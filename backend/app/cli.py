@@ -1,0 +1,131 @@
+"""Commandes d'administration de CoGes.
+
+L'inscription publique n'existe pas en V1 (ADR 0009) : une entreprise est créée par
+cette commande, qui pose l'entreprise, ses trois rôles système et son gérant, **dans
+une seule transaction**.
+
+    python -m app.cli create-company \\
+        --name "Boutique Diallo" --slug boutique-diallo \\
+        --manager-email gerant@example.test --manager-name "Awa Diallo"
+
+Le mot de passe est demandé de façon interactive : il n'apparaît ni dans la ligne de
+commande, ni dans l'historique du shell.
+"""
+
+from __future__ import annotations
+
+import argparse
+import getpass
+import sys
+from uuid import uuid4
+
+from pydantic import TypeAdapter, ValidationError
+from pydantic.networks import EmailStr
+
+from app.core.security import hash_password
+from app.core.tenancy import TenantContext, tenant_transaction
+from app.modules.companies import service as companies_service
+from app.modules.rbac import service as rbac_service
+from app.modules.rbac.matrix import MANAGER
+from app.modules.users.models import User
+from app.modules.users.repository import UserRepository
+
+MIN_PASSWORD_LENGTH = 12
+
+#: Même validation que l'API : un e-mail refusé au login ne doit pas pouvoir entrer
+#: en base par la porte de service.
+_EMAIL_ADAPTER = TypeAdapter(EmailStr)
+
+
+def create_company(
+    *,
+    name: str,
+    slug: str,
+    manager_email: str,
+    manager_name: str,
+    password: str,
+    currency: str,
+    timezone: str,
+) -> tuple[str, str]:
+    """Crée l'entreprise, ses rôles système et son gérant. Renvoie (company_id, user_id)."""
+    try:
+        manager_email = _EMAIL_ADAPTER.validate_python(manager_email)
+    except ValidationError as exc:
+        raise SystemExit(f"Adresse e-mail invalide : {manager_email}") from exc
+
+    company_id = uuid4()
+    manager_id = uuid4()
+    ctx = TenantContext(user_id=manager_id, company_id=company_id)
+
+    with tenant_transaction(ctx) as session:
+        companies_service.create_company(
+            session, ctx, name=name, slug=slug, currency=currency, timezone=timezone
+        )
+        roles = rbac_service.create_system_roles(session, ctx)
+
+        UserRepository(session, ctx).add(
+            User(
+                id=manager_id,
+                company_id=company_id,
+                email=manager_email,
+                password_hash=hash_password(password),
+                full_name=manager_name,
+                is_active=True,
+            )
+        )
+        session.flush()
+        rbac_service.assign_role(session, ctx, manager_id, roles[MANAGER].id)
+
+    return str(company_id), str(manager_id)
+
+
+def _prompt_password() -> str:
+    password = getpass.getpass("Mot de passe du gérant : ")
+    if len(password) < MIN_PASSWORD_LENGTH:
+        raise SystemExit(f"Le mot de passe doit faire au moins {MIN_PASSWORD_LENGTH} caractères.")
+    if password != getpass.getpass("Confirmer le mot de passe : "):
+        raise SystemExit("Les deux saisies diffèrent.")
+    return password
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="app.cli", description="Administration de CoGes")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    create = subparsers.add_parser("create-company", help="Créer une entreprise et son gérant")
+    create.add_argument("--name", required=True, help="Raison sociale")
+    create.add_argument("--slug", required=True, help="Identifiant de connexion, a-z0-9-")
+    create.add_argument("--manager-email", required=True)
+    create.add_argument("--manager-name", required=True)
+    create.add_argument("--currency", default="XOF")
+    create.add_argument("--timezone", default="Africa/Dakar")
+    create.add_argument(
+        "--password",
+        default=None,
+        help="À éviter : le mot de passe resterait dans l'historique du shell.",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+
+    if args.command == "create-company":
+        password = args.password or _prompt_password()
+        company_id, user_id = create_company(
+            name=args.name,
+            slug=args.slug,
+            manager_email=args.manager_email,
+            manager_name=args.manager_name,
+            password=password,
+            currency=args.currency,
+            timezone=args.timezone,
+        )
+        print(f"Entreprise créée : {company_id}")
+        print(f"Gérant créé      : {user_id}")
+        print(f"Connexion        : slug={args.slug} email={args.manager_email}")
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    sys.exit(main())

@@ -20,6 +20,10 @@ node_modules/
 .next/
 .pnpm-store/
 
+# Celery beat : fichier d'état local, régénéré à chaque démarrage
+celerybeat-schedule*
+celerybeat.pid
+
 # Outils et éditeurs
 *.~lock*
 .DS_Store

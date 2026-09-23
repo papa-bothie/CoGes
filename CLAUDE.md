@@ -147,6 +147,7 @@ make lint                    # ruff check + ruff format --check + mypy --strict
 make format                  # ruff format + ruff check --fix
 make api                     # uvicorn → http://localhost:8000/api/v1/health
 make worker                  # celery worker + beat
+uv run --directory backend python -m app.cli create-company --help   # créer une entreprise
 cd frontend && pnpm dev      # à partir de la phase 11 (corepack enable pnpm)
 ```
 
@@ -173,7 +174,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 |---|---|---|---|---|
 | 00 Initialisation du dépôt | `docs/prompts/00-initialisation.md` | — | CI verte à vide | ✅ |
 | 01 Socle tenant + RLS | `01-socle-tenant-rls.md` | 00 | T1–T5, T36–T37, architecture | ✅ |
-| 02 Auth, utilisateurs, RBAC, audit, outbox | `02-auth-rbac-audit.md` | 01 | fuite générique, RBAC | ⬜ |
+| 02 Auth, utilisateurs, RBAC, audit, outbox | `02-auth-rbac-audit.md` | 01 | fuite générique, RBAC | ✅ |
 | 03 Référentiels et prix | `03-referentiels.md` | 02 | fuite, FK croisées (T5) | ⬜ |
 | 04 Stock et CMP | `04-stock-cmp.md` | 03 | T6–T13, T38 | ⬜ |
 | 05 Ventes (draft → confirm → cancel, reçu) | `05-ventes.md` | 04 | T14–T17, T23–T24, T39 | ⬜ |
@@ -195,6 +196,11 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0002 | 2026-09-23 | Schéma V1.1 direct, une révision Alembic par phase ; ENUM dès 0001 ; base de test `coges_test` migrée | `docs/decisions/0002-strategie-migrations.md` |
 | 0003 | 2026-09-23 | RLS : `NULLIF(current_setting(…), '')::uuid` et `RESET ALL` au retour au pool (écart démontré au § 8.11) | `docs/decisions/0003-politique-rls-nullif.md` |
 | 0004 | 2026-09-23 | Contexte via `set_config(…, true)` dans `core/tenancy.py` seul ; tenant amorcé par UUID pré-généré ; privilèges par défaut, `permissions` en lecture seule | `docs/decisions/0004-contexte-tenant-et-privileges.md` |
+| 0005 | 2026-09-23 | Connexion : `auth_lookup` SECURITY DEFINER appartenant à `coges_auth` (NOLOGIN BYPASSRLS) ; table `auth_sessions`, refresh rotatif avec détection de réutilisation | `docs/decisions/0005-connexion-et-sessions.md` |
+| 0006 | 2026-09-23 | Access token en mémoire (15 min), refresh en cookie `httpOnly` (7 j), clé JWT ≥ 32 caractères | `docs/decisions/0006-transport-des-jetons.md` |
+| 0007 | 2026-09-23 | Matrice RBAC gérant/vendeur/comptable ; DELETE accordé sur exactement `user_roles`, `role_permissions`, `roles` | `docs/decisions/0007-matrice-rbac.md` |
+| 0008 | 2026-09-23 | `ensure_audit_partition` + partition DEFAULT, RLS par partition, audit append-only, `CHECK` sur les 9 événements | `docs/decisions/0008-audit-partitionne-et-outbox.md` |
+| 0009 | 2026-09-23 | Onboarding par `python -m app.cli create-company`, pas d'inscription publique en V1 | `docs/decisions/0009-onboarding-par-cli.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 

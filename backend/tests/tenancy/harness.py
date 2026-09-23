@@ -21,12 +21,20 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import text
 
+from app.core.security import hash_password
 from app.core.tenancy import TenantContext, tenant_transaction
 
 # Tables tenant-scoped couvertes par les tests croisés.
 # Chaque phase ajoute les siennes ; T37 vérifie en plus, génériquement, qu'aucune
 # table portant `company_id` n'échappe à la RLS.
-TENANT_TABLES: tuple[str, ...] = ("users", "roles", "user_roles", "role_permissions")
+TENANT_TABLES: tuple[str, ...] = (
+    "users",
+    "roles",
+    "user_roles",
+    "role_permissions",
+    "auth_sessions",
+    "business_events",
+)
 
 # Valeur factice : aucun mot de passe réel ne figure dans les tests.
 PLACEHOLDER_PASSWORD_HASH = "argon2-placeholder-not-a-real-hash"  # noqa: S105
@@ -49,31 +57,37 @@ class Tenant:
         return TenantContext(user_id=self.user_id, company_id=self.company_id)
 
 
-def create_permission(owner_engine: Engine, code: str) -> UUID:
-    """Ajoute une entrée au catalogue global `permissions`.
+def catalogue_permission_id(owner_engine: Engine, code: str = "dashboard:read") -> UUID:
+    """Identifiant d'une permission du catalogue global, livré par la migration 0002.
 
-    Écrite avec le rôle **propriétaire** : `coges_app` n'a que SELECT sur ce
-    catalogue (ADR 0004), et le vocabulaire des droits est livré par migration,
-    jamais par un tenant.
+    Lu avec le rôle **propriétaire** : `coges_app` n'a que SELECT sur ce catalogue
+    (ADR 0004), et le vocabulaire des droits n'est jamais écrit par un tenant.
     """
-    permission_id = uuid4()
     with owner_engine.begin() as connection:
-        connection.execute(
-            text(
-                "INSERT INTO permissions (id, code, resource, action) "
-                "VALUES (:id, :code, :resource, 'read')"
-            ),
-            {"id": permission_id, "code": code, "resource": code.split(".")[0]},
+        return UUID(
+            str(
+                connection.execute(
+                    text("SELECT id FROM permissions WHERE code = :code"), {"code": code}
+                ).scalar_one()
+            )
         )
-    return permission_id
 
 
-def create_tenant(session_factory: sessionmaker[Any], owner_engine: Engine, slug: str) -> Tenant:
+def create_tenant(
+    session_factory: sessionmaker[Any],
+    owner_engine: Engine,
+    slug: str,
+    *,
+    password: str | None = None,
+) -> Tenant:
     """Crée une entreprise complète : société, utilisateur, rôle, rattachement."""
     company_id = uuid4()
     user_id = uuid4()
     role_id = uuid4()
-    email = f"gerant@{slug}.test"
+    # `.test` est un domaine réservé que le validateur d'e-mail refuse : les comptes
+    # de test utilisent donc un sous-domaine d'example.com.
+    email = f"gerant@{slug}.example.com"
+    password_hash = hash_password(password) if password else PLACEHOLDER_PASSWORD_HASH
 
     # Le contexte est posé sur l'UUID pré-généré : l'INSERT satisfait `WITH CHECK`.
     bootstrap = TenantContext(user_id=user_id, company_id=company_id)
@@ -95,7 +109,7 @@ def create_tenant(session_factory: sessionmaker[Any], owner_engine: Engine, slug
                 "id": user_id,
                 "company_id": company_id,
                 "email": email,
-                "password_hash": PLACEHOLDER_PASSWORD_HASH,
+                "password_hash": password_hash,
                 "full_name": f"Gérant {slug.upper()}",
             },
         )
@@ -111,7 +125,7 @@ def create_tenant(session_factory: sessionmaker[Any], owner_engine: Engine, slug
             {"user_id": user_id, "role_id": role_id, "company_id": company_id},
         )
 
-    permission_id = create_permission(owner_engine, f"{slug}.read")
+    permission_id = catalogue_permission_id(owner_engine)
     tenant = Tenant(
         slug=slug,
         company_id=company_id,
@@ -130,6 +144,31 @@ def create_tenant(session_factory: sessionmaker[Any], owner_engine: Engine, slug
             {"role_id": role_id, "permission_id": permission_id, "company_id": company_id},
         )
 
+    # Une ligne dans chaque table tenant-scoped de la phase 02, pour que les tests
+    # croisés portent sur des données réelles et non sur des tables vides.
+    with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
+        session.execute(
+            text(
+                "INSERT INTO auth_sessions "
+                "(company_id, user_id, token_hash, family_id, expires_at) "
+                "VALUES (:company_id, :user_id, :token_hash, gen_random_uuid(), "
+                "now() + interval '7 days')"
+            ),
+            {
+                "company_id": company_id,
+                "user_id": user_id,
+                "token_hash": f"empreinte-de-test-{slug}",
+            },
+        )
+        session.execute(
+            text(
+                "INSERT INTO business_events "
+                "(company_id, event_type, aggregate_type, aggregate_id, payload) "
+                "VALUES (:company_id, 'stock.updated', 'product', :aggregate_id, '{}'::jsonb)"
+            ),
+            {"company_id": company_id, "aggregate_id": uuid4()},
+        )
+
     return tenant
 
 
@@ -140,5 +179,9 @@ def own_row_ids(tenant: Tenant, table: str) -> dict[str, Any]:
         "roles": {"clause": "id = :value", "value": tenant.role_id},
         "user_roles": {"clause": "user_id = :value", "value": tenant.user_id},
         "role_permissions": {"clause": "role_id = :value", "value": tenant.role_id},
+        # Ces deux tables sont alimentées par les tests qui les concernent ; le
+        # critère porte sur le tenant, la RLS étant ce que l'on mesure.
+        "auth_sessions": {"clause": "company_id = :value", "value": tenant.company_id},
+        "business_events": {"clause": "company_id = :value", "value": tenant.company_id},
     }
     return criteria[table]

@@ -34,6 +34,10 @@ from app.core.errors import TenantContextError
 SET_TENANT_CONTEXT_SQL = text("SELECT set_config('app.company_id', :company_id, true)")
 READ_TENANT_CONTEXT_SQL = text("SELECT current_setting('app.company_id', true)")
 
+#: Acteur « inconnu » des contextes d'amorçage. N'est jamais un utilisateur réel :
+#: `users.id` est un uuid aléatoire, jamais le zéro.
+NIL_USER_ID = UUID(int=0)
+
 
 @dataclass(frozen=True, slots=True)
 class TenantContext:
@@ -46,6 +50,18 @@ class TenantContext:
     def has_permission(self, code: str) -> bool:
         """Vérification RBAC côté serveur (le front ne fait que masquer)."""
         return code in self.permissions
+
+    @classmethod
+    def bootstrap(cls, company_id: UUID) -> TenantContext:
+        """Contexte sans utilisateur identifié, pour les rares amorçages.
+
+        Deux cas seulement : la **création d'une entreprise** (l'UUID est
+        pré-généré, aucun utilisateur n'existe encore) et le **rafraîchissement
+        d'un jeton** (le porteur n'est connu qu'après lecture de la session).
+        Aucune permission n'est accordée : toute route protégée refuserait ce
+        contexte.
+        """
+        return cls(user_id=NIL_USER_ID, company_id=company_id)
 
 
 @contextmanager

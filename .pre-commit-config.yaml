@@ -22,8 +22,11 @@ repos:
       - id: detect-private-key
       - id: forbid-new-submodules
 
+  # La version doit rester alignée sur celle de backend/pyproject.toml : deux
+  # versions de ruff ne formatent pas à l'identique, et le hook réécrirait en
+  # boucle ce que `make format` vient d'écrire.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+    rev: v0.16.8
     hooks:
       - id: ruff
         args: ["--fix"]
