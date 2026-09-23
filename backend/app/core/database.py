@@ -25,6 +25,10 @@ logger = logging.getLogger(__name__)
 
 # Les migrations sont écrites à la main en SQL (§ 8 du Modèle de données) ; cette
 # convention ne sert qu'à garder des noms cohérents pour les objets déclarés en ORM.
+#: Défaut serveur des colonnes horodatées. Sans lui, l'ORM enverrait NULL au lieu
+#: de laisser PostgreSQL appliquer `DEFAULT now()`.
+NOW = text("now()")
+
 NAMING_CONVENTION = {
     "ix": "%(table_name)s_%(column_0_N_name)s_idx",
     "uq": "%(table_name)s_%(column_0_N_name)s_uq",

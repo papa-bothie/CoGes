@@ -12,11 +12,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/app/core/config.py -> backend/app/core -> backend/app -> backend -> racine
 REPO_ROOT = Path(__file__).resolve().parents[3]
+
+#: HMAC-SHA256 : une clé plus courte que sa sortie affaiblit la signature.
+MIN_JWT_SECRET_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -42,7 +45,9 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379/0"
 
-    jwt_secret: SecretStr = SecretStr("change-me")
+    # 32 octets minimum : en deçà, PyJWT avertit que la clé est trop courte pour
+    # HMAC-SHA256 (RFC 7518 § 3.2).
+    jwt_secret: SecretStr = SecretStr("change-me-" + "0" * 32)
     jwt_access_ttl_seconds: int = Field(default=900, ge=60)
     jwt_refresh_ttl_seconds: int = Field(default=1_209_600, ge=3600)
 
@@ -56,6 +61,16 @@ class Settings(BaseSettings):
     db_pool_timeout_seconds: int = Field(default=10, ge=1)
     db_pool_recycle_seconds: int = Field(default=1800, ge=60)
     db_echo: bool = False
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def _secret_is_long_enough(cls, value: SecretStr) -> SecretStr:
+        """Refuse au démarrage une clé de signature trop courte."""
+        if len(value.get_secret_value()) < MIN_JWT_SECRET_LENGTH:
+            raise ValueError(
+                f"COGES_JWT_SECRET doit faire au moins {MIN_JWT_SECRET_LENGTH} caractères."
+            )
+        return value
 
     def require_owner_url(self) -> str:
         """DSN propriétaire, ou une erreur explicite si le processus n'a pas le droit de migrer."""
