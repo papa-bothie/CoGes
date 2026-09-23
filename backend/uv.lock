@@ -308,7 +308,7 @@ dev = [
     { name = "pre-commit", specifier = ">=4.0" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-cov", specifier = ">=6.0" },
-    { name = "ruff", specifier = ">=0.8" },
+    { name = "ruff", specifier = ">=0.16.8" },
 ]
 
 [[package]]

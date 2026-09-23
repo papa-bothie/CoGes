@@ -19,6 +19,7 @@ env:
   COGES_DATABASE_URL_APP: postgresql+psycopg://coges_app:ci-app@localhost:5432/coges
   COGES_TEST_DATABASE_URL_OWNER: postgresql+psycopg://coges_owner:ci-owner@localhost:5432/coges_test
   COGES_TEST_DATABASE_URL_APP: postgresql+psycopg://coges_app:ci-app@localhost:5432/coges_test
+  COGES_JWT_SECRET: ci-jwt-secret-0000000000000000000000
   COGES_REDIS_URL: redis://localhost:6379/0
 
 jobs:

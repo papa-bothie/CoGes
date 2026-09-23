@@ -16,13 +16,25 @@ CREATE ROLE coges_owner LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE
 CREATE ROLE coges_app LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE
     PASSWORD :'app_password';
 
+-- Propriétaire de la seule fonction d'authentification. NOLOGIN : personne ne peut
+-- s'y connecter. BYPASSRLS : indispensable car `companies` et `users` sont en
+-- FORCE ROW LEVEL SECURITY, qui s'applique aussi au propriétaire des tables — une
+-- fonction SECURITY DEFINER appartenant à coges_owner ne verrait rien (ADR 0005).
+CREATE ROLE coges_auth NOLOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE;
+
+-- coges_owner doit pouvoir transférer la propriété de auth_lookup à coges_auth.
+-- WITH INHERIT FALSE : aucune élévation implicite, il faut un SET ROLE explicite.
+GRANT coges_auth TO coges_owner WITH INHERIT FALSE;
+
 CREATE DATABASE coges      OWNER coges_owner;
 CREATE DATABASE coges_test OWNER coges_owner;
 
 \connect coges
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO coges_app;
+GRANT USAGE ON SCHEMA public TO coges_auth;
 
 \connect coges_test
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO coges_app;
+GRANT USAGE ON SCHEMA public TO coges_auth;
