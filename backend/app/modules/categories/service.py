@@ -93,6 +93,17 @@ def assert_exists(session: Session, ctx: TenantContext, category_id: UUID) -> No
     get_category(session, ctx, category_id)
 
 
+def get_names(
+    session: Session, ctx: TenantContext, category_ids: Sequence[UUID]
+) -> dict[UUID, str]:
+    """Libellés de catégories, pour les modules qui les affichent (Inventory).
+
+    Renvoie un dictionnaire : une catégorie absente ou supprimée n'y figure pas,
+    et l'appelant montre alors une catégorie vide plutôt que d'échouer.
+    """
+    return CategoryRepository(session, ctx).live_names_by_ids(category_ids)
+
+
 # ------------------------------------------------------------------- écritures
 
 

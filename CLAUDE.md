@@ -148,6 +148,7 @@ make format                  # ruff format + ruff check --fix
 make api                     # uvicorn → http://localhost:8000/api/v1/health
 make worker                  # celery worker + beat
 uv run --directory backend python -m app.cli create-company --help   # créer une entreprise
+uv run --directory backend python -m app.cli rebuild-stock --company-id <uuid>   # recalcul stock/CMP
 cd frontend && pnpm dev      # à partir de la phase 11 (corepack enable pnpm)
 ```
 
@@ -176,7 +177,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 01 Socle tenant + RLS | `01-socle-tenant-rls.md` | 00 | T1–T5, T36–T37, architecture | ✅ |
 | 02 Auth, utilisateurs, RBAC, audit, outbox | `02-auth-rbac-audit.md` | 01 | fuite générique, RBAC | ✅ |
 | 03 Référentiels et prix | `03-referentiels.md` | 02 | fuite, FK croisées (T5) | ✅ |
-| 04 Stock et CMP | `04-stock-cmp.md` | 03 | T6–T13, T38 | ⬜ |
+| 04 Stock et CMP | `04-stock-cmp.md` | 03 | T6–T13, T38 | ✅ |
 | 05 Ventes (draft → confirm → cancel, reçu) | `05-ventes.md` | 04 | T14–T17, T23–T24, T39 | ⬜ |
 | 06 Retours et remboursements | `06-retours.md` | 05 | T18–T22 | ⬜ |
 | 07 Finance de gestion | `07-finance.md` | 06 | T25–T28 | ⬜ |
@@ -206,6 +207,10 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0012 | 2026-09-23 | La vue « produits + stock » sera un endpoint d'Inventory (phase 04) ; `product_stock` non créée en 0003 | `docs/decisions/0012-produits-et-stock.md` |
 | 0013 | 2026-09-23 | Codes tiers `CLI-0001`/`FRN-0001` générés par entreprise et modifiables ; recherche trigramme sur le nom, égalité stricte sur les codes | `docs/decisions/0013-codes-tiers-et-recherche.md` |
 | 0014 | 2026-09-23 | Une règle inter-modules interdite par le sens des dépendances descend en base : trigger `categories_guard_soft_delete` + SQLSTATE traduits | `docs/decisions/0014-garde-de-suppression-en-base.md` |
+| 0015 | 2026-09-23 | `occurred_at` borné des deux côtés : 48 h d'antidatage au plus (`CG010`), jamais dans le futur (`CG011`, révision 0005) | `docs/decisions/0015-antidatage-des-mouvements.md` |
+| 0016 | 2026-09-23 | Ajustement positif : `unit_cost` par défaut = CMP courant, surchargeable ; refus si aucun CMP à reprendre | `docs/decisions/0016-cout-d-un-ajustement-positif.md` |
+| 0017 | 2026-09-23 | Correction d'un mouvement par `POST /inventory/movements/{id}/reverse`, gérant seul, audit critique | `docs/decisions/0017-correction-par-mouvement-inverse.md` |
+| 0018 | 2026-09-23 | Écarts assumés au § 8.5 : SQLSTATE `CG020`/`CG021`, `insufficient_stock` en 409, aucun `REVOKE` (le `FOR SHARE` exige UPDATE), `refresh` après `flush` | `docs/decisions/0018-ecarts-assumes-au-paragraphe-8-5.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 

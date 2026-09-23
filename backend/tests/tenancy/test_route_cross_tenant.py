@@ -61,6 +61,9 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
     ),
     "/api/v1/customers/{customer_id}": CrossTenantCase(parameters={"customer_id": "customer"}),
     "/api/v1/suppliers/{supplier_id}": CrossTenantCase(parameters={"supplier_id": "supplier"}),
+    "/api/v1/inventory/movements/{movement_id}/reverse": CrossTenantCase(
+        parameters={"movement_id": "movement"}
+    ),
 }
 
 
@@ -99,16 +102,28 @@ def _beta_owned(client: TestClient, beta_token: str, resource: str, payload: dic
 def _beta_sources(client: TestClient, beta_token: str) -> dict[str, str]:
     """Une ressource de Beta par type d'identifiant manipulé par les routes."""
     marker = uuid4().hex[:8]
+    product_id = _beta_owned(
+        client,
+        beta_token,
+        "products",
+        {"sku": f"SKU-{marker}", "name": f"Produit {marker}", "unit_price": "1500.00"},
+    )
     return {
         "category": _beta_owned(client, beta_token, "categories", {"name": f"Cat-{marker}"}),
-        "product": _beta_owned(
-            client,
-            beta_token,
-            "products",
-            {"sku": f"SKU-{marker}", "name": f"Produit {marker}", "unit_price": "1500.00"},
-        ),
+        "product": product_id,
         "customer": _beta_owned(client, beta_token, "customers", {"name": f"Client {marker}"}),
         "supplier": _beta_owned(client, beta_token, "suppliers", {"name": f"Fournisseur {marker}"}),
+        "movement": _beta_owned(
+            client,
+            beta_token,
+            "inventory/movements",
+            {
+                "product_id": product_id,
+                "type": "initial",
+                "qty_delta": "10",
+                "unit_cost": "1000",
+            },
+        ),
     }
 
 

@@ -19,6 +19,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.categories.router import router as categories_router
 from app.modules.companies.router import router as companies_router
 from app.modules.customers.router import router as customers_router
+from app.modules.inventory.router import router as inventory_router
 from app.modules.products.router import router as products_router
 from app.modules.rbac.router import router as rbac_router
 from app.modules.suppliers.router import router as suppliers_router
@@ -46,6 +47,8 @@ api_router.include_router(categories_router)
 api_router.include_router(products_router)
 api_router.include_router(customers_router)
 api_router.include_router(suppliers_router)
+# Bande C : Inventory lit Products, jamais l'inverse (ADR 0012).
+api_router.include_router(inventory_router)
 
 app.include_router(api_router)
 

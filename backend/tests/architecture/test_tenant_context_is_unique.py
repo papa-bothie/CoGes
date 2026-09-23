@@ -26,6 +26,11 @@ SET_WITHOUT_LOCAL = re.compile(r"\bSET\s+(?!LOCAL\b)[A-Za-z_]", re.IGNORECASE)
 # toujours interdit dans `app/`.
 FUNCTION_SEARCH_PATH = re.compile(r"\bSET\s+search_path\s*=", re.IGNORECASE)
 
+# Le `SET` d'un `UPDATE` n'a rien d'un `SET` de session : c'est la liste des colonnes
+# affectées. On ne le reconnaît qu'à son statement, qui **commence** la ligne — ainsi
+# ni `BEFORE UPDATE ON`, ni `FOR UPDATE` n'ouvrent d'exception.
+UPDATE_STATEMENT = re.compile(r"^\s*UPDATE\s+[A-Za-z_\"]", re.IGNORECASE)
+
 # Équivalent Python d'un `SET` de session : le 3e argument de set_config vaut false.
 SESSION_SCOPED_SET_CONFIG = re.compile(r"set_config\s*\([^)]*,\s*(false|False)\s*\)")
 
@@ -39,8 +44,16 @@ def test_no_sql_set_without_local() -> None:
     offenders: list[str] = []
     for source in _python_sources(APP_ROOT) + _python_sources(MIGRATIONS_ROOT):
         in_migrations = MIGRATIONS_ROOT in source.parents
+        in_update = False
         for number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), start=1):
+            if UPDATE_STATEMENT.search(line):
+                in_update = True
+            set_is_an_update_clause = in_update
+            if ";" in line:
+                in_update = False
             if not SET_WITHOUT_LOCAL.search(line):
+                continue
+            if set_is_an_update_clause:
                 continue
             if in_migrations and FUNCTION_SEARCH_PATH.search(line):
                 continue

@@ -10,6 +10,12 @@ une seule transaction**.
 
 Le mot de passe est demandé de façon interactive : il n'apparaît ni dans la ligne de
 commande, ni dans l'historique du shell.
+
+La reconstruction du stock s'appelle de la même façon, une entreprise à la fois :
+
+    python -m app.cli rebuild-stock --company-id <uuid>
+
+Elle sera planifiée en phase 08 ; en attendant, elle s'exécute à la demande.
 """
 
 from __future__ import annotations
@@ -17,7 +23,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import sys
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pydantic import TypeAdapter, ValidationError
 from pydantic.networks import EmailStr
@@ -25,6 +31,8 @@ from pydantic.networks import EmailStr
 from app.core.security import hash_password
 from app.core.tenancy import TenantContext, tenant_transaction
 from app.modules.companies import service as companies_service
+from app.modules.inventory import service as inventory_service
+from app.modules.inventory.schemas import StockRebuildLine
 from app.modules.rbac import service as rbac_service
 from app.modules.rbac.matrix import MANAGER
 from app.modules.users.models import User
@@ -88,6 +96,19 @@ def _prompt_password() -> str:
     return password
 
 
+def rebuild_stock(company_id: UUID) -> list[StockRebuildLine]:
+    """Rejoue le journal d'une entreprise et réaligne sa projection de stock.
+
+    Une entreprise par transaction : `rebuild_product_stock` s'appuie sur une table
+    temporaire `ON COMMIT DROP`, qui interdit deux appels dans la même transaction.
+    Le contexte tenant est posé comme partout ailleurs, par `tenant_transaction` :
+    la fonction s'exécute sous RLS, sans privilège particulier.
+    """
+    ctx = TenantContext.bootstrap(company_id)
+    with tenant_transaction(ctx) as session:
+        return inventory_service.rebuild_stock(session, ctx)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="app.cli", description="Administration de CoGes")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -104,6 +125,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="À éviter : le mot de passe resterait dans l'historique du shell.",
     )
+
+    rebuild = subparsers.add_parser(
+        "rebuild-stock", help="Recalculer stock et CMP d'une entreprise depuis le journal"
+    )
+    rebuild.add_argument("--company-id", required=True, type=UUID)
     return parser
 
 
@@ -124,6 +150,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Entreprise créée : {company_id}")
         print(f"Gérant créé      : {user_id}")
         print(f"Connexion        : slug={args.slug} email={args.manager_email}")
+
+    if args.command == "rebuild-stock":
+        gaps = rebuild_stock(args.company_id)
+        if not gaps:
+            print("Aucun écart : la projection est conforme au journal.")
+        for gap in gaps:
+            print(
+                f"Écart produit {gap.product_id} : "
+                f"quantité {gap.qty_ecart:+}, CMP {gap.avg_ecart:+}"
+            )
     return 0
 
 
