@@ -20,6 +20,12 @@ TENANCY_MODULE = APP_ROOT / "core" / "tenancy.py"
 # `SET ...` en SQL, sauf `SET LOCAL`. Le `\b` initial évite de capturer « RESET ».
 SET_WITHOUT_LOCAL = re.compile(r"\bSET\s+(?!LOCAL\b)[A-Za-z_]", re.IGNORECASE)
 
+# `SET search_path = ...` dans un `CREATE FUNCTION` est un **attribut de fonction** :
+# il ne vaut que pendant l'appel, ne survit pas à la connexion, et il est au
+# contraire exigé sur toute fonction `SECURITY DEFINER`. Toléré dans les migrations,
+# toujours interdit dans `app/`.
+FUNCTION_SEARCH_PATH = re.compile(r"\bSET\s+search_path\s*=", re.IGNORECASE)
+
 # Équivalent Python d'un `SET` de session : le 3e argument de set_config vaut false.
 SESSION_SCOPED_SET_CONFIG = re.compile(r"set_config\s*\([^)]*,\s*(false|False)\s*\)")
 
@@ -32,9 +38,13 @@ def test_no_sql_set_without_local() -> None:
     """Aucun `SET` de session : un `SET LOCAL` meurt au COMMIT, un `SET` survit au pool."""
     offenders: list[str] = []
     for source in _python_sources(APP_ROOT) + _python_sources(MIGRATIONS_ROOT):
+        in_migrations = MIGRATIONS_ROOT in source.parents
         for number, line in enumerate(source.read_text(encoding="utf-8").splitlines(), start=1):
-            if SET_WITHOUT_LOCAL.search(line):
-                offenders.append(f"{source.name}:{number}: {line.strip()}")
+            if not SET_WITHOUT_LOCAL.search(line):
+                continue
+            if in_migrations and FUNCTION_SEARCH_PATH.search(line):
+                continue
+            offenders.append(f"{source.name}:{number}: {line.strip()}")
 
     assert offenders == [], "SET sans LOCAL détecté :\n" + "\n".join(offenders)
 

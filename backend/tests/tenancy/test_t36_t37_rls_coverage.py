@@ -14,6 +14,12 @@ from sqlalchemy.sql import text
 pytestmark = pytest.mark.tenancy
 
 APP_ROLE = "coges_app"
+AUTH_ROLE = "coges_auth"
+
+#: Seules tables sur lesquelles `coges_app` a le droit de supprimer (ADR 0007).
+#: Deux tables de liaison et `roles` : aucune n'a de colonne de suppression logique,
+#: aucune ne porte de donnée métier historisée, et chaque suppression est auditée.
+DELETABLE_TABLES = ["role_permissions", "roles", "user_roles"]
 
 
 def test_t36_application_role_has_no_escape_hatch(app_engine: Engine) -> None:
@@ -40,8 +46,12 @@ def test_t36_application_role_connects_as_itself(app_engine: Engine) -> None:
     assert current == APP_ROLE
 
 
-def test_t36_no_physical_delete_anywhere(app_engine: Engine) -> None:
-    """T36 — aucun DELETE physique n'est accordé : la suppression est logique."""
+def test_t36_physical_delete_is_limited_to_three_tables(app_engine: Engine) -> None:
+    """T36 — la suppression physique reste l'exception, et elle est nommée.
+
+    Toute table ajoutée par une phase future se retrouverait dans cette liste si
+    quelqu'un lui accordait DELETE : le test échouerait sans être modifié.
+    """
     with app_engine.connect() as connection:
         granted = (
             connection.execute(
@@ -62,7 +72,9 @@ def test_t36_no_physical_delete_anywhere(app_engine: Engine) -> None:
             .all()
         )
 
-    assert granted == [], f"DELETE accordé à {APP_ROLE} sur : {granted}"
+    assert granted == DELETABLE_TABLES, (
+        f"DELETE accordé à {APP_ROLE} sur un jeu de tables inattendu : {granted}"
+    )
 
 
 def test_t36_permissions_catalogue_is_read_only(app_engine: Engine) -> None:
@@ -83,7 +95,12 @@ def test_t36_permissions_catalogue_is_read_only(app_engine: Engine) -> None:
 
 
 def test_t37_every_tenant_scoped_table_has_forced_rls(app_engine: Engine) -> None:
-    """T37 — toute table portant `company_id` a `relrowsecurity` ET `relforcerowsecurity`."""
+    """T37 — toute table portant `company_id` a `relrowsecurity` ET `relforcerowsecurity`.
+
+    Les tables **partitionnées** (`relkind = 'p'`) et chacune de leurs partitions
+    sont incluses : une politique posée sur le parent ne protège pas un accès direct
+    à une partition (ADR 0008).
+    """
     with app_engine.connect() as connection:
         rows = connection.execute(
             text(
@@ -92,7 +109,7 @@ def test_t37_every_tenant_scoped_table_has_forced_rls(app_engine: Engine) -> Non
                 FROM pg_class c
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 WHERE n.nspname = 'public'
-                  AND c.relkind = 'r'
+                  AND c.relkind IN ('r', 'p')
                   AND EXISTS (
                         SELECT 1 FROM pg_attribute a
                         WHERE a.attrelid = c.oid
@@ -122,7 +139,7 @@ def test_t37_every_tenant_scoped_table_has_a_policy(app_engine: Engine) -> None:
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 LEFT JOIN pg_policy p ON p.polrelid = c.oid
                 WHERE n.nspname = 'public'
-                  AND c.relkind = 'r'
+                  AND c.relkind IN ('r', 'p')
                   AND EXISTS (
                         SELECT 1 FROM pg_attribute a
                         WHERE a.attrelid = c.oid AND a.attname = 'company_id'
@@ -178,3 +195,60 @@ def test_t37_permissions_is_a_global_catalogue(app_engine: Engine) -> None:
 
     assert row.has_company_id is False
     assert row.relrowsecurity is False
+
+
+def test_t36_no_login_role_can_bypass_rls(app_engine: Engine) -> None:
+    """T36 — `coges_auth` a BYPASSRLS, mais il est NOLOGIN : nul ne s'y connecte.
+
+    Aucun rôle capable de se connecter ne doit pouvoir franchir la RLS (ADR 0005).
+    """
+    with app_engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT rolname, rolcanlogin, rolbypassrls FROM pg_roles "
+                "WHERE rolbypassrls AND NOT rolsuper ORDER BY rolname"
+            )
+        ).all()
+
+    offenders = [row.rolname for row in rows if row.rolcanlogin]
+    assert offenders == [], f"Rôles connectables avec BYPASSRLS : {offenders}"
+    assert AUTH_ROLE in [row.rolname for row in rows]
+
+
+def test_t36_application_role_is_not_a_member_of_the_auth_role(app_engine: Engine) -> None:
+    """T36 — `coges_app` ne doit pas pouvoir emprunter `coges_auth` par SET ROLE."""
+    with app_engine.connect() as connection:
+        is_member = connection.execute(
+            text("SELECT pg_has_role(:app, :auth, 'USAGE')"),
+            {"app": APP_ROLE, "auth": AUTH_ROLE},
+        ).scalar_one()
+
+    assert is_member is False
+
+
+def test_t36_audit_log_is_append_only(app_engine: Engine) -> None:
+    """T36 — le journal d'audit n'est ni modifiable ni supprimable par l'application."""
+    with app_engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                """
+                SELECT c.relname,
+                       has_table_privilege(:role, c.oid, 'INSERT') AS can_insert,
+                       has_table_privilege(:role, c.oid, 'UPDATE') AS can_update,
+                       has_table_privilege(:role, c.oid, 'DELETE') AS can_delete
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public'
+                  AND c.relkind IN ('r', 'p')
+                  AND c.relname LIKE 'audit_logs%'
+                ORDER BY c.relname
+                """
+            ),
+            {"role": APP_ROLE},
+        ).all()
+
+    assert rows, "audit_logs est absente du schéma"
+    for row in rows:
+        assert row.can_insert is True, f"{row.relname} : écriture d'audit impossible"
+        assert row.can_update is False, f"{row.relname} : une trace d'audit est modifiable"
+        assert row.can_delete is False, f"{row.relname} : une trace d'audit est supprimable"
