@@ -20,6 +20,10 @@ make migrate             # migrations, rôle propriétaire
 make api                 # http://localhost:8000/api/v1/health
 ```
 
+Si un PostgreSQL ou un Redis tourne déjà sur la machine, `make up` échoue sur
+`address already in use` : changer `POSTGRES_PORT` / `REDIS_PORT` dans `.env` et
+reporter le nouveau port dans les trois DSN.
+
 `deploy/postgres/init/01-roles.sql` ne s'exécute qu'à la **création du volume**. Après un
 changement de ce fichier : `docker compose down -v && make up`.
 

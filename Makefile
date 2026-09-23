@@ -1,6 +1,13 @@
 # CoGes — commandes de développement.
 # Le backend est un projet uv situé dans backend/ ; tout passe par `uv run --directory backend`.
 
+# Le .env local (non versionné) fournit les DSN et les mots de passe de développement.
+# Une valeur contenant $ ou # doit être évitée : make l'interpréterait.
+ifneq (,$(wildcard .env))
+include .env
+export
+endif
+
 UV := uv run --directory backend
 
 .PHONY: help install up down logs psql migrate test test-tenancy lint format api worker
@@ -22,7 +29,7 @@ logs: ## Suit les journaux des services
 	docker compose logs -f
 
 psql: ## Ouvre un psql sur la base coges en tant que coges_app
-	docker compose exec postgres psql -U coges_app -d coges
+	docker compose exec -e PGPASSWORD=$(COGES_APP_PASSWORD) postgres psql -U coges_app -d coges
 
 migrate: ## Applique les migrations Alembic (rôle propriétaire, jamais au démarrage de l'API)
 	$(UV) alembic upgrade head

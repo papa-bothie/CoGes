@@ -171,7 +171,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 
 | Phase | Prompt | Prérequis | Tests exigés | Statut |
 |---|---|---|---|---|
-| 00 Initialisation du dépôt | `docs/prompts/00-initialisation.md` | — | CI verte à vide | 🟨 |
+| 00 Initialisation du dépôt | `docs/prompts/00-initialisation.md` | — | CI verte à vide | ✅ |
 | 01 Socle tenant + RLS | `01-socle-tenant-rls.md` | 00 | T1–T5, T36–T37, architecture | ⬜ |
 | 02 Auth, utilisateurs, RBAC, audit, outbox | `02-auth-rbac-audit.md` | 01 | fuite générique, RBAC | ⬜ |
 | 03 Référentiels et prix | `03-referentiels.md` | 02 | fuite, FK croisées (T5) | ⬜ |
