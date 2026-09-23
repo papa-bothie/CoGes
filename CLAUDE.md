@@ -172,7 +172,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | Phase | Prompt | Prérequis | Tests exigés | Statut |
 |---|---|---|---|---|
 | 00 Initialisation du dépôt | `docs/prompts/00-initialisation.md` | — | CI verte à vide | ✅ |
-| 01 Socle tenant + RLS | `01-socle-tenant-rls.md` | 00 | T1–T5, T36–T37, architecture | ⬜ |
+| 01 Socle tenant + RLS | `01-socle-tenant-rls.md` | 00 | T1–T5, T36–T37, architecture | ✅ |
 | 02 Auth, utilisateurs, RBAC, audit, outbox | `02-auth-rbac-audit.md` | 01 | fuite générique, RBAC | ⬜ |
 | 03 Référentiels et prix | `03-referentiels.md` | 02 | fuite, FK croisées (T5) | ⬜ |
 | 04 Stock et CMP | `04-stock-cmp.md` | 03 | T6–T13, T38 | ⬜ |
@@ -192,6 +192,9 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | # | Date | Décision | Fichier |
 |---|---|---|---|
 | 0001 | 2026-09-23 | Outillage (uv, GitHub Actions, docker compose, pre-commit, pnpm) et **SQLAlchemy synchrone + psycopg 3** | `docs/decisions/0001-outillage.md` |
+| 0002 | 2026-09-23 | Schéma V1.1 direct, une révision Alembic par phase ; ENUM dès 0001 ; base de test `coges_test` migrée | `docs/decisions/0002-strategie-migrations.md` |
+| 0003 | 2026-09-23 | RLS : `NULLIF(current_setting(…), '')::uuid` et `RESET ALL` au retour au pool (écart démontré au § 8.11) | `docs/decisions/0003-politique-rls-nullif.md` |
+| 0004 | 2026-09-23 | Contexte via `set_config(…, true)` dans `core/tenancy.py` seul ; tenant amorcé par UUID pré-généré ; privilèges par défaut, `permissions` en lecture seule | `docs/decisions/0004-contexte-tenant-et-privileges.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 
