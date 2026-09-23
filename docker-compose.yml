@@ -1,0 +1,42 @@
+# Infrastructure de développement local : PostgreSQL 16 et Redis 7.
+# En production, ces deux services sont managés (zone B du Diagramme 2).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: coges-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?définir POSTGRES_PASSWORD dans .env}
+      POSTGRES_DB: postgres
+      COGES_OWNER_PASSWORD: ${COGES_OWNER_PASSWORD:?définir COGES_OWNER_PASSWORD dans .env}
+      COGES_APP_PASSWORD: ${COGES_APP_PASSWORD:?définir COGES_APP_PASSWORD dans .env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - coges_pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d coges"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: coges-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - coges_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  coges_pgdata:
+  coges_redisdata:
