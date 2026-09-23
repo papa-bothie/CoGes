@@ -16,6 +16,7 @@ from app.core.errors import CogesError, ValidationFailedError
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
 from app.modules.auth.router import router as auth_router
+from app.modules.categories.router import router as categories_router
 from app.modules.companies.router import router as companies_router
 from app.modules.rbac.router import router as rbac_router
 from app.modules.users.router import router as users_router
@@ -38,6 +39,7 @@ api_router.include_router(auth_router)
 api_router.include_router(companies_router)
 api_router.include_router(users_router)
 api_router.include_router(rbac_router)
+api_router.include_router(categories_router)
 
 app.include_router(api_router)
 

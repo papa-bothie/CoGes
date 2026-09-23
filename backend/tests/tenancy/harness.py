@@ -34,6 +34,12 @@ TENANT_TABLES: tuple[str, ...] = (
     "role_permissions",
     "auth_sessions",
     "business_events",
+    # Phase 03 — référentiels.
+    "customers",
+    "suppliers",
+    "categories",
+    "products",
+    "product_prices",
 )
 
 # Valeur factice : aucun mot de passe réel ne figure dans les tests.
@@ -50,6 +56,12 @@ class Tenant:
     role_id: UUID
     permission_id: UUID
     email: str
+    # Phase 03 — une ligne de référentiel par table, pour que les tests croisés
+    # portent sur des données réelles et non sur des tables vides.
+    customer_id: UUID
+    supplier_id: UUID
+    category_id: UUID
+    product_id: UUID
 
     @property
     def ctx(self) -> TenantContext:
@@ -133,6 +145,10 @@ def create_tenant(
         role_id=role_id,
         permission_id=permission_id,
         email=email,
+        customer_id=uuid4(),
+        supplier_id=uuid4(),
+        category_id=uuid4(),
+        product_id=uuid4(),
     )
 
     with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
@@ -169,7 +185,70 @@ def create_tenant(
             {"company_id": company_id, "aggregate_id": uuid4()},
         )
 
+    _seed_referential(session_factory, tenant)
     return tenant
+
+
+def _seed_referential(session_factory: sessionmaker[Any], tenant: Tenant) -> None:
+    """Une ligne dans chaque table du référentiel (phase 03).
+
+    Les identifiants sont pré-générés : les tests croisés désignent ensuite une
+    ligne précise de l'autre entreprise, pas « la première venue ».
+    """
+    with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
+        session.execute(
+            text(
+                "INSERT INTO customers (id, company_id, code, name, credit_limit) "
+                "VALUES (:id, :company_id, 'CLI-0001', :name, 250000.00)"
+            ),
+            {
+                "id": tenant.customer_id,
+                "company_id": tenant.company_id,
+                "name": f"Client {tenant.slug.upper()}",
+            },
+        )
+        session.execute(
+            text(
+                "INSERT INTO suppliers (id, company_id, code, name, payment_terms_days) "
+                "VALUES (:id, :company_id, 'FRN-0001', :name, 30)"
+            ),
+            {
+                "id": tenant.supplier_id,
+                "company_id": tenant.company_id,
+                "name": f"Fournisseur {tenant.slug.upper()}",
+            },
+        )
+        session.execute(
+            text(
+                "INSERT INTO categories (id, company_id, name) "
+                "VALUES (:id, :company_id, 'Boissons')"
+            ),
+            {"id": tenant.category_id, "company_id": tenant.company_id},
+        )
+        session.execute(
+            text(
+                "INSERT INTO products (id, company_id, category_id, sku, name, unit) "
+                "VALUES (:id, :company_id, :category_id, 'SKU-0001', :name, 'piece')"
+            ),
+            {
+                "id": tenant.product_id,
+                "company_id": tenant.company_id,
+                "category_id": tenant.category_id,
+                "name": f"Produit {tenant.slug.upper()}",
+            },
+        )
+        session.execute(
+            text(
+                "INSERT INTO product_prices "
+                "(company_id, product_id, unit_price, cost_price, created_by) "
+                "VALUES (:company_id, :product_id, 1500.00, 1000.0000, :created_by)"
+            ),
+            {
+                "company_id": tenant.company_id,
+                "product_id": tenant.product_id,
+                "created_by": tenant.user_id,
+            },
+        )
 
 
 def own_row_ids(tenant: Tenant, table: str) -> dict[str, Any]:
@@ -181,6 +260,11 @@ def own_row_ids(tenant: Tenant, table: str) -> dict[str, Any]:
         "role_permissions": {"clause": "role_id = :value", "value": tenant.role_id},
         # Ces deux tables sont alimentées par les tests qui les concernent ; le
         # critère porte sur le tenant, la RLS étant ce que l'on mesure.
+        "customers": {"clause": "id = :value", "value": tenant.customer_id},
+        "suppliers": {"clause": "id = :value", "value": tenant.supplier_id},
+        "categories": {"clause": "id = :value", "value": tenant.category_id},
+        "products": {"clause": "id = :value", "value": tenant.product_id},
+        "product_prices": {"clause": "product_id = :value", "value": tenant.product_id},
         "auth_sessions": {"clause": "company_id = :value", "value": tenant.company_id},
         "business_events": {"clause": "company_id = :value", "value": tenant.company_id},
     }

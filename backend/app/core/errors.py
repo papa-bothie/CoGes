@@ -30,6 +30,16 @@ class CogesError(Exception):
         return {"error": {"code": self.code, "message": self.message, "details": self.details}}
 
 
+def sqlstate(exc: BaseException) -> str | None:
+    """Code SQLSTATE porté par une erreur SQLAlchemy, s'il y en a un.
+
+    Sert à traduire un invariant refusé **par PostgreSQL** (trigger, contrainte) en
+    erreur métier nommée. Le SQLSTATE est stable, contrairement au texte du message,
+    qui dépend de la locale du serveur.
+    """
+    return getattr(getattr(exc, "orig", None), "sqlstate", None)
+
+
 class NotFoundError(CogesError):
     code = "not_found"
     status_code = 404
@@ -59,6 +69,23 @@ class ValidationFailedError(CogesError):
     code = "validation_failed"
     status_code = 422
     default_message = "Les données envoyées sont invalides."
+
+
+class BusinessRuleError(CogesError):
+    """Invariant métier violé par une demande pourtant bien formée.
+
+    Chaque module en dérive **une classe par règle**, avec son propre code stable
+    en anglais (`category_not_empty`, `insufficient_stock`…) et son message en
+    français : le client peut alors réagir à la règle précise, pas à un
+    « validation_failed » indifférencié.
+
+    409 et non 422 : la donnée envoyée est valide, c'est l'état actuel du système
+    qui rend l'opération impossible.
+    """
+
+    code = "business_rule_violated"
+    status_code = 409
+    default_message = "Cette opération est impossible dans l'état actuel des données."
 
 
 class TenantContextError(CogesError):

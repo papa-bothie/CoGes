@@ -12,8 +12,10 @@ Deux garanties en découlent :
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -52,6 +54,7 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
         parameters={"user_id": "manager", "role_id": "role"}
     ),
     "/api/v1/roles/{role_id}": CrossTenantCase(parameters={"role_id": "role"}),
+    "/api/v1/categories/{category_id}": CrossTenantCase(parameters={"category_id": "category"}),
 }
 
 
@@ -80,6 +83,17 @@ def _beta_role_id(client: TestClient, beta_token: str) -> str:
     return str(response.json()["items"][0]["id"])
 
 
+def _beta_category_id(client: TestClient, beta_token: str) -> str:
+    """Catégorie appartenant à Beta, créée par Beta elle-même."""
+    response = client.post(
+        "/api/v1/categories",
+        headers=auth_headers(beta_token),
+        json={"name": f"Catégorie {uuid4()}"},
+    )
+    assert response.status_code == 201, response.text
+    return str(response.json()["id"])
+
+
 @pytest.mark.parametrize("path", sorted(CROSS_TENANT_ROUTES))
 def test_cross_tenant_access_is_not_found(
     api_client: TestClient,
@@ -93,6 +107,7 @@ def test_cross_tenant_access_is_not_found(
     sources = {
         "manager": str(company_beta.manager_id),
         "role": _beta_role_id(api_client, beta_token),
+        "category": _beta_category_id(api_client, beta_token),
     }
 
     concrete_path = path
@@ -128,9 +143,9 @@ def test_unauthenticated_access_is_refused_on_every_protected_route(
     for path in sorted(app.openapi()["paths"]):
         if path in PUBLIC_PATHS or not path.startswith("/api/v1/"):
             continue
-        concrete_path = path.replace("{user_id}", str(company_beta.manager_id)).replace(
-            "{role_id}", str(company_beta.company_id)
-        )
+        # N'importe quel paramètre de chemin reçoit un UUID valide : le test reste
+        # vrai pour les routes des phases suivantes, sans liste à tenir à jour.
+        concrete_path = re.sub(r"\{[^}]+\}", str(company_beta.manager_id), path)
         for method in app.openapi()["paths"][path]:
             response = api_client.request(method.upper(), concrete_path)
             assert response.status_code == 401, f"{method.upper()} {path}"
