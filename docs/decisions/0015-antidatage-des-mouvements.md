@@ -2,7 +2,7 @@
 
 - **Date** : 2026-09-23
 - **Phase** : 04
-- **Statut** : acceptée
+- **Statut** : acceptée · complétée le 2026-09-23 (borne haute, révision 0005)
 - **Décideur** : utilisateur (via `AskUserQuestion`)
 
 ## Contexte
@@ -32,6 +32,10 @@ La migration 0004 crée `inv_check_backdating()`, trigger **`t05_inv_check_backd
 mouvement du même produit, avec le SQLSTATE applicatif **`CG010`** traduit en
 `movement_backdated_too_far` (409).
 
+La migration **0005** complète la même fonction d'une borne haute : `occurred_at` ne peut pas
+dépasser `now()` de plus de **5 minutes**, SQLSTATE **`CG011`** traduit en `movement_in_future`
+(409). Voir « Correctif » ci-dessous.
+
 La fenêtre borne le **désordre**, pas l'ancienneté : elle se mesure depuis le dernier mouvement du
 produit, jamais depuis `now()`. Un article dormant depuis un mois accepte donc une saisie datée
 d'il y a un mois ; un inventaire annuel reste possible.
@@ -54,3 +58,29 @@ d'il y a un mois ; un inventaire annuel reste possible.
   formule du CMP. `test_t12_cmp_rebuild.py` crée donc son propre tenant.
 - Le contrôle est en base, donc il tient aussi pour les mouvements que Sales écrira en phase 05
   sans passer par le router.
+
+## Correctif — la fenêtre avait besoin d'une seconde borne (révision 0005)
+
+**Le défaut.** La fenêtre se mesure depuis `max(occurred_at)` du produit. Une date **future**
+saisie par erreur — un « 2027 » au lieu de « 2026 » — devient ce maximum. Tout mouvement ultérieur
+daté de `now()` tombe alors à plus de 48 h en arrière et se fait refuser en `CG010`, **ventes
+comprises**, jusqu'à ce que la date fautive soit atteinte.
+
+**Ce qui rendait le défaut grave.** Le mouvement **inverse**, seule correction possible sur un
+journal append-only, est lui aussi daté de `now()` : il était refusé à son tour. Un ajustement
+non plus ne passait pas. Le produit devenait irrécupérable par l'API, et seule une intervention
+directe en base l'aurait débloqué — précisément ce que le journal append-only existe pour éviter.
+
+**La correction.** La révision 0005 remplace le corps de `inv_check_backdating()` — même trigger,
+même nom de fonction — et ajoute la borne haute **avant** le contrôle de la fenêtre : une date
+future est une faute de saisie, pas un antidatage, et le message doit le dire. SQLSTATE `CG011`,
+code métier `movement_in_future` (409). Le schéma Pydantic porte la même borne, pour que le refus
+arrive sans aller-retour avec la base et nomme le champ.
+
+**Sur la tolérance de 5 minutes.** Elle n'est pas de la complaisance : `now()` est évalué par
+PostgreSQL, `datetime.now(UTC)` par le serveur d'application, et les deux horloges ne sont pas
+parfaitement synchrones. Sans marge, un décalage de quelques secondes ferait échouer une saisie
+parfaitement légitime. Aucune saisie honnête n'a besoin de plus de cinq minutes d'avance.
+
+**Pourquoi une révision séparée.** La 0004 était déjà livrable. Une migration livrée ne se
+réécrit pas — c'est la règle que le journal qu'elle installe applique à ses propres lignes.

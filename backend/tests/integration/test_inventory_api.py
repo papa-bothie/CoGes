@@ -226,6 +226,26 @@ def test_backdating_beyond_the_window_is_a_named_business_error(
     assert response.json()["error"]["code"] == "movement_backdated_too_far"
 
 
+def test_a_future_date_is_named_immediately_by_the_schema(
+    api_client: TestClient, alpha_token: str
+) -> None:
+    """Le message arrive avant la base, et nomme le champ fautif.
+
+    Le contrôle existe aussi en base (`CG011`, révision 0005), pour les appels qui
+    n'entrent pas par l'API et pour un décalage d'horloge défavorable.
+    """
+    product_id = _make_product(api_client, alpha_token)
+    response = _record(
+        api_client,
+        alpha_token,
+        product_id,
+        occurred_at=(datetime.now(UTC) + timedelta(days=365)).isoformat(),
+    )
+    assert response.status_code == 422
+    fields = response.json()["error"]["details"]["fields"]
+    assert any("dans le futur" in field["message"] for field in fields), fields
+
+
 def test_a_positive_adjustment_defaults_to_the_current_average(
     api_client: TestClient, alpha_token: str
 ) -> None:

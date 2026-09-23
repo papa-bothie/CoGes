@@ -119,3 +119,87 @@ def test_the_window_is_measured_from_the_last_movement_not_from_now(
             occurred_at=last - timedelta(hours=12),
         )
         assert read_stock(session, product_id).qty_on_hand == 15
+
+
+# ------------------------------------------------- borne haute (révision 0005)
+
+#: SQLSTATE applicatif de la date future (migration 0005).
+IN_FUTURE = "CG011"
+
+
+def test_a_movement_dated_in_the_future_is_refused(
+    session_factory: sessionmaker[Any], tenant_a: Tenant
+) -> None:
+    """Une date future est une faute de frappe, jamais une intention."""
+    with tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session:
+        product_id = make_product(session, tenant_a)
+
+    with (
+        pytest.raises(DBAPIError) as excinfo,
+        tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session,
+    ):
+        insert_movement(
+            session,
+            tenant_a,
+            product_id,
+            "initial",
+            "10",
+            unit_cost="10",
+            occurred_at=datetime.now(UTC) + timedelta(days=365),
+        )
+
+    assert sqlstate(excinfo.value) == IN_FUTURE
+
+
+def test_a_few_minutes_of_clock_drift_are_tolerated(
+    session_factory: sessionmaker[Any], tenant_a: Tenant
+) -> None:
+    """La tolérance absorbe l'écart d'horloge entre l'API et PostgreSQL."""
+    with tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session:
+        product_id = make_product(session, tenant_a)
+        insert_movement(
+            session,
+            tenant_a,
+            product_id,
+            "initial",
+            "10",
+            unit_cost="10",
+            occurred_at=datetime.now(UTC) + timedelta(minutes=2),
+        )
+        assert read_stock(session, product_id).qty_on_hand == 10
+
+
+def test_a_refused_future_date_does_not_block_the_product(
+    session_factory: sessionmaker[Any], tenant_a: Tenant
+) -> None:
+    """Le vrai dégât évité : un produit qui n'accepte plus rien.
+
+    Sans la borne haute, une date future devenait le `max(occurred_at)` du produit.
+    Tout mouvement ultérieur daté de `now()` tombait à plus de 48 h en arrière et se
+    faisait refuser — ventes comprises. Pire, le mouvement **inverse** écrit pour
+    corriger la saisie étant lui aussi daté de `now()`, rien ne rattrapait le
+    produit : il fallait intervenir en base.
+    """
+    with tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session:
+        product_id = make_product(session, tenant_a)
+        insert_movement(session, tenant_a, product_id, "initial", "10", unit_cost="10")
+
+    with (
+        pytest.raises(DBAPIError),
+        tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session,
+    ):
+        insert_movement(
+            session,
+            tenant_a,
+            product_id,
+            "purchase_in",
+            "5",
+            unit_cost="10",
+            occurred_at=datetime.now(UTC) + timedelta(days=365),
+        )
+
+    # Le produit vit toujours : la saisie suivante, datée de maintenant, passe.
+    with tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session:
+        insert_movement(session, tenant_a, product_id, "purchase_in", "5", unit_cost="10")
+        insert_movement(session, tenant_a, product_id, "sale_out", "-3")
+        assert read_stock(session, product_id).qty_on_hand == 12

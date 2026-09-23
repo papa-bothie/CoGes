@@ -8,6 +8,7 @@ ailleurs que dans une migration.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -81,6 +82,32 @@ def test_movement_bounds_name_the_faulty_field(payload: dict[str, str], expected
     """Chaque `CHECK` du § 8.5 est doublé côté schéma, avec un message lisible."""
     with pytest.raises(ValueError, match=expected):
         MovementCreate(product_id=_ANY_ID, **payload)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("offset", "accepted"),
+    [(timedelta(days=365), False), (timedelta(minutes=30), False), (timedelta(minutes=2), True)],
+    ids=["un an", "trente minutes", "deux minutes"],
+)
+def test_occurred_at_is_bounded_on_the_future_side(offset: timedelta, accepted: bool) -> None:
+    """Le schéma rend le message tout de suite ; la base reste l'autorité (ADR 0015).
+
+    Sans cette borne, une date future devient le `max(occurred_at)` du produit et
+    le bloque : plus aucun mouvement daté de maintenant ne passe, pas même
+    l'annulation censée corriger la saisie.
+    """
+    payload: dict[str, object] = {
+        "product_id": _ANY_ID,
+        "type": "purchase_in",
+        "qty_delta": "1",
+        "unit_cost": "10",
+        "occurred_at": datetime.now(UTC) + offset,
+    }
+    if accepted:
+        assert MovementCreate(**payload).occurred_at is not None  # type: ignore[arg-type]
+        return
+    with pytest.raises(ValueError, match="dans le futur"):
+        MovementCreate(**payload)  # type: ignore[arg-type]
 
 
 def test_a_valid_movement_is_accepted() -> None:

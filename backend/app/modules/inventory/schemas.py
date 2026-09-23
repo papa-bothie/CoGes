@@ -12,7 +12,7 @@ Ces deux types appartiennent aux flux de vente (phases 05-06), qui passent par
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Literal, Self
 from uuid import UUID
@@ -22,6 +22,10 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_vali
 from app.core.money import Amount, Quantity, UnitCost
 
 NOTE_MAX_LENGTH = 500
+
+#: Tolérance sur la borne haute d'`occurred_at`, alignée sur la révision 0005 :
+#: elle absorbe le décalage d'horloge entre l'API et PostgreSQL, rien de plus.
+FUTURE_TOLERANCE = timedelta(minutes=5)
 
 #: Les cinq types qu'un humain peut saisir. `sale_out` et `customer_return_in` en
 #: sont volontairement absents (voir le docstring du module).
@@ -71,7 +75,8 @@ class MovementCreate(BaseModel):
     unit_cost: MovementUnitCost | None = None
     supplier_id: UUID | None = None
     note: MovementNote | None = None
-    #: Date métier. Par défaut `now()`. L'antidatage est borné à 48 h (ADR 0015).
+    #: Date métier. Par défaut `now()`. Bornée des deux côtés (ADR 0015) : 48 h
+    #: d'antidatage au plus, et jamais dans le futur.
     occurred_at: datetime | None = None
 
     @model_validator(mode="after")
@@ -91,8 +96,14 @@ class MovementCreate(BaseModel):
             raise ValueError(
                 "unit_cost : une sortie est valorisée au CMP courant, il ne se saisit pas."
             )
-        if self.occurred_at is not None and self.occurred_at.tzinfo is None:
-            raise ValueError("occurred_at : la date doit porter un fuseau horaire.")
+        if self.occurred_at is not None:
+            if self.occurred_at.tzinfo is None:
+                raise ValueError("occurred_at : la date doit porter un fuseau horaire.")
+            # Une date future est une faute de frappe, jamais une intention. Non
+            # refusée, elle devient le `max(occurred_at)` du produit et bloque tout
+            # mouvement ultérieur, l'annulation comprise (ADR 0015).
+            if self.occurred_at > datetime.now(UTC) + FUTURE_TOLERANCE:
+                raise ValueError("occurred_at : un mouvement ne peut pas être daté dans le futur.")
         return self
 
 

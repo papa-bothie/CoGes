@@ -65,6 +65,11 @@ class MovementBackdatedTooFarError(BusinessRuleError):
     )
 
 
+class MovementInFutureError(BusinessRuleError):
+    code = "movement_in_future"
+    default_message = "Date invalide : un mouvement de stock ne peut pas être daté dans le futur."
+
+
 class AlreadyReversedError(BusinessRuleError):
     code = "already_reversed"
     default_message = "Ce mouvement a déjà été annulé."
@@ -95,6 +100,7 @@ class UnitCostRequiredError(BusinessRuleError):
 #: SQLSTATE applicatifs levés par les triggers de la migration 0004 (ADR 0018).
 _TRIGGER_ERRORS: dict[str, type[BusinessRuleError]] = {
     "CG010": MovementBackdatedTooFarError,
+    "CG011": MovementInFutureError,
     "CG020": InsufficientStockError,
     "CG021": ProductNotStockTrackedError,
 }

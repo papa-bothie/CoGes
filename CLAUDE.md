@@ -207,7 +207,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0012 | 2026-09-23 | La vue « produits + stock » sera un endpoint d'Inventory (phase 04) ; `product_stock` non créée en 0003 | `docs/decisions/0012-produits-et-stock.md` |
 | 0013 | 2026-09-23 | Codes tiers `CLI-0001`/`FRN-0001` générés par entreprise et modifiables ; recherche trigramme sur le nom, égalité stricte sur les codes | `docs/decisions/0013-codes-tiers-et-recherche.md` |
 | 0014 | 2026-09-23 | Une règle inter-modules interdite par le sens des dépendances descend en base : trigger `categories_guard_soft_delete` + SQLSTATE traduits | `docs/decisions/0014-garde-de-suppression-en-base.md` |
-| 0015 | 2026-09-23 | Antidatage refusé au-delà de **48 h** depuis le dernier mouvement du produit (`t05_inv_check_backdating`, `CG010`) | `docs/decisions/0015-antidatage-des-mouvements.md` |
+| 0015 | 2026-09-23 | `occurred_at` borné des deux côtés : 48 h d'antidatage au plus (`CG010`), jamais dans le futur (`CG011`, révision 0005) | `docs/decisions/0015-antidatage-des-mouvements.md` |
 | 0016 | 2026-09-23 | Ajustement positif : `unit_cost` par défaut = CMP courant, surchargeable ; refus si aucun CMP à reprendre | `docs/decisions/0016-cout-d-un-ajustement-positif.md` |
 | 0017 | 2026-09-23 | Correction d'un mouvement par `POST /inventory/movements/{id}/reverse`, gérant seul, audit critique | `docs/decisions/0017-correction-par-mouvement-inverse.md` |
 | 0018 | 2026-09-23 | Écarts assumés au § 8.5 : SQLSTATE `CG020`/`CG021`, `insufficient_stock` en 409, aucun `REVOKE` (le `FOR SHARE` exige UPDATE), `refresh` après `flush` | `docs/decisions/0018-ecarts-assumes-au-paragraphe-8-5.md` |
