@@ -1,0 +1,47 @@
+# Mêmes règles qu'en CI, mais avant le commit.
+# Installation : make install
+default_language_version:
+  python: python3.12
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # Les extraits de docs/architecture/ sont des sources de vérité : aucun hook
+      # ne les réécrit (§ 10 de CLAUDE.md).
+      - id: end-of-file-fixer
+        exclude: ^docs/architecture/
+      - id: trailing-whitespace
+        exclude: ^docs/architecture/
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: detect-private-key
+      - id: forbid-new-submodules
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+        files: ^backend/
+      - id: ruff-format
+        files: ^backend/
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.23.1
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy --strict (backend/app)
+        entry: uv run --directory backend mypy
+        language: system
+        types: [python]
+        files: ^backend/app/
+        pass_filenames: false

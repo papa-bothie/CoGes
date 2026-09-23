@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POSTGRES_PASSWORD: ci-postgres
+  COGES_DATABASE_URL_OWNER: postgresql+psycopg://postgres:ci-postgres@localhost:5432/coges_test
+  COGES_TEST_DATABASE_URL: postgresql+psycopg://postgres:ci-postgres@localhost:5432/coges_test
+  COGES_REDIS_URL: redis://localhost:6379/0
+
+jobs:
+  backend:
+    name: Lint et tests backend
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-postgres
+          POSTGRES_DB: coges_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Installer les dépendances
+        run: uv sync --directory backend --frozen
+
+      - name: Lint (ruff + mypy --strict)
+        run: make lint
+
+      - name: Tests
+        run: make test
+
+      # Bloquant dès la phase 01 : une fuite inter-tenant arrête le déploiement.
+      - name: Tests de fuite inter-tenant
+        run: make test-tenancy
