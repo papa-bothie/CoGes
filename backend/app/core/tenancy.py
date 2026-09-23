@@ -1,0 +1,73 @@
+"""Contexte tenant et **unique** point d'entrée transactionnel.
+
+C'est le seul module du projet autorisé à poser `app.company_id`. Un test
+d'architecture (`tests/architecture/test_tenant_context_is_unique.py`) échoue si un
+autre fichier y touche.
+
+Chaîne d'isolation (Diagramme 8) :
+
+1. le `company_id` vient du serveur (JWT → utilisateur en base), jamais du client ;
+2. `set_config('app.company_id', :id, true)` — le `true` signifie « portée
+   transaction », c'est l'équivalent exact de `SET LOCAL`, mais l'UUID passe en
+   paramètre lié, donc sans concaténation de chaîne ;
+3. assertion immédiate : la base doit confirmer la valeur posée ;
+4. COMMIT ou ROLLBACK : le contexte meurt avec la transaction.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.sql import text
+
+from app.core.database import get_session_factory
+from app.core.errors import TenantContextError
+
+# Portée transaction (`is_local = true`) : strictement équivalent à SET LOCAL.
+# Publiques à dessein : le test T4 les rejoue telles quelles, pour qu'un jour où
+# quelqu'un passerait la portée à `false`, le test échoue au lieu de se taire.
+SET_TENANT_CONTEXT_SQL = text("SELECT set_config('app.company_id', :company_id, true)")
+READ_TENANT_CONTEXT_SQL = text("SELECT current_setting('app.company_id', true)")
+
+
+@dataclass(frozen=True, slots=True)
+class TenantContext:
+    """Identité résolue côté serveur. Immuable : on ne change pas de tenant en cours de route."""
+
+    user_id: UUID
+    company_id: UUID
+    permissions: frozenset[str] = field(default_factory=frozenset)
+
+    def has_permission(self, code: str) -> bool:
+        """Vérification RBAC côté serveur (le front ne fait que masquer)."""
+        return code in self.permissions
+
+
+@contextmanager
+def tenant_transaction(
+    ctx: TenantContext, *, session_factory: sessionmaker[Any] | None = None
+) -> Iterator[Session]:
+    """Ouvre une transaction, y pose le contexte tenant, puis commit ou rollback.
+
+    Aucune requête métier ne doit s'exécuter hors de ce gestionnaire.
+    """
+    factory = session_factory or get_session_factory()
+    session: Session = factory()
+    try:
+        with session.begin():
+            session.execute(SET_TENANT_CONTEXT_SQL, {"company_id": str(ctx.company_id)})
+            observed = session.execute(READ_TENANT_CONTEXT_SQL).scalar_one()
+            if observed != str(ctx.company_id):
+                # Contexte non pris en compte : on refuse d'exécuter quoi que ce soit.
+                raise TenantContextError(
+                    "Le contexte d'entreprise n'a pas été appliqué par la base.",
+                    details={"expected": str(ctx.company_id), "observed": observed},
+                )
+            yield session
+    finally:
+        session.close()
