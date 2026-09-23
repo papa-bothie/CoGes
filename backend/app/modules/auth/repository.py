@@ -74,6 +74,17 @@ class AuthSessionRepository(TenantRepository[AuthSession]):
         stmt = self._select().where(AuthSession.token_hash == token_hash)
         return self.session.execute(stmt).scalar_one_or_none()
 
+    def lock_by_token_hash(self, token_hash: str) -> AuthSession | None:
+        """Lit la session **en la verrouillant** jusqu'au COMMIT.
+
+        Deux rafraîchissements simultanés avec le même jeton se sérialisent : le
+        second attend, puis relit la ligne avec `revoked_at` renseigné et échoue.
+        Sans ce verrou, les deux pourraient tourner le jeton en parallèle et
+        émettre deux sessions valides à partir d'un seul jeton.
+        """
+        stmt = self._select().where(AuthSession.token_hash == token_hash).with_for_update()
+        return self.session.execute(stmt).scalar_one_or_none()
+
     def revoke_family(self, family_id: UUID) -> int:
         """Révoque toutes les sessions d'une famille : réutilisation détectée."""
         statement = (

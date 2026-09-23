@@ -145,22 +145,31 @@ def refresh(
 ) -> IssuedTokens:
     """Consomme un refresh token et en émet un nouveau dans la même famille.
 
+    Tout se joue dans **une seule** transaction, sur une ligne verrouillée : de la
+    lecture du jeton jusqu'au COMMIT, personne d'autre ne peut le consommer. Deux
+    rafraîchissements concurrents avec le même jeton se sérialisent donc, et le
+    second est traité comme une réutilisation.
+
     Rejouer un jeton déjà consommé ou révoqué est le signe d'un vol : **toute la
-    famille** est révoquée, et l'incident est audité en transactionnel.
+    famille** est révoquée, et l'incident est audité en transactionnel. L'erreur
+    n'est levée qu'**après** le COMMIT — la lever à l'intérieur annulerait la
+    révocation et sa ligne d'audit, c'est-à-dire exactement ce qu'il fallait garder.
     """
     company_id, token_value = _split_refresh_token(raw_token)
     ctx = TenantContext.bootstrap(company_id)
-    # La réutilisation est constatée dans une transaction, mais l'erreur n'est levée
-    # qu'**après** son COMMIT : lever à l'intérieur annulerait la révocation de la
-    # famille et sa ligne d'audit, c'est-à-dire exactement ce qu'il fallait garder.
+
     reuse_detected = False
+    expired = False
+    issued: IssuedTokens | None = None
 
     with tenant_transaction(ctx) as session:
         repository = AuthSessionRepository(session, ctx)
-        current = repository.get_by_token_hash(hash_refresh_token(token_value))
+        current = repository.lock_by_token_hash(hash_refresh_token(token_value))
         if current is None:
+            # Rien n'a été écrit : lever ici est sans conséquence.
             raise AuthenticationRequiredError("Jeton de rafraîchissement invalide.")
 
+        now = datetime.now(UTC)
         if current.revoked_at is not None:
             revoked = repository.revoke_family(current.family_id)
             audit_critical(
@@ -174,43 +183,38 @@ def refresh(
                 ip_address=ip_address,
             )
             reuse_detected = True
+        elif current.expires_at <= now:
+            expired = True
+        else:
+            user_ctx = TenantContext(user_id=current.user_id, company_id=company_id)
+            rotated, new_raw_token = _issue_session(
+                user_ctx,
+                repository,
+                user_id=current.user_id,
+                family_id=current.family_id,
+                user_agent=user_agent,
+                ip_address=ip_address,
+            )
+            session.flush()
+
+            current.revoked_at = now
+            current.replaced_by = rotated.id
+            access_token, expires_in = create_access_token(current.user_id, company_id)
+            issued = IssuedTokens(
+                access_token=access_token,
+                expires_in=expires_in,
+                refresh_token=new_raw_token,
+                company_id=company_id,
+                user_id=current.user_id,
+            )
 
     if reuse_detected:
         raise AuthenticationRequiredError("Session révoquée.")
+    if expired:
+        raise AuthenticationRequiredError("Session expirée.")
 
-    with tenant_transaction(ctx) as session:
-        repository = AuthSessionRepository(session, ctx)
-        current = repository.get_by_token_hash(hash_refresh_token(token_value))
-        if current is None or current.revoked_at is not None:
-            raise AuthenticationRequiredError("Session révoquée.")
-
-        now = datetime.now(UTC)
-        if current.expires_at <= now:
-            raise AuthenticationRequiredError("Session expirée.")
-
-        user_ctx = TenantContext(user_id=current.user_id, company_id=company_id)
-        rotated, new_raw_token = _issue_session(
-            user_ctx,
-            repository,
-            user_id=current.user_id,
-            family_id=current.family_id,
-            user_agent=user_agent,
-            ip_address=ip_address,
-        )
-        session.flush()
-
-        current.revoked_at = now
-        current.replaced_by = rotated.id
-        access_token, expires_in = create_access_token(current.user_id, company_id)
-        user_id = current.user_id
-
-    return IssuedTokens(
-        access_token=access_token,
-        expires_in=expires_in,
-        refresh_token=new_raw_token,
-        company_id=company_id,
-        user_id=user_id,
-    )
+    assert issued is not None  # noqa: S101 - garanti par les branches ci-dessus
+    return issued
 
 
 def logout(raw_token: str) -> None:

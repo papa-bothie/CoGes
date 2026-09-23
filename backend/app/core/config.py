@@ -49,7 +49,8 @@ class Settings(BaseSettings):
     # HMAC-SHA256 (RFC 7518 § 3.2).
     jwt_secret: SecretStr = SecretStr("change-me-" + "0" * 32)
     jwt_access_ttl_seconds: int = Field(default=900, ge=60)
-    jwt_refresh_ttl_seconds: int = Field(default=1_209_600, ge=3600)
+    # 7 jours (ADR 0006). Le cookie de rafraîchissement lit la même valeur.
+    jwt_refresh_ttl_seconds: int = Field(default=604_800, ge=3600)
 
     default_currency: str = Field(default="XOF", pattern="^[A-Z]{3}$")
     default_timezone: str = "Africa/Dakar"
