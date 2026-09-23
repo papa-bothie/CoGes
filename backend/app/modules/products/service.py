@@ -33,6 +33,7 @@ from app.modules.products.schemas import (
     CurrentPrice,
     ProductCreate,
     ProductPriceCreate,
+    ProductSummary,
     ProductUpdate,
 )
 
@@ -166,6 +167,29 @@ def assert_sellable(session: Session, ctx: TenantContext, product_id: UUID) -> C
     if not product.is_active:
         raise ProductInactiveError(details={"product_id": str(product.id)})
     return get_current_price(session, ctx, product.id)
+
+
+def get_summaries(
+    session: Session, ctx: TenantContext, product_ids: Sequence[UUID]
+) -> dict[UUID, ProductSummary]:
+    """Fiches résumées d'un lot de produits, pour Inventory.
+
+    Renvoie un dictionnaire, et non une liste : l'appelant a déjà ses identifiants
+    et veut les rattacher. Un produit supprimé est simplement absent du résultat.
+    """
+    products = ProductRepository(session, ctx).live_by_ids(product_ids)
+    return {
+        product_id: ProductSummary(
+            id=product.id,
+            sku=product.sku,
+            name=product.name,
+            category_id=product.category_id,
+            unit=product.unit,
+            is_stock_tracked=product.is_stock_tracked,
+            reorder_point=product.reorder_point,
+        )
+        for product_id, product in products.items()
+    }
 
 
 def count_active_in_category(session: Session, ctx: TenantContext, category_id: UUID) -> int:

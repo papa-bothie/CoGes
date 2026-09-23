@@ -40,6 +40,17 @@ def sqlstate(exc: BaseException) -> str | None:
     return getattr(getattr(exc, "orig", None), "sqlstate", None)
 
 
+def constraint_name(exc: BaseException) -> str | None:
+    """Nom de la contrainte ou de l'index violé, s'il y en a un.
+
+    Jumeau de `sqlstate` pour les cas où le SQLSTATE seul ne suffit pas : plusieurs
+    contraintes d'une même table rendent `23505`, et seul leur nom dit laquelle.
+    PostgreSQL renseigne ce champ pour les index uniques comme pour les contraintes
+    nommées. Il est stable, contrairement au texte du message.
+    """
+    return getattr(getattr(getattr(exc, "orig", None), "diag", None), "constraint_name", None)
+
+
 class NotFoundError(CogesError):
     code = "not_found"
     status_code = 404

@@ -40,6 +40,9 @@ TENANT_TABLES: tuple[str, ...] = (
     "categories",
     "products",
     "product_prices",
+    # Phase 04 — stock.
+    "product_stock",
+    "inventory_movements",
 )
 
 # Valeur factice : aucun mot de passe réel ne figure dans les tests.
@@ -62,6 +65,8 @@ class Tenant:
     supplier_id: UUID
     category_id: UUID
     product_id: UUID
+    # Phase 04 — un mouvement, qui crée du même coup la ligne de `product_stock`.
+    movement_id: UUID
 
     @property
     def ctx(self) -> TenantContext:
@@ -149,6 +154,7 @@ def create_tenant(
         supplier_id=uuid4(),
         category_id=uuid4(),
         product_id=uuid4(),
+        movement_id=uuid4(),
     )
 
     with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
@@ -186,6 +192,7 @@ def create_tenant(
         )
 
     _seed_referential(session_factory, tenant)
+    _seed_inventory(session_factory, tenant)
     return tenant
 
 
@@ -251,6 +258,31 @@ def _seed_referential(session_factory: sessionmaker[Any], tenant: Tenant) -> Non
         )
 
 
+def _seed_inventory(session_factory: sessionmaker[Any], tenant: Tenant) -> None:
+    """Un mouvement de stock par entreprise (phase 04).
+
+    Un seul INSERT suffit à peupler les **deux** tables : `t20_inv_apply` crée la
+    ligne de `product_stock` au passage. Écrire la projection à la main serait
+    d'ailleurs interdit (§ 5.6).
+    """
+    with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
+        session.execute(
+            text(
+                "INSERT INTO inventory_movements "
+                "(id, company_id, product_id, type, qty_delta, unit_cost, "
+                " ref_type, ref_id, created_by) "
+                "VALUES (:id, :company_id, :product_id, 'initial', 100, 1000.0000, "
+                "        'initial', :product_id, :created_by)"
+            ),
+            {
+                "id": tenant.movement_id,
+                "company_id": tenant.company_id,
+                "product_id": tenant.product_id,
+                "created_by": tenant.user_id,
+            },
+        )
+
+
 def own_row_ids(tenant: Tenant, table: str) -> dict[str, Any]:
     """Critère SQL qui désigne la ligne de `tenant` dans `table`."""
     criteria: dict[str, dict[str, Any]] = {
@@ -265,6 +297,8 @@ def own_row_ids(tenant: Tenant, table: str) -> dict[str, Any]:
         "categories": {"clause": "id = :value", "value": tenant.category_id},
         "products": {"clause": "id = :value", "value": tenant.product_id},
         "product_prices": {"clause": "product_id = :value", "value": tenant.product_id},
+        "product_stock": {"clause": "product_id = :value", "value": tenant.product_id},
+        "inventory_movements": {"clause": "id = :value", "value": tenant.movement_id},
         "auth_sessions": {"clause": "company_id = :value", "value": tenant.company_id},
         "business_events": {"clause": "company_id = :value", "value": tenant.company_id},
     }

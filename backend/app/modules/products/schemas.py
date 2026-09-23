@@ -94,6 +94,25 @@ class ProductRead(BaseModel):
         )
 
 
+class ProductSummary(BaseModel):
+    """Ce qu'un autre module a le droit de savoir d'un produit.
+
+    Inventory s'en sert pour la vue « produits + stock » (ADR 0012) : il lit
+    **ceci**, jamais le modèle `Product`. Pas de prix ici — le stock et le prix
+    sont deux faits datés distincts.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    sku: str
+    name: str
+    category_id: UUID | None
+    unit: ProductUnit
+    is_stock_tracked: bool
+    reorder_point: ReorderPoint | None
+
+
 class ProductCreate(BaseModel):
     """Création d'un produit **et** de son premier intervalle de prix.
 

@@ -48,6 +48,17 @@ class ProductRepository(TenantRepository[Product]):
             self._live().where(Product.id == product_id)
         ).scalar_one_or_none()
 
+    def live_by_ids(self, product_ids: Sequence[UUID]) -> dict[UUID, Product]:
+        """Fiches vivantes d'une page d'identifiants, en une requête (pas de N+1).
+
+        Sert la façade `get_summaries`, par laquelle Inventory joint le stock aux
+        fiches produit sans jamais toucher à ce modèle (ADR 0012).
+        """
+        if not product_ids:
+            return {}
+        stmt = self._live().where(Product.id.in_(product_ids))
+        return {product.id: product for product in self.session.execute(stmt).scalars()}
+
     def get_by_sku(self, sku: str) -> Product | None:
         """Homonyme de SKU, **y compris supprimé**.
 

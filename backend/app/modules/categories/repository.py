@@ -45,6 +45,17 @@ class CategoryRepository(TenantRepository[Category]):
         stmt = self._live().where(Category.id == category_id)
         return self.session.execute(stmt).scalar_one_or_none()
 
+    def live_names_by_ids(self, category_ids: Sequence[UUID]) -> dict[UUID, str]:
+        """Libellés vivants d'un lot de catégories, en une requête (pas de N+1)."""
+        if not category_ids:
+            return {}
+        stmt = select(Category.id, Category.name).where(
+            Category.company_id == self.ctx.company_id,
+            Category.deleted_at.is_(None),
+            Category.id.in_(category_ids),
+        )
+        return {row.id: row.name for row in self.session.execute(stmt)}
+
     def get_by_name(self, name: str, parent_id: UUID | None) -> Category | None:
         """Homonyme vivant sous le même parent (index `categories_name_uq`)."""
         stmt = self._live().where(Category.name == name)
