@@ -1,0 +1,403 @@
+# CoGes — Modèle de données V1.1 — §9 à §12 (migration, tests T1–T40, matrice V1/futur, critère final)
+# Extrait texte automatique (pdftotext -layout) du PDF d'origine dans ./pdf/.
+# En cas de doute (ligne coupée, tableau déformé), le PDF fait foi.
+
+9. Migration Alembic V1 → V1.1
+Outil unique : Alembic + SQLAlchemy. Flyway et Liquibase ne figurent plus dans la recommandation. Une
+seule chaîne de révisions, exécutée en CI sur une base restaurée de production, avec alembic upgrade
+head puis alembic downgrade -1 vérifiés à chaque livraison. La révision V1.1 est non destructive : aucune
+colonne supprimée, aucun type réduit, aucune donnée perdue. Seule exception assumée : la vue matérialisée
+daily_sales_facts est supprimée puis reconstruite comme table, ce qui est sans risque puisqu'elle ne
+porte aucune vérité.
+
+ Étape    Opération                        Détail et précaution
+
+ 1        Nouveaux types énumérés          CREATE TYPE pour return_refund_status, forecast_type,
+                                           insight_type, insight_severity, insight_status. Ajout de
+                                           'initial' à la liste de ref_type (un CHECK, pas un ENUM :
+                                           DROP puis ADD CONSTRAINT).
+
+ 2        Colonnes additives               products.default_tax_rate, sale_items.tax_rate,
+                                           sale_returns.refunded_total/refund_status,
+                                           sale_return_items.tax_refund/unit_cost,
+                                           payments.sale_return_id,
+                                           inventory_movements.reversal_of_movement_id,
+                                           product_stock.avg_cost. Toutes avec NOT NULL DEFAULT : en
+                                           PostgreSQL 11+ l'ajout ne réécrit pas la table.
+
+ 3        Rétro-remplissage des coûts      sale_return_items.unit_cost ← sale_items.unit_cost par
+                                           jointure. inventory_movements.unit_cost NULL ←
+                                           product_prices.cost_price valide à occurred_at, sinon 0 avec
+                                           trace dans audit_logs. À exécuter avant de passer la colonne
+                                           en NOT NULL.
+
+ 4        Colonnes générées                sale_items.net_amount/tax_amount ajoutées ; line_total et
+                                           sales.total redéfinies : DROP COLUMN puis ADD COLUMN …
+                                           GENERATED dans la même migration. Une colonne générée ne
+                                           peut pas être modifiée en place. L'ordre compte : les taux
+                                           valant 0 après remplissage, les valeurs recalculées sont
+                                           identiques aux anciennes.
+
+ 5        Alignement de tax_total          UPDATE sales SET tax_total = 0 — les ventes historiques ont
+                                           un taux nul, donc total reste inchangé. Contrôle
+                                           obligatoire : SELECT count(*) FROM sales WHERE total <>
+                                           subtotal - discount_total + tax_total doit renvoyer 0.
+
+ 6        CMP initial                      SELECT rebuild_product_stock(id) FROM companies : rejoue le
+                                           journal et calcule le CMP historique de chaque article.
+                                           C'est l'étape la plus longue — la planifier hors production
+                                           ouverte, entreprise par entreprise.
+
+ 7        Nouvelles tables                 sale_return_refunds, forecasts, insights,
+                                           ml_feature_snapshots, avec leurs FK composites et index.
+
+ 8        daily_sales_facts                DROP MATERIALIZED VIEW → CREATE TABLE → reconstruction
+                                           complète sur l'historique par la requête de 6.1. Aucune
+                                           reprise de données de l'ancienne MV : ses chiffres étaient
+                                           faux par duplication.
+
+ 9        Contraintes et index             inv_reversal_uq, remplacement de l'index d'idempotence par
+                                           sa version partielle (DROP INDEX + CREATE UNIQUE INDEX …
+                                           WHERE), CHECK de direction sur payments, plafonds de
+                                           remboursement. Créer les index en CONCURRENTLY hors
+                                           transaction pour les grosses tables.
+
+ 10       Fonctions et triggers            cmp_next_avg, inv_check_reversal, inv_apply_movement
+                                           (remplace la version V1), rebuild_product_stock, triggers de
+                                           retour et de remboursement. Remplacement des RULES DO
+                                           INSTEAD NOTHING par les triggers d'immuabilité.
+
+ 11       RLS                              Bloc DO de 8.11 : politiques sur audit_logs et sur les
+                                           nouvelles tables. Vérifier ensuite pg_class.relrowsecurity
+                                           et relforcerowsecurity sur les 28 tables tenant-scoped.
+
+ 12       Contrôle post-migration          Rejeu de la suite de tests de la section 10 sur la base
+                                           migrée, avant réouverture du service.
+
+  # alembic/versions/0002_v11_corrective.py — extraits representatifs
+  revision = "0002_v11_corrective"; down_revision = "0001_v1_initial"
+
+  def upgrade():
+       op.add_column("products", sa.Column("default_tax_rate",
+             sa.Numeric(6, 4), nullable=False, server_default="0"))
+       op.add_column("inventory_movements", sa.Column(
+             "reversal_of_movement_id", postgresql.UUID(as_uuid=True), nullable=True))
+       op.create_foreign_key("inv_reversal_fk", "inventory_movements",
+             "inventory_movements",
+             ["company_id", "reversal_of_movement_id"], ["company_id", "id"],
+             ondelete="RESTRICT")
+       op.create_unique_constraint("inv_reversal_uq", "inventory_movements",
+             ["company_id", "reversal_of_movement_id"])
+       op.drop_index("inv_ref_idempotence", table_name="inventory_movements")
+       op.execute("""CREATE UNIQUE INDEX inv_ref_idempotence
+             ON inventory_movements (company_id, ref_type, ref_id)
+             WHERE ref_id IS NOT NULL AND reversal_of_movement_id IS NULL""")
+       op.execute("SELECT rebuild_product_stock(id) FROM companies")
+
+  def downgrade():
+       # Reversible sur le schema. Les valeurs de CMP calculees ne sont pas
+       # restaurables : documente comme perte acceptable d'une projection.
+       ...
+
+10. Tests d'intégrité indispensables
+Chaque test est un pytest qui ouvre une transaction, pose SET LOCAL app.company_id et attend soit un
+résultat, soit une exception PostgreSQL précise. Un test qui passerait parce que l'API a vérifié quelque chose
+ne vaut rien : tous ces tests attaquent la base directement.
+
+ #       Test                     Scénario                                  Attendu
+
+ T1      Isolation en             Contexte tenant A, SELECT count(*)        0 ligne sur les 8 tables
+         lecture                  sur customers, sales,
+                                  product_stock, payments,
+                                  audit_logs, forecasts, insights,
+                                  daily_sales_facts contenant des
+                                  données de B
+
+ T2      Isolation en             Contexte A, INSERT avec company_id        WITH CHECK violé
+         écriture                 = B
+
+ T3      Contexte absent          Aucun SET LOCAL, SELECT sur sales         0 ligne, jamais d'erreur ni de
+                                                                            fuite
+
+ T4      Fuite par le pool        Transaction A puis réutilisation de       0 ligne : SET LOCAL meurt au
+                                  la même connexion pour B sans             COMMIT
+                                  nouveau SET LOCAL
+
+ T5      FK croisée               sale_items de A référençant un            Violation de FK composite
+                                  produit de B ; idem
+                                  sale_return_refunds → paiement de B
+
+ T6      Stock négatif —          Stock 5, vente de 6                       Exception, transaction
+         vente                                                              annulée, stock resté à 5
+
+ T7      Stock négatif —          adjustment −10, loss −10,                 Exception dans les 3 cas
+         autres sorties           supplier_return_out −10 sur stock 5
+
+ T8      Article non suivi        Mouvement sur un produit                  Exception ; aucune ligne de
+                                  is_stock_tracked = false                  product_stock créée
+
+ T9      CMP — entrée             100 u à 10, puis 100 u à 20               avg_cost = 15.0000,
+                                                                            stock_value = 3000.00
+
+ T10     CMP — sortie             Après T9, sortie de 50                    unit_cost du mouvement = 15 ;
+                                                                            avg_cost toujours 15 ;
+                                                                            stock_value = 2250.00
+
+ T11     CMP — stock nul          Sortie de la totalité                     qty_on_hand = 0, avg_cost
+                                                                            conservé, aucune division par
+                                                                            zéro
+
+ T12     CMP —                    rebuild_product_stock après 200           Écart nul sur qty et sur avg :
+         reconstruction           mouvements aléatoires                     trigger et recalcul donnent le
+                                                                            même résultat
+
+ T13     Immuabilité du           UPDATE et DELETE sur                      Exception restrict_violation
+         journal                  inventory_movements                       dans les deux cas
+
+ T14     Annulation de vente      Vente confirmée puis annulée              Un mouvement inverse par
+                                                                            ligne, reversal_of_movement_id
+                                                                            renseigné, stock revenu à
+                                                                            l'identique
+
+ T15     Idempotence              Deuxième annulation de la même            Violation de inv_reversal_uq ;
+         d'annulation             vente                                     aucun mouvement supplémentaire
+
+ T16     Annulation               Inverse d'un mouvement déjà inverse       Exception du trigger de
+         d'annulation                                                       validation
+
+ T17     Idempotence de           Deux mouvements pour le même              Violation de l'index partiel
+         sortie                   sale_item_id                              d'idempotence
+
+ #       Test                    Scénario                                 Attendu
+
+ T18     Retours multiples       Ligne de 10 retournée 3, 4 puis 4        Les deux premiers passent, le
+                                                                          troisième lève ; cumul
+                                                                          plafonné à 10
+
+ T19     Coût de retour          Vente au CMP 15, CMP passé à 20,         Entrée à 15 (coût de sortie),
+                                 puis retour                              pas à 20 ; cogs_returned
+                                                                          compense exactement cogs_gross
+
+ T20     Remboursement           Retour de 1 000 remboursé 600 puis       Le premier passe, le second
+                                 500                                      lève ; refund_status = partial
+
+ T21     Sens du                 payment inflow avec sale_return_id       Violation du CHECK
+         remboursement                                                    payments_return_outflow
+
+ T22     Traçabilité du          Requêtes croisées retour → paiement      Réponse unique et non ambiguë
+         remboursement           et paiement → retour                     dans les deux sens
+
+ T23     Taxes figées            Vente à 18 %, puis                       sale_items.tax_amount et
+                                 products.default_tax_rate passé à        sales.total inchangés
+                                 5 %
+
+ T24     Égalité comptable       Balayage de toutes les ventes            subtotal − discount_total +
+                                                                          tax_total = total partout
+
+ T25     Paiement partiel        Dette 1 000, paiement 400                amount_paid = 400, balance =
+                                                                          600, status = partially_paid
+
+ T26     Paiement multi-         Paiement 1 000 réparti 400 / 400 /       La troisième allocation lève :
+         dettes                  300                                      sur-affectation
+
+ T27     Dette soldée            Solde atteint 0                          status = paid, closed_at
+                                                                          renseigné
+
+ T28     Plafond de crédit       Nouvelle dette dépassant                 Exception du trigger
+                                 credit_limit
+
+ T29     Agrégation —            Une ligne de vente avec 3 retours        qty_sold, gross_revenue,
+         duplication             partiels, puis reconstruction            discount_total, cogs_gross et
+                                                                          sale_count identiques au cas
+                                                                          sans retour ; c'est le test
+                                                                          qui échouait en V1
+
+ T30     Agrégation —            Reconstruction de la même plage          Résultat identique ; aucune
+         idempotence             deux fois                                ligne dupliquée
+
+ T31     Agrégation —            Vente annulée après construction du      Ligne de fait purgée ; aucun
+         annulation              fait                                     fait fantôme
+
+ T32     Cohérence               Comparaison au calcul direct depuis      Égalité à 0,01 près sur 90
+         net_revenue             le transactionnel                        jours
+
+ T33     Idempotence des         Rejeu du pipeline sur le même as_of      forecasts : mise à jour, pas
+         résultats ML                                                     de doublon ; insights : même
+                                                                          dedupe_key mise à jour
+
+ T34     Insight écarté          Insight dismissed puis réémission        Insertion acceptée : l'index
+                                 de la même dedupe_key                    partiel ne bloque pas
+
+ T35     Pas d'inférence en      Trace SQL d'un appel aux écrans de       Aucune lecture de
+         ligne                   prévision                                ml_feature_snapshots, aucun
+                                                                          calcul : seulement forecasts /
+                                                                          insights par index
+
+ T36     Rôle applicatif         Inspection de pg_roles                   rolbypassrls = false, rolsuper
+                                                                          = false ; aucun DELETE
+                                                                          physique accordé
+
+ T37     Couverture RLS          pg_class croisé à la liste des           28/28 avec relrowsecurity et
+                                 tables tenant-scoped                     relforcerowsecurity
+
+ #       Test                    Scénario                              Attendu
+
+ T38     Concurrence sur le      Deux transactions vendant             Une réussit, l'autre lève ;
+         stock                   simultanément le dernier article      jamais de stock négatif ni de
+                                                                       CMP faux
+
+ T39     Atomicité de la         ROLLBACK injecté après les            Ni vente, ni mouvement, ni
+         vente                   mouvements                            événement ; stock intact
+
+ T40     Outbox                  Crash simulé après COMMIT, avant      Événement toujours présent
+                                 publication                           avec published_at IS NULL ;
+                                                                       rejouable
+
+11. Matrice V1 / V1.1 / futur
+ Évolution                  Statut        Ce qui existe en V1.1            Ce qu'il resterait à faire
+
+ Snapshot des taxes         Implémenté    tax_rate / tax_amount            —
+                                          figés, tax_total, égalité
+                                          comptable générée
+
+ Valorisation CMP           Implémenté    avg_cost, stock_value, coût      —
+                                          de sortie estampillé,
+                                          reconstruction
+
+ Stock négatif              Implémenté    CHECK + exception trigger,       —
+ interdit                                 tous types de sortie
+
+ Mouvements inverses        Implémenté    reversal_of_movement_id,         —
+ tracés                                   unicité, validation
+
+ Remboursement              Implémenté    sale_return_refunds,             —
+ traçable                                 payments.sale_return_id,
+                                          plafonds
+
+ Résultats ML               Implémenté    forecasts, insights,             Registre de modèles, backtest
+ persistés                                idempotence, RLS                 automatisé (hors base)
+
+ Analytique isolée          Implémenté    daily_sales_facts table +        Partitionnement mensuel si le
+                                          RLS, retours pré-agrégés         volume l'exige
+
+ RLS exhaustive             Implémenté    28 tables, audit_logs            —
+                                          inclus, rôles sans
+                                          BYPASSRLS
+
+ Migrations Alembic         Implémenté    Chaîne unique V1 → V1.1,         —
+                                          non destructive
+
+ Variantes produit          Préparé       product_id comme seule           Table product_variants +
+                                          référence stable ; stock         variant_id nullable sur 4
+                                          événementiel et prix             tables + reconstruction de
+                                          historisés, donc                 product_stock
+                                          reventilables
+
+ Multi-company /            Préparé       Unicité e-mail par tenant,       Table company_memberships,
+ memberships                              company_id jamais dérivé de      choix de tenant après
+                                          l'utilisateur dans les FK        authentification, revue du
+                                                                           flux JWT
+
+ Multi-entrepôts            Préparé       Stock entièrement                warehouses + location_id sur
+                                          événementiel ;                   les mouvements + clé de
+                                          product_stock jetable            projection élargie
+
+ Méthode FIFO               Préparé       Journal complet quantité /       Table de couches de coût, ou
+                                          coût / date : recalcul           recalcul à la demande
+                                          historique possible
+
+ Promotions                 Préparé       Remise stockée séparément        promotions + rattachement aux
+                                          du prix, donc distinguable       lignes
+                                          d'une baisse tarifaire
+                                          durable
+
+ Multi-devises              Hors V1       companies.currency unique ;      currency + taux sur chaque
+                                          tous les montants dans           flux, revue de toutes les
+                                          cette devise                     agrégations
+
+ Avoirs clients             Hors V1       Statut tranché en 4.6 :          credit_notes + solde client +
+                                          aucune table, aucun solde        imputation sur ventes futures
+                                          créditeur
+
+ Comptabilité générale      Hors V1       —                                Plan comptable, écritures à
+                                                                           double entrée, journaux,
+                                                                           exercices
+
+ Évolution                  Statut        Ce qui existe en V1.1            Ce qu'il resterait à faire
+
+ Moteur fiscal              Hors V1       Un taux par ligne, figé.         Table de règles fiscales,
+                                          Pas de règles, pas de            exonérations, déclarations
+                                          territorialité
+
+ CRM                        Hors V1       Fiche client minimale            Interactions, segments,
+                                                                           campagnes
+
+ Achats avancés             Hors V1       Entrées de stock + charge        purchase_orders, réceptions
+                                          ou dette fournisseur             partielles, rapprochement de
+                                                                           factures
+
+ Event sourcing             Hors V1       Outbox business_events           Non souhaitable pour CoGes :
+ complet                                  uniquement, l'état reste la      sur-ingénierie assumée comme
+                                          vérité                           écartée
+
+12. Critère final
+  « Le modèle V1.1 est-il maintenant suffisamment cohérent pour commencer l'implémentation backend
+  FastAPI + PostgreSQL + Alembic sans devoir refaire le schéma sur les mêmes sujets ? »
+
+  Oui — sur les dix sujets corrigés, aucun ne devrait rouvrir le schéma.
+  Les quatre décisions ouvertes sont verrouillées et portées par des structures, pas par des intentions. Les
+  dix défauts recensés en section 1 sont chacun corrigés par une contrainte, un index ou une table — pas
+  par une convention applicative. Les propriétés critiques (isolation, non-négativité du stock, idempotence
+  de l'annulation, plafond de remboursement, égalité comptable) sont désormais vérifiables par un test
+  SQL qui attaque la base directement, ce qui est le seul critère fiable de non-régression.
+
+12.1 Trois points résiduels — non masqués
+Aucun n'est bloquant, aucun n'exige de refaire le schéma. Les trois sont des risques de processus, à traiter
+dans l'implémentation.
+
+ Point                    Nature exacte du risque                Correction minimale avant développement
+
+ 1. SET LOCAL et          C'est le seul endroit où une           Poser le contexte dans une dépendance
+ pool de connexions       erreur d'implémentation peut           FastAPI unique, jamais ailleurs ;
+                          encore produire une fuite entre        interdire SET par revue de code ; T3, T4
+                          tenants : un SET au lieu d'un          et T37 en test de non-régression
+                          SET LOCAL, ou un SET LOCAL posé        obligatoire à chaque livraison.
+                          hors transaction, survivrait au
+                          retour de la connexion au pool.
+                          La base ne peut pas s'en
+                          protéger seule.
+
+ 2. CMP et                Le CMP dépend de l'ordre des           Deux options, à trancher avant
+ antidatage               mouvements. Un mouvement inséré        développement : refuser l'antidatage au-
+                          avec un occurred_at antérieur          delà d'une fenêtre (par exemple 48 h) par
+                          au dernier mouvement existant          un CHECK sur occurred_at, ou l'autoriser
+                          rend le CMP courant différent          et accepter l'écart corrigé chaque nuit
+                          du CMP recalculé. Le schéma ne         par rebuild_product_stock avec trace dans
+                          l'interdit pas ; c'est inhérent        audit_logs. Recommandation : la première,
+                          à toute valorisation en coût           plus simple à expliquer au gérant.
+                          moyen.
+
+ 3. Fenêtre de            Les retours étant rattachés au         Écrire l'événement dans la même
+ reconstruction           jour de la vente, l'exactitude         transaction que chaque mutation de vente,
+ analytique               de daily_sales_facts dépend            de retour et d'annulation, sans
+                          d'un job qui déduit                    exception ; ajouter un contrôle de
+                          correctement les jours à               réconciliation hebdomadaire (T32 sur 90
+                          réécrire depuis                        jours) et une alerte si l'écart dépasse
+                          business_events. Un événement          0,01.
+                          manquant produit un agrégat
+                          silencieusement faux — une
+                          contrainte SQL ne peut pas
+                          détecter cela.
+
+Périmètre fonctionnel : inchangé. Aucune fonctionnalité n'a été ajoutée ni retirée silencieusement. Les taxes,
+seule zone qui pouvait être interprétée de deux façons, sont explicitement dans le périmètre sous une forme
+minimale ; les avoirs clients, la comptabilité générale, le multi-devises et les variantes sont explicitement hors
+périmètre, avec leur point d'extension documenté.
+
+Ordre de développement recommandé : (1) socle tenant + RLS + dépendance de contexte, avec T1–T5 et
+T36–T37 avant toute autre ligne de code ; (2) référentiels et prix ; (3) stock et CMP, avec T6–T13 et T38 ; (4)
+ventes, confirmation, annulation, avec T14–T17, T23–T24, T39 ; (5) retours et remboursements, T18–T22 ; (6)
+
+dettes et paiements, T25–T28 ; (7) outbox et couche analytique, T29–T32, T40 ; (8) forecasts et insights, T33–
+T35. Le ML arrive en dernier, et seulement en lecture.
+

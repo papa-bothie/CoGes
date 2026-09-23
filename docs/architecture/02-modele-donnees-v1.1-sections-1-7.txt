@@ -1,0 +1,1467 @@
+# CoGes — Modèle de données V1.1 — §1 à §7 (corrections, décisions, ER, dictionnaire, règles métier, analytique, isolation)
+# Extrait texte automatique (pdftotext -layout) du PDF d'origine dans ./pdf/.
+# En cas de doute (ligne coupée, tableau déformé), le PDF fait foi.
+
+ANNEXE A BIS — SCHÉMA RELATIONNEL CORRIGÉ
+
+Modèle de données CoGes V1.1
+Version corrective du modèle V1. Les quatre décisions ouvertes sont verrouillées, dix défauts
+structurels identifiés sont corrigés, trois tables sont ajoutées et six sont amendées. Le périmètre
+fonctionnel de CoGes est inchangé : aucune extension future n'est implémentée, seules les
+structures nécessaires à la non-régression de l'évolution sont préparées. Toute décision V1
+pertinente est conservée telle quelle.
+
+  TABLES AJOUTÉES                        TABLES AMENDÉES                              DÉCISIONS VERROUILLÉES
+
+  3                                      6                                            4
+  forecasts · insights ·                 products · sales · sale_items ·              variantes · compte unique · stock ≥ 0
+  sale_return_refunds                    inventory_movements ·                        · CMP
+                                         product_stock · daily_sales_facts
+
+  SOMMAIRE
+
+   1. Résumé des corrections                                  7. Isolation multi-tenant
+   2. Décisions définitivement verrouillées                   8. SQL PostgreSQL 16 complet
+   3. Diagramme ER complet V1.1                               9. Migration Alembic V1 → V1.1
+   4. Dictionnaire de données V1.1                          10. Tests d'intégrité indispensables
+   5. Règles métier critiques                               11. Matrice V1 / V1.1 / futur
+   6. Architecture analytique                               12. Critère final
+
+1. Résumé des corrections
+ Problème V1                    Correction V1.1                               Impact
+
+ Aucune structure pour          Ajout de forecasts et insights, tenant-       Chemin de lecture
+ persister les résultats        scoped, RLS, écrites par le pipeline, lues    utilisateur découplé du
+ ML : l'API devrait             seules par l'API                              calcul ML. Aucune
+ exécuter un modèle pour                                                      inférence en ligne.
+ répondre
+
+ Annulation de vente : les      inventory_movements.reversal_of_movement_id   Traçabilité exacte
+ mouvements inverses ne         (FK composite auto-référente) + UNIQUE        « quel mouvement annule
+ sont pas rattachés au          (company_id, reversal_of_movement_id)         quoi » et idempotence
+ mouvement d'origine                                                          structurelle de
+                                                                              l'annulation.
+
+ Remboursement d'un retour      payments.sale_return_id + table de lettrage   Lien retour ↔ trésorerie
+ non traçable                   sale_return_refunds + CHECK de direction +    bidirectionnel. Double
+ financièrement ; notion        trigger de plafond                            remboursement
+ d'« avoir » ambiguë                                                          impossible. Avoir client
+                                                                              déclaré hors V1.
+
+ Taxes ni figées ni             Snapshot sale_items.tax_rate / tax_amount,    Montants historiques
+ exclues : une                  sales.tax_total,                              immuables. Égalité
+ modification de règle          sale_return_items.tax_refund ;                comptable sous-total −
+ pouvait réécrire une           products.default_tax_rate comme seule         remises + taxes = total
+ vente passée                   source de paramétrage                         garantie en base.
+
+ CMP annoncé mais absent        product_stock.avg_cost + stock_value          Valeur de stock, coût de
+ du modèle : aucune             généré, maintenus par le trigger de           sortie et COGS
+ colonne ne porte le coût       mouvement ; unit_cost des sorties             historique calculables.
+ moyen                          estampillé au CMP applicable                  Méthode explicite et
+                                                                              testable.
+
+ daily_sales_facts              Pré-agrégation des retours par sale_item_id   Fin de la surestimation
+ multipliait les lignes         dans une CTE avant jointure ; métriques       de quantité, CA,
+ quand un sale_item a           redéfinies et renommées                       remises, COGS et nombre
+ plusieurs lignes de                                                          de ventes.
+ retour
+
+ daily_sales_facts était        Transformation en table d'agrégats avec       Isolation analytique au
+ une vue matérialisée :         company_id, PK tenant-aware, RLS + FORCE      même niveau que le
+ pas de RLS, fuite              RLS, reconstruite par le processus            transactionnel.
+ possible entre tenants         analytique
+
+ audit_logs hors stratégie      RLS + FORCE RLS sur audit_logs et sur         Plus aucune table
+ RLS alors qu'il contient       toutes les nouvelles tables tenant-scoped     tenant-scoped sans
+ des données d'entreprise                                                     politique.
+
+ Risque de FK simples sur       Toutes les FK V1.1 sont composites            Référence croisée entre
+ les nouvelles relations        (company_id, child_id) → (company_id,         entreprises
+                                parent_id)                                    structurellement
+                                                                              impossible.
+
+ Trois outils de migration      Standardisation sur Alembic + SQLAlchemy,     Une seule chaîne de
+ cités en parallèle             migration versionnée V1 → V1.1 non            migration, reproductible
+                                destructive                                   en CI.
+
+ Stock négatif                  Interdit sans exception : CHECK sur           Une seule sémantique de
+ « paramétrable par             qty_on_hand + rejet dans le trigger, pour     stock dans tout le
+ entreprise »                   tout type de sortie                           système.
+
+ ml_feature_snapshots           Statut tranché : créée en V1.1, alimentée     Fin de l'ambiguïté de
+ marquée « pas de la V1 »       par le pipeline, non lue par l'application    périmètre.
+ puis « V1.1 »
+
+Aucune table V1 n'est supprimée, aucune colonne n'est renommée hors couche analytique, aucun type
+énuméré n'est réduit. Les seuls renommages portent sur daily_sales_facts, qui est reconstruite
+intégralement et dont aucune donnée n'est source de vérité.
+
+2. Décisions définitivement verrouillées
+
+2.1 Variantes produit — pas de moteur de variantes en V1
+products reste l'unité de référence unique des ventes et du stock. Il n'existe ni product_variants, ni
+matrice taille/couleur, ni SKU parent/enfant. Aucune notion de variante n'est codée en dur : ni colonne size,
+ni color, ni convention de nommage de SKU interprétée par le code.
+
+Point d'extension documenté. Les quatre tables qui référencent un article le font par product_id et par lui
+seul : sale_items, inventory_movements, product_stock, product_prices. L'extension future
+consistera à créer product_variants (id, company_id, product_id, attributes jsonb, sku)
+puis à ajouter une colonne variant_id nullable à ces quatre tables, le NULL signifiant « l'article lui-même ».
+Cette évolution reste possible sans réécriture de l'historique parce que : (a) le stock est événementiel, donc
+une reventilation par variante n'exige aucun UPDATE des mouvements passés ; (b) product_stock est une
+projection jetable, sa clé peut devenir (product_id, variant_id) par reconstruction ; (c) le prix est
+historisé par intervalles, un prix par variante s'ajoute sans invalider les intervalles existants.
+
+Non implémenté en V1.1. Aucune colonne variant_id n'est créée maintenant.
+
+2.2 Utilisateur / entreprise — 1 compte = 1 entreprise
+users.company_id NOT NULL est conservé comme unique rattachement. Il n'existe aucune table de
+membership. Un humain travaillant pour deux entreprises possède deux comptes distincts, avec deux mots de
+passe et deux sessions : users.email est unique par entreprise (UNIQUE (company_id, email)) et non
+globalement, ce qui rend ce cas représentable sans conflit.
+
+Conséquence assumée sur l'authentification : l'identifiant de connexion n'est pas l'e-mail seul mais le
+couple (slug d'entreprise, e-mail). C'est ce qui permet au JWT de porter un company_id unique et non
+ambigu, donc au serveur d'émettre un SET LOCAL app.company_id déterministe à chaque transaction. Le
+multi-company introduirait un choix de tenant après authentification, et donc un risque de bascule de
+contexte — écarté en V1.
+
+Extension future documentée : table company_memberships (user_id, company_id, role_set),
+users.company_id devenant le tenant d'origine puis étant retiré après reprise des données.
+Non implémenté.
+
+2.3 Stock négatif — interdit par défaut, sans dérogation
+Toute opération qui amènerait qty_on_hand sous zéro est rejetée par PostgreSQL, atomiquement, dans la
+transaction appelante. La règle s'applique indistinctement à la vente (sale_out), à l'ajustement négatif
+(adjustment), à la perte (loss), au retour fournisseur (supplier_return_out) et à toute sortie future.
+Elle est portée par deux mécanismes redondants : un CHECK (qty_on_hand >= 0) sur la projection et
+un RAISE EXCEPTION explicite dans le trigger de mouvement, qui produit un message métier exploitable
+par l'API.
+La colonne de paramétrage par entreprise évoquée en V1 est supprimée de la conception : un stock négatif
+autorisé chez un tenant rendrait le CMP indéfini (division par une quantité nulle ou négative) et la valeur de
+stock non interprétable. Les articles is_stock_tracked = false restent hors du mécanisme : aucun
+mouvement ne peut être écrit pour eux, et aucune ligne de product_stock n'existe.
+
+2.4 Valorisation — coût moyen pondéré (CMP)
+Le CMP est la méthode unique de V1.1. FIFO n'est pas implémenté. Le modèle porte le CMP courant
+dans product_stock.avg_cost, recalculé à chaque entrée, et fige le coût de chaque sortie dans
+inventory_movements.unit_cost. sale_items.unit_cost reste le snapshot du coût appliqué à
+la vente.
+
+Évolution future préservée : chaque mouvement conserve sa quantité signée, son coût unitaire et son
+horodatage métier. Un recalcul complet en FIFO ou en coût standard est donc possible a posteriori à partir du
+seul journal inventory_movements, sans donnée manquante. Seule la projection product_stock serait
+à reconstruire.
+
+3. Diagramme ER complet V1.1
+30 tables. Notation Mermaid : || exactement un, o| zéro ou un, o{ zéro ou plusieurs, |{ un ou plusieurs. Les
+relations ajoutées en V1.1 sont commentées %% V1.1. Toutes les relations traversant des données tenant-
+scoped sont matérialisées par des FK composites (company_id, child_id) → (company_id,
+parent_id) ; le diagramme ne montre que la colonne fonctionnelle.
+
+  erDiagram
+       COMPANIES ||--o{ USERS : "emploie"
+       COMPANIES ||--o{ ROLES : "definit"
+       COMPANIES ||--o{ CUSTOMERS : "possede"
+       COMPANIES ||--o{ SUPPLIERS : "possede"
+       COMPANIES ||--o{ CATEGORIES : "possede"
+       COMPANIES ||--o{ PRODUCTS : "possede"
+       COMPANIES ||--o{ SALES : "enregistre"
+       COMPANIES ||--o{ EXPENSES : "supporte"
+       COMPANIES ||--o{ DEBTS : "suit"
+       COMPANIES ||--o{ PAYMENTS : "encaisse"
+       COMPANIES ||--o{ INVENTORY_MOVEMENTS : "tracte"
+       COMPANIES ||--o{ AUDIT_LOGS : "journalise"
+       COMPANIES ||--o{ BUSINESS_EVENTS : "publie"
+       COMPANIES ||--o{ NOTIFICATIONS : "notifie"
+       COMPANIES ||--o{ DAILY_SALES_FACTS : "agrege"
+       COMPANIES ||--o{ ML_FEATURE_SNAPSHOTS : "featurise"
+       COMPANIES ||--o{ FORECASTS : "prevoit"
+       COMPANIES ||--o{ INSIGHTS : "observe"
+
+       USERS ||--o{ USER_ROLES : "detient"
+       ROLES ||--o{ USER_ROLES : "attribue_a"
+       ROLES ||--o{ ROLE_PERMISSIONS : "accorde"
+       PERMISSIONS ||--o{ ROLE_PERMISSIONS : "accordee_par"
+
+       CATEGORIES ||--o{ CATEGORIES : "parent_de"
+       CATEGORIES ||--o{ PRODUCTS : "classe"
+       PRODUCTS ||--o{ PRODUCT_PRICES : "tarife_par"
+       PRODUCTS ||--o| PRODUCT_STOCK : "etat_courant_cmp"
+       PRODUCTS ||--o{ SALE_ITEMS : "vendu_dans"
+       PRODUCTS ||--o{ INVENTORY_MOVEMENTS : "mouvemente"
+
+       CUSTOMERS ||--o{ SALES : "achete"
+       USERS ||--o{ SALES : "saisit"
+       SALES ||--|{ SALE_ITEMS : "compose_de"
+       SALES ||--o{ SALE_RETURNS : "retourne"
+       SALE_RETURNS ||--|{ SALE_RETURN_ITEMS : "compose_de"
+       SALE_ITEMS ||--o{ SALE_RETURN_ITEMS : "retourne_via"
+       PRODUCT_PRICES |o--o{ SALE_ITEMS : "prix_applique"
+
+       SALE_ITEMS ||--o| INVENTORY_MOVEMENTS : "sortie_stock"
+       SALE_RETURN_ITEMS ||--o| INVENTORY_MOVEMENTS : "entree_retour"
+       SUPPLIERS ||--o{ INVENTORY_MOVEMENTS : "approvisionne"
+       INVENTORY_MOVEMENTS ||--o| INVENTORY_MOVEMENTS : "annule_par"              %% V1.1
+
+       EXPENSE_CATEGORIES ||--o{ EXPENSES : "classe"
+       SUPPLIERS ||--o{ EXPENSES : "facture"
+
+       SALES ||--o{ DEBTS : "genere"
+       CUSTOMERS ||--o{ DEBTS : "doit"
+       SUPPLIERS ||--o{ DEBTS : "creancier"
+       DEBTS ||--o{ PAYMENT_ALLOCATIONS : "reglee_par"
+       PAYMENTS ||--o{ PAYMENT_ALLOCATIONS : "affecte_a"
+
+       SALES ||--o{ PAYMENTS : "encaissement"
+       EXPENSES ||--o{ PAYMENTS : "decaissement"
+       USERS ||--o{ PAYMENTS : "saisit"
+       SALE_RETURNS ||--o{ SALE_RETURN_REFUNDS : "rembourse_par"                %% V1.1
+       PAYMENTS ||--o{ SALE_RETURN_REFUNDS : "couvre_retour"                    %% V1.1
+
+       USERS ||--o{ AUDIT_LOGS : "acteur"
+       USERS ||--o{ NOTIFICATIONS : "destinataire"
+       PRODUCTS ||--o{ DAILY_SALES_FACTS : "agrege_par"
+       PRODUCTS ||--o{ ML_FEATURE_SNAPSHOTS : "featurise"
+       PRODUCTS ||--o{ FORECASTS : "prevu_pour"                                 %% V1.1
+
+       COMPANIES {
+           uuid id PK
+           text name
+           citext slug UK
+           char currency
+           text timezone
+           jsonb settings
+           timestamptz deleted_at
+       }
+       USERS {
+           uuid id PK
+           uuid company_id FK
+           citext email UK
+           text password_hash
+           text full_name
+           boolean is_active
+           timestamptz last_login_at
+           timestamptz deleted_at
+       }
+       ROLES {
+           uuid id PK
+           uuid company_id FK
+           text name UK
+           boolean is_system
+       }
+       PERMISSIONS {
+           uuid id PK
+           text code UK
+           text resource
+           text action
+       }
+       USER_ROLES {
+           uuid user_id PK
+           uuid role_id PK
+           uuid company_id FK
+       }
+       ROLE_PERMISSIONS {
+           uuid role_id PK
+           uuid permission_id PK
+           uuid company_id FK
+       }
+       CUSTOMERS {
+           uuid id PK
+           uuid company_id FK
+           text code UK
+           text name
+           text phone
+           citext email
+           numeric credit_limit
+
+           timestamptz deleted_at
+       }
+       SUPPLIERS {
+           uuid id PK
+           uuid company_id FK
+           text code UK
+           text name
+           text phone
+           smallint payment_terms_days
+           timestamptz deleted_at
+       }
+       CATEGORIES {
+           uuid id PK
+           uuid company_id FK
+           uuid parent_id FK
+           text name UK
+           timestamptz deleted_at
+       }
+       PRODUCTS {
+           uuid id PK
+           uuid company_id FK
+           uuid category_id FK
+           text sku UK
+           text barcode
+           text name
+           text unit
+           boolean is_stock_tracked
+           numeric default_tax_rate "V1.1"
+           numeric reorder_point
+           boolean is_active
+           timestamptz deleted_at
+       }
+       PRODUCT_PRICES {
+           uuid id PK
+           uuid company_id FK
+           uuid product_id FK
+           numeric unit_price
+           numeric cost_price
+           timestamptz valid_from
+           timestamptz valid_to
+           uuid created_by FK
+       }
+       PRODUCT_STOCK {
+           uuid product_id PK
+           uuid company_id FK
+           numeric qty_on_hand
+           numeric avg_cost "V1.1 - CMP"
+           numeric stock_value "V1.1 - genere"
+           timestamptz last_movement_at
+           timestamptz recomputed_at
+       }
+       SALES {
+           uuid id PK
+           uuid company_id FK
+           uuid customer_id FK
+           text sale_no UK
+           sale_status status
+           timestamptz sold_at
+           numeric subtotal
+           numeric discount_total
+           numeric tax_total "V1.1"
+
+           numeric total
+           numeric paid_total
+           text cancel_reason
+           timestamptz confirmed_at
+           timestamptz cancelled_at
+           uuid created_by FK
+       }
+       SALE_ITEMS {
+           uuid id PK
+           uuid company_id FK
+           uuid sale_id FK
+           uuid product_id FK
+           uuid price_id FK
+           numeric qty
+           numeric unit_price
+           numeric unit_cost
+           numeric discount
+           numeric tax_rate "V1.1"
+           numeric tax_amount "V1.1 - genere"
+           numeric net_amount "genere"
+           numeric line_total "genere"
+       }
+       SALE_RETURNS {
+           uuid id PK
+           uuid company_id FK
+           uuid sale_id FK
+           text return_no UK
+           text reason
+           timestamptz returned_at
+           numeric total_refund
+           numeric refunded_total "V1.1"
+           return_refund_status refund_status "V1.1"
+           uuid created_by FK
+       }
+       SALE_RETURN_ITEMS {
+           uuid id PK
+           uuid company_id FK
+           uuid return_id FK
+           uuid sale_item_id FK
+           numeric qty
+           numeric refund_amount
+           numeric tax_refund "V1.1"
+           numeric unit_cost "V1.1"
+       }
+       SALE_RETURN_REFUNDS {
+           uuid id PK
+           uuid company_id FK
+           uuid sale_return_id FK
+           uuid payment_id FK
+           numeric amount
+           timestamptz created_at
+       }
+       INVENTORY_MOVEMENTS {
+           uuid id PK
+           uuid company_id FK
+           uuid product_id FK
+           movement_type type
+           numeric qty_delta
+           numeric unit_cost
+           text ref_type
+           uuid ref_id
+
+           uuid reversal_of_movement_id FK "V1.1"
+           uuid supplier_id FK
+           text note
+           timestamptz occurred_at
+           uuid created_by FK
+       }
+       EXPENSE_CATEGORIES {
+           uuid id PK
+           uuid company_id FK
+           text name UK
+           expense_kind kind
+       }
+       EXPENSES {
+           uuid id PK
+           uuid company_id FK
+           uuid category_id FK
+           uuid supplier_id FK
+           text label
+           numeric amount
+           date spent_at
+           timestamptz deleted_at
+           uuid created_by FK
+       }
+       DEBTS {
+           uuid id PK
+           uuid company_id FK
+           party_type party_type
+           uuid customer_id FK
+           uuid supplier_id FK
+           uuid sale_id FK
+           uuid expense_id FK
+           numeric principal
+           numeric amount_paid
+           numeric balance "genere"
+           date due_date
+           debt_status status
+           timestamptz closed_at
+       }
+       PAYMENTS {
+           uuid id PK
+           uuid company_id FK
+           cash_direction direction
+           pay_method method
+           numeric amount
+           timestamptz paid_at
+           uuid sale_id FK
+           uuid expense_id FK
+           uuid sale_return_id FK "V1.1"
+           text reference
+           uuid created_by FK
+       }
+       PAYMENT_ALLOCATIONS {
+           uuid id PK
+           uuid company_id FK
+           uuid payment_id FK
+           uuid debt_id FK
+           numeric amount
+       }
+       NOTIFICATIONS {
+           uuid id PK
+           uuid company_id FK
+
+           uuid user_id FK
+           text type
+           text title
+           text body
+           jsonb data
+           timestamptz read_at
+       }
+       AUDIT_LOGS {
+           bigint id PK
+           uuid company_id FK
+           uuid actor_user_id FK
+           text action
+           text entity_table
+           uuid entity_id
+           jsonb diff
+           inet ip_address
+           timestamptz occurred_at
+       }
+       BUSINESS_EVENTS {
+           bigint id PK
+           uuid company_id FK
+           text event_type
+           text aggregate_type
+           uuid aggregate_id
+           jsonb payload
+           timestamptz occurred_at
+           timestamptz published_at
+           smallint attempts
+       }
+       DAILY_SALES_FACTS {
+           uuid company_id PK
+           date day PK
+           uuid product_id PK
+           uuid category_id
+           numeric qty_sold
+           numeric returned_qty
+           numeric net_qty_sold
+           numeric gross_revenue
+           numeric discount_total
+           numeric tax_total
+           numeric refund_net_amount
+           numeric net_revenue
+           numeric cogs_gross
+           numeric cogs_returned
+           numeric cogs_net
+           integer sale_count
+           timestamptz built_at
+       }
+       ML_FEATURE_SNAPSHOTS {
+           bigint id PK
+           uuid company_id FK
+           uuid product_id FK
+           date as_of
+           jsonb features
+           jsonb labels
+           timestamptz created_at
+       }
+       FORECASTS {
+           uuid id PK
+           uuid company_id FK
+           uuid product_id FK
+
+           forecast_type forecast_type
+           date as_of
+           date horizon_date
+           numeric yhat
+           numeric yhat_lower
+           numeric yhat_upper
+           text model_name
+           text model_version
+           jsonb metadata
+           timestamptz generated_at
+       }
+       INSIGHTS {
+           uuid id PK
+           uuid company_id FK
+           insight_type insight_type
+           insight_severity severity
+           text title
+           text body
+           text entity_table
+           uuid entity_id
+           jsonb evidence
+           text dedupe_key UK
+           text model_name
+           text model_version
+           insight_status status
+           timestamptz generated_at
+           timestamptz valid_until
+       }
+
+4. Dictionnaire de données V1.1
+Conventions inchangées : PK uuid via gen_random_uuid() ; created_at timestamptz NOT NULL
+DEFAULT now() et updated_at par trigger ; company_id uuid NOT NULL sur toute table métier avec
+UNIQUE (company_id, id) comme cible des FK composites ; montants numeric(14,2), quantités
+numeric(14,3), coûts unitaires numeric(14,4) (précision nécessaire au CMP), taux numeric(6,4) ;
+jamais de flottant. La section 4.1 recense les 30 tables ; 4.2 à 4.12 détaillent au niveau colonne les tables
+nouvelles ou amendées. Pour les tables inchangées, le détail colonne par colonne de l'annexe V1 reste la
+référence et n'est pas dupliqué ici.
+
+4.1 Recensement des 30 tables
+
+ Table                     Statut         Rôle                   Vérité        RLS     Colonnes
+
+ companies                 V1             Racine du tenant       Source        non*    id, name, slug,
+                                                                                       currency, timezone,
+                                                                                       settings, created_at,
+                                                                                       updated_at, deleted_at
+
+ users                     V1             Comptes d'accès,       Source        oui     id, company_id, email,
+                                          1 par entreprise                             password_hash,
+                                                                                       full_name, is_active,
+                                                                                       last_login_at,
+                                                                                       deleted_at
+
+ roles                     V1             Rôles RBAC par         Source        oui     id, company_id, name,
+                                          tenant                                       description, is_system
+
+ permissions               V1             Catalogue global       Source        non*    id, code, resource,
+                                          des droits                                   action
+
+ user_roles                V1             Liaison                Source        oui     user_id, role_id,
+                                          utilisateur ↔                                company_id, granted_at
+                                          rôle
+
+ role_permissions          V1             Liaison rôle ↔         Source        oui     role_id, permission_id,
+                                          permission                                   company_id
+
+ customers                 V1             Clients                Source        oui     id, company_id, code,
+                                                                                       name, phone, email,
+                                                                                       credit_limit,
+                                                                                       deleted_at
+
+ suppliers                 V1             Fournisseurs           Source        oui     id, company_id, code,
+                                                                                       name, phone,
+                                                                                       payment_terms_days,
+                                                                                       deleted_at
+
+ categories                V1             Arbre de familles      Source        oui     id, company_id,
+                                          produit                                      parent_id, name,
+                                                                                       deleted_at
+
+ products                  AMENDÉE        Référentiel            Source        oui     + default_tax_rate
+                                          article
+
+ product_prices            V1             Historique             Source        oui     id, company_id,
+                                          tarifaire par                                product_id, unit_price,
+                                          intervalles                                  cost_price, valid_from,
+                                                                                       valid_to, created_by
+
+ product_stock             AMENDÉE        État courant +         Projection    oui     + avg_cost,
+                                          CMP                                          stock_value,
+                                                                                       recomputed_at
+
+ sales                     AMENDÉE        Racine d'agrégat       Source        oui     + tax_total, total
+                                          de la vente                                  redéfini
+
+ Table                    Statut         Rôle                Vérité       RLS    Colonnes
+
+ sale_items               AMENDÉE        Lignes de vente,    Source       oui    + tax_rate, tax_amount,
+                                         snapshots                               net_amount
+
+ sale_returns             AMENDÉE        En-tête de retour   Source       oui    + refunded_total,
+                                         client                                  refund_status
+
+ sale_return_items        AMENDÉE        Lignes de retour    Source       oui    + tax_refund, unit_cost
+
+ sale_return_refunds      NOUVELLE       Lettrage retour ↔   Source       oui    id, company_id,
+                                         paiement                                sale_return_id,
+                                                                                 payment_id, amount,
+                                                                                 created_at
+
+ inventory_movements      AMENDÉE        Journal de stock    Source       oui    +
+                                         append-only                             reversal_of_movement_id
+
+ expense_categories       V1             Axes de charges     Source       oui    id, company_id, name,
+                                                                                 kind
+
+ expenses                 V1             Charges             Source       oui    id, company_id,
+                                                                                 category_id,
+                                                                                 supplier_id, label,
+                                                                                 amount, spent_at,
+                                                                                 deleted_at, created_by
+
+ debts                    V1             Créances et         Source       oui    id, company_id,
+                                         dettes                                  party_type,
+                                                                                 customer_id,
+                                                                                 supplier_id, sale_id,
+                                                                                 expense_id, principal,
+                                                                                 amount_paid, balance,
+                                                                                 due_date, status,
+                                                                                 closed_at
+
+ payments                 AMENDÉE        Flux de             Source       oui    + sale_return_id
+                                         trésorerie
+
+ payment_allocations      V1             Lettrage paiement   Source       oui    id, company_id,
+                                         ↔ dette                                 payment_id, debt_id,
+                                                                                 amount, created_at
+
+ notifications            V1             Alertes             Source       oui    id, company_id,
+                                         utilisateur                             user_id, type, title,
+                                                                                 body, data, read_at
+
+ audit_logs               RLS AJOUTÉE    Journal de          Source       oui    id, company_id,
+                                         conformité                              actor_user_id, action,
+                                                                                 entity_table,
+                                                                                 entity_id, diff,
+                                                                                 ip_address, occurred_at
+
+ business_events          V1             Outbox              Source       oui    id, company_id,
+                                         transactionnelle                        event_type,
+                                                                                 aggregate_type,
+                                                                                 aggregate_id, payload,
+                                                                                 occurred_at,
+                                                                                 published_at, attempts
+
+ daily_sales_facts        MV → TABLE     Agrégat jour ×      Projection   oui    voir 4.10
+                                         produit
+
+ ml_feature_snapshots     CRÉÉE          Features figées     Projection   oui    id, company_id,
+                                         par as_of                               product_id, as_of,
+                                                                                 features, labels,
+                                                                                 created_at
+
+ forecasts                NOUVELLE       Prévisions          Projection   oui    voir 4.11
+                                         persistées
+
+ Table                     Statut           Rôle                   Vérité         RLS    Colonnes
+
+ insights                   NOUVELLE        Anomalies et           Projection     oui    voir 4.12
+                                            recommandations
+
+* companies et permissions ne sont pas tenant-scoped : la première est le tenant, la
+seconde est un catalogue global en lecture seule pour l'application. Une politique RLS
+USING (id = current_setting('app.company_id', true)::uuid) est néanmoins posée sur
+companies pour éviter l'énumération des tenants.
+
+4.2 products AMENDÉE
+Une seule colonne ajoutée. Aucune notion de variante. default_tax_rate est un paramètre de saisie, jamais une
+source de recalcul : sa valeur est copiée dans sale_items.tax_rate à la confirmation et sa modification
+ultérieure n'affecte aucune vente passée.
+
+ Colonne                     Type                  Null    Contraintes / notes
+
+ default_tax_rate            numeric(6,4)          NON      V1.1 défaut 0 ; CHECK (default_tax_rate >= 0
+                                                           AND default_tax_rate < 1) ; taux décimal (0.18
+                                                           = 18 %)
+
+ (autres colonnes)           —                     —       inchangées : id, company_id, category_id, sku,
+                                                           barcode, name, unit, is_stock_tracked,
+                                                           reorder_point, is_active, deleted_at
+
+4.3 product_stock AMENDÉE — PROJECTION CMP
+Reste une projection sans vérité propre, désormais porteuse du CMP courant. Elle n'existe que pour les articles
+is_stock_tracked = true : la cardinalité products → product_stock passe donc de 1:1 à 1:0..1. Le trigger
+de mouvement la met à jour sous verrou de ligne ; un job nocturne la reconstruit depuis inventory_movements et
+journalise tout écart dans audit_logs.
+
+ Colonne                     Type                  Null    Contraintes / notes
+
+ product_id                  uuid                  NON     PK ; FK composite (company_id, product_id) →
+                                                           products
+
+ company_id                  uuid                  NON     FK → companies ; UNIQUE (company_id,
+                                                           product_id)
+
+ qty_on_hand                 numeric(14,3)         NON     défaut 0 ; CHECK (qty_on_hand >= 0) — stock
+                                                           négatif interdit sans dérogation
+
+ avg_cost                    numeric(14,4)         NON      V1.1 défaut 0 ; CHECK ≥ 0 ; CMP courant,
+                                                           recalculé à chaque entrée, inchangé à chaque
+                                                           sortie
+
+ stock_value                 numeric(14,2)         NON      V1.1 GENERATED ALWAYS AS round(qty_on_hand *
+                                                           avg_cost, 2) STORED — ne peut pas diverger
+
+ last_movement_at            timestamptz           OUI     horodatage métier du dernier mouvement appliqué
+
+ recomputed_at               timestamptz           NON      RENOMMÉE (ex-refreshed_at) défaut now() ; date
+                                                           de la dernière reconstruction complète
+
+Index : PK(product_id) ; UNIQUE(company_id, product_id) ; (company_id, qty_on_hand) pour
+les alertes de seuil ; (company_id) WHERE qty_on_hand = 0 pour les ruptures.
+
+4.4 sales AMENDÉE — TAXES FIGÉES
+
+ Colonne                      Type                   Null     Contraintes / notes
+
+ subtotal                     numeric(14,2)          NON      Σ qty × unit_price des lignes, hors taxe et
+                                                              avant remise ; maintenu par trigger ; CHECK ≥ 0
+
+ discount_total               numeric(14,2)          NON      Σ des remises de ligne ; CHECK (0 <=
+                                                              discount_total AND discount_total <= subtotal)
+
+ tax_total                    numeric(14,2)          NON       V1.1 défaut 0 ; CHECK ≥ 0 ; Σ
+                                                              sale_items.tax_amount, maintenu par trigger
+
+ total                        numeric(14,2)          NON       REDÉFINI GENERATED ALWAYS AS (subtotal −
+                                                              discount_total + tax_total) STORED — l'égalité
+                                                              comptable est portée par la base
+
+ paid_total                   numeric(14,2)          NON      défaut 0 ; maintenu par trigger depuis payments
+                                                              (inflow rattachés à la vente)
+
+ (autres colonnes)            —                      —        inchangées : id, company_id, customer_id,
+                                                              sale_no, status, sold_at, cancel_reason,
+                                                              cancelled_at, confirmed_at, created_by
+
+Index : inchangés, dont le partiel (company_id, sold_at) WHERE status = 'confirmed' qui
+sert tous les rapports et la reconstruction analytique.
+
+4.5 sale_items AMENDÉE — SNAPSHOT FISCAL
+Les taxes font partie du périmètre V1.1, sous une forme volontairement minimale : un taux unique par ligne, figé à
+la confirmation. Il n'existe pas de moteur fiscal, pas de table de règles, pas de territorialité, pas d'exonération
+conditionnelle. La base garantit seulement qu'un montant émis ne peut plus changer.
+
+ Colonne                      Type                   Null     Contraintes / notes
+
+ unit_price                   numeric(14,2)          NON      snapshot HT ; immuable après confirmation
+                                                              (trigger)
+
+ unit_cost                    numeric(14,4)          NON       NON NULLABLE snapshot du CMP applicable à
+                                                              l'instant de la sortie, recopié depuis le
+                                                              mouvement ; base du COGS historique
+
+ discount                     numeric(14,2)          NON      défaut 0 ; CHECK (discount >= 0 AND discount <=
+                                                              qty * unit_price)
+
+ tax_rate                     numeric(6,4)           NON       V1.1 défaut 0 ; CHECK >= 0 AND < 1 ; copié de
+                                                              products.default_tax_rate à la confirmation,
+                                                              jamais relu ensuite
+
+ net_amount                   numeric(14,2)          NON       V1.1 GENERATED (qty * unit_price − discount)
+                                                              STORED — base taxable de la ligne
+
+ tax_amount                   numeric(14,2)          NON       V1.1 GENERATED round((qty * unit_price −
+                                                              discount) * tax_rate, 2) STORED
+
+ line_total                   numeric(14,2)          NON       REDÉFINI GENERATED (qty * unit_price −
+                                                              discount + round((qty * unit_price − discount)
+                                                              * tax_rate, 2)) STORED — montant TTC de la
+                                                              ligne
+
+ (autres colonnes)            —                      —        inchangées : id, company_id, sale_id,
+                                                              product_id, price_id, qty
+
+4.6 sale_returns AMENDÉE
+
+ Colonne                     Type                      Null     Contraintes / notes
+
+ total_refund                numeric(14,2)             NON      montant remboursable TTC ; Σ des
+                                                                refund_amount de lignes ; maintenu par
+                                                                trigger ; CHECK ≥ 0
+
+ refunded_total              numeric(14,2)             NON       V1.1 défaut 0 ; Σ des
+                                                                sale_return_refunds.amount, maintenu par
+                                                                trigger ; CHECK (refunded_total <=
+                                                                total_refund) — le double remboursement est
+                                                                impossible
+
+ refund_status               return_refund_status      NON       V1.1 ENUM (pending, partial, settled,
+                                                                none_due) ; dérivé par trigger du couple
+                                                                (total_refund, refunded_total)
+
+ (autres colonnes)           —                         —        inchangées : id, company_id, sale_id,
+                                                                return_no, reason, returned_at, created_by
+
+Statut de la notion d'avoir client : explicitement hors V1. Il n'existe pas de table credit_notes et aucun solde
+créditeur client n'est représentable. Un retour se règle soit par un remboursement en trésorerie
+(payments.direction = 'outflow'), soit par une extinction de dette existante via payment_allocations,
+soit par rien du tout (refund_status = 'none_due'). L'ancien libellé « remboursement ou avoir » de la V1 est
+retiré de la conception.
+
+4.7 sale_return_items AMENDÉE · sale_return_refunds NOUVELLE
+Pourquoi une table de lettrage plutôt qu'une simple FK : payments.sale_return_id seul ne permettrait pas
+de rembourser deux retours par un unique versement, ni d'échelonner un remboursement en deux versements. La
+structure retenue est symétrique de payment_allocations, déjà éprouvée dans le modèle.
+payments.sale_return_id est conservé comme contexte direct (lecture rapide, cohérent avec sale_id et
+expense_id), le lettrage porte la relation N:N.
+
+ Table.colonne                             Type               Null    Contraintes / notes
+
+ sale_return_items.qty                     numeric(14,3)      NON     CHECK > 0 ; trigger : Σ des retours
+                                                                      d'une ligne ≤ sale_items.qty
+
+ sale_return_items.refund_amount           numeric(14,2)      NON     CHECK ≥ 0 ; TTC, calculé au prix et au
+                                                                      taux historiques de la ligne : qty ×
+                                                                      (unit_price − discount/qty) × (1 +
+                                                                      tax_rate), arrondi à 2 décimales
+
+ sale_return_items.tax_refund              numeric(14,2)      NON      V1.1 défaut 0 ; part de taxe incluse
+                                                                      dans refund_amount ; CHECK 0 <=
+                                                                      tax_refund <= refund_amount
+
+ sale_return_items.unit_cost               numeric(14,4)      NON      V1.1 recopié de
+                                                                      sale_items.unit_cost : le retour
+                                                                      réintègre le stock au coût auquel il
+                                                                      en était sorti, pas au CMP du jour
+
+ sale_return_refunds.sale_return_id        uuid               NON     FK composite → sale_returns ON DELETE
+                                                                      RESTRICT
+
+ sale_return_refunds.payment_id            uuid               NON     FK composite → payments ON DELETE
+                                                                      CASCADE ; UNIQUE (company_id,
+                                                                      payment_id, sale_return_id)
+
+ sale_return_refunds.amount                numeric(14,2)      NON     CHECK > 0 ; triggers : Σ par retour ≤
+                                                                      total_refund, Σ par paiement ≤
+                                                                      payments.amount, et payments.direction
+                                                                      doit valoir outflow
+
+Index : (company_id, sale_return_id) — répond à « quel remboursement pour ce retour » ;
+(company_id, payment_id) — répond à « quel retour a provoqué cette sortie de trésorerie ».
+
+4.8 inventory_movements AMENDÉE — MOUVEMENTS INVERSES
+Toujours append-only : ni UPDATE ni DELETE, garantis par des règles DO INSTEAD NOTHING. Le mouvement
+d'origine reste strictement immuable ; son annulation crée une nouvelle ligne qui le désigne.
+
+ Colonne                      Type                 Null      Contraintes / notes
+
+ type                         movement_type        NON       ENUM inchangé (initial, purchase_in, sale_out,
+                                                             customer_return_in, supplier_return_out,
+                                                             adjustment, loss)
+
+ qty_delta                    numeric(14,3)        NON       CHECK <> 0 ; signe contraint par type (entrées
+                                                             > 0, sorties < 0, adjustment libre)
+
+ unit_cost                    numeric(14,4)        NON        NON NULLABLE CHECK ≥ 0 ; entrées : coût
+                                                             d'acquisition fourni ; sorties : estampillé au
+                                                             CMP par le trigger ; retours et inverses :
+                                                             coût du mouvement d'origine
+
+ ref_type                     text                 OUI        ÉTENDU CHECK IN (sale_item, sale_return_item,
+                                                             manual, import, initial)
+
+ ref_id                       uuid                 OUI       idempotence par index unique partiel
+                                                             (company_id, ref_type, ref_id) WHERE
+                                                             reversal_of_movement_id IS NULL — voir note
+                                                             ci-dessous
+
+ reversal_of_movement_id      uuid                 OUI        V1.1 FK composite auto-référente (company_id,
+                                                             reversal_of_movement_id) → inventory_movements
+                                                             (company_id, id) ON DELETE RESTRICT ; CHECK
+                                                             (reversal_of_movement_id <> id) ; UNIQUE
+                                                             (company_id, reversal_of_movement_id)
+
+ (autres colonnes)            —                    —         inchangées : id, company_id, product_id,
+                                                             supplier_id, note, occurred_at, created_by
+
+Articulation avec ref_type / ref_id, et pourquoi elle est nécessaire. Un mouvement inverse conserve les
+ref_type et ref_id de l'objet métier d'origine — c'est ce qui permet de retrouver, à partir d'une ligne de
+vente, à la fois sa sortie et son annulation. Mais l'index d'idempotence V1 portait sur (company_id,
+ref_type, ref_id) sans condition : il aurait rejeté l'inverse comme un doublon. Il devient donc partiel sur
+reversal_of_movement_id IS NULL, ce qui préserve exactement la propriété recherchée : au plus un
+mouvement direct par objet métier. L'unicité de l'annulation est portée séparément, et plus fortement, par
+UNIQUE (company_id, reversal_of_movement_id) : un mouvement ne peut être annulé qu'une
+seule fois, quel que soit le nombre de fois où l'API est appelée. Une double annulation de vente est rejetée par
+la base, pas par une vérification applicative.
+
+Trois règles complémentaires sont portées par un trigger de validation : (a) le mouvement inverse doit viser le
+même product_id que sa cible ; (b) son qty_delta doit être exactement l'opposé de celui de la cible ; (c)
+on ne peut pas annuler un mouvement qui est lui-même une annulation. Le type de l'inverse reste
+sémantique (customer_return_in pour une sortie de vente annulée, adjustment pour une correction
+d'inventaire), ce qui conserve la lisibilité des rapports de mouvements.
+Index : UNIQUE(company_id, id) ; (company_id, product_id, occurred_at DESC) ;
+BRIN(occurred_at) ; UNIQUE partiel d'idempotence ; UNIQUE(company_id,
+reversal_of_movement_id) ; (company_id, ref_type, ref_id) non unique pour la lecture.
+
+4.9 payments AMENDÉE
+
+ Colonne                     Type                 Null      Contraintes / notes
+
+ direction                   cash_direction       NON       ENUM (inflow, outflow) ; le sens n'est jamais
+                                                            porté par un montant négatif
+
+ amount                      numeric(14,2)        NON       CHECK > 0
+
+ sale_return_id              uuid                 OUI        V1.1 FK composite → sale_returns ON DELETE
+                                                            RESTRICT
+
+ contexte direct             —                    —          CHECK ÉTENDU au plus un de (sale_id,
+                                                            expense_id, sale_return_id) renseigné : CHECK
+                                                            (num_nonnulls(sale_id, expense_id,
+                                                            sale_return_id) <= 1)
+
+ cohérence de sens           —                    —          V1.1 CHECK (sale_return_id IS NULL OR
+                                                            direction = 'outflow') — un remboursement de
+                                                            retour ne peut pas être un encaissement
+
+ (autres colonnes)           —                    —         inchangées : id, company_id, method, paid_at,
+                                                            sale_id, expense_id, reference, note,
+                                                            created_by
+
+4.10 daily_sales_facts VUE MATÉRIALISÉE → TABLE RLS
+Grain : entreprise × jour de vente × produit. Table réelle, jamais une vue matérialisée : une MV n'est pas soumise
+aux politiques RLS de ses tables sources, l'exposer directement à l'API laissait un chemin de lecture sans barrière
+tenant. Reste une projection intégralement reconstruisible ; aucune décision métier ne s'appuie sur elle.
+
+ Colonne                    Type                Définition exacte
+
+ company_id, day,           uuid, date,         PK composite. day = jour de sales.sold_at converti dans le
+ product_id                 uuid                fuseau de l'entreprise ; les retours sont rattachés au jour
+                                                de la vente d'origine, pas au jour du retour
+
+ category_id                uuid                dénormalisé depuis products à la construction ; évite la
+                                                jointure sur les agrégats par famille
+
+ qty_sold                   numeric(14,3)       quantité vendue brute : Σ sale_items.qty des ventes
+                                                confirmed
+
+ returned_qty               numeric(14,3)       quantité retournée, pré-agrégée par sale_item_id avant
+                                                jointure
+
+ net_qty_sold               numeric(14,3)       qty_sold − returned_qty ; quantité réellement écoulée
+
+ gross_revenue              numeric(14,2)       Σ qty × unit_price : chiffre d'affaires HT avant remise et
+                                                hors retour
+
+ discount_total             numeric(14,2)       Σ sale_items.discount : remises réellement appliquées
+
+ tax_total                  numeric(14,2)       Σ sale_items.tax_amount ; isolé pour ne jamais polluer une
+                                                mesure de revenu
+
+ refund_net_amount          numeric(14,2)       Σ (refund_amount − tax_refund) des retours : montant HT
+                                                rendu au client
+
+ net_revenue                numeric(14,2)       gross_revenue − discount_total − refund_net_amount ; HT, net
+                                                de remise et de retour. La formule correspond désormais au
+                                                nom : la V1 appelait ainsi une mesure qui ignorait les
+                                                retours et incluait des lignes dupliquées
+
+ cogs_gross                 numeric(14,2)       Σ qty × sale_items.unit_cost : coût des marchandises
+                                                sorties, au CMP figé à la vente
+
+ cogs_returned              numeric(14,2)       Σ returned_qty × sale_return_items.unit_cost : coût
+                                                réintégré
+
+ cogs_net                   numeric(14,2)       cogs_gross − cogs_returned ; c'est cette mesure qui se
+                                                retranche de net_revenue pour obtenir la marge
+
+ sale_count                 integer             COUNT(DISTINCT sale_id) — nombre de tickets contenant
+                                                l'article ; distingue « beaucoup vendu » de « vendu
+                                                souvent ». La duplication V1 le gonflait mécaniquement
+
+ built_at                   timestamptz         date de construction de la ligne ; sert au contrôle de
+                                                fraîcheur et au diagnostic
+
+Contraintes : FK composites vers companies et products ; CHECK de non-négativité sur les
+quantités ; CHECK (net_qty_sold = qty_sold − returned_qty). Index : PK(company_id, day,
+product_id) ; (company_id, day) ; (company_id, product_id, day) ; (company_id, category_id,
+day) ; BRIN(day). RLS : activée et forcée.
+Conséquence du rattachement des retours au jour de la vente. Un retour enregistré aujourd'hui modifie une
+ligne de fait datée d'il y a trois semaines. La reconstruction doit donc être par plage réaffectée, pas seulement
+incrémentale sur la veille : le job lit business_events depuis le dernier passage, en déduit l'ensemble des
+jours de vente touchés (ventes créées, confirmées, annulées, retournées) et réécrit ces jours-là en DELETE …
+INSERT sous une seule transaction par entreprise. C'est un choix assumé : il garantit qu'une ligne de fait décrit
+la réalité finale d'une journée de vente, au prix d'un retraitement du passé. L'alternative — rattacher le retour
+à son propre jour — donnerait des séries plus stables mais un net_revenue journalier faux pour la prévision
+de demande.
+
+4.11 forecasts NOUVELLE
+Pourquoi cette table : sans elle, afficher « rupture probable dans 5 jours » exigerait d'exécuter un modèle dans le
+cycle de requête HTTP. La table découple totalement inférence et lecture : le pipeline écrit, l'API lit. Écrite
+exclusivement par le processus analytique, jamais par un endpoint applicatif.
+
+ Colonne                    Type                  Null    Contraintes / notes
+
+ id                         uuid                  NON     PK
+
+ company_id                 uuid                  NON     FK → companies ; UNIQUE (company_id, id)
+
+ product_id                 uuid                  OUI     FK composite → products ; NULL = prévision agrégée
+                                                          à l'entreprise (CA global, trésorerie)
+
+ forecast_type              forecast_type         NON     ENUM (demand_qty, revenue, stockout_date,
+                                                          cash_balance)
+
+ as_of                      date                  NON     date de référence : état d'information utilisé.
+                                                          CHECK (horizon_date >= as_of)
+
+ horizon_date               date                  NON     date prévue
+
+ yhat                       numeric(14,4)         NON     valeur prédite
+
+ yhat_lower /               numeric(14,4)         OUI     intervalle si le modèle en produit ; CHECK
+ yhat_upper                                               (yhat_lower IS NULL OR yhat_upper IS NULL OR
+                                                          yhat_lower <= yhat_upper)
+
+ model_name /               text                  NON     traçabilité : quelle version a produit ce
+ model_version                                            chiffre ; indispensable au backtest
+
+ metadata                   jsonb                 NON     défaut '{}' : métriques d'entraînement, features
+                                                          clés, fenêtre utilisée
+
+ generated_at               timestamptz           NON     défaut now()
+
+Idempotence : UNIQUE NULLS NOT DISTINCT (company_id, forecast_type, product_id, as_of,
+horizon_date, model_version) — syntaxe PostgreSQL 15+, indispensable ici puisque product_id
+est nullable ; un rejeu du pipeline fait un ON CONFLICT DO UPDATE au lieu de dupliquer.
+Index : (company_id, product_id, forecast_type, horizon_date) — lecture UI ; partiel
+(company_id, as_of DESC). RLS : activée et forcée.
+
+4.12 insights NOUVELLE
+Anomalies, observations et recommandations persistées, qu'elles viennent d'un modèle ou d'une règle
+déterministe. evidence porte les chiffres qui expliquent l'insight : l'UI doit pouvoir justifier une alerte sans relancer
+un calcul.
+
+ Colonne                  Type                 Null    Contraintes / notes
+
+ id                       uuid                 NON     PK ; UNIQUE (company_id, id)
+
+ company_id               uuid                 NON     FK → companies
+
+ insight_type             insight_type         NON     ENUM (stockout_risk, slow_mover, demand_spike,
+                                                       margin_drop, expense_anomaly, cash_shortfall,
+                                                       debt_overdue, cashier_anomaly)
+
+ severity                 insight_severity     NON     ENUM (info, warning, critical) ; pilote le tri et
+                                                       la notification
+
+ title                    text                 NON     CHECK longueur 1–160 ; phrase courte prête à
+                                                       l'affichage
+
+ body                     text                 OUI     explication et recommandation
+
+ entity_table /           text / uuid          OUI     entité concernée. CHECK IN (products, customers,
+ entity_id                                             suppliers, expense_categories, sales, users) ;
+                                                       référence souple volontairement non FK — une FK
+                                                       polymorphe n'est pas exprimable, et l'insight doit
+                                                       survivre à l'archivage de sa cible. CHECK
+                                                       (num_nonnulls(entity_table, entity_id) <> 1) : les
+                                                       deux ou aucun
+
+ evidence                 jsonb                NON     défaut '{}' : séries, seuils, écarts, période
+                                                       observée
+
+ dedupe_key               text                 NON     clé de déduplication stable, ex. stockout_risk:
+                                                       <product_id>:2026-W12 ; évite de republier chaque
+                                                       nuit la même alerte
+
+ model_name /             text                 OUI     NULL si l'insight vient d'une règle métier et non
+ model_version                                         d'un modèle — distinction utile au diagnostic
+
+ status                   insight_status       NON     ENUM (new, read, acknowledged, dismissed,
+                                                       resolved) ; défaut 'new' ; seule colonne
+                                                       modifiable par l'application
+
+ read_at /                timestamptz          OUI     CHECK croisés avec status
+ resolved_at
+
+ generated_at             timestamptz          NON     défaut now()
+
+ valid_until              timestamptz          OUI     péremption : au-delà l'insight n'est plus
+                                                       affiché ; purge par job
+
+Idempotence : index unique partiel (company_id, dedupe_key) WHERE status <> 'dismissed' —
+un rejeu met à jour l'insight vivant ; un insight écarté par l'utilisateur ne bloque pas
+une réémission future si le problème réapparaît. Index : (company_id, status, severity,
+generated_at DESC) — liste UI ; (company_id, entity_table, entity_id) ; GIN sur evidence si
+recherche par champ. RLS : activée et forcée.
+
+Frontière avec notifications : un insight est un fait analytique daté et persistant, qui garde son évidence
+même lu. Une notification est un message à un destinataire, jetable après lecture. Un insight critical
+déclenche l'écriture d'une notification ; l'inverse n'existe pas. Les deux tables ne sont pas fusionnées parce
+que leurs cycles de vie et leurs volumes diffèrent d'un ordre de grandeur.
+
+5. Règles métier critiques
+Chaque opération est une transaction unique, ouverte par SET LOCAL app.company_id. Niveau READ
+COMMITTED, suffisant grâce aux verrous de ligne explicites pris dans un ordre déterministe (product_id
+croissant) — ce qui élimine les interblocages entre deux caisses simultanées.
+
+5.1 Confirmation d'une vente
+1. Vérifier status = 'draft' et au moins une ligne ; verrouiller la vente FOR UPDATE.
+2. Verrouiller les lignes product_stock des articles suivis, ordonnées par product_id.
+3. Figer les snapshots : unit_price et price_id depuis product_prices où valid_to IS NULL ;
+   tax_rate depuis products.default_tax_rate. net_amount, tax_amount et line_total sont
+   générés par la base.
+4. Insérer un mouvement sale_out par ligne d'article suivi, qty_delta = −qty, ref_type =
+   'sale_item', ref_id = sale_item.id. Le trigger estampille unit_cost au CMP courant, refuse le
+   stock négatif et met à jour la projection.
+5. Recopier inventory_movements.unit_cost dans sale_items.unit_cost : c'est le COGS historique
+   de la ligne, définitivement figé. Les articles non suivis prennent unit_cost = 0.
+6. Recalculer sales.subtotal, discount_total, tax_total ; total est généré. Passer status =
+   'confirmed', confirmed_at = now().
+7. Volet financier : payments (inflow) pour la part encaissée, debts pour la part à crédit, avec contrôle du
+   plafond client.
+8. business_events : sale.confirmed, dans la même transaction (outbox). COMMIT.
+
+Cohérence arithmétique garantie : sous-total − remises + taxes = total n'est pas vérifié par le
+code mais produit par une colonne générée. Aucune écriture ne peut créer une vente déséquilibrée.
+
+5.2 Annulation d'une vente
+1. Verrouiller la vente. Refuser si status <> 'confirmed', ou s'il existe un retour, ou un paiement
+   encaissé non remboursé — l'annulation n'est pas un substitut au retour.
+2. Pour chaque mouvement sale_out de la vente : insérer un mouvement inverse customer_return_in,
+   qty_delta = −qty_delta_origine, unit_cost = unit_cost_origine,
+   reversal_of_movement_id = id_origine, ref_type/ref_id repris de l'origine.
+3. Idempotence : un second appel viole UNIQUE (company_id, reversal_of_movement_id) et
+   échoue au niveau SQL. L'API traduit ce conflit en réponse « déjà annulée », sans effet de bord.
+4. Dette liée : si amount_paid = 0, status = 'written_off' et closed_at = now() ; sinon refus, la
+   dette doit d'abord être traitée financièrement.
+5. status = 'cancelled', cancelled_at, cancel_reason obligatoire. Événement sale.cancelled.
+
+Le mouvement d'origine n'est ni modifié ni supprimé — les règles DO INSTEAD NOTHING le rendent
+impossible même pour un UPDATE direct en base.
+
+5.3 Retour client
+1. Vente confirmed exigée ; returned_at >= sold_at.
+2. Par ligne : qty retournée ≤ sale_items.qty moins les retours déjà enregistrés (trigger sous verrou).
+   refund_amount et tax_refund calculés au prix et au taux historiques. unit_cost recopié
+   de sale_items.unit_cost.
+
+3. Mouvement customer_return_in, qty_delta = +qty, unit_cost =
+   sale_return_items.unit_cost, ref_type = 'sale_return_item'. Sans
+   reversal_of_movement_id : un retour est un fait métier autonome, pas l'annulation d'un mouvement.
+4. total_refund et refund_status recalculés par trigger.
+5. Règlement, au choix du gérant : remboursement en trésorerie (5.4), ou extinction d'une dette client
+   existante par payment_allocations, ou rien (none_due).
+6. Événement sale.returned, puis retraitement analytique du jour de vente concerné.
+
+Traitement du coût au retour — règle explicite. La marchandise revient en stock au coût auquel elle en est
+sortie (sale_items.unit_cost), et non au CMP du jour. Deux raisons : le COGS historique de la vente reste
+exactement compensé, donc la marge nette de la période est juste ; et un retour ne doit pas créer de profit ou
+de perte fictif par simple variation du CMP entre la vente et le retour. Conséquence assumée : cette entrée
+entre dans la formule du CMP comme toute autre entrée, et peut donc faire légèrement varier le CMP courant
+si celui-ci a changé entre-temps. C'est le comportement normal d'une valorisation en coût moyen ; il n'existe
+pas de solution exacte sans passer à un suivi par couches (FIFO), explicitement hors V1.
+
+5.4 Remboursement d'un retour
+1. Verrouiller sale_returns FOR UPDATE ; calculer le reste dû total_refund − refunded_total.
+2. Insérer payments avec direction = 'outflow' et sale_return_id renseigné — le CHECK rejette
+   tout inflow.
+3. Insérer sale_return_refunds ; les triggers refusent un montant qui dépasserait soit le reste dû du
+   retour, soit le montant du paiement.
+4. refunded_total et refund_status recalculés par trigger.
+5. Événement sale_return.refunded.
+
+Les deux questions du cahier des charges sont désormais répondues par une jointure : « quel remboursement
+correspond à ce retour » = sale_return_refunds filtré sur sale_return_id ; « quel retour a provoqué
+cette sortie » = le même index lu par payment_id. Un remboursement partiel puis complémentaire est
+représentable ; un remboursement supérieur au remboursable est rejeté ; un remboursement dans le mauvais
+sens financier est rejeté.
+
+5.5 Dettes et paiements
+   Paiement direct : payments avec sale_id ou expense_id, sans dette ni allocation.
+   Paiement partiel : une allocation d'un montant inférieur au solde ; debts.status devient
+   partially_paid par trigger.
+   Paiement réparti sur plusieurs dettes : N allocations pour un même payment_id ; le trigger contrôle
+   que Σ allocations ≤ payments.amount et, par dette, que Σ ≤ principal, chaque dette étant verrouillée
+   FOR UPDATE.
+   Dette soldée : balance (colonne générée) atteint 0 → status = 'paid', closed_at renseigné.
+   Plafond de crédit : à la création d'une dette client, Σ des soldes ouverts du client doit rester sous
+   customers.credit_limit quand il est renseigné.
+   Abandon : written_off avec motif en audit_logs ; principal n'est jamais réécrit.
+
+5.6 Mouvement de stock et CMP
+Un seul point d'entrée : l'insertion dans inventory_movements. Aucun code applicatif
+n'écrit product_stock.
+
+  ENTREE (qty_delta > 0)                          SORTIE (qty_delta < 0)
+  -------------------------------------           -------------------------------------
+  unit_cost fourni, obligatoire                   unit_cost := avg_cost courant (estampille)
+  new_qty := qty_on_hand + qty_delta              new_qty := qty_on_hand + qty_delta
+                                                  SI new_qty < 0 -> EXCEPTION (rejet atomique)
+  new_avg :=
+    (qty_on_hand * avg_cost
+     + qty_delta * unit_cost)                     new_avg := avg_cost             (inchange)
+    / new_qty
+  SI new_qty = 0 -> new_avg := avg_cost           stock_value recalcule (colonne generee)
+    (dernier CMP conserve, pas de 0/0)
+
+   Verrou : la ligne product_stock est verrouillée avant lecture du CMP, ce qui sérialise deux ventes
+   simultanées du même article et rend le calcul exact sous concurrence.
+   Articles non suivis : is_stock_tracked = false → toute insertion de mouvement est refusée, aucune
+   ligne de projection n'existe, le CMP n'a pas de sens pour eux.
+   Idempotence : un même (ref_type, ref_id) ne peut produire qu'un mouvement direct ; un même
+   mouvement ne peut être annulé qu'une fois.
+   COGS : obtenu en lisant unit_cost figé sur les mouvements ou les lignes de vente — jamais en relisant un
+   coût d'aujourd'hui.
+
+5.7 Reconstruction du stock et du CMP
+product_stock étant une projection, elle doit être entièrement recalculable. La quantité est une simple
+somme, mais le CMP ne l'est pas : il dépend de l'ordre des mouvements. La reconstruction rejoue donc les
+mouvements par (occurred_at, id) croissant et applique la même récurrence que le trigger. La fonction
+de reconstruction et le trigger partagent volontairement la même formule, appelée depuis une fonction
+unique, pour qu'aucune divergence ne soit possible.
+
+   Ordre canonique : ORDER BY occurred_at, id. Un mouvement antidaté inséré après coup change
+   donc le CMP recalculé — le job nocturne journalise l'écart dans audit_logs et adopte la valeur recalculée,
+   qui est la seule cohérente avec le journal.
+   Contrôle de non-négativité historique : la reconstruction vérifie qu'aucun état intermédiaire n'est négatif.
+   Un écart révèle un antidatage abusif, à corriger par mouvement d'ajustement.
+   Fréquence : quotidienne, par entreprise, hors heures ouvrées ; recomputed_at atteste du passage.
+
+6. Architecture analytique
+Principe directeur inchangé depuis la V1 : aucune logique ML dans les tables transactionnelles. La V1.1
+ajoute la contrepartie manquante — les résultats sont persistés, donc le chemin de lecture utilisateur ne
+touche jamais un modèle.
+
+  donnees transactionnelles         (sales, sale_items, sale_returns, inventory_movements,
+          |                             expenses, debts, payments, product_prices)
+          |   job de reconstruction par plage de jours reaffectes
+          v
+  daily_sales_facts                 table d'agregats, RLS, reconstruisible
+          |
+          |   pipeline de features (anti-fuite temporelle : occurred_at <= as_of)
+          v
+  ml_feature_snapshots              features + labels figes par as_of
+          |
+          |   entrainement hors ligne, versionne
+          v
+  modele (artefact hors base)
+          |
+          |   inference batch nocturne
+          v
+  forecasts    /   insights         resultats persistes, RLS
+          |
+          |   lecture simple, indexee, sans calcul
+          v
+  API FastAPI      ->   UI
+
+ Couche                 Tables                     Écrit par      Rôle et règles
+
+ Transactionnelle       sales, sale_items,         API            Vérité immuable et normalisée. Aucune
+                        sale_returns,                             colonne de score, de prédiction ou de
+                        sale_return_items,                        feature. Rien n'est supprimé physiquement :
+                        inventory_movements,                      la profondeur d'historique détermine la
+                        expenses, debts,                          qualité des prévisions — viser 18 à 24 mois
+                        payments,                                 avant d'espérer capter une saisonnalité
+                        product_prices                            annuelle.
+
+ Analytique             daily_sales_facts          Job            Série jour × produit, reconstruite par
+                        (table)                    analytique     plage. Sert les tableaux de bord et
+                                                                  l'exploration. Métriques définies sans
+                                                                  ambiguïté en 4.10, retours pré-agrégés
+                                                                  avant jointure.
+
+ Features ML            ml_feature_snapshots       Pipeline       Matérialise, pour chaque as_of,
+                                                                  l'information réellement disponible à cette
+                                                                  date. Jamais lue par l'application.
+
+ Résultats              forecasts, insights        Pipeline       Seules tables analytiques exposées à l'API.
+                                                                  Écriture par ON CONFLICT DO UPDATE sur la
+                                                                  clé d'idempotence. L'application n'écrit
+                                                                  que insights.status.
+
+ Notification           notifications              Job + API      Dérivée d'un insight critical ou d'une
+                                                                  règle de seuil. Jetable.
+
+6.1 Reconstruction de daily_sales_facts — pré-agrégation des retours
+La V1 joignait sale_items à sale_return_items directement. Une ligne de vente ayant reçu trois retours
+partiels produisait alors trois lignes, donc trois fois la quantité vendue, le CA, la remise, le COGS, et trois fois le
+même sale_id dans le comptage. La correction est structurelle : les retours sont agrégés par
+sale_item_id dans une CTE, ce qui garantit une ligne par ligne de vente avant toute jointure.
+
+  WITH cible AS (               -- jours de vente a reconstruire, deduits de l'outbox
+       SELECT DISTINCT (s.sold_at AT TIME ZONE c.timezone)::date AS day
+        FROM business_events e
+        JOIN sales s ON s.company_id = e.company_id AND s.id = e.aggregate_id
+        JOIN companies c ON c.id = e.company_id
+       WHERE e.company_id = :co AND e.aggregate_type = 'sale'
+          AND e.occurred_at > :depuis
+  ),
+  retours AS (                  -- PRE-AGREGATION : une seule ligne par sale_item_id
+       SELECT ri.company_id, ri.sale_item_id,
+             SUM(ri.qty)                              AS returned_qty,
+             SUM(ri.refund_amount - ri.tax_refund)    AS refund_net_amount,
+             SUM(ri.qty * ri.unit_cost)               AS cogs_returned
+        FROM sale_return_items ri
+        JOIN sale_returns r
+           ON r.company_id = ri.company_id AND r.id = ri.return_id
+       WHERE ri.company_id = :co
+       GROUP BY ri.company_id, ri.sale_item_id
+  ),
+  lignes AS (
+       SELECT s.company_id,
+             (s.sold_at AT TIME ZONE c.timezone)::date AS day,
+             si.product_id, p.category_id, s.id AS sale_id,
+             si.qty, si.unit_price, si.discount, si.tax_amount, si.unit_cost,
+             COALESCE(rt.returned_qty, 0)          AS returned_qty,
+             COALESCE(rt.refund_net_amount, 0)     AS refund_net_amount,
+             COALESCE(rt.cogs_returned, 0)         AS cogs_returned
+        FROM sales s
+        JOIN companies c   ON c.id = s.company_id
+        JOIN sale_items si ON si.company_id = s.company_id AND si.sale_id = s.id
+        JOIN products p       ON p.company_id = si.company_id AND p.id = si.product_id
+        LEFT JOIN retours rt
+           ON rt.company_id = si.company_id AND rt.sale_item_id = si.id       -- 1:0..1
+       WHERE s.company_id = :co
+          AND s.status = 'confirmed'                   -- annulees exclues des faits
+          AND (s.sold_at AT TIME ZONE c.timezone)::date IN (SELECT day FROM cible)
+  )
+  INSERT INTO daily_sales_facts AS f (
+       company_id, day, product_id, category_id,
+       qty_sold, returned_qty, net_qty_sold,
+       gross_revenue, discount_total, tax_total, refund_net_amount, net_revenue,
+       cogs_gross, cogs_returned, cogs_net, sale_count, built_at)
+  SELECT company_id, day, product_id, max(category_id),
+           SUM(qty)                                                   AS qty_sold,
+           SUM(returned_qty)                                          AS returned_qty,
+           SUM(qty) - SUM(returned_qty)                               AS net_qty_sold,
+           SUM(qty * unit_price)                                      AS gross_revenue,
+           SUM(discount)                                              AS discount_total,
+           SUM(tax_amount)                                            AS tax_total,
+           SUM(refund_net_amount)                                     AS refund_net_amount,
+           SUM(qty * unit_price) - SUM(discount)
+             - SUM(refund_net_amount)                                 AS net_revenue,
+           SUM(qty * unit_cost)                                       AS cogs_gross,
+           SUM(cogs_returned)                                         AS cogs_returned,
+           SUM(qty * unit_cost) - SUM(cogs_returned)                  AS cogs_net,
+           COUNT(DISTINCT sale_id)                                    AS sale_count,
+           now()
+       FROM lignes
+      GROUP BY company_id, day, product_id
+  ON CONFLICT (company_id, day, product_id) DO UPDATE SET
+       category_id = EXCLUDED.category_id, qty_sold = EXCLUDED.qty_sold,
+
+     returned_qty = EXCLUDED.returned_qty, net_qty_sold = EXCLUDED.net_qty_sold,
+     gross_revenue = EXCLUDED.gross_revenue, discount_total = EXCLUDED.discount_total,
+     tax_total = EXCLUDED.tax_total, refund_net_amount = EXCLUDED.refund_net_amount,
+     net_revenue = EXCLUDED.net_revenue, cogs_gross = EXCLUDED.cogs_gross,
+     cogs_returned = EXCLUDED.cogs_returned, cogs_net = EXCLUDED.cogs_net,
+     sale_count = EXCLUDED.sale_count, built_at = now();
+
+  -- Les lignes devenues vides (vente annulee, derniere ligne supprimee) sont
+  -- purgees pour les jours reconstruits, sinon un fait fantome subsiste.
+  DELETE FROM daily_sales_facts d
+   WHERE d.company_id = :co
+      AND d.day IN (SELECT day FROM cible)
+      AND NOT EXISTS (SELECT 1 FROM lignes l
+                         WHERE l.company_id = d.company_id AND l.day = d.day
+                           AND l.product_id = d.product_id);
+
+Propriétés obtenues : une ligne de vente contribue exactement une fois à chaque mesure, quel que soit son
+nombre de retours ; COUNT(DISTINCT sale_id) compte des tickets et non des lignes ; la reconstruction est
+idempotente (rejouer la même plage donne le même résultat) ; les ventes annulées n'entrent dans aucun fait,
+et leur annulation purge les faits antérieurs du même jour.
+
+6.2 Anti-fuite temporelle
+Une feature calculée pour as_of = D ne doit utiliser que des lignes dont occurred_at <= D. Comme
+daily_sales_facts est réécrite quand un retour arrive plus tard, la relire pour reconstituer l'information
+d'une date passée introduirait une fuite : on utiliserait un chiffre qui n'était pas connu à cette date. D'où
+ml_feature_snapshots, écrite une fois pour chaque as_of et jamais réécrite. La densité de la série reste
+obligatoire : les jours sans vente valent zéro, sans quoi toute moyenne mobile est biaisée à la hausse. Le signal
+de rupture (qty_on_hand reconstitué à la date, et non aujourd'hui) distingue une demande faible d'une
+indisponibilité — erreur classique qui fait chuter durablement la prévision d'un article à succès.
+
+7. Isolation multi-tenant
+Quatre barrières superposées, dont trois sont structurelles : un bug applicatif ne peut pas les franchir. La V1.1
+complète la couverture — plus aucune table tenant-scoped, y compris analytique et journal d'audit, n'échappe
+au dispositif.
+
+ #            Barrière                   Portée V1.1
+
+ 1            company_id NOT NULL +      Toutes les tables métier, analytiques et de résultats ML. La
+              UNIQUE (company_id, id)    cible composite est ce qui rend les FK tenant-aware possibles.
+
+ 2            FK composites              Toutes les relations traversant des données tenant-scoped, y
+              (company_id, child_id)     compris les nouvelles : sale_return_refunds → sale_returns /
+              → (company_id,             payments, payments → sale_returns, inventory_movements →
+              parent_id)                 inventory_movements, forecasts → products, daily_sales_facts →
+                                         products.
+
+ 3            company_id en première     La clause RLS est présente dans 100 % des requêtes ; un index
+              colonne de tout index      qui ne commence pas par company_id est inutilisable.
+              composé
+
+ 4            RLS + FORCE ROW LEVEL      Toutes les tables ci-dessus, plus audit_logs (correction V1.1),
+              SECURITY                   daily_sales_facts, ml_feature_snapshots, forecasts, insights,
+                                         sale_return_refunds. Le rôle applicatif n'est ni superuser ni
+                                         BYPASSRLS.
+
+     -- Politique unique, identique sur toutes les tables tenant-scoped
+     ALTER TABLE <table> ENABLE ROW LEVEL SECURITY;
+     ALTER TABLE <table> FORCE    ROW LEVEL SECURITY;     -- s'applique au proprietaire
+     CREATE POLICY <table>_tenant ON <table>
+       USING       (company_id = current_setting('app.company_id', true)::uuid)
+       WITH CHECK (company_id = current_setting('app.company_id', true)::uuid);
+
+     -- Role applicatif : aucun privilege de contournement
+     CREATE ROLE coges_app LOGIN NOBYPASSRLS NOSUPERUSER;
+     GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO coges_app;
+     REVOKE DELETE ON ALL TABLES IN SCHEMA public FROM coges_app;        -- soft delete only
+
+     -- Ouverture de session : pose obligatoire du contexte, portee = transaction
+     BEGIN;
+     SET LOCAL app.company_id = '...';      -- issu du JWT, jamais d'un parametre client
+     -- ... requetes ...
+     COMMIT;                                -- le contexte disparait avec la transaction
+
+     SET LOCAL et non SET : avec un pool de connexions, un SET de session survivrait au retour de la
+     connexion au pool et fuiterait vers la requête suivante, d'un autre tenant. C'est le seul point où une erreur
+     d'implémentation reste possible — d'où le test d'intégrité dédié en section 10.
+     Le true de current_setting : évite une erreur si le paramètre est absent. La politique renvoie alors
+     NULL, donc faux, donc aucune ligne : l'oubli du contexte produit un jeu vide, jamais une fuite.
+     Écritures du pipeline analytique : il pose le même SET LOCAL par entreprise et boucle ; il n'utilise pas de
+     rôle privilégié. Une reconstruction ne peut donc pas écrire dans le tenant voisin.
+     audit_logs partitionné : la politique est déclarée sur la table parente et héritée par les partitions ;
+     chaque nouvelle partition mensuelle est créée par la même fonction, ce qui évite une partition
+     sans politique.
+     companies et permissions : companies reçoit une politique sur id (anti-énumération) ; permissions
+     est un catalogue global en lecture seule, sans donnée d'entreprise.
+

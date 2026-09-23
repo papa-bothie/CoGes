@@ -1,0 +1,27 @@
+# Secrets et environnement
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node / frontend
+node_modules/
+.next/
+.pnpm-store/
+
+# Outils et éditeurs
+*.~lock*
+.DS_Store
+.idea/
+.vscode/

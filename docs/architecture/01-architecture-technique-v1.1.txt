@@ -1,0 +1,1253 @@
+# CoGes — Architecture technique V1.1
+# Extrait texte automatique (pdftotext -layout) du PDF d'origine dans ./pdf/.
+# En cas de doute (ligne coupée, tableau déformé), le PDF fait foi.
+
+CoGes — Architecture
+technique V1.1
+Version révisée de l'architecture logique et technique. Les décisions structurantes
+précédentes sont conservées — monolithe modulaire FastAPI, PostgreSQL, Next.js,
+Redis/Celery, outbox transactionnelle, isolation par company_id. Cette révision intègre
+le déploiement Vercel, sépare l'audit critique de l'audit asynchrone, précise
+l'implémentation réelle de RLS, réduit le périmètre V1 de Sales et Finance, et fait
+apparaître partout la frontière V1 / versions futures. La V1.1 aligne ce document sur
+le Modèle de données V1.1 du 21/09/2026, qui fait autorité en cas de divergence :
+nommage pointé des événements, responsabilité de products, cycle draft →
+confirmed, clés étrangères composites tenant.
+
+  PRINCIPE DIRECTEUR
+
+  Construire peu de fonctionnalités, mais les rendre fiables, cohérentes, traçables et
+  exploitables par CoGes Intelligence. CoGes V1 n'est pas un ERP : toute fonctionnalité
+  qui n'est pas nécessaire au cycle vente → stock → argent → décision est reportée.
+
+ CHE MIN UT ILISA T EU R   TR AI T EM E NT S L ON GS    MOD ULE S V 1         AU DIT
+ Vercel · Next.js + API    Docker hors Vercel           14 core + 5 gestion   Critique =
+                                                                              transactionnel
+Ce que cette révision change
+
+ SUJET                AVANT                                    DÉCISION V1.1
+
+ Déploiement          Une image Docker API + une image         Chemin utilisateur sur Vercel (Next.js + API)
+                      worker                                   ; base, cache, workers et ML hors Vercel,
+                                                               packagés en Docker
+
+ Audit Log            Alimenté par le bus d'événements         Deux canaux : audit critique dans la
+                                                               transaction métier, audit secondaire par
+                                                               événement
+
+ RLS                  « RLS adossée à une variable de          Procédure d'injection, de transmission et de
+                      session »                                nettoyage du contexte sur pool documentée
+                                                               + tests de fuite obligatoires
+
+ Sales                Devis, commandes, factures, avoirs       Vente, lignes, remise, taxes, paiement
+                                                               total/partiel, annulation, retour, reçu simple
+
+ Finance              Périmètre implicite                      Gestion, pas comptabilité générale :
+                                                               exclusions écrites
+
+ Intelligence         « Produits à forte valeur »              Huit métriques distinctes ; toute
+                                                               recommandation nomme sa métrique
+
+ Événements métier    SCREAMING_SNAKE_CASE                     Notation pointée namespace.action du
+                      (SALE_CREATED, stock.updated…)           modèle de données (sale.confirmed,
+                                                               stock.updated,
+                                                               sale_return.refunded) comme
+                                                               convention unique de
+                                                               business_events.event_type
+
+ Products             La fiche porte « prix de vente, coût »   Référentiel fonctionnel de l'article seul ; prix
+                                                               historisé par intervalles dans
+                                                               product_prices, stock projeté depuis
+                                                               inventory_movements
+
+ Cycle de vie d'une   Une seule étape de validation            Cycle en deux temps draft → confirmed
+ vente                                                         : seule la confirmation déclenche stock,
+                                                               écriture financière, audit critique et outbox
+
+ Isolation tenant     Clé étrangère simple vers                Cible UNIQUE (company_id, id), FK
+                      companies                                composites (company_id, child_id) →
+                                                               (company_id, parent_id) sur chaque
+                                                               relation tenant-scoped, RLS FORCE
+
+ Périmètre            Évolutions futures en fin de             Marqueur V1 / Futur sur les modules, les
+                      document                                 tableaux et les diagrammes
+D I AG R A M M E 1 — A R C H I T E C T U R E LO G I Q U E G LO B A L E
+
+  01 · U TIL ISATE U R                                                                            TRA NSV ERS E
+
+                                                                                                    Isolation tenant
+    Navigateur                                   Mobile / hors-ligne                                colonne + repository + RLS
+    gérant, vendeur, comptable                   versions futures
+                                                                                                    Audit critique
+                                                                                                    transactionnel, append-only
+                                          ▼ HTTPS                                                   Observabilité
+                                                                                                    logs structurés, traces,
+  02 · F RON TEND N EX T .J S — VE RC E L
+                                                                                                    métriques
+
+    Pages App Router               Client API typé               Garde de                           Secrets
+                                                                 permissions (UI)                   variables d'environnement
+                                                                                                    chiffrées
+  Aucune règle métier, aucun accès base. Les permissions vérifiées ici ne sont qu'un                Sauvegardes
+  confort d'affichage — la décision reste serveur.                                                  dumps chiffrés + PITR
+
+                                   ▼ REST / JSON · JWT
+                                                                                                  RÈG LE NON NÉ GOC IAB LE
+  03 · A PI FASTA P I
+                                                                                                  Aucun calcul ML lourd dans
+    Routers REST                   Schémas Pydantic              Auth JWT + RBAC                  une requête utilisateur. L'API
+                                                                                                  ne sert que des résultats déjà
+                                                                                                  persistés.
+    Tenant resolver
+
+  Traduit HTTP ↔ services et construit le contexte (user, company_id,
+                                                                                                  CHA ÎNE CI BLE
+  permissions) transmis à chaque appel de service.
+                                                                                                  Utilisateur
+                                             ▼                                                    → Vercel / Next.js
+                                                                                                  → API FastAPI
+  04 · S ERV ICES M ÉT I ER — M ON OL I TH E M O DU LA IRE                                        → services métier
+                                                                                                  → PostgreSQL managé
+    Plateforme       Référentiel        Ventes & Stock       Finance de gestion
+                                                                                                  et en parallèle :
+    Restitution                                                                                   services → outbox
+                                                                                                  → Redis → workers
+                                                                                                  → Analytics /
+    Audit critique                               Table outbox                                     Notifications
+    même transaction que l'opération             événement écrit avec la donnée                   / CoGes Intelligence
+
+               ▼ synchrone                                    ▼ après COMMIT
+
+  05 · D ONN ÉES                                  0 6 · AS YNC HRO NE
+
+    Repositories (filtre tenant)                     Redis managé
+                                                     transport + cache court
+
+    SQLAlchemy + Alembic
+                                                     Workers Celery (Docker)
+    PostgreSQL managé
+    source de vérité · RLS company_id                Analytics · Notifications
+                                                     Audit secondaire · Intelligence
+
+Figure 1 — Architecture logique. Le frontend n'atteint jamais PostgreSQL. L'audit critique est dans la transaction ; tout le reste
+part de l'outbox après commit.
+Rôle de chaque couche
+
+ COUCHE               RESPONSABILITÉ                                            NE FAIT JAMAIS
+
+ Frontend Next.js     Rendu, navigation, validation de surface, affichage des   Règle métier, calcul de
+                      résultats. Consomme uniquement l'API REST.                marge, accès base
+
+ API / routers        Contrat HTTP, (dé)sérialisation, authentification,        Requête SQL,
+                      résolution du tenant, codes d'erreur, pagination.         orchestration métier
+
+ Services métier      Invariants, cas d'usage, frontière transactionnelle,      Connaître HTTP ou le SQL
+                      audit critique, écriture outbox.                          détaillé
+
+ Repositories         Requêtes, filtre systématique par company_id,             Décider d'une règle de
+                      mapping ORM.                                              gestion
+
+ PostgreSQL           Vérité transactionnelle, contraintes, RLS, vues           Porter de la logique
+                      d'agrégation.                                             applicative
+
+ Workers (Docker)     Agrégats, notifications, exports, features,               Bloquer une requête
+                      entraînement et inférence ML.                             utilisateur
+
+ CoGes Intelligence   Lecture analytique, features, modèles versionnés,         Écrire dans les tables
+                      prévisions, recommandations explicables.                  transactionnelles
+D I AG R A M M E 2 — D É P LO I E M E N T : V E R C E L + I N F R A S T R U C T U R E E X T E R N E
+
+Vercel n'est pas un remplacement de Docker. Vercel est la plateforme du chemin utilisateur :
+requêtes courtes, déploiement continu depuis Git, HTTPS et domaine gérés. Docker est
+l'environnement d'exécution de tout ce qui doit vivre longtemps ou calculer longtemps. La
+frontière est la durée de vie du processus, pas la technologie.
+
+  Z ONE A · V ERC EL — C HE M IN UT I LI SA T EU R                    ZO NE B · IN FRA STR UCT URE EXT ERN E — RU NT IME
+  Requêtes courtes, sans état, dimensionnées à la seconde             CO NTR ÔLÉ
+                                                                      État persistant et traitements longs, packagés en Docker
+
+     Application Next.js
+     SSR, App Router, assets edge                                       PostgreSQL managé
+                                                                        RLS, sauvegardes, PITR, pooler de connexions
+
+     API FastAPI
+     lorsque le workload s'y prête : lectures, écritures                Redis managé
+     métier courtes                                                     file de tâches + cache court
+
+     Déploiement continu depuis Git                                     Workers Celery — conteneur Docker
+     preview par branche, promotion en production                       agrégats, notifications, audit secondaire
+
+     HTTPS, domaine, edge                                               Tâches ML & batch — conteneur Docker
+     TLS, cache statique, en-têtes de sécurité                          features, entraînement, inférence, exports volumineux
+
+                                                                        Scheduler
+                                                                        batch nocturne et hebdomadaire par tenant
+
+  Contraintes acceptées : pas de processus persistant,
+  durée d'exécution bornée, connexions base via pool                  Même code applicatif que l'API, autre point d'entrée : le
+  externe.                                                            module métier reste unique.
+
+  A→B                                            B→B                                       B⇸A
+  API → PostgreSQL via pooler ; API →            Workers → PostgreSQL et Redis ;           Aucun appel entrant des workers
+  Redis pour l'enfilement.                       Intelligence en lecture seule.            vers Vercel : ils écrivent leurs
+                                                                                           résultats en base.
+
+Figure 2 — Déploiement. Un composant relève de la zone B dès qu'il est persistant, long, planifié, ou consommateur
+de mémoire.
+Règle d'affectation d'un composant
+
+ COMPOSANT / TRAITEMENT                ZONE             POURQUOI
+
+ Pages et rendu Next.js                Vercel           Chemin utilisateur, sans état, bénéficie du
+                                                        déploiement Git et de l'edge
+
+ Endpoints d'écriture métier (vente,   Vercel           Transaction courte, cible < 300 ms
+ paiement, stock)
+
+ Endpoints de lecture et de tableau    Vercel           Lisent des agrégats déjà calculés
+ de bord
+
+ Base de données                       Externe managé   Persistance, sauvegardes, RLS, pooling
+
+ File de tâches et cache               Externe managé   État partagé entre API et workers
+
+ Workers Celery                        Docker externe   Processus persistant qui consomme une file
+
+ Features, entraînement, inférence     Docker externe   Durée et mémoire incompatibles avec une
+                                                        requête HTTP
+
+ Exports volumineux, réconciliation    Docker externe   Tâches planifiées, fichier livré en fin de
+ nocturne                                               traitement
+
+ Migrations Alembic                    Docker externe   Exécutées comme étape de déploiement, jamais
+                                                        au démarrage d'une requête
+D I AG R A M M E 3 — M O D U L E S B AC K E N D
+
+Cinq bandes, dépendances orientées vers le bas uniquement ; toute remontée d'information
+passe par un événement. Les modules marqués V1 sont obligatoires ; ceux marqués FUTUR
+ne sont pas développés en V1 mais leur emplacement est réservé.
+
+  BAN DE E · REST I TU T IO N                                                              lecture seule sur les bandes inférieures
+
+    Dashboard V1                     Analytics V1                   Notifications V1                CoGes Intelligence V1
+                                                                                                    simple
+
+    Agents conversationnels FUTUR
+
+                                                 ▲ événements | ▼ lecture
+
+  BAN DE D · FINA N CE DE GE S TI ON                                                            pas de comptabilité générale en V1
+
+    Finance V1                       Payments V1                    Debts V1                        Expenses V1
+
+    Comptabilité, rapprochement, fiscal FUTUR
+
+                                                                ▼
+
+  BAN DE C · OPÉR A TI O NS
+
+    Sales V1 réduit                              Inventory V1                                  Devis, commandes, achats,
+    vente, lignes, remise, taxes, paiement,      mouvements, stock courant, seuils             multi-entrepôts FUTUR
+    annulation, retour, reçu                     d'alerte
+
+                                                                ▼
+
+  BAN DE B · RÉFÉ R EN T IE L
+
+    Products V1                      Categories V1                  Customers V1                    Suppliers V1
+
+                                                                ▼
+
+  BAN DE A · PLAT E FO R ME — D ON T T OU T L E M ON DE DÉP END
+
+    Companies /               Authentication            Users                    Roles &                   Audit Log
+    Tenants                                                                      Permissions
+
+    Shared kernel                   Tenant context                  Outbox + bus                    Task queue
+    montants décimaux, devise,      session, RLS, nettoyage         publication après commit        enfilement asynchrone
+    dates, erreurs                  pool
+
+Figure 3 — Modules. Chaque module expose une façade de services et garde ses modèles privés ; un module n'importe jamais
+le repository d'un autre.
+Responsabilités et dépendances
+
+ MODULE           STATUT   RESPONSABILITÉ V1                                        DÉPEND DE
+
+ Companies        V1       Entreprise, paramètres (devise, TVA activée ou non,      —
+                           seuils), racine d'isolation.
+
+ Authentication   V1       Login, refresh rotatif, hachage Argon2, révocation de    Users, Companies
+                           session.
+
+ Users            V1       Comptes, rattachement à une entreprise, cycle de         Companies, Roles
+                           vie.
+
+ Roles & Perms    V1       Rôles, matrice de permissions, vérification RBAC         Companies, Audit
+                           serveur. Tout changement est audité en
+                           transactionnel.
+
+ Products         V1       Fiche produit, unité, seuil d'alerte, taux de taxe par   Categories, Suppliers
+                           défaut ; prix de vente et coût historisés dans
+                           product_prices, jamais stockés sur la fiche. Stock
+                           = projection de inventory_movements.
+
+ Categories       V1       Classification du catalogue.                             —
+
+ Customers        V1       Clients, coordonnées, encours autorisé, historique       Companies
+                           d'achat.
+
+ Suppliers        V1       Fournisseurs, délai de réapprovisionnement               Companies
+                           indicatif.
+
+ Sales            V1       Vente et lignes, prix appliqué, remise, taxes si         Products, Customers,
+                           activées, paiement total ou partiel, annulation,         Inventory, Finance,
+                           retour, reçu simple. Émet sale.confirmed,                Audit
+                           sale.cancelled, sale.returned,
+                           sale_return.refunded.
+
+ Inventory        V1       Mouvements (entrée, sortie, ajustement, retour),         Products, Suppliers
+                           stock courant projeté, seuils. Émet
+                           stock.updated.
+
+ Finance          V1       Revenus de ventes, charges, trésorerie simple,           Sales, Expenses,
+                           marge estimée, indicateurs de gestion.                   Payments, Debts
+
+ Payments         V1       Encaissements et décaissements, allocation à une         Sales, Debts, Finance,
+                           vente ou une dette, idempotence. Émet                    Audit
+                           payment.received.
+
+ Debts            V1       Créances clients et dettes fournisseurs, échéance,       Customers, Suppliers,
+                           solde restant. Émet debt.created,                        Finance, Audit
+                           debt.settled.
+
+ Expenses         V1       Dépenses, charges récurrentes, catégorisation.           Finance
+                           Émet expense.created.
+MODULE          STATUT   RESPONSABILITÉ V1                                       DÉPEND DE
+
+Dashboard       V1       Composition des KPI d'accueil sur agrégats pré-         Analytics, Notifications,
+                         calculés.                                               Intelligence
+
+Analytics       V1       Agrégats essentiels : CA, marge, top produits par       lecture seule : Sales,
+                         métrique, séries temporelles, vues matérialisées.       Inventory, Finance
+
+Notifications   V1       Alertes principales (stock bas, dette échue,            Bus d'événements,
+                         anomalie), in-app et e-mail, déduplication.             Users
+
+Audit Log       V1       Journal append-only à deux canaux : critique            Services métier (direct)
+                         (transactionnel) et secondaire (événementiel).          + bus
+
+Import/Export   V1       CSV/Excel du référentiel et des ventes, uniquement      Référentiel, Sales,
+                         si nécessaire au démarrage. Export volumineux en        workers
+                         worker.
+
+CoGes           V1       Statistiques descriptives, tendances, anomalies         lecture seule :
+Intelligence    simple   simples, alertes de stock, risque de rupture,           Analytics + tables de
+                         prévisions simples, produits identifiés par métrique,   features
+                         recommandations explicables.
+D I AG R A M M E S 4 À 6 — F LU X M É T I E R
+
+Chaque flux distingue la partie transactionnelle — une seule transaction PostgreSQL,
+atomique, dans la requête — de la partie asynchrone déclenchée après commit. L'audit
+critique et l'écriture dans l'outbox font partie de la transaction : aucun événement perdu,
+aucune notification pour une opération annulée par rollback, aucune trace d'audit
+dépendante de la disponibilité de Redis.
+
+  DIAGRAMME 4 · VALIDATION                         POST /api/v1/sales → draft · POST
+  D'UNE VENTE                                      /api/v1/sales/{id}/confirm → confirmed
+
+    ÉTAPE 0 · CRÉATION EN DRAFT — HORS TRANSACTION CRITIQUE, OU TRANSACTION COURTE
+
+      00 Vente créée en draft                                     00b Brouillon verrouillé
+      lignes saisies, totaux recalculés                           à la confirmation, plus aucune ligne modifiable
+
+    À ce stade : aucun mouvement de stock, aucune écriture financière, aucun audit critique, aucun événement — règle
+    métier 5.1 du Modèle de données V1.1.
+
+                                 ▼ confirmation · POST /api/v1/sales/{id}/confirm
+
+    TRANSACTION POSTGRESQL UNIQUE — SYNCHRONE, DÉCLENCHÉE À LA CONFIRMATION
+
+      01 Validation RBAC                  02 Validation de la     03 Création de la vente         04 Création des lignes
+                                          vente                                                   prix appliqué, remise,
+                                                                                                  taxes
+
+      05 Vérification du                  06 Mouvement de         07 Écriture financière          08 Dette éventuelle
+      stock                               sortie                                                  si paiement partiel
+
+      09 Audit critique                   10 Écriture outbox      11 COMMIT
+                                          sale.confirmed
+
+    Échec d'une étape critique ⇒ ROLLBACK COMPLET. Jamais de vente sans mouvement de stock, jamais d'écriture
+    financière orpheline, jamais d'événement publié pour une vente inexistante. Les étapes 01 à 11 se déclenchent à la
+    confirmation, jamais à la création du brouillon.
+
+                                ▼ après COMMIT uniquement · outbox → Redis → workers
+
+    ABONNÉS — ASYNCHRONE, IDEMPOTENTS
+
+      Analytics                           Notifications           Intelligence                     Audit secondaire
+      agrégats du jour                    alerte stock bas        features de vente                contexte, enrichissement
+DIAGRAMME 5 · RÉCEPTION D'UN PAIEMENT                                                                        POST /api/v1/payments
+
+  Clé d'idempotence vérifiée            →     Paiement enregistré            →     Allocation vente / dette        →
+
+  Solde de dette recalculé         →        Trésorerie Finance       →       Audit critique      →       Outbox payment.received
+
+→    COMMIT        ⇢     Analytics · Notifications · Intelligence
+
+Contrôles : montant alloué ≤ solde restant ; dette soldée ⇒ statut settled et debt.settled ; sur-paiement refusé par
+défaut. Une modification importante d'un paiement est journalisée en audit critique, avec valeur avant / après.
+
+DIAGRAMME 6 · MOUVEMENT DE STOCK                                                           POST /api/v1/inventory/movements
+
+  Origine                                       Mouvement écrit                      Stock courant
+                                        →                                     →                                →
+  saisie · vente · retour · réception           in · out · adjust · return           projection du journal
+
+                                                                                 Alertes
+  Outbox stock.updated + COMMIT                    ⇢     Analytics       ⇢       seuil, rupture prévue
+
+Le stock n'est jamais écrit en valeur absolue par un autre module : il est la somme des mouvements. Tout écart est auditable,
+tout historique rejouable pour l'Intelligence. Un ajustement manuel est une opération à auditer en critique.
+A U D I T LO G — A U D I T C R I T I Q U E E T A U D I T A SY N C H R O N E
+
+L'audit essentiel ne doit pas dépendre de la disponibilité de Redis ou d'un worker. Deux
+canaux sont donc distingués, avec des garanties différentes.
+
+  C ANA L 1 · AUD IT CR I TI Q UE                                    CA NAL 2 · A UDI T S ECO NDA IRE
+
+  Dans la transaction métier                                         Après commit, par événement
+
+    BEGIN                                                              COMMIT
+       opération métier                                                → outbox
+       INSERT audit_log (critique)                                     → Redis
+       INSERT outbox                                                   → worker
+    COMMIT                                                             → audit secondaire / traces
+
+     Écrit par le service, pas par un worker                            Consultations, exports, connexions, enrichissement
+     Perdu si et seulement si l'opération elle-même                     de contexte
+     est annulée                                                        Tolère un retard ou une reprise
+
+     Append-only, aucune suppression applicative                        Consommateur idempotent, dédoublonné par
+     Contenu : acteur, entreprise, action, entité, valeur               identifiant d'événement
+
+     avant / après, horodatage, IP, origine                             Ne porte jamais seul la preuve d'une
+                                                                        opération critique
+
+Figure 7 — Deux canaux d'audit. L'approche asynchrone reste la règle pour tout ce qui ne requiert pas de garantie
+transactionnelle immédiate.
+Opérations exigeant un audit critique transactionnel
+
+ OPÉRATION                                  MOTIF
+
+ Modification d'une donnée                  Montant, taxe, remise ou écriture de trésorerie : la trace doit exister
+ financière critique                        dès que la donnée existe.
+
+ Suppression logique importante             Vente, paiement, produit, client : l'acteur et l'état antérieur doivent
+                                            être récupérables.
+
+ Changement de permission ou de             Élévation de privilège : condition d'enquête sur tout incident
+ rôle                                       ultérieur.
+
+ Modification de paramètres                 Devise, TVA, seuils, politique de sur-paiement : change
+ sensibles                                  l'interprétation de toutes les données suivantes.
+
+ Création ou modification d'une             Engagement financier vis-à-vis d'un tiers.
+ dette
+
+ Modification importante d'un               Réallocation, annulation, correction de montant.
+ paiement
+
+ Annulation ou retour de vente              Impacte simultanément stock, finance et dette.
+
+ Ajustement manuel de stock                 Seule écriture de stock non issue d'un flux métier.
+
+Tout le reste — consultation d'écran, export, connexion réussie, notification envoyée — relève du
+canal asynchrone.
+P É R I M È T R E S FO N C T I O N N E L S V 1
+
+Module Sales — périmètre réduit
+
+  O BLI GAT OIR E E N V 1                                  RE POR TÉ AUX VE RSI ONS FU TURE S
+
+      Création d'une vente                                    Devis avancés
+      Lignes de vente                                         Gestion complète des commandes
+      Prix appliqué (par ligne, traçable)                     Workflow commercial avancé (étapes,
+      Remise                                                  validations, relances)
+
+      Taxes si activées pour l'entreprise                     Avoirs complexes
+
+      Paiement total ou partiel                               Cycle commercial complet
+
+      Annulation
+                                                           Préparation sans implémentation : la vente porte un
+      Retour, lorsqu'il est nécessaire à la cohérence      statut et un type de document extensibles, et les
+                                                           lignes sont déjà découplées de la vente — un devis futur
+      du stock
+                                                           sera un document amont, pas une refonte.
+      Facture / reçu simple associé à la vente
+
+Module Finance — gestion, pas comptabilité générale
+
+   CoGes V1 n'est pas un logiciel de comptabilité générale.
+   Finance V1 répond à une question de pilotage — « où en est mon argent ? » — et non à une
+   obligation comptable.
+
+  C OUV ERT EN V1                                          HO RS V1 — É VOL UTI ONS FU TURE S
+
+      Revenus issus des ventes                                Comptabilité générale complète
+      Dépenses et charges                                     Plan comptable complet
+      Paiements                                               Grand livre comptable complet
+      Dettes                                                  Rapprochement bancaire avancé
+      Encaissements et décaissements                          Déclarations fiscales automatisées
+      Trésorerie simple                                       Comptabilité multi-normes
+
+      Marge estimée
+                                                           Les écritures V1 restent horodatées, typées et rattachées
+      Indicateurs financiers de gestion                    à leur pièce d'origine : un export comptable ultérieur
+                                                           reste possible sans reprise de données.
+D I AG R A M M E 7 — P I P E L I N E C O G E S I N T E L L I G E N C E
+
+L'Intelligence lit les données de gestion, ne bloque jamais une opération, et peut être
+désactivée sans interrompre CoGes. Ses modèles sont versionnés et n'écrivent que dans
+leurs propres tables.
+
+  01                                           02 · batch + événements                   03 · batch nocturne
+  Données opérationnelles                      Collecte                                  Préparation
+  ventes, mouvements, paiements,               extraction incrémentale par               déduplication, valeurs manquantes,
+  dettes, dépenses, référentiel                updated_at, lecture seule                 calendrier, ventes annulées exclues
+
+                                                                  ▼
+
+  04 · batch nocturne                          05 · hebdo, par tenant                    06 · inférence quotidienne
+  Features                                     Modèles versionnés                        Prédictions
+  séries j/7j/28j, saisonnalité, marge par     moyenne mobile de référence,              prévisions de ventes, risque de
+  produit, rotation, délai de paiement,        régression saisonnière, z-score, ABC-     rupture, anomalies, classements par
+  jours de couverture                          Pareto                                    métrique
+
+                                                                  ▼
+
+  07                                           08                                        09 · temps réel
+  Recommandations                              Stockage des résultats                    Interface
+  réapprovisionner, relancer un client,        tables dédiées features,                  l'API sert des résultats déjà calculés :
+  revoir un prix, surveiller une charge —      forecasts, insights —                     aucun calcul ML dans la requête
+  métrique nommée et valeur chiffrée           horodatées, versionnées, porteuses de
+                                               company_id
+
+Figure 8 — Étapes 02 à 08 dans les conteneurs workers ; seule l'étape 09 est dans le chemin de la requête utilisateur.
+
+« Valeur produit » : huit métriques distinctes, jamais équivalentes
+Un « produit à forte valeur » n'existe pas comme métrique unique. Toute recommandation ou
+tout classement affiché indique explicitement la métrique sur laquelle il repose.
+ MÉTRIQUE                    DÉFINITION                            FORMULATION ATTENDUE À L'ÉCRAN
+
+ Chiffre d'affaires          Somme des ventes nettes sur           « Produit A génère le plus fort chiffre d'affaires sur
+ généré                      la période.                           30 jours. »
+
+ Marge générée               CA − coût d'achat, sur la             « Produit B génère la plus forte marge sur 30 jours.
+                             période.                              »
+
+ Quantité vendue             Unités écoulées.                      « Produit C est le plus vendu en volume. »
+
+ Fréquence de vente          Nombre de ventes distinctes           « Produit D apparaît dans le plus grand nombre de
+                             contenant le produit.                 ventes. »
+
+ Rotation du stock           Quantité vendue rapportée au          « Produit E a la plus forte rotation de stock. »
+                             stock moyen détenu.
+
+ Vélocité des ventes         Unités vendues par jour sur           « Produit F s'écoule le plus rapidement, en unités
+                             une fenêtre glissante.                par jour. »
+
+ Évolution de la             Variation de la vélocité entre        « La demande du produit G progresse de 18 % par
+ demande                     deux fenêtres comparables.            rapport au mois précédent. »
+
+ Potentiel futur             Sortie d'un modèle de                 « Produit H est prévu en hausse — prévision du
+ estimé                      prévision, avec incertitude.          18/09, modèle saisonnier v3, incertitude
+                                                                   moyenne. »
+
+ CORRECT                                                          INTERDIT
+
+ « Produit A est actuellement le produit générant la              « Produit A est votre meilleur produit. »
+ plus forte marge. »                                              Aucun classement sans métrique nommée, aucune
+ « Produit B est actuellement le produit ayant la plus            fusion de plusieurs métriques en un score opaque
+ forte rotation. »                                                non expliqué.
+
+Règles d'affichage des prévisions
+
+ Date du calcul                            Modèle utilisé                             Niveau d'incertitude
+ Toute prévision affiche sa date de        Nom et version du modèle                   Intervalle ou qualificatif lisible, dès
+ production, jamais « en direct ».         consultables depuis l'indicateur.          que le modèle en produit un.
+
+ Données insuffisantes                     Désactivation
+ Sous le seuil minimal d'historique :      Intelligence coupée ⇒ CoGes
+ message explicite, jamais zéro ni         fonctionne, les blocs prédictifs
+ valeur inventée.                          disparaissent proprement.
+D I AG R A M M E 8 — S É C U R I T É M U LT I-T E N A N T : I M P L É M E N TAT I O N D E R L S
+
+Trois barrières indépendantes. Elles ne remplacent pas l'une l'autre : une erreur applicative
+ne suffit pas à provoquer une fuite, car la base refuse aussi.
+
+  ÉTA PE 1 · DÉTE R MI N AT I ON DU T E NA N T
+
+    JWT vérifié     →     Utilisateur chargé      →
+
+    company_id lu côté serveur                                                             Contexte immuable
+                                                                                      →
+    depuis le rattachement en base, jamais depuis un en-tête ni un paramètre client        (user, company_id, permissions)
+
+                                                                   ▼
+
+  ÉTA PE 2 · TRAN S MI S SI O N À L A T RA N SA C TI ON
+
+    BEGIN;
+       SET LOCAL app.company_id = '<uuid du tenant>';                      -- portée = transaction
+       -- toutes les requêtes du cas d'usage
+    COMMIT;                                                                -- la variable expire avec la transaction
+
+  SET LOCAL et non SET : la valeur est liée à la transaction, elle disparaît au COMMIT ou au ROLLBACK. Aucune requête
+  métier n'est exécutée hors transaction.
+
+                                                                   ▼
+
+  ÉTA PE 3 · TROI S B A RR I ÈR E S
+
+    Barrière 1 · Schéma                          Barrière 2 · Application                   Barrière 3 · PostgreSQL
+    company_id NOT NULL sur toute                Repository de base qui injecte le          RLS activée et FORCE, politique
+    table métier, contrainte UNIQUE              filtre tenant ; un repository métier ne    comparant company_id à la
+                                                 peut pas construire une requête sans
+    (company_id, id) comme                                                                  variable de session ; le rôle applicatif
+                                                 lui, ni écrire une relation dont le
+    cible de référence, et FK composites                                                    n'est pas BYPASSRLS.
+    (company_id, child_id) →                     company_id diffère du contexte —
+                                                 les FK composites rendent ce
+    (company_id, parent_id)                      croisement impossible même en cas
+    sur chaque relation entre tables
+                                                 d'erreur applicative.
+    tenant-scoped ; company_id en
+    tête de tout index composite.
+
+    ALTER TABLE products ADD CONSTRAINT products_tenant_key UNIQUE (company_id, id);
+    ALTER TABLE sale_items
+       ADD CONSTRAINT sale_items_product_fk
+       FOREIGN KEY (company_id, product_id) REFERENCES products (company_id, id);
+
+    ALTER TABLE sales ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE sales FORCE ROW LEVEL SECURITY;
+    CREATE POLICY tenant_isolation ON sales
+       USING          (company_id = current_setting('app.company_id', true)::uuid)
+       WITH CHECK (company_id = current_setting('app.company_id', true)::uuid);
+
+  WITH CHECK autant que USING : la RLS protège aussi les écritures, pas seulement les lectures. Si la variable est absente,
+  current_setting(..., true) renvoie NULL et la politique ne laisse rien passer — l'absence de contexte échoue de
+  façon sûre.
+                                                                ▼
+
+  ÉTA PE 4 · CONN E XI O NS PO O LÉ ES — E MP Ê CH ER LA RÉ MAN ENC E D E C ONT EXTE
+
+    Portée transactionnelle         Réinitialisation au             Une session = un tenant        Pooling en mode
+    SET LOCAL                       checkin                         Le contexte est posé à         transaction
+    uniquement : rien ne            Sur l'événement de              l'ouverture de la              Avec un pooler externe
+    survit au COMMIT, donc          retour au pool, exécuter        transaction et jamais          (Vercel → PostgreSQL),
+    rien à nettoyer en cas de       DISCARD ALL (ou                 modifié en cours de            utiliser le mode
+    retour au pool.                 RESET                           route ; changer de tenant      transaction : une
+                                                                    impose une nouvelle            connexion physique n'est
+                                    app.company_id)
+                                                                    transaction.                   pas partagée au milieu
+                                    avant réutilisation.
+                                                                                                   d'une transaction.
+
+    Assertion en début de           Workers identiques
+    transaction                     Toute tâche Celery ouvre
+    Le repository de base           sa transaction avec le
+    vérifie que la variable de      contexte du tenant
+    session correspond au           qu'elle traite — aucune
+    company_id du                   tâche « multi-tenant »
+    contexte applicatif, sinon      sans boucle explicite par
+    erreur immédiate.               tenant.
+
+Figure 9 — Chaîne d'isolation, de l'authentification à la politique PostgreSQL, en incluant le comportement sur pool
+de connexions.
+
+Tests automatisés de fuite inter-tenant
+Suite obligatoire en intégration continue. Elle échoue ⇒ le déploiement est bloqué. Deux
+entreprises A et B sont créées avec des données propres, puis chaque endpoint est appelé
+en croisé.
+ CAS                           ATTENDU          VÉRIFICATION
+
+ Entreprise A → donnée A       ✅   200          Lecture, mise à jour et suppression autorisées sur ses propres
+                                                enregistrements.
+
+ Entreprise A → donnée B       ❌   404          Aucune donnée retournée, et un code indiscernable d'une
+                                                ressource inexistante (pas de 403 qui révélerait l'existence).
+
+ Entreprise B → donnée A       ❌   404          Symétrie vérifiée dans les deux sens pour chaque module.
+
+ Écriture croisée              ❌   refus        WITH CHECK rejette l'insertion ou la mise à jour portant un
+                                                company_id étranger.
+
+ Requête sans contexte         ❌   0 ligne      Variable de session absente ⇒ aucune ligne visible : l'oubli de
+                                                contexte ne produit jamais un accès global.
+
+ Réutilisation de              ❌   étanche      Enchaînement A puis B sur la même connexion physique : la
+ connexion                                      seconde requête ne voit jamais les données de A.
+
+ Agrégats et exports           ❌   étanche      Vues matérialisées, tableaux de bord et exports contrôlés au
+                                                même titre que les endpoints CRUD.
+
+ Résultats d'Intelligence      ❌   étanche      Tables features, forecasts, insights également porteuses
+                                                de company_id et couvertes par RLS.
+
+Un test générique parcourt la table des routes : tout nouvel endpoint est automatiquement
+soumis aux cas croisés, sans intervention du développeur.
+P E R FO R M A N C E — C H E M I N SY N C H R O N E E T C H E M I N A SY N C H R O N E
+
+  C HEM IN SYN CHR ON E                                           CH EMI N A SYN CHR ONE
+
+  Strictement ce qui est nécessaire pour terminer                 Tout ce qui peut être traité après le COMMIT
+  l'opération utilisateur
+                                                                      Recalcul d'agrégats et vues matérialisées
+     Validation, RBAC, contexte tenant
+                                                                      Notifications et alertes
+     Écritures métier de la transaction
+                                                                      Audit secondaire
+     Audit critique
+                                                                      Features, entraînement, inférence
+     Écriture outbox
+                                                                      Exports volumineux, réconciliation nocturne
+     Lecture d'agrégats déjà calculés
+                                                                  Aucun calcul ML lourd dans une requête utilisateur —
+  Cible : < 300 ms pour une écriture, < 200 ms pour une           sans exception.
+  lecture de tableau de bord.
+
+Où s'exécute quoi
+
+ TRAITEMENT                         EXÉCUTION                CADENCE & GARDE-FOUS
+
+ Écriture métier (vente,            Requête HTTP ·           Synchrone, transactionnel, audit critique inclus
+ paiement, stock)                   Vercel
+
+ Agrégats du tableau de             Worker + cache           Rafraîchis sur événement ; vue matérialisée reconstruite
+ bord                                                        périodiquement
+
+ Notifications et alertes           Worker                   À l'événement, déduplication par fenêtre
+
+ Préparation et features            Batch nocturne           1×/nuit par tenant, fenêtre glissante, reprise sur échec
+
+ Entraînement des modèles           Batch                    Par tenant, seuil minimal d'historique, artefact versionné
+                                    hebdomadaire
+
+ Inférence                          Batch quotidien          Résultats persistés ; l'API ne fait que lire
+
+ Exports et documents               Worker                   À la demande, fichier mis à disposition en fin de tâche
+
+Index de référence : (company_id, date) en tête sur toute table à forte volumétrie — ventes,
+mouvements, paiements, écritures financières — et (company_id, product_id, date) pour
+les séries produit. Cache court par tenant sur les indicateurs d'accueil, invalidé par événement.
+D I AG R A M M E 9 — S É PA R AT I O N V 1 / V E R S I O N S F U T U R E S
+
+  OBLIGATOIRE EN V1                                                VERSIONS FUTURES — NON IMPLÉMENTÉES,
+                                                                   RESTÉES POSSIBLES
+  Core
+                                                                   Fonctionnel
+    Companies / Tenants         Authentication      Users
+                                                                     Achats avancés       Commandes fournisseurs
+    Roles & Permissions         Products     Categories
+                                                                     Multi-entrepôts      CRM avancé       RH      Paie
+    Customers       Suppliers      Sales (réduit)
+                                                                     Comptabilité avancée       Facturation électronique
+    Inventory      Finance (gestion)       Payments
+                                                                     Abonnements        Automatisations avancées
+    Debts       Expenses
+                                                                   Canaux
+  Management
+                                                                     Application mobile      Mode hors connexion
+    Dashboard       Analytics essentielles
+                                                                   Technique
+    Notifications principales      Audit Log
+                                                                     Modèles ML avancés
+    Import/export CSV · Excel si nécessaire
+                                                                     Architecture distribuée / microservices
+
+  Intelligence
+                                                                     Kafka / RabbitMQ       Entrepôt de données dédié
+    Statistiques descriptives      Tendances
+                                                                     Agents IA conversationnels avancés
+    Anomalies simples       Alertes de stock
+
+                                                                   Ce que l'architecture V1 garantit pour eux : frontières
+    Prévisions simples si historique suffisant
+                                                                   de modules explicites (extraction possible), outbox
+    Risque de rupture      Produits par métrique                   (remplacement du transport sans toucher aux
+                                                                   émetteurs), Intelligence en lecture seule (isolable),
+    Recommandations explicables                                    stock en journal de mouvements (multi-entrepôts
+                                                                   additif), écritures financières typées et rattachées à leur
+                                                                   pièce (export comptable ultérieur).
+D I AG R A M M E 1 0 — A R B O R E S C E N C E F I N A L E D U P R OJ E T
+
+Backend — FastAPI (Vercel) + workers (Docker)
+
+  backend/
+    app/
+       main.py                      # entrée API (Vercel)
+       core/
+         config.py     security.py
+         database.py                # engine, pool, checkin reset
+         tenancy.py                 # contexte + SET LOCAL
+         deps.py                    # auth, RBAC, tenant
+         audit.py                   # audit critique transactionnel
+         events/
+            types.py    outbox.py    bus.py
+         errors.py     logging.py
+       modules/
+         companies/
+         auth/
+         users/
+         rbac/
+         products/
+         categories/
+         customers/
+         suppliers/
+         sales/                     # V1 réduit
+            router.py
+            service.py
+            repository.py
+            models.py
+            schemas.py
+            events.py
+         inventory/
+         finance/
+         payments/
+         debts/
+         expenses/
+         dashboard/
+         analytics/
+         notifications/
+         audit/
+         importexport/
+         intelligence/
+            features/
+            models/
+            pipelines/
+            serving.py              # lecture des résultats
+       workers/                     # image Docker
+         celery_app.py
+         beat.py                    # planification
+         tasks/
+            outbox_relay.py
+            analytics.py
+            notifications.py
+            ml_features.py
+            ml_train.py
+            ml_infer.py
+            exports.py
+            reconcile.py
+      migrations/               # Alembic
+    tests/
+      unit/    integration/
+      tenancy/                  # fuite inter-tenant
+      architecture/             # imports inter-modules
+    Dockerfile.worker
+    vercel.json
+    pyproject.toml
+
+Frontend — Next.js (Vercel)
+
+ frontend/
+    app/
+      (auth)/login/
+      (app)/
+        dashboard/
+        products/
+        categories/
+        customers/
+        suppliers/
+        sales/
+            new/                # vente + paiement
+            [id]/               # reçu simple
+        inventory/
+            movements/
+        finance/
+            expenses/
+            debts/
+            payments/
+        analytics/
+        insights/               # CoGes Intelligence
+        settings/
+            users/   roles/
+            company/            # devise, TVA, seuils
+            audit/
+      layout.tsx
+    components/
+      ui/                       # primitives
+      charts/
+      data-table/
+      alerts/
+      forecast/                 # date, modèle, incertitude
+    lib/
+      api/                      # client REST typé
+      auth/
+      permissions.ts
+      format/                   # devise décimale, dates
+    hooks/
+    types/                      # générés depuis OpenAPI
+    package.json
+
+ deploy/
+    docker-compose.worker.yml
+    README-infra.md             # base, cache, scheduler
+Un module = un dossier, même découpage interne partout, aucune logique métier hors
+modules/. tests/architecture/ échoue si un module importe le repository d'un autre ;
+tests/tenancy/ échoue sur la moindre fuite. Côté frontend, types/ est généré depuis
+OpenAPI pour que le contrat ne dérive pas.
+A N N E X E A — S O U R C E S M E R M A I D D E S D I X D I AG R A M M E S
+
+Équivalents textuels à versionner dans le dépôt de documentation, à côté du code.
+
+A.1 — Architecture logique globale
+
+  flowchart TB
+    U[Utilisateur] --> FE[Next.js · Vercel]
+    FE --> API[API FastAPI · routers, Pydantic, auth, tenant resolver]
+    API --> SVC[Services metier du monolithe]
+    SVC --> RP[Repositories · filtre company_id]
+    RP --> DB[(PostgreSQL manage · RLS)]
+    SVC --> AUD[Audit critique · meme transaction]
+    AUD --> DB
+    SVC --> OBX[(Table outbox)]
+    OBX --> DB
+    OBX -. apres commit .-> RDS[(Redis manage)]
+    RDS --> WK[Workers Celery · Docker]
+    WK --> ANA[Analytics]
+    WK --> NOT[Notifications]
+    WK --> AUD2[Audit secondaire]
+    WK --> ML[CoGes Intelligence]
+    ML -. lecture seule .-> DB
+    WK --> DB
+
+A.2 — Déploiement Vercel + infrastructure externe
+
+  flowchart LR
+    subgraph V[Vercel · chemin utilisateur]
+      NX[Application Next.js]
+       AP[API FastAPI · requetes courtes]
+       CD[Deploiement continu depuis Git]
+      TLS[HTTPS · domaine · edge]
+    end
+    subgraph X[Infrastructure externe · runtime controle]
+       PG[(PostgreSQL manage + pooler)]
+       RD[(Redis manage)]
+       CW[Workers Celery · Docker]
+       MLW[Taches ML et batch · Docker]
+       SCH[Scheduler]
+      EXP[Exports volumineux]
+    end
+    NX --> AP
+    AP --> PG
+    AP --> RD
+    RD --> CW
+    SCH --> MLW
+    CW --> PG
+    MLW --> PG
+    MLW --> EXP
+    CW -.->|aucun appel entrant| V
+A.3 — Modules backend
+
+  flowchart TB
+    subgraph E[Bande E · Restitution]
+      DSH[Dashboard]; ANA[Analytics]; NOT[Notifications]; INT[CoGes Intelligence]
+    end
+    subgraph D[Bande D · Finance de gestion]
+      FIN[Finance]; PAY[Payments]; DEB[Debts]; EXP[Expenses]
+    end
+    subgraph C[Bande C · Operations]
+      SAL[Sales · V1 reduit]; INV[Inventory]
+    end
+    subgraph B[Bande B · Referentiel]
+      PRD[Products]; CAT[Categories]; CUS[Customers]; SUP[Suppliers]
+    end
+    subgraph A[Bande A · Plateforme]
+      COM[Companies]; AUT[Auth]; USR[Users]; RBA[Roles and Permissions]
+      AUD[Audit Log]; BUS[(Outbox et bus)]; TEN[Tenant context]
+    end
+    SAL --> PRD; SAL --> CUS; SAL --> INV; SAL --> FIN; SAL --> AUD
+    INV --> PRD; INV --> SUP
+    PAY --> DEB; PAY --> FIN; PAY --> AUD
+    DEB --> CUS; DEB --> SUP; DEB --> FIN; DEB --> AUD
+    EXP --> FIN
+    DSH --> ANA; DSH --> NOT; DSH --> INT
+    ANA -. lecture .-> SAL; ANA -. lecture .-> INV; ANA -. lecture .-> FIN
+    INT -. lecture .-> ANA
+    SAL --> BUS; INV --> BUS; PAY --> BUS; DEB --> BUS; EXP --> BUS
+    BUS --> NOT; BUS --> ANA; BUS --> INT; BUS --> AUD
+
+A.4 — Flux d'une vente
+
+  sequenceDiagram
+    participant U as Utilisateur
+    participant API as API FastAPI
+    participant SAL as Sales
+    participant INV as Inventory
+    participant FIN as Finance
+    participant DEB as Debts
+    participant AUD as Audit critique
+    participant OBX as Outbox
+    participant WK as Workers
+    U->>API: POST /api/v1/sales
+    API->>SAL: 00 creation en draft · brouillon verrouillable
+    SAL-->>U: 201 vente en draft
+    U->>API: POST /api/v1/sales/{id}/confirm
+    API->>SAL: confirm_sale(id, ctx)
+    Note over SAL,OBX: BEGIN · SET LOCAL app.company_id
+    SAL->>SAL: 01 RBAC · 02 validation
+    SAL->>SAL: 03 vente · 04 lignes
+    SAL->>INV: 05 verification stock · 06 mouvement de sortie
+    SAL->>FIN: 07 ecriture financiere
+    SAL->>DEB: 08 dette si paiement partiel
+    SAL->>AUD: 09 audit critique
+    SAL->>OBX: 10 sale.confirmed
+    Note over SAL,OBX: 11 COMMIT · sinon ROLLBACK COMPLET
+    SAL-->>API: vente confirmee
+    API-->>U: 200 OK · statut confirmed
+    OBX->>WK: relais via Redis
+    WK->>WK: Analytics · Notifications · Intelligence · Audit secondaire
+A.5 — Flux d'un paiement
+
+  flowchart TB
+    IN[POST /api/v1/payments] --> IDEM{Cle d idempotence deja vue ?}
+    IDEM -- oui --> RET[Retour du resultat initial]
+    IDEM -- non --> TX[BEGIN transaction]
+    TX --> P1[Paiement enregistre]
+    P1 --> P2[Allocation vente ou dette]
+    P2 --> CHK{Montant alloue <= solde restant ?}
+    CHK -- non --> RB[ROLLBACK · 422]
+    CHK -- oui --> P3[Solde de dette recalcule]
+    P3 --> P4{Solde = 0 ?}
+    P4 -- oui --> P5[Statut settled · debt.settled]
+    P4 -- non --> P6[Dette partiellement soldee]
+    P5 --> FINX[Tresorerie Finance]
+    P6 --> FINX
+    FINX --> AUDX[Audit critique]
+    AUDX --> OBXX[Outbox payment.received]
+    OBXX --> CM[COMMIT]
+    CM -. apres commit .-> WKX[Analytics · Notifications · Intelligence]
+
+A.6 — Flux d'un mouvement de stock
+
+  flowchart LR
+    SRC{Origine du mouvement}
+    SRC -->|vente| MV[Mouvement out]
+    SRC -->|retour| MV2[Mouvement return]
+    SRC -->|reception| MV3[Mouvement in]
+    SRC -->|ajustement manuel| MV4[Mouvement adjust + audit critique]
+    MV --> LEDGER[(Journal des mouvements)]
+    MV2 --> LEDGER
+    MV3 --> LEDGER
+    MV4 --> LEDGER
+    LEDGER --> CUR[Stock courant · projection]
+    CUR --> OBX[Outbox stock.updated]
+    OBX -. apres commit .-> ANA[Analytics]
+    OBX -. apres commit .-> ALR[Alertes seuil et rupture prevue]
+    ALR --> INT[CoGes Intelligence · risque de rupture]
+
+A.7 — Pipeline CoGes Intelligence
+
+  flowchart LR
+    OPS[(Donnees operationnelles)] --> COL[02 Collecte incrementale]
+    COL --> CLN[03 Preparation]
+    CLN --> FE[04 Features]
+    FE --> TR[05 Entrainement hebdomadaire par tenant]
+    TR --> MOD[Modeles versionnes]
+    MOD --> INF[06 Inference quotidienne]
+    INF --> OUT[Previsions · anomalies · risque de rupture · classements par metrique]
+    OUT --> REC[07 Recommandations avec metrique nommee]
+    REC --> ST[(08 Tables features / forecasts / insights)]
+    ST --> UI[09 Dashboard et ecran Insights]
+    MOD -. jamais d ecriture transactionnelle .-> OPS
+    UI -->|si historique insuffisant| MSG[Message donnees insuffisantes]
+A.8 — Sécurité multi-tenant
+
+  flowchart TB
+    JWT[JWT verifie] --> USR[Utilisateur charge en base]
+    USR --> CID[company_id determine cote serveur]
+    CID --> CTX[Contexte immuable user + company_id + permissions]
+    CTX --> TX[BEGIN · SET LOCAL app.company_id]
+    TX --> B1[Barriere 1 · company_id NOT NULL · UNIQUE company_id,id · FK composites]
+    TX --> B2[Barriere 2 · repository de base · filtre impose · pas de croisement tenant]
+    TX --> B3[Barriere 3 · RLS FORCE · USING et WITH CHECK]
+    B1 --> DB[(PostgreSQL)]
+    B2 --> DB
+    B3 --> DB
+    TX --> CM[COMMIT · la variable expire]
+    CM --> POOL[Retour au pool · DISCARD ALL au checkin]
+    POOL --> NEXT[Transaction suivante · contexte repose a zero]
+    DB --> TEST[Tests CI de fuite inter-tenant]
+    TEST --> T1[A vers donnee A : autorise]
+    TEST --> T2[A vers donnee B : refuse]
+    TEST --> T3[B vers donnee A : refuse]
+    TEST --> T4[Sans contexte : aucune ligne]
+    TEST --> T5[Connexion reutilisee : etanche]
+
+A.9 — Séparation V1 / versions futures
+
+  flowchart LR
+    subgraph V1[OBLIGATOIRE EN V1]
+      direction TB
+      CORE[Core · Companies, Auth, Users, RBAC, Products, Categories,
+            Customers, Suppliers, Sales reduit, Inventory,
+            Finance de gestion, Payments, Debts, Expenses]
+      MGT[Management · Dashboard, Analytics essentielles,
+           Notifications principales, Audit Log, Import/export CSV]
+      INTL[Intelligence · descriptif, tendances, anomalies simples,
+            alertes stock, previsions simples, risque de rupture,
+            produits par metrique, recommandations explicables]
+    end
+    subgraph FUT[VERSIONS FUTURES]
+      direction TB
+      F1[Achats avances · commandes fournisseurs · multi-entrepots]
+      F2[CRM avance · RH · paie · abonnements · automatisations]
+      F3[Comptabilite avancee · facturation electronique]
+      F4[Mobile · mode hors connexion]
+      F5[ML avance · microservices · Kafka/RabbitMQ ·
+         entrepot dedie · agents IA conversationnels]
+    end
+    CORE --> FUT
+    MGT --> FUT
+    INTL --> FUT
+    V1 -.->|frontieres de modules, outbox, lecture seule ML,
+    journal de mouvements| FUT
+A.10 — Arborescence du projet
+
+ flowchart TB
+    ROOT[coges/] --> BE[backend/]
+    ROOT --> FEX[frontend/]
+    ROOT --> DEP[deploy/]
+    BE --> APPX[app/]
+    APPX --> CORE2[core/ · config, database, tenancy, audit, events]
+    APPX --> MODS[modules/ · un dossier par module]
+    APPX --> WKS[workers/ · celery_app, beat, tasks]
+    APPX --> MIG[migrations/ · Alembic]
+    MODS --> SHAPE[router · service · repository · models · schemas · events]
+    BE --> TST[tests/ · unit, integration, tenancy, architecture]
+    BE --> DKR[Dockerfile.worker + vercel.json]
+    FEX --> APPR[app/ · routes App Router]
+    FEX --> CMP[components/ · ui, charts, data-table, alerts, forecast]
+    FEX --> LIBX[lib/ · api, auth, permissions, format]
+    FEX --> TYP[types/ · generes depuis OpenAPI]
+    DEP --> INFRA[docker-compose.worker.yml + README-infra]
+DÉCISIONS DÉFINITIVEMENT RETENUES POUR COGES V1
+
+Liste de référence pour le développement. Rien au-delà de cette liste n'est à construire en V1.
+
+  01    Monolithe modulaire FastAPI, un module par dossier
+        Façade de services, modèles privés, aucun import du repository d'un autre module — vérifié par un test
+        d'architecture.
+
+  02    Chemin utilisateur sur Vercel, traitements longs en Docker externe
+        Next.js et API sur Vercel, déployés depuis Git ; PostgreSQL et Redis managés ; workers, ML, batch et
+        exports dans des conteneurs.
+
+  03    Une transaction PostgreSQL par cas d'usage, rollback complet
+        Vente : RBAC, validation, vente, lignes, stock, mouvement, écriture financière, dette, audit critique,
+        outbox, COMMIT. Échec d'une étape critique ⇒ ROLLBACK COMPLET.
+
+  04    Outbox transactionnelle, publication après commit uniquement
+        L'événement est écrit avec la donnée ; un relais l'envoie dans Redis. Consommateurs idempotents,
+        reprises avec back-off, file de rebut surveillée.
+
+  05    Audit à deux canaux
+        Audit critique dans la transaction pour les opérations financières, les suppressions importantes, les
+        changements de permission, les paramètres sensibles, les dettes, les paiements, les annulations et les
+        ajustements de stock. Audit secondaire par événement pour le reste. Append-only.
+
+  06    Isolation multi-tenant à trois barrières
+        company_id NOT NULL indexé, filtre imposé par le repository de base, RLS FORCE avec USING et WITH
+        CHECK. Contexte posé par SET LOCAL en début de transaction, réinitialisé au retour au pool, pooling en
+        mode transaction.
+
+  07    Tests de fuite inter-tenant bloquants en CI
+        A → A autorisé, A → B refusé, B → A refusé, écriture croisée refusée, requête sans contexte sans résultat,
+        connexion réutilisée étanche. Test générique appliqué à toute nouvelle route.
+
+  08    Sales V1 réduit
+        Vente, lignes, prix appliqué, remise, taxes si activées, paiement total ou partiel, annulation, retour, reçu
+        simple. Pas de devis avancés, de commandes, de workflow commercial ni d'avoirs complexes.
+
+  09    Finance de gestion, pas de comptabilité générale
+        Revenus, dépenses, paiements, dettes, encaissements, décaissements, trésorerie simple, marge estimée,
+        indicateurs. Aucun plan comptable, grand livre, rapprochement avancé, déclaration fiscale ni multi-
+        normes.
+
+  10    Stock en journal de mouvements
+        Le stock courant est une projection ; aucune écriture en valeur absolue par un autre module. Historique
+        auditable et rejouable.
+
+  11    Intelligence hors du transactionnel, en lecture seule
+        Collecte, préparation, features, modèles versionnés, inférence, recommandations, résultats dans des
+        tables dédiées. Désactivable sans interrompre CoGes. Aucun calcul ML dans une requête utilisateur.
+12   Valeur produit = métrique nommée
+     CA, marge, quantité, fréquence, rotation, vélocité, évolution de la demande, potentiel estimé — jamais
+     présentés comme équivalents. Toute recommandation nomme sa métrique et affiche sa valeur.
+
+13   Prévisions toujours qualifiées
+     Date de calcul, modèle et version, incertitude quand elle existe, message « données insuffisantes » sous
+     le seuil minimal d'historique.
+
+14   Performance : agrégats pré-calculés et index disciplinés
+     Vues matérialisées, cache court par tenant invalidé par événement, index (company_id, date) et
+     (company_id, product_id, date), pagination obligatoire.
+
+15   Montants en décimal, de bout en bout
+     NUMERIC en base, Decimal en Python, formatage devise côté frontend. Aucun flottant sur une écriture
+     financière.
+
+16   Sécurité applicative de base
+     JWT courts + refresh rotatif, Argon2, RBAC vérifié côté serveur, schémas Pydantic stricts, limitation de
+     débit par IP et par tenant, clés d'idempotence sur les écritures financières, secrets hors dépôt, TLS,
+     sauvegardes chiffrées avec PITR et restauration testée.
+
+17   Migrations Alembic obligatoires et réversibles
+     Exécutées comme étape de déploiement, jamais au démarrage d'une requête ; déploiement en deux
+     temps pour tout changement destructif.
+
+18   Tout le reste est hors V1
+     Achats avancés, commandes fournisseurs, multi-entrepôts, CRM, RH, paie, comptabilité avancée,
+     facturation électronique, mobile, hors connexion, abonnements, automatisations, ML avancé,
+     microservices, Kafka/RabbitMQ, entrepôt dédié, agents conversationnels. Non implémentés, non préparés
+     au-delà des frontières déjà posées.
+Risques techniques & réduction
+
+ RISQUE                     GRAVITÉ    RÉDUCTION
+
+ Fuite de données entre     Critique   Trois barrières + suite de tests croisés bloquante en CI +
+ tenants                               réinitialisation du contexte au retour au pool.
+
+ Contexte de tenant         Critique   SET LOCAL uniquement, DISCARD ALL au checkin, pooling en
+ rémanent sur connexion                mode transaction, assertion en début de transaction.
+ poolée
+
+ Perte de trace d'une       Élevée     Audit critique dans la transaction : indépendant de Redis et des
+ opération sensible                    workers.
+
+ Dérive du monolithe        Élevée     Test d'architecture interdisant les imports transversaux ; revue de
+                                       toute nouvelle dépendance inter-modules.
+
+ Incohérence ventes /       Élevée     Une transaction par cas d'usage, contraintes en base, réconciliation
+ stock / finance                       nocturne qui remonte les écarts.
+
+ Traitement long lancé      Élevée     Règle de zone : tout traitement long vit dans un conteneur worker ;
+ dans une requête                      budget de temps surveillé côté API.
+
+ Épuisement des             Moyenne    Pooler externe en mode transaction, taille de pool bornée, pas de
+ connexions base depuis                connexion persistante par requête.
+ Vercel
+
+ IA peu fiable sur faible   Moyenne    Seuil minimal par modèle, incertitude affichée, message « données
+ historique                            insuffisantes ».
+
+ Tâches asynchrones en      Moyenne    Reprises avec back-off, file de rebut surveillée, alerte
+ échec silencieux                      d'exploitation, consommateurs idempotents.
+
+ Migrations risquées en     Moyenne    Migrations réversibles, déploiement en deux temps, sauvegarde
+ production                            préalable.
+
+COGES — ARCHITECTURE TECHNIQUE V1.1                                               VERSION RÉVISÉE & FINALE

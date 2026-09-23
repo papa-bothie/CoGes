@@ -1,0 +1,1175 @@
+# CoGes — Modèle de données V1.1 — §8 SQL PostgreSQL 16 complet
+# Extrait texte automatique (pdftotext -layout) du PDF d'origine dans ./pdf/.
+# En cas de doute (ligne coupée, tableau déformé), le PDF fait foi.
+
+# ATTENTION : SQL extrait d'un PDF. Les lignes longues peuvent être coupées
+# (ex. regex d'email dans users). Relire et corriger avant exécution.
+
+8. SQL PostgreSQL 16 complet
+Schéma complet V1.1, pas seulement les changements. Exige PostgreSQL 15+ pour UNIQUE NULLS NOT
+DISTINCT ; testé sur 16. Ordre d'exécution : extensions, types, fonctions utilitaires, tables, index, triggers,
+RLS, couche analytique. Idempotent là où PostgreSQL le permet.
+
+8.1 Extensions, types, fonctions utilitaires
+
+  -- =====================================================================
+  -- CoGes V1.1 - schema relationnel complet | PostgreSQL 16 | UTF8 | UTC
+  -- =====================================================================
+  BEGIN;
+
+  CREATE EXTENSION IF NOT EXISTS pgcrypto;          -- gen_random_uuid()
+  CREATE EXTENSION IF NOT EXISTS citext;            -- emails, slugs
+  CREATE EXTENSION IF NOT EXISTS btree_gist;        -- EXCLUDE sur intervalles
+  CREATE EXTENSION IF NOT EXISTS pg_trgm;           -- recherche par nom
+
+  -- ---------------------------------------------------------------- types
+  CREATE TYPE sale_status        AS ENUM ('draft','confirmed','cancelled');
+  CREATE TYPE movement_type      AS ENUM ('initial','purchase_in','sale_out',
+     'customer_return_in','supplier_return_out','adjustment','loss');
+  CREATE TYPE expense_kind       AS ENUM ('fixed','variable');
+  CREATE TYPE party_type         AS ENUM ('customer','supplier');
+  CREATE TYPE debt_status        AS ENUM ('open','partially_paid','paid','written_off');
+  CREATE TYPE cash_direction AS ENUM ('inflow','outflow');
+  CREATE TYPE pay_method         AS ENUM ('cash','mobile_money','bank_transfer',
+     'card','cheque');
+  -- V1.1
+  CREATE TYPE return_refund_status AS ENUM ('none_due','pending','partial','settled');
+  CREATE TYPE forecast_type       AS ENUM ('demand_qty','revenue','stockout_date',
+     'cash_balance');
+  CREATE TYPE insight_type        AS ENUM ('stockout_risk','slow_mover','demand_spike',
+     'margin_drop','expense_anomaly','cash_shortfall','debt_overdue',
+     'cashier_anomaly');
+  CREATE TYPE insight_severity AS ENUM ('info','warning','critical');
+  CREATE TYPE insight_status       AS ENUM ('new','read','acknowledged','dismissed',
+     'resolved');
+
+  -- ----------------------------------------------------- fonctions communes
+  CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger AS $$
+  BEGIN NEW.updated_at := now(); RETURN NEW; END $$ LANGUAGE plpgsql;
+
+  -- Formule CMP unique, partagee par le trigger et la reconstruction :
+  -- aucune divergence possible entre temps reel et recalcul.
+  CREATE OR REPLACE FUNCTION cmp_next_avg(
+     p_qty numeric, p_avg numeric, p_delta numeric, p_cost numeric)
+  RETURNS numeric LANGUAGE sql IMMUTABLE AS $$
+     SELECT CASE
+        WHEN p_delta <= 0              THEN p_avg                      -- sortie : inchange
+        WHEN p_qty + p_delta = 0       THEN p_avg                      -- garde-fou 0/0
+        ELSE round((p_qty * p_avg + p_delta * p_cost) / (p_qty + p_delta), 4)
+     END;
+  $$;
+
+8.2 Tenant et RBAC
+
+  CREATE TABLE companies (
+     id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+
+       name         text NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 200),
+       slug         citext NOT NULL UNIQUE CHECK (slug ~ '^[a-z0-9-]{3,40}$'),
+       currency     char(3) NOT NULL DEFAULT 'XOF' CHECK (currency ~ '^[A-Z]{3}$'),
+       timezone     text NOT NULL DEFAULT 'UTC',
+       settings     jsonb NOT NULL DEFAULT '{}'::jsonb,
+       created_at   timestamptz NOT NULL DEFAULT now(),
+       updated_at   timestamptz NOT NULL DEFAULT now(),
+       deleted_at   timestamptz
+  );
+
+  CREATE TABLE users (
+       id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id     uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       email          citext NOT NULL CHECK (email ~ '^[^@[:space:]]+@[^@[:space:]]+[.]
+  [^@[:space:]]+$'),
+       password_hash text NOT NULL,
+       full_name      text NOT NULL CHECK (length(btrim(full_name)) > 0),
+       is_active      boolean NOT NULL DEFAULT true,
+       last_login_at timestamptz,
+       created_at     timestamptz NOT NULL DEFAULT now(),
+       updated_at     timestamptz NOT NULL DEFAULT now(),
+       deleted_at     timestamptz,
+       CONSTRAINT users_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT users_email_uq     UNIQUE (company_id, email)   -- unicite PAR tenant
+  );
+
+  CREATE TABLE roles (
+       id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id   uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       name         text NOT NULL CHECK (length(btrim(name)) > 0),
+       description text,
+       is_system    boolean NOT NULL DEFAULT false,
+       created_at   timestamptz NOT NULL DEFAULT now(),
+       updated_at   timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT roles_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT roles_name_uq      UNIQUE (company_id, name)
+  );
+
+  -- Catalogue GLOBAL : vocabulaire des droits commun a tous les tenants
+  CREATE TABLE permissions (
+       id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       code       text NOT NULL UNIQUE,
+       resource text NOT NULL,
+       action     text NOT NULL CHECK (action IN ('read','create','update','delete',
+                                                   'confirm','cancel','export'))
+  );
+
+  CREATE TABLE user_roles (
+       user_id      uuid NOT NULL,
+       role_id      uuid NOT NULL,
+       company_id uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       granted_at timestamptz NOT NULL DEFAULT now(),
+       PRIMARY KEY (user_id, role_id),
+       FOREIGN KEY (company_id, user_id) REFERENCES users (company_id, id)
+        ON DELETE CASCADE,
+       FOREIGN KEY (company_id, role_id) REFERENCES roles (company_id, id)
+        ON DELETE RESTRICT
+  );
+
+  CREATE TABLE role_permissions (
+       role_id        uuid NOT NULL,
+
+       permission_id uuid NOT NULL REFERENCES permissions(id) ON DELETE RESTRICT,
+       company_id     uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       PRIMARY KEY (role_id, permission_id),
+       FOREIGN KEY (company_id, role_id) REFERENCES roles (company_id, id)
+        ON DELETE CASCADE
+  );
+
+8.3 Référentiels — tiers, catégories, produits, prix
+
+  CREATE TABLE customers (
+       id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id    uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       code          text,
+       name          text NOT NULL CHECK (length(btrim(name)) > 0),
+       phone         text,
+       email         citext,
+       credit_limit numeric(14,2) CHECK (credit_limit >= 0),
+       created_at    timestamptz NOT NULL DEFAULT now(),
+       updated_at    timestamptz NOT NULL DEFAULT now(),
+       deleted_at    timestamptz,
+       CONSTRAINT customers_tenant_uq UNIQUE (company_id, id)
+  );
+
+  CREATE TABLE suppliers (
+       id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id            uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       code                  text,
+       name                  text NOT NULL CHECK (length(btrim(name)) > 0),
+       phone                 text,
+       payment_terms_days smallint CHECK (payment_terms_days BETWEEN 0 AND 365),
+       created_at            timestamptz NOT NULL DEFAULT now(),
+       updated_at            timestamptz NOT NULL DEFAULT now(),
+       deleted_at            timestamptz,
+       CONSTRAINT suppliers_tenant_uq UNIQUE (company_id, id)
+  );
+
+  CREATE TABLE categories (
+       id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       parent_id    uuid,
+       name         text NOT NULL CHECK (length(btrim(name)) > 0),
+       created_at timestamptz NOT NULL DEFAULT now(),
+       updated_at timestamptz NOT NULL DEFAULT now(),
+       deleted_at timestamptz,
+       CONSTRAINT categories_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT categories_self_fk FOREIGN KEY (company_id, parent_id)
+        REFERENCES categories (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT categories_not_self CHECK (parent_id IS DISTINCT FROM id)
+  );
+  CREATE UNIQUE INDEX categories_name_uq
+       ON categories (company_id, COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid),
+  name)
+       WHERE deleted_at IS NULL;
+
+  CREATE TABLE products (
+       id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id           uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       category_id          uuid,
+       sku                  text NOT NULL,
+       barcode              text,
+
+       name              text NOT NULL CHECK (length(btrim(name)) > 0),
+       unit              text NOT NULL DEFAULT 'piece'
+                             CHECK (unit IN ('piece','kg','litre','carton','metre','paquet')),
+       is_stock_tracked boolean NOT NULL DEFAULT true,
+       -- V1.1 : parametre de saisie, jamais source de recalcul d'une vente passee
+       default_tax_rate numeric(6,4) NOT NULL DEFAULT 0
+                             CHECK (default_tax_rate >= 0 AND default_tax_rate < 1),
+       reorder_point     numeric(14,3) CHECK (reorder_point >= 0),
+       is_active         boolean NOT NULL DEFAULT true,
+       created_at        timestamptz NOT NULL DEFAULT now(),
+       updated_at        timestamptz NOT NULL DEFAULT now(),
+       deleted_at        timestamptz,
+       CONSTRAINT products_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT products_sku_uq       UNIQUE (company_id, sku),
+       CONSTRAINT products_category_fk FOREIGN KEY (company_id, category_id)
+        REFERENCES categories (company_id, id) ON DELETE RESTRICT
+  );
+  -- POINT D'EXTENSION DOCUMENTE (non implemente) : une table product_variants
+  -- viendrait ici, et une colonne variant_id nullable serait ajoutee a
+  -- sale_items, inventory_movements, product_stock et product_prices.
+
+  CREATE TABLE product_prices (
+       id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id    uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       product_id    uuid NOT NULL,
+       unit_price    numeric(14,2) NOT NULL CHECK (unit_price > 0),
+       cost_price    numeric(14,4) CHECK (cost_price >= 0),
+       valid_from    timestamptz NOT NULL DEFAULT now(),
+       valid_to      timestamptz,
+       created_by    uuid,
+       created_at    timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT product_prices_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT product_prices_product_fk FOREIGN KEY (company_id, product_id)
+        REFERENCES products (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT product_prices_creator_fk FOREIGN KEY (company_id, created_by)
+        REFERENCES users (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT product_prices_range CHECK (valid_to IS NULL OR valid_to > valid_from),
+       -- un seul prix valide a la fois : l'ambiguite tarifaire est impossible
+       CONSTRAINT product_prices_no_overlap EXCLUDE USING gist (
+        product_id WITH =, tstzrange(valid_from, valid_to) WITH &&)
+  );
+
+  CREATE TABLE product_stock (           -- PROJECTION : aucune verite propre
+       product_id        uuid PRIMARY KEY,
+       company_id        uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       qty_on_hand       numeric(14,3) NOT NULL DEFAULT 0
+                             CHECK (qty_on_hand >= 0),         -- stock negatif interdit
+       avg_cost          numeric(14,4) NOT NULL DEFAULT 0
+                             CHECK (avg_cost >= 0),            -- V1.1 : CMP courant
+       stock_value       numeric(14,2) NOT NULL
+                             GENERATED ALWAYS AS (round(qty_on_hand * avg_cost, 2)) STORED,
+       last_movement_at timestamptz,
+       recomputed_at     timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT product_stock_tenant_uq UNIQUE (company_id, product_id),
+       CONSTRAINT product_stock_product_fk FOREIGN KEY (company_id, product_id)
+        REFERENCES products (company_id, id) ON DELETE RESTRICT
+  );
+
+8.4 Ventes, retours, remboursements
+
+  CREATE TABLE sales (
+       id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id      uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       customer_id     uuid,
+       sale_no         text NOT NULL,
+       status          sale_status NOT NULL DEFAULT 'draft',
+       sold_at         timestamptz NOT NULL DEFAULT now(),
+       subtotal        numeric(14,2) NOT NULL DEFAULT 0 CHECK (subtotal >= 0),
+       discount_total numeric(14,2) NOT NULL DEFAULT 0,
+       tax_total       numeric(14,2) NOT NULL DEFAULT 0 CHECK (tax_total >= 0), -- V1.1
+       -- V1.1 : l'egalite comptable est PRODUITE par la base, pas verifiee par le code
+       total           numeric(14,2) NOT NULL
+                         GENERATED ALWAYS AS (subtotal - discount_total + tax_total) STORED,
+       paid_total      numeric(14,2) NOT NULL DEFAULT 0 CHECK (paid_total >= 0),
+       cancel_reason   text,
+       confirmed_at    timestamptz,
+       cancelled_at    timestamptz,
+       created_by      uuid NOT NULL,
+       created_at      timestamptz NOT NULL DEFAULT now(),
+       updated_at      timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT sales_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT sales_no_uq         UNIQUE (company_id, sale_no),
+       CONSTRAINT sales_customer_fk FOREIGN KEY (company_id, customer_id)
+        REFERENCES customers (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT sales_creator_fk FOREIGN KEY (company_id, created_by)
+        REFERENCES users (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT sales_discount_bounds CHECK (discount_total >= 0
+                                              AND discount_total <= subtotal),
+       CONSTRAINT sales_cancel_coherent CHECK (
+        (status = 'cancelled') = (cancelled_at IS NOT NULL)
+        AND (status <> 'cancelled' OR length(btrim(coalesce(cancel_reason,''))) > 0)),
+       CONSTRAINT sales_confirm_coherent CHECK (
+        status = 'draft' OR confirmed_at IS NOT NULL)
+  );
+
+  CREATE TABLE sale_items (
+       id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id    uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       sale_id       uuid NOT NULL,
+       product_id    uuid NOT NULL,
+       price_id      uuid,
+       qty           numeric(14,3) NOT NULL CHECK (qty > 0),
+       unit_price    numeric(14,2) NOT NULL CHECK (unit_price >= 0),       -- snapshot HT
+       unit_cost     numeric(14,4) NOT NULL DEFAULT 0 CHECK (unit_cost >= 0), -- CMP fige
+       discount      numeric(14,2) NOT NULL DEFAULT 0 CHECK (discount >= 0),
+       tax_rate      numeric(6,4)   NOT NULL DEFAULT 0                     -- V1.1 snapshot
+                       CHECK (tax_rate >= 0 AND tax_rate < 1),
+       net_amount    numeric(14,2) NOT NULL
+                       GENERATED ALWAYS AS (round(qty * unit_price - discount, 2)) STORED,
+       tax_amount    numeric(14,2) NOT NULL
+                       GENERATED ALWAYS AS (round((qty * unit_price - discount) * tax_rate, 2)) STORED,
+       line_total    numeric(14,2) NOT NULL
+                       GENERATED ALWAYS AS (round(qty * unit_price - discount, 2)
+                        + round((qty * unit_price - discount) * tax_rate, 2)) STORED,
+       created_at    timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT sale_items_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT sale_items_sale_fk FOREIGN KEY (company_id, sale_id)
+        REFERENCES sales (company_id, id) ON DELETE CASCADE,
+       CONSTRAINT sale_items_product_fk FOREIGN KEY (company_id, product_id)
+
+        REFERENCES products (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT sale_items_price_fk FOREIGN KEY (company_id, price_id)
+        REFERENCES product_prices (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT sale_items_discount_bounds CHECK (discount <= qty * unit_price)
+  );
+
+  CREATE TABLE sale_returns (
+       id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id      uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       sale_id         uuid NOT NULL,
+       return_no       text NOT NULL,
+       reason          text,
+       returned_at     timestamptz NOT NULL DEFAULT now(),
+       total_refund    numeric(14,2) NOT NULL DEFAULT 0 CHECK (total_refund >= 0),
+       refunded_total numeric(14,2) NOT NULL DEFAULT 0                         -- V1.1
+                         CHECK (refunded_total >= 0),
+       refund_status   return_refund_status NOT NULL DEFAULT 'pending',        -- V1.1
+       created_by      uuid NOT NULL,
+       created_at      timestamptz NOT NULL DEFAULT now(),
+       updated_at      timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT sale_returns_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT sale_returns_no_uq      UNIQUE (company_id, return_no),
+       CONSTRAINT sale_returns_sale_fk FOREIGN KEY (company_id, sale_id)
+        REFERENCES sales (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT sale_returns_creator_fk FOREIGN KEY (company_id, created_by)
+        REFERENCES users (company_id, id) ON DELETE RESTRICT,
+       -- V1.1 : le double remboursement est structurellement impossible
+       CONSTRAINT sale_returns_refund_cap CHECK (refunded_total <= total_refund)
+  );
+
+  CREATE TABLE sale_return_items (
+       id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id      uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       return_id       uuid NOT NULL,
+       sale_item_id    uuid NOT NULL,
+       qty             numeric(14,3) NOT NULL CHECK (qty > 0),
+       refund_amount numeric(14,2) NOT NULL CHECK (refund_amount >= 0),     -- TTC
+       tax_refund      numeric(14,2) NOT NULL DEFAULT 0                     -- V1.1
+                        CHECK (tax_refund >= 0),
+       unit_cost       numeric(14,4) NOT NULL CHECK (unit_cost >= 0),       -- V1.1
+       created_at      timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT sale_return_items_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT sale_return_items_return_fk FOREIGN KEY (company_id, return_id)
+        REFERENCES sale_returns (company_id, id) ON DELETE CASCADE,
+       CONSTRAINT sale_return_items_item_fk FOREIGN KEY (company_id, sale_item_id)
+        REFERENCES sale_items (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT sale_return_items_tax_bounds CHECK (tax_refund <= refund_amount)
+  );
+
+  -- sale_return_refunds depend de payments : voir 8.6
+
+8.5 Stock — journal, mouvements inverses, CMP
+
+  CREATE TABLE inventory_movements (               -- APPEND-ONLY : source de verite
+       id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id               uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       product_id               uuid NOT NULL,
+       type                     movement_type NOT NULL,
+       qty_delta                numeric(14,3) NOT NULL CHECK (qty_delta <> 0),
+       unit_cost                numeric(14,4) NOT NULL CHECK (unit_cost >= 0),
+
+       ref_type               text CHECK (ref_type IN ('sale_item','sale_return_item',
+                                                        'manual','import','initial')),
+       ref_id                 uuid,
+       reversal_of_movement_id uuid,                                        -- V1.1
+       supplier_id            uuid,
+       note                   text,
+       occurred_at            timestamptz NOT NULL DEFAULT now(),
+       created_by             uuid,
+       created_at             timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT inv_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT inv_product_fk FOREIGN KEY (company_id, product_id)
+        REFERENCES products (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT inv_supplier_fk FOREIGN KEY (company_id, supplier_id)
+        REFERENCES suppliers (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT inv_creator_fk FOREIGN KEY (company_id, created_by)
+        REFERENCES users (company_id, id) ON DELETE RESTRICT,
+       -- V1.1 : FK auto-referente TENANT-AWARE vers le mouvement annule
+       CONSTRAINT inv_reversal_fk FOREIGN KEY (company_id, reversal_of_movement_id)
+        REFERENCES inventory_movements (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT inv_reversal_not_self CHECK (reversal_of_movement_id IS DISTINCT FROM id),
+       -- V1.1 : un mouvement ne peut etre annule QU'UNE SEULE FOIS
+       CONSTRAINT inv_reversal_uq UNIQUE (company_id, reversal_of_movement_id),
+       CONSTRAINT inv_sign_coherent CHECK (
+        (type IN ('initial','purchase_in','customer_return_in') AND qty_delta > 0)
+   OR (type IN ('sale_out','supplier_return_out','loss')           AND qty_delta < 0)
+   OR (type = 'adjustment')),
+       CONSTRAINT inv_ref_pair CHECK (num_nonnulls(ref_type, ref_id) <> 1)
+  );
+
+  -- V1.1 : idempotence des mouvements DIRECTS uniquement. Sans la clause
+  -- partielle, le mouvement inverse serait rejete comme doublon de son origine.
+  CREATE UNIQUE INDEX inv_ref_idempotence
+       ON inventory_movements (company_id, ref_type, ref_id)
+       WHERE ref_id IS NOT NULL AND reversal_of_movement_id IS NULL;
+
+  -- ------------------------------------------- immuabilite du journal
+  -- V1.1 : exception explicite au lieu d'une RULE "DO INSTEAD NOTHING", qui
+  -- masquait silencieusement un bug applicatif en renvoyant "0 ligne modifiee".
+  CREATE OR REPLACE FUNCTION inv_immutable() RETURNS trigger AS $$
+  BEGIN
+       RAISE EXCEPTION 'inventory_movements est append-only : % interdit. '
+        'Corriger par un mouvement inverse ou un ajustement.', TG_OP
+        USING ERRCODE = 'restrict_violation';
+  END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER inv_no_update BEFORE UPDATE ON inventory_movements
+       FOR EACH ROW EXECUTE FUNCTION inv_immutable();
+  CREATE TRIGGER inv_no_delete BEFORE DELETE ON inventory_movements
+       FOR EACH ROW EXECUTE FUNCTION inv_immutable();
+
+  -- ------------------------------------------- validation du mouvement inverse
+  -- Nommage t10_/t20_ : les triggers BEFORE se declenchent dans l'ordre
+  -- alphabetique, la validation doit preceder l'application du CMP.
+  CREATE OR REPLACE FUNCTION inv_check_reversal() RETURNS trigger AS $$
+  DECLARE o inventory_movements;
+  BEGIN
+       IF NEW.reversal_of_movement_id IS NULL THEN RETURN NEW; END IF;
+       SELECT * INTO o FROM inventory_movements
+       WHERE company_id = NEW.company_id AND id = NEW.reversal_of_movement_id
+       FOR SHARE;
+       IF NOT FOUND THEN
+        RAISE EXCEPTION 'Mouvement a annuler introuvable dans ce tenant';
+
+    END IF;
+    IF o.reversal_of_movement_id IS NOT NULL THEN
+       RAISE EXCEPTION 'On ne peut pas annuler une annulation (mouvement %)', o.id;
+    END IF;
+    IF o.product_id <> NEW.product_id THEN
+       RAISE EXCEPTION 'Le mouvement inverse doit porter sur le meme produit';
+    END IF;
+    IF NEW.qty_delta <> -o.qty_delta THEN
+       RAISE EXCEPTION 'Quantite inverse attendue % , recue %',
+          -o.qty_delta, NEW.qty_delta;
+    END IF;
+    NEW.unit_cost := o.unit_cost;      -- on rend la marchandise a son cout de sortie
+    NEW.ref_type   := o.ref_type;      -- tracabilite conservee vers l'objet metier
+    NEW.ref_id     := o.ref_id;
+    RETURN NEW;
+  END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER t10_inv_check_reversal BEFORE INSERT ON inventory_movements
+    FOR EACH ROW EXECUTE FUNCTION inv_check_reversal();
+
+  -- ------------------------------------------- application : stock + CMP
+  CREATE OR REPLACE FUNCTION inv_apply_movement() RETURNS trigger AS $$
+  DECLARE
+    v_tracked boolean;
+    v_qty numeric(14,3); v_avg numeric(14,4);
+    v_new_qty numeric(14,3); v_new_avg numeric(14,4);
+  BEGIN
+    SELECT is_stock_tracked INTO v_tracked FROM products
+     WHERE company_id = NEW.company_id AND id = NEW.product_id;
+    IF NOT FOUND THEN
+       RAISE EXCEPTION 'Produit % inconnu dans ce tenant', NEW.product_id;
+    END IF;
+    IF NOT v_tracked THEN
+       RAISE EXCEPTION 'Produit % non suivi en stock : aucun mouvement autorise',
+          NEW.product_id USING ERRCODE = 'restrict_violation';
+    END IF;
+
+    INSERT INTO product_stock (product_id, company_id, qty_on_hand, avg_cost)
+    VALUES (NEW.product_id, NEW.company_id, 0, 0)
+    ON CONFLICT (product_id) DO NOTHING;
+
+    -- verrou de ligne : serialise deux caisses sur le meme article
+    SELECT qty_on_hand, avg_cost INTO v_qty, v_avg FROM product_stock
+     WHERE product_id = NEW.product_id FOR UPDATE;
+
+    IF NEW.qty_delta < 0 AND NEW.reversal_of_movement_id IS NULL THEN
+       -- SORTIE : le cout de sortie est le CMP applicable a cet instant
+       NEW.unit_cost := v_avg;
+    END IF;
+
+    v_new_qty := v_qty + NEW.qty_delta;
+    IF v_new_qty < 0 THEN
+       RAISE EXCEPTION
+          'Stock negatif interdit : produit %, disponible %, sortie demandee %',
+          NEW.product_id, v_qty, abs(NEW.qty_delta)
+          USING ERRCODE = 'check_violation';
+    END IF;
+    IF NEW.qty_delta > 0 AND NEW.unit_cost IS NULL THEN
+       RAISE EXCEPTION 'Entree de stock sans cout unitaire : CMP indefinissable';
+    END IF;
+
+    v_new_avg := cmp_next_avg(v_qty, v_avg, NEW.qty_delta, NEW.unit_cost);
+
+    UPDATE product_stock
+          SET qty_on_hand      = v_new_qty,
+             avg_cost         = v_new_avg,
+             last_movement_at = GREATEST(COALESCE(last_movement_at, NEW.occurred_at),
+                                           NEW.occurred_at)
+     WHERE product_id = NEW.product_id;
+    RETURN NEW;
+  END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER t20_inv_apply BEFORE INSERT ON inventory_movements
+    FOR EACH ROW EXECUTE FUNCTION inv_apply_movement();
+
+  -- ------------------------------------------- reconstruction (job nocturne)
+  -- Rejoue le journal dans l'ordre canonique et applique la MEME formule CMP.
+  CREATE OR REPLACE FUNCTION rebuild_product_stock(p_company uuid)
+  RETURNS TABLE (product_id uuid, qty_ecart numeric, avg_ecart numeric)
+  LANGUAGE plpgsql AS $$
+  DECLARE m record; v_qty numeric(14,3); v_avg numeric(14,4); v_prod uuid;
+  BEGIN
+    CREATE TEMP TABLE _rebuilt (product_id uuid PRIMARY KEY,
+       qty numeric(14,3), avg numeric(14,4)) ON COMMIT DROP;
+    v_prod := NULL;
+    FOR m IN
+       SELECT * FROM inventory_movements
+          WHERE company_id = p_company
+          ORDER BY product_id, occurred_at, id         -- ordre canonique
+    LOOP
+       IF v_prod IS DISTINCT FROM m.product_id THEN
+           IF v_prod IS NOT NULL THEN
+            INSERT INTO _rebuilt VALUES (v_prod, v_qty, v_avg);
+           END IF;
+           v_prod := m.product_id; v_qty := 0; v_avg := 0;
+       END IF;
+       v_avg := cmp_next_avg(v_qty, v_avg, m.qty_delta, m.unit_cost);
+       v_qty := v_qty + m.qty_delta;
+       IF v_qty < 0 THEN
+           RAISE WARNING 'Etat intermediaire negatif : produit %, mouvement % '
+            '(antidatage probable)', m.product_id, m.id;
+       END IF;
+    END LOOP;
+    IF v_prod IS NOT NULL THEN INSERT INTO _rebuilt VALUES (v_prod, v_qty, v_avg); END IF;
+
+    RETURN QUERY
+       SELECT r.product_id, r.qty - s.qty_on_hand, r.avg - s.avg_cost
+           FROM _rebuilt r JOIN product_stock s USING (product_id)
+          WHERE r.qty <> s.qty_on_hand OR r.avg <> s.avg_cost;
+
+    UPDATE product_stock s
+          SET qty_on_hand = r.qty, avg_cost = r.avg, recomputed_at = now()
+       FROM _rebuilt r
+     WHERE s.product_id = r.product_id AND s.company_id = p_company;
+  END $$;
+
+8.6 Charges, dettes, paiements, remboursements
+
+  CREATE TABLE expense_categories (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+    name         text NOT NULL CHECK (length(btrim(name)) > 0),
+    kind         expense_kind NOT NULL,
+
+       created_at timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT expense_categories_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT expense_categories_name_uq      UNIQUE (company_id, name)
+  );
+
+  CREATE TABLE expenses (
+       id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id   uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       category_id uuid NOT NULL,
+       supplier_id uuid,
+       label        text NOT NULL CHECK (length(btrim(label)) > 0),
+       amount       numeric(14,2) NOT NULL CHECK (amount > 0),
+       spent_at     date NOT NULL CHECK (spent_at <= current_date + 1),
+       created_by   uuid NOT NULL,
+       created_at   timestamptz NOT NULL DEFAULT now(),
+       updated_at   timestamptz NOT NULL DEFAULT now(),
+       deleted_at   timestamptz,
+       CONSTRAINT expenses_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT expenses_category_fk FOREIGN KEY (company_id, category_id)
+        REFERENCES expense_categories (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT expenses_supplier_fk FOREIGN KEY (company_id, supplier_id)
+        REFERENCES suppliers (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT expenses_creator_fk FOREIGN KEY (company_id, created_by)
+        REFERENCES users (company_id, id) ON DELETE RESTRICT
+  );
+
+  CREATE TABLE debts (
+       id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id   uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       party_type   party_type NOT NULL,
+       customer_id uuid,
+       supplier_id uuid,
+       sale_id      uuid,
+       expense_id   uuid,
+       principal    numeric(14,2) NOT NULL CHECK (principal > 0),
+       amount_paid numeric(14,2) NOT NULL DEFAULT 0 CHECK (amount_paid >= 0),
+       balance      numeric(14,2) NOT NULL
+                      GENERATED ALWAYS AS (principal - amount_paid) STORED,
+       due_date     date,
+       status       debt_status NOT NULL DEFAULT 'open',
+       closed_at    timestamptz,
+       created_at   timestamptz NOT NULL DEFAULT now(),
+       updated_at   timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT debts_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT debts_customer_fk FOREIGN KEY (company_id, customer_id)
+        REFERENCES customers (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT debts_supplier_fk FOREIGN KEY (company_id, supplier_id)
+        REFERENCES suppliers (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT debts_sale_fk FOREIGN KEY (company_id, sale_id)
+        REFERENCES sales (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT debts_expense_fk FOREIGN KEY (company_id, expense_id)
+        REFERENCES expenses (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT debts_party_xor CHECK (
+        (party_type = 'customer' AND customer_id IS NOT NULL AND supplier_id IS NULL)
+   OR (party_type = 'supplier' AND supplier_id IS NOT NULL AND customer_id IS NULL)),
+       CONSTRAINT debts_origin_one CHECK (num_nonnulls(sale_id, expense_id) <= 1),
+       CONSTRAINT debts_paid_bounds CHECK (amount_paid <= principal),
+       CONSTRAINT debts_closed_coherent CHECK (
+        (status IN ('paid','written_off')) = (closed_at IS NOT NULL))
+  );
+
+  CREATE TABLE payments (
+       id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id      uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       direction       cash_direction NOT NULL,
+       method          pay_method NOT NULL,
+       amount          numeric(14,2) NOT NULL CHECK (amount > 0),
+       paid_at         timestamptz NOT NULL DEFAULT now(),
+       sale_id         uuid,
+       expense_id      uuid,
+       sale_return_id uuid,                                                 -- V1.1
+       reference       text,
+       note            text,
+       created_by      uuid NOT NULL,
+       created_at      timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT payments_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT payments_sale_fk FOREIGN KEY (company_id, sale_id)
+        REFERENCES sales (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT payments_expense_fk FOREIGN KEY (company_id, expense_id)
+        REFERENCES expenses (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT payments_return_fk FOREIGN KEY (company_id, sale_return_id)
+        REFERENCES sale_returns (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT payments_creator_fk FOREIGN KEY (company_id, created_by)
+        REFERENCES users (company_id, id) ON DELETE RESTRICT,
+       -- V1.1 : au plus un contexte direct, et sens financier coherent
+       CONSTRAINT payments_context_one CHECK (
+        num_nonnulls(sale_id, expense_id, sale_return_id) <= 1),
+       CONSTRAINT payments_return_outflow CHECK (
+        sale_return_id IS NULL OR direction = 'outflow')
+  );
+
+  CREATE TABLE payment_allocations (
+       id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       payment_id uuid NOT NULL,
+       debt_id      uuid NOT NULL,
+       amount       numeric(14,2) NOT NULL CHECK (amount > 0),
+       created_at timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT pa_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT pa_pair_uq    UNIQUE (company_id, payment_id, debt_id),
+       CONSTRAINT pa_payment_fk FOREIGN KEY (company_id, payment_id)
+        REFERENCES payments (company_id, id) ON DELETE CASCADE,
+       CONSTRAINT pa_debt_fk FOREIGN KEY (company_id, debt_id)
+        REFERENCES debts (company_id, id) ON DELETE RESTRICT
+  );
+
+  -- V1.1 : lettrage retour <-> paiement, symetrique de payment_allocations.
+  -- Permet un remboursement echelonne, et un versement couvrant deux retours.
+  CREATE TABLE sale_return_refunds (
+       id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id      uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       sale_return_id uuid NOT NULL,
+       payment_id      uuid NOT NULL,
+       amount          numeric(14,2) NOT NULL CHECK (amount > 0),
+       created_at      timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT srr_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT srr_pair_uq    UNIQUE (company_id, payment_id, sale_return_id),
+       CONSTRAINT srr_return_fk FOREIGN KEY (company_id, sale_return_id)
+        REFERENCES sale_returns (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT srr_payment_fk FOREIGN KEY (company_id, payment_id)
+        REFERENCES payments (company_id, id) ON DELETE CASCADE
+  );
+
+8.7 Triggers financiers et de cohérence des ventes
+
+  -- ---------------------------------- totaux de vente (subtotal / remise / taxe)
+  CREATE OR REPLACE FUNCTION sale_recompute_totals() RETURNS trigger AS $$
+  DECLARE v_sale uuid; v_co uuid;
+  BEGIN
+    v_sale := COALESCE(NEW.sale_id, OLD.sale_id);
+    v_co     := COALESCE(NEW.company_id, OLD.company_id);
+    UPDATE sales s SET
+       subtotal        = COALESCE(t.sub, 0),
+       discount_total = COALESCE(t.dis, 0),
+       tax_total       = COALESCE(t.tax, 0),
+       updated_at      = now()
+    FROM (SELECT SUM(qty * unit_price) sub, SUM(discount) dis, SUM(tax_amount) tax
+               FROM sale_items
+             WHERE company_id = v_co AND sale_id = v_sale) t
+    WHERE s.company_id = v_co AND s.id = v_sale;
+    RETURN NULL;
+  END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER sale_items_totals AFTER INSERT OR UPDATE OR DELETE ON sale_items
+    FOR EACH ROW EXECUTE FUNCTION sale_recompute_totals();
+
+  -- ---------------------------------- immuabilite des lignes apres confirmation
+  CREATE OR REPLACE FUNCTION sale_items_frozen() RETURNS trigger AS $$
+  DECLARE v_status sale_status;
+  BEGIN
+    SELECT status INTO v_status FROM sales
+     WHERE company_id = COALESCE(NEW.company_id, OLD.company_id)
+          AND id = COALESCE(NEW.sale_id, OLD.sale_id);
+    IF v_status <> 'draft' THEN
+       RAISE EXCEPTION 'Vente % : les lignes sont figees apres confirmation',
+           COALESCE(NEW.sale_id, OLD.sale_id) USING ERRCODE = 'restrict_violation';
+    END IF;
+    RETURN COALESCE(NEW, OLD);
+  END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER sale_items_no_change BEFORE UPDATE OR DELETE ON sale_items
+    FOR EACH ROW EXECUTE FUNCTION sale_items_frozen();
+
+  -- ---------------------------------- retour : quantite bornee par la vente
+  CREATE OR REPLACE FUNCTION return_item_check() RETURNS trigger AS $$
+  DECLARE v_sold numeric(14,3); v_already numeric(14,3);
+  BEGIN
+    SELECT qty INTO v_sold FROM sale_items
+     WHERE company_id = NEW.company_id AND id = NEW.sale_item_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Ligne de vente introuvable'; END IF;
+    SELECT COALESCE(SUM(qty), 0) INTO v_already FROM sale_return_items
+     WHERE company_id = NEW.company_id AND sale_item_id = NEW.sale_item_id
+          AND id <> NEW.id;
+    IF v_already + NEW.qty > v_sold THEN
+       RAISE EXCEPTION 'Retour cumule % superieur a la quantite vendue %',
+           v_already + NEW.qty, v_sold USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+  END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER sri_check BEFORE INSERT OR UPDATE ON sale_return_items
+    FOR EACH ROW EXECUTE FUNCTION return_item_check();
+
+  -- ---------------------------------- total remboursable + statut du retour
+  CREATE OR REPLACE FUNCTION return_recompute() RETURNS trigger AS $$
+  DECLARE v_ret uuid; v_co uuid;
+  BEGIN
+
+    v_ret := COALESCE(NEW.return_id, OLD.return_id);
+    v_co    := COALESCE(NEW.company_id, OLD.company_id);
+    UPDATE sale_returns r SET total_refund = COALESCE(t.s, 0), updated_at = now()
+       FROM (SELECT SUM(refund_amount) s FROM sale_return_items
+               WHERE company_id = v_co AND return_id = v_ret) t
+     WHERE r.company_id = v_co AND r.id = v_ret;
+    RETURN NULL;
+  END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER sri_totals AFTER INSERT OR UPDATE OR DELETE ON sale_return_items
+    FOR EACH ROW EXECUTE FUNCTION return_recompute();
+
+  CREATE OR REPLACE FUNCTION return_refund_status_set() RETURNS trigger AS $$
+  BEGIN
+    NEW.refund_status := CASE
+       WHEN NEW.total_refund = 0                       THEN 'none_due'
+       WHEN NEW.refunded_total = 0                     THEN 'pending'
+       WHEN NEW.refunded_total < NEW.total_refund      THEN 'partial'
+       ELSE 'settled' END::return_refund_status;
+    RETURN NEW;
+  END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER sr_status BEFORE INSERT OR UPDATE OF total_refund, refunded_total
+    ON sale_returns FOR EACH ROW EXECUTE FUNCTION return_refund_status_set();
+
+  -- ---------------------------------- remboursement : plafonds et sens financier
+  CREATE OR REPLACE FUNCTION refund_check() RETURNS trigger AS $$
+  DECLARE v_due numeric(14,2); v_free numeric(14,2); v_dir cash_direction;
+  BEGIN
+    SELECT total_refund - refunded_total INTO v_due FROM sale_returns
+     WHERE company_id = NEW.company_id AND id = NEW.sale_return_id FOR UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Retour introuvable'; END IF;
+    IF NEW.amount > v_due THEN
+       RAISE EXCEPTION 'Remboursement % superieur au reste du %', NEW.amount, v_due
+           USING ERRCODE = 'check_violation';
+    END IF;
+    SELECT direction, amount - COALESCE(
+               (SELECT SUM(r.amount) FROM sale_return_refunds r
+                 WHERE r.payment_id = p.id AND r.id <> NEW.id), 0)
+       INTO v_dir, v_free
+       FROM payments p
+     WHERE p.company_id = NEW.company_id AND p.id = NEW.payment_id FOR UPDATE;
+    IF v_dir <> 'outflow' THEN
+       RAISE EXCEPTION 'Un remboursement de retour exige direction = outflow';
+    END IF;
+    IF NEW.amount > v_free THEN
+       RAISE EXCEPTION 'Paiement sur-affecte : reste % disponible', v_free;
+    END IF;
+    RETURN NEW;
+  END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER srr_check BEFORE INSERT OR UPDATE ON sale_return_refunds
+    FOR EACH ROW EXECUTE FUNCTION refund_check();
+
+  CREATE OR REPLACE FUNCTION refund_rollup() RETURNS trigger AS $$
+  DECLARE v_ret uuid; v_co uuid;
+  BEGIN
+    v_ret := COALESCE(NEW.sale_return_id, OLD.sale_return_id);
+    v_co    := COALESCE(NEW.company_id, OLD.company_id);
+    UPDATE sale_returns r SET refunded_total = COALESCE(t.s, 0), updated_at = now()
+       FROM (SELECT SUM(amount) s FROM sale_return_refunds
+               WHERE company_id = v_co AND sale_return_id = v_ret) t
+     WHERE r.company_id = v_co AND r.id = v_ret;
+    RETURN NULL;
+
+  END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER srr_rollup AFTER INSERT OR UPDATE OR DELETE ON sale_return_refunds
+    FOR EACH ROW EXECUTE FUNCTION refund_rollup();
+
+  -- ---------------------------------- lettrage paiement / dette (V1, conserve)
+  CREATE OR REPLACE FUNCTION allocation_check() RETURNS trigger AS $$
+  DECLARE v_bal numeric(14,2); v_free numeric(14,2);
+  BEGIN
+    SELECT balance INTO v_bal FROM debts
+     WHERE company_id = NEW.company_id AND id = NEW.debt_id FOR UPDATE;
+    IF NEW.amount > v_bal THEN
+       RAISE EXCEPTION 'Affectation % superieure au solde restant %',
+           NEW.amount, v_bal USING ERRCODE = 'check_violation';
+    END IF;
+    SELECT p.amount - COALESCE((SELECT SUM(a.amount) FROM payment_allocations a
+                                     WHERE a.payment_id = p.id AND a.id <> NEW.id), 0)
+       INTO v_free FROM payments p
+     WHERE p.company_id = NEW.company_id AND p.id = NEW.payment_id FOR UPDATE;
+    IF NEW.amount > v_free THEN
+       RAISE EXCEPTION 'Paiement sur-affecte : reste % disponible', v_free;
+    END IF;
+    RETURN NEW;
+  END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER pa_check BEFORE INSERT OR UPDATE ON payment_allocations
+    FOR EACH ROW EXECUTE FUNCTION allocation_check();
+
+  CREATE OR REPLACE FUNCTION debt_rollup() RETURNS trigger AS $$
+  DECLARE v_debt uuid; v_co uuid;
+  BEGIN
+    v_debt := COALESCE(NEW.debt_id, OLD.debt_id);
+    v_co     := COALESCE(NEW.company_id, OLD.company_id);
+    UPDATE debts d SET
+       amount_paid = COALESCE(t.s, 0),
+       status = CASE WHEN COALESCE(t.s, 0) = 0               THEN 'open'
+                      WHEN COALESCE(t.s, 0) < d.principal      THEN 'partially_paid'
+                      ELSE 'paid' END::debt_status,
+       closed_at = CASE WHEN COALESCE(t.s, 0) >= d.principal THEN now() END,
+       updated_at = now()
+    FROM (SELECT SUM(amount) s FROM payment_allocations
+             WHERE company_id = v_co AND debt_id = v_debt) t
+    WHERE d.company_id = v_co AND d.id = v_debt AND d.status <> 'written_off';
+    RETURN NULL;
+  END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER pa_rollup AFTER INSERT OR UPDATE OR DELETE ON payment_allocations
+    FOR EACH ROW EXECUTE FUNCTION debt_rollup();
+
+  -- ---------------------------------- plafond de credit client
+  CREATE OR REPLACE FUNCTION debt_credit_limit() RETURNS trigger AS $$
+  DECLARE v_limit numeric(14,2); v_open numeric(14,2);
+  BEGIN
+    IF NEW.party_type <> 'customer' THEN RETURN NEW; END IF;
+    SELECT credit_limit INTO v_limit FROM customers
+     WHERE company_id = NEW.company_id AND id = NEW.customer_id;
+    IF v_limit IS NULL THEN RETURN NEW; END IF;
+    SELECT COALESCE(SUM(balance), 0) INTO v_open FROM debts
+     WHERE company_id = NEW.company_id AND customer_id = NEW.customer_id
+          AND status IN ('open','partially_paid') AND id <> NEW.id;
+    IF v_open + NEW.principal > v_limit THEN
+       RAISE EXCEPTION 'Plafond de credit depasse : % + % > %',
+           v_open, NEW.principal, v_limit USING ERRCODE = 'check_violation';
+    END IF;
+
+    RETURN NEW;
+  END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER debts_credit_limit BEFORE INSERT ON debts
+    FOR EACH ROW EXECUTE FUNCTION debt_credit_limit();
+
+  -- ---------------------------------- paid_total de la vente
+  CREATE OR REPLACE FUNCTION sale_paid_rollup() RETURNS trigger AS $$
+  DECLARE v_sale uuid; v_co uuid;
+  BEGIN
+    v_sale := COALESCE(NEW.sale_id, OLD.sale_id);
+    IF v_sale IS NULL THEN RETURN NULL; END IF;
+    v_co := COALESCE(NEW.company_id, OLD.company_id);
+    UPDATE sales s SET paid_total = COALESCE(t.s, 0), updated_at = now()
+       FROM (SELECT SUM(amount) s FROM payments
+              WHERE company_id = v_co AND sale_id = v_sale AND direction = 'inflow') t
+     WHERE s.company_id = v_co AND s.id = v_sale;
+    RETURN NULL;
+  END $$ LANGUAGE plpgsql;
+  CREATE TRIGGER payments_sale_rollup AFTER INSERT OR UPDATE OR DELETE ON payments
+    FOR EACH ROW EXECUTE FUNCTION sale_paid_rollup();
+
+8.8 Journaux — notifications, audit, outbox
+
+  CREATE TABLE notifications (
+       id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       user_id      uuid,
+       type         text NOT NULL CHECK (type IN ('stock_low','stock_out','debt_due',
+                      'sale_cancelled','forecast_alert','insight_critical')),
+       title        text NOT NULL,
+       body         text,
+       data         jsonb NOT NULL DEFAULT '{}'::jsonb,
+       read_at      timestamptz,
+       created_at timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT notifications_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT notifications_user_fk FOREIGN KEY (company_id, user_id)
+        REFERENCES users (company_id, id) ON DELETE CASCADE
+  );
+
+  -- Partitionne par mois : purge par DROP PARTITION, pas par DELETE massif
+  CREATE TABLE audit_logs (
+       id             bigint GENERATED ALWAYS AS IDENTITY,
+       company_id     uuid NOT NULL,
+       actor_user_id uuid,
+       action         text NOT NULL CHECK (action IN ('insert','update','delete',
+                        'login','export','confirm','cancel','rebuild')),
+       entity_table   text NOT NULL,
+       entity_id      uuid,
+       diff           jsonb,
+       ip_address     inet,
+       occurred_at    timestamptz NOT NULL DEFAULT now(),
+       PRIMARY KEY (id, occurred_at)
+  ) PARTITION BY RANGE (occurred_at);
+  CREATE TABLE audit_logs_2026m09 PARTITION OF audit_logs
+       FOR VALUES FROM ('2026-09-01') TO ('2026-10-01');
+  -- Les partitions suivantes sont creees par un job ; la politique RLS declaree
+  -- sur la table parente est heritee, aucune partition ne peut naitre sans elle.
+
+  CREATE TABLE business_events (               -- TRANSACTIONAL OUTBOX
+       id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+       company_id      uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       event_type      text NOT NULL,
+       aggregate_type text NOT NULL,
+       aggregate_id    uuid NOT NULL,
+       payload         jsonb NOT NULL,
+       occurred_at     timestamptz NOT NULL DEFAULT now(),
+       published_at    timestamptz,
+       attempts        smallint NOT NULL DEFAULT 0 CHECK (attempts <= 10)
+  );
+
+8.9 Couche analytique et résultats ML
+
+  -- V1.1 : TABLE et non plus vue materialisee -> soumise a RLS comme le reste
+  CREATE TABLE daily_sales_facts (
+       company_id           uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       day                  date NOT NULL,
+       product_id           uuid NOT NULL,
+       category_id          uuid,
+       qty_sold             numeric(14,3) NOT NULL DEFAULT 0 CHECK (qty_sold >= 0),
+       returned_qty         numeric(14,3) NOT NULL DEFAULT 0 CHECK (returned_qty >= 0),
+       net_qty_sold         numeric(14,3) NOT NULL DEFAULT 0,
+
+       gross_revenue         numeric(14,2) NOT NULL DEFAULT 0,
+       discount_total        numeric(14,2) NOT NULL DEFAULT 0,
+       tax_total             numeric(14,2) NOT NULL DEFAULT 0,
+       refund_net_amount numeric(14,2) NOT NULL DEFAULT 0,
+       net_revenue           numeric(14,2) NOT NULL DEFAULT 0,
+       cogs_gross            numeric(14,2) NOT NULL DEFAULT 0,
+       cogs_returned         numeric(14,2) NOT NULL DEFAULT 0,
+       cogs_net              numeric(14,2) NOT NULL DEFAULT 0,
+       sale_count            integer NOT NULL DEFAULT 0 CHECK (sale_count >= 0),
+       built_at              timestamptz NOT NULL DEFAULT now(),
+       PRIMARY KEY (company_id, day, product_id),
+       CONSTRAINT dsf_product_fk FOREIGN KEY (company_id, product_id)
+        REFERENCES products (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT dsf_net_qty_coherent CHECK (net_qty_sold = qty_sold - returned_qty),
+       CONSTRAINT dsf_returned_bounds     CHECK (returned_qty <= qty_sold)
+  );
+
+  CREATE TABLE ml_feature_snapshots (            -- ecrite par le pipeline uniquement
+       id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+       company_id uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       product_id uuid NOT NULL,
+       as_of        date NOT NULL,
+       features     jsonb NOT NULL,
+       labels       jsonb,
+       created_at timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT mlf_uq UNIQUE (company_id, product_id, as_of),
+       CONSTRAINT mlf_product_fk FOREIGN KEY (company_id, product_id)
+        REFERENCES products (company_id, id) ON DELETE RESTRICT
+  );
+
+  -- V1.1 : previsions persistees. L'API lit, elle n'infere jamais.
+  CREATE TABLE forecasts (
+       id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id      uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       product_id      uuid,                         -- NULL = prevision entreprise
+       forecast_type forecast_type NOT NULL,
+       as_of           date NOT NULL,
+       horizon_date    date NOT NULL,
+       yhat            numeric(14,4) NOT NULL,
+       yhat_lower      numeric(14,4),
+       yhat_upper      numeric(14,4),
+       model_name      text NOT NULL,
+       model_version text NOT NULL,
+       metadata        jsonb NOT NULL DEFAULT '{}'::jsonb,
+       generated_at    timestamptz NOT NULL DEFAULT now(),
+       CONSTRAINT forecasts_tenant_uq UNIQUE (company_id, id),
+       CONSTRAINT forecasts_product_fk FOREIGN KEY (company_id, product_id)
+        REFERENCES products (company_id, id) ON DELETE RESTRICT,
+       CONSTRAINT forecasts_horizon CHECK (horizon_date >= as_of),
+       CONSTRAINT forecasts_interval CHECK (
+        yhat_lower IS NULL OR yhat_upper IS NULL OR yhat_lower <= yhat_upper),
+       -- PostgreSQL 15+ : product_id nullable doit participer a l'unicite
+       CONSTRAINT forecasts_idem UNIQUE NULLS NOT DISTINCT
+        (company_id, forecast_type, product_id, as_of, horizon_date, model_version)
+  );
+
+  -- V1.1 : anomalies, observations, recommandations persistees
+  CREATE TABLE insights (
+       id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       company_id      uuid NOT NULL REFERENCES companies(id) ON DELETE RESTRICT,
+       insight_type    insight_type NOT NULL,
+
+       severity       insight_severity NOT NULL DEFAULT 'info',
+       title          text NOT NULL CHECK (length(btrim(title)) BETWEEN 1 AND 160),
+       body           text,
+       entity_table   text CHECK (entity_table IN ('products','customers','suppliers',
+                       'expense_categories','sales','users')),
+       entity_id      uuid,
+       evidence       jsonb NOT NULL DEFAULT '{}'::jsonb,
+       dedupe_key     text NOT NULL,
+       model_name     text,
+       model_version text,
+       status         insight_status NOT NULL DEFAULT 'new',
+       read_at        timestamptz,
+       resolved_at    timestamptz,
+       generated_at   timestamptz NOT NULL DEFAULT now(),
+       valid_until    timestamptz,
+       CONSTRAINT insights_tenant_uq UNIQUE (company_id, id),
+       -- reference souple assumee : pas de FK polymorphe, l'insight survit a
+       -- l'archivage de sa cible ; les deux colonnes vont par paire
+       CONSTRAINT insights_entity_pair CHECK (num_nonnulls(entity_table, entity_id) <> 1),
+       CONSTRAINT insights_read_coherent CHECK (status <> 'new' OR read_at IS NULL),
+       CONSTRAINT insights_resolved_coherent CHECK (
+        (status = 'resolved') = (resolved_at IS NOT NULL))
+  );
+  -- Idempotence : un rejeu met a jour l'insight vivant. Un insight ecarte par
+  -- l'utilisateur ne bloque pas une reemission si le probleme reapparait.
+  CREATE UNIQUE INDEX insights_dedupe_uq ON insights (company_id, dedupe_key)
+       WHERE status <> 'dismissed';
+
+8.10 Index
+
+  -- company_id est TOUJOURS la premiere colonne : la clause RLS est dans 100 %
+  -- des requetes, un index qui ne commence pas par company_id est inutilisable.
+  CREATE UNIQUE INDEX companies_live_uq ON companies (id) WHERE deleted_at IS NULL;
+  CREATE INDEX users_live            ON users (company_id) WHERE deleted_at IS NULL;
+  CREATE INDEX user_roles_user       ON user_roles (company_id, user_id);
+  CREATE INDEX role_perms_role       ON role_permissions (company_id, role_id);
+
+  CREATE UNIQUE INDEX customers_code_uq ON customers (company_id, code)
+       WHERE code IS NOT NULL AND deleted_at IS NULL;
+  CREATE UNIQUE INDEX suppliers_code_uq ON suppliers (company_id, code)
+       WHERE code IS NOT NULL AND deleted_at IS NULL;
+  CREATE INDEX customers_name          ON customers (company_id, name);
+  CREATE INDEX customers_name_trgm ON customers USING gin (name gin_trgm_ops);
+  CREATE INDEX suppliers_name_trgm ON suppliers USING gin (name gin_trgm_ops);
+  CREATE INDEX categories_parent       ON categories (company_id, parent_id);
+
+  CREATE UNIQUE INDEX products_barcode_uq ON products (company_id, barcode)
+       WHERE barcode IS NOT NULL AND deleted_at IS NULL;
+  CREATE INDEX products_category ON products (company_id, category_id);
+  CREATE INDEX products_sellable ON products (company_id)
+       WHERE is_active AND deleted_at IS NULL;
+  CREATE INDEX products_name_trgm ON products USING gin (name gin_trgm_ops);
+
+  CREATE INDEX prices_history ON product_prices (company_id, product_id, valid_from DESC);
+  CREATE INDEX prices_current ON product_prices (company_id, product_id)
+       WHERE valid_to IS NULL;
+
+  CREATE INDEX stock_threshold ON product_stock (company_id, qty_on_hand);
+  CREATE INDEX stock_out             ON product_stock (company_id) WHERE qty_on_hand = 0;
+
+  CREATE INDEX sales_recent       ON sales (company_id, sold_at DESC);
+  CREATE INDEX sales_customer     ON sales (company_id, customer_id, sold_at DESC);
+  CREATE INDEX sales_confirmed ON sales (company_id, sold_at)
+    WHERE status = 'confirmed';
+  CREATE INDEX sales_sold_brin ON sales USING brin (sold_at);
+  CREATE INDEX sale_items_sale       ON sale_items (company_id, sale_id);
+  CREATE INDEX sale_items_product ON sale_items (company_id, product_id);
+
+  CREATE INDEX returns_sale     ON sale_returns (company_id, sale_id);
+  CREATE INDEX returns_recent ON sale_returns (company_id, returned_at DESC);
+  CREATE INDEX returns_unpaid ON sale_returns (company_id, refund_status)
+    WHERE refund_status IN ('pending','partial');
+  CREATE INDEX sri_item        ON sale_return_items (company_id, sale_item_id);
+  CREATE INDEX srr_by_return ON sale_return_refunds (company_id, sale_return_id);
+  CREATE INDEX srr_by_payment ON sale_return_refunds (company_id, payment_id);
+
+  CREATE INDEX inv_stock_calc ON inventory_movements
+    (company_id, product_id, occurred_at DESC);
+  CREATE INDEX inv_ref_lookup ON inventory_movements (company_id, ref_type, ref_id);
+  CREATE INDEX inv_occurred_brin ON inventory_movements USING brin (occurred_at);
+
+  CREATE INDEX expenses_recent ON expenses (company_id, spent_at DESC)
+    WHERE deleted_at IS NULL;
+  CREATE INDEX expenses_cat       ON expenses (company_id, category_id, spent_at);
+
+  CREATE INDEX debts_party    ON debts (company_id, party_type, status);
+  CREATE INDEX debts_client ON debts (company_id, customer_id)
+    WHERE status <> 'paid';
+  CREATE INDEX debts_due      ON debts (company_id, due_date)
+    WHERE status IN ('open','partially_paid');
+
+  CREATE INDEX payments_recent ON payments (company_id, paid_at DESC);
+  CREATE INDEX payments_dir       ON payments (company_id, direction, paid_at);
+  CREATE INDEX payments_brin      ON payments USING brin (paid_at);
+  CREATE UNIQUE INDEX payments_ref_uq ON payments (company_id, reference)
+    WHERE reference IS NOT NULL;
+  CREATE INDEX pa_debt      ON payment_allocations (company_id, debt_id);
+  CREATE INDEX pa_payment ON payment_allocations (company_id, payment_id);
+
+  CREATE INDEX notifs_unread ON notifications (company_id, user_id)
+    WHERE read_at IS NULL;
+  CREATE INDEX audit_entity    ON audit_logs (company_id, entity_table, entity_id);
+  CREATE INDEX audit_actor     ON audit_logs (company_id, actor_user_id, occurred_at DESC);
+  CREATE INDEX outbox_queue    ON business_events (company_id, occurred_at)
+    WHERE published_at IS NULL;
+
+  CREATE INDEX dsf_day        ON daily_sales_facts (company_id, day);
+  CREATE INDEX dsf_product    ON daily_sales_facts (company_id, product_id, day);
+  CREATE INDEX dsf_category ON daily_sales_facts (company_id, category_id, day);
+  CREATE INDEX dsf_day_brin ON daily_sales_facts USING brin (day);
+
+  CREATE INDEX forecasts_read ON forecasts
+    (company_id, product_id, forecast_type, horizon_date);
+  CREATE INDEX forecasts_asof ON forecasts (company_id, as_of DESC);
+  CREATE INDEX insights_feed    ON insights
+    (company_id, status, severity, generated_at DESC);
+  CREATE INDEX insights_entity ON insights (company_id, entity_table, entity_id);
+
+8.11 Row Level Security — couverture complète
+
+  -- Boucle explicite sur TOUTES les tables tenant-scoped, y compris celles
+  -- ajoutees en V1.1 et audit_logs, oublie en V1.
+  DO $$
+  DECLARE t text;
+  BEGIN
+    FOREACH t IN ARRAY ARRAY[
+       'users','roles','user_roles','role_permissions',
+       'customers','suppliers','categories','products','product_prices',
+       'product_stock','sales','sale_items','sale_returns','sale_return_items',
+       'sale_return_refunds','inventory_movements',
+       'expense_categories','expenses','debts','payments','payment_allocations',
+       'notifications','audit_logs','business_events',
+       'daily_sales_facts','ml_feature_snapshots','forecasts','insights'
+    ] LOOP
+       EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+       EXECUTE format('ALTER TABLE %I FORCE       ROW LEVEL SECURITY', t);
+       EXECUTE format($f$
+          CREATE POLICY %1$I_tenant ON %1$I
+            USING        (company_id = current_setting('app.company_id', true)::uuid)
+            WITH CHECK (company_id = current_setting('app.company_id', true)::uuid)
+       $f$, t);
+    END LOOP;
+  END $$;
+
+  -- companies : politique sur id, pour empecher l'enumeration des tenants
+  ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE companies FORCE      ROW LEVEL SECURITY;
+  CREATE POLICY companies_self ON companies
+    USING           (id = current_setting('app.company_id', true)::uuid)
+    WITH CHECK (id = current_setting('app.company_id', true)::uuid);
+  -- permissions : catalogue global, aucune donnee d'entreprise, pas de RLS.
+
+  -- Role applicatif : aucun privilege de contournement, aucun DELETE physique
+  CREATE ROLE coges_app LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+  GRANT USAGE ON SCHEMA public TO coges_app;
+  GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO coges_app;
+  GRANT SELECT ON permissions TO coges_app;
+  GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO coges_app;
+
+  -- Role analytique : ecrit les projections, lit le transactionnel, pose le
+  -- meme SET LOCAL par entreprise. Pas de BYPASSRLS non plus.
+  CREATE ROLE coges_analytics LOGIN NOSUPERUSER NOBYPASSRLS;
+  GRANT SELECT ON ALL TABLES IN SCHEMA public TO coges_analytics;
+  GRANT INSERT, UPDATE, DELETE ON daily_sales_facts, ml_feature_snapshots,
+    forecasts, insights TO coges_analytics;
+
+  COMMIT;
+
