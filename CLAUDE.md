@@ -175,7 +175,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 00 Initialisation du dépôt | `docs/prompts/00-initialisation.md` | — | CI verte à vide | ✅ |
 | 01 Socle tenant + RLS | `01-socle-tenant-rls.md` | 00 | T1–T5, T36–T37, architecture | ✅ |
 | 02 Auth, utilisateurs, RBAC, audit, outbox | `02-auth-rbac-audit.md` | 01 | fuite générique, RBAC | ✅ |
-| 03 Référentiels et prix | `03-referentiels.md` | 02 | fuite, FK croisées (T5) | ⬜ |
+| 03 Référentiels et prix | `03-referentiels.md` | 02 | fuite, FK croisées (T5) | ✅ |
 | 04 Stock et CMP | `04-stock-cmp.md` | 03 | T6–T13, T38 | ⬜ |
 | 05 Ventes (draft → confirm → cancel, reçu) | `05-ventes.md` | 04 | T14–T17, T23–T24, T39 | ⬜ |
 | 06 Retours et remboursements | `06-retours.md` | 05 | T18–T22 | ⬜ |
@@ -201,6 +201,11 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0007 | 2026-09-23 | Matrice RBAC gérant/vendeur/comptable ; DELETE accordé sur exactement `user_roles`, `role_permissions`, `roles` | `docs/decisions/0007-matrice-rbac.md` |
 | 0008 | 2026-09-23 | `ensure_audit_partition` + partition DEFAULT, RLS par partition, audit append-only, `CHECK` sur les 9 événements | `docs/decisions/0008-audit-partitionne-et-outbox.md` |
 | 0009 | 2026-09-23 | Onboarding par `python -m app.cli create-company`, pas d'inscription publique en V1 | `docs/decisions/0009-onboarding-par-cli.md` |
+| 0010 | 2026-09-23 | **Gabarit d'un module métier** : 6 fichiers (pas d'`events.py` sans événement), erreurs métier nommées en 409, bornes de saisie dans le schéma | `docs/decisions/0010-gabarit-de-module.md` |
+| 0011 | 2026-09-23 | Prix : premier intervalle obligatoire à la création, changement = fermeture + ouverture à `now()` sous audit critique, `created_by` toujours renseigné | `docs/decisions/0011-prix-historises.md` |
+| 0012 | 2026-09-23 | La vue « produits + stock » sera un endpoint d'Inventory (phase 04) ; `product_stock` non créée en 0003 | `docs/decisions/0012-produits-et-stock.md` |
+| 0013 | 2026-09-23 | Codes tiers `CLI-0001`/`FRN-0001` générés par entreprise et modifiables ; recherche trigramme sur le nom, égalité stricte sur les codes | `docs/decisions/0013-codes-tiers-et-recherche.md` |
+| 0014 | 2026-09-23 | Une règle inter-modules interdite par le sens des dépendances descend en base : trigger `categories_guard_soft_delete` + SQLSTATE traduits | `docs/decisions/0014-garde-de-suppression-en-base.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 

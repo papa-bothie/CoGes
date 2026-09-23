@@ -32,12 +32,23 @@ RATE_EXPONENT = Decimal("0.0001")
 type Numeric = Decimal | int | str
 
 
+class NotANumberError(TypeError, ValueError):
+    """Type inapte à porter un montant : flottant, booléen.
+
+    Hérite des **deux** exceptions à dessein. `TypeError` pour l'appelant Python,
+    parce qu'un flottant sur un montant est une faute de type. `ValueError` parce
+    que Pydantic ne rattrape que `ValueError` et `AssertionError` : sans cela, un
+    `{"unit_price": 1500.5}` envoyé par un client sortirait en 500 au lieu du 422
+    qui nomme le champ fautif.
+    """
+
+
 def _quantize(value: Numeric, exponent: Decimal, label: str) -> Decimal:
     """Convertit en `Decimal` quantifié, en refusant tout flottant."""
     if isinstance(value, bool):
-        raise TypeError(f"{label} : un booléen n'est pas une valeur numérique.")
+        raise NotANumberError(f"{label} : un booléen n'est pas une valeur numérique.")
     if isinstance(value, float):
-        raise TypeError(
+        raise NotANumberError(
             f"{label} : les flottants sont interdits sur une donnée financière. "
             "Passer une chaîne, un entier ou un Decimal."
         )

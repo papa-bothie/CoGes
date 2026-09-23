@@ -55,6 +55,12 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
     ),
     "/api/v1/roles/{role_id}": CrossTenantCase(parameters={"role_id": "role"}),
     "/api/v1/categories/{category_id}": CrossTenantCase(parameters={"category_id": "category"}),
+    "/api/v1/products/{product_id}": CrossTenantCase(parameters={"product_id": "product"}),
+    "/api/v1/products/{product_id}/prices": CrossTenantCase(
+        parameters={"product_id": "product"}, body={"unit_price": "1500.00"}
+    ),
+    "/api/v1/customers/{customer_id}": CrossTenantCase(parameters={"customer_id": "customer"}),
+    "/api/v1/suppliers/{supplier_id}": CrossTenantCase(parameters={"supplier_id": "supplier"}),
 }
 
 
@@ -83,15 +89,27 @@ def _beta_role_id(client: TestClient, beta_token: str) -> str:
     return str(response.json()["items"][0]["id"])
 
 
-def _beta_category_id(client: TestClient, beta_token: str) -> str:
-    """Catégorie appartenant à Beta, créée par Beta elle-même."""
-    response = client.post(
-        "/api/v1/categories",
-        headers=auth_headers(beta_token),
-        json={"name": f"Catégorie {uuid4()}"},
-    )
+def _beta_owned(client: TestClient, beta_token: str, resource: str, payload: dict[str, Any]) -> str:
+    """Crée une ressource **chez Beta**, que Alpha tentera ensuite d'atteindre."""
+    response = client.post(f"/api/v1/{resource}", headers=auth_headers(beta_token), json=payload)
     assert response.status_code == 201, response.text
     return str(response.json()["id"])
+
+
+def _beta_sources(client: TestClient, beta_token: str) -> dict[str, str]:
+    """Une ressource de Beta par type d'identifiant manipulé par les routes."""
+    marker = uuid4().hex[:8]
+    return {
+        "category": _beta_owned(client, beta_token, "categories", {"name": f"Cat-{marker}"}),
+        "product": _beta_owned(
+            client,
+            beta_token,
+            "products",
+            {"sku": f"SKU-{marker}", "name": f"Produit {marker}", "unit_price": "1500.00"},
+        ),
+        "customer": _beta_owned(client, beta_token, "customers", {"name": f"Client {marker}"}),
+        "supplier": _beta_owned(client, beta_token, "suppliers", {"name": f"Fournisseur {marker}"}),
+    }
 
 
 @pytest.mark.parametrize("path", sorted(CROSS_TENANT_ROUTES))
@@ -107,7 +125,7 @@ def test_cross_tenant_access_is_not_found(
     sources = {
         "manager": str(company_beta.manager_id),
         "role": _beta_role_id(api_client, beta_token),
-        "category": _beta_category_id(api_client, beta_token),
+        **_beta_sources(api_client, beta_token),
     }
 
     concrete_path = path

@@ -192,6 +192,10 @@ def delete_category(
     if repository.count_live_children(category.id) > 0:
         raise CategoryHasChildrenError(details={"category_id": str(category.id)})
 
+    # L'identifiant est retenu **avant** le flush : si le trigger refuse,
+    # PostgreSQL annule la transaction et tout accès à un attribut expiré de
+    # `category` émettrait une requête sur une transaction morte.
+    audited_category_id = str(category.id)
     before = {"name": category.name, "deleted_at": category.deleted_at}
     category.deleted_at = datetime.now(UTC)
     try:
@@ -200,7 +204,7 @@ def delete_category(
         guard = _GUARD_ERRORS.get(sqlstate(exc) or "")
         if guard is None:
             raise
-        raise guard(details={"category_id": str(category.id)}) from exc
+        raise guard(details={"category_id": audited_category_id}) from exc
 
     audit_critical(
         session,
