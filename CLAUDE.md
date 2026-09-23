@@ -132,17 +132,22 @@ Si le code contredit l'architecture, c'est le code qui a tort, sauf si une déci
 
 ## 6. Commandes utiles
 
-> À compléter en phase 00, puis à tenir à jour.
+Toutes les cibles s'exécutent depuis la **racine** du dépôt et délèguent au projet uv
+`backend/` (`uv run --directory backend`). `make help` liste les cibles.
 
 ```bash
-# make up / make down        # PostgreSQL 16 + Redis en local (docker compose)
-# make migrate               # alembic upgrade head
-# make test                  # pytest (toutes suites)
-# make test-tenancy          # tests de fuite inter-tenant (bloquants en CI)
-# make lint                  # ruff + mypy
-# make api                   # uvicorn en local
-# make worker                # celery worker + beat
-# cd frontend && pnpm dev
+cp .env.example .env         # une fois, puis remplacer les valeurs
+make install                 # uv sync + installation des hooks pre-commit
+make up / make down          # PostgreSQL 16 + Redis 7 en local (docker compose, --wait)
+make logs / make psql        # journaux des services / psql en coges_app sur coges
+make migrate                 # alembic upgrade head (rôle propriétaire, jamais au boot de l'API)
+make test                    # pytest (toutes suites)
+make test-tenancy            # tests de fuite inter-tenant (bloquants en CI)
+make lint                    # ruff check + ruff format --check + mypy --strict
+make format                  # ruff format + ruff check --fix
+make api                     # uvicorn → http://localhost:8000/api/v1/health
+make worker                  # celery worker + beat
+cd frontend && pnpm dev      # à partir de la phase 11 (corepack enable pnpm)
 ```
 
 ## 7. Carte du dépôt
@@ -166,7 +171,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 
 | Phase | Prompt | Prérequis | Tests exigés | Statut |
 |---|---|---|---|---|
-| 00 Initialisation du dépôt | `docs/prompts/00-initialisation.md` | — | CI verte à vide | ⬜ |
+| 00 Initialisation du dépôt | `docs/prompts/00-initialisation.md` | — | CI verte à vide | ✅ |
 | 01 Socle tenant + RLS | `01-socle-tenant-rls.md` | 00 | T1–T5, T36–T37, architecture | ⬜ |
 | 02 Auth, utilisateurs, RBAC, audit, outbox | `02-auth-rbac-audit.md` | 01 | fuite générique, RBAC | ⬜ |
 | 03 Référentiels et prix | `03-referentiels.md` | 02 | fuite, FK croisées (T5) | ⬜ |
@@ -186,7 +191,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 
 | # | Date | Décision | Fichier |
 |---|---|---|---|
-| — | — | (aucune pour l'instant) | — |
+| 0001 | 2026-09-23 | Outillage (uv, GitHub Actions, docker compose, pre-commit, pnpm) et **SQLAlchemy synchrone + psycopg 3** | `docs/decisions/0001-outillage.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 
