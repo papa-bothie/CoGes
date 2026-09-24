@@ -1,4 +1,4 @@
-"""Outils communs aux tests d'intégrité des ventes (T14 à T17, T23, T24, T39).
+"""Outils communs aux tests d'intégrité des ventes (T14 à T24, T39).
 
 Tout passe par du SQL brut exécuté en `coges_app`, jamais par l'API ni par le
 service : « un test qui passerait parce que l'API a vérifié quelque chose ne vaut
@@ -205,6 +205,178 @@ def reverse(
         },
     )
     return movement_id
+
+
+_INSERT_RETURN = text(
+    """
+    INSERT INTO sale_returns (id, company_id, sale_id, return_no, reason, created_by)
+    VALUES (:id, :company_id, :sale_id, :return_no, :reason, :created_by)
+    """
+)
+
+_INSERT_RETURN_ITEM = text(
+    """
+    INSERT INTO sale_return_items
+        (id, company_id, return_id, sale_item_id, qty, refund_amount, tax_refund, unit_cost)
+    VALUES (:id, :company_id, :return_id, :sale_item_id,
+            :qty, :refund_amount, :tax_refund, :unit_cost)
+    """
+)
+
+_RETURN_IN = text(
+    """
+    INSERT INTO inventory_movements
+        (id, company_id, product_id, type, qty_delta, unit_cost, ref_type, ref_id, created_by)
+    VALUES (:id, :company_id, :product_id, 'customer_return_in', :qty, :unit_cost,
+            'sale_return_item', :return_item_id, :created_by)
+    """
+)
+
+_INSERT_REFUND_PAYMENT = text(
+    """
+    INSERT INTO payments
+        (id, company_id, direction, method, amount, sale_return_id, created_by)
+    VALUES (:id, :company_id, CAST(:direction AS cash_direction), CAST(:method AS pay_method),
+            :amount, :sale_return_id, :created_by)
+    """
+)
+
+_INSERT_REFUND = text(
+    """
+    INSERT INTO sale_return_refunds (id, company_id, sale_return_id, payment_id, amount)
+    VALUES (:id, :company_id, :sale_return_id, :payment_id, :amount)
+    """
+)
+
+_READ_RETURN = text(
+    """
+    SELECT return_no, returned_at, total_refund, refunded_total, refund_status
+      FROM sale_returns WHERE id = :return_id
+    """
+)
+
+
+def make_return(
+    session: Session, tenant: Tenant, sale_id: UUID, *, reason: str | None = None
+) -> UUID:
+    """Un en-tête de retour. La vente doit être confirmée."""
+    return_id = uuid4()
+    session.execute(
+        _INSERT_RETURN,
+        {
+            "id": return_id,
+            "company_id": tenant.company_id,
+            "sale_id": sale_id,
+            "return_no": f"R-{return_id.hex[:6].upper()}",
+            "reason": reason,
+            "created_by": tenant.user_id,
+        },
+    )
+    return return_id
+
+
+def return_line(
+    session: Session,
+    tenant: Tenant,
+    return_id: UUID,
+    sale_item_id: UUID,
+    *,
+    qty: str,
+    refund_amount: str = "0",
+    tax_refund: str = "0",
+    unit_cost: str = "0",
+) -> UUID:
+    """Une ligne de retour. C'est ici que `sri_check` borne le cumul retourné."""
+    item_id = uuid4()
+    session.execute(
+        _INSERT_RETURN_ITEM,
+        {
+            "id": item_id,
+            "company_id": tenant.company_id,
+            "return_id": return_id,
+            "sale_item_id": sale_item_id,
+            "qty": Decimal(qty),
+            "refund_amount": Decimal(refund_amount),
+            "tax_refund": Decimal(tax_refund),
+            "unit_cost": Decimal(unit_cost),
+        },
+    )
+    return item_id
+
+
+def return_in(
+    session: Session,
+    tenant: Tenant,
+    product_id: UUID,
+    return_item_id: UUID,
+    *,
+    qty: str,
+    unit_cost: str,
+) -> UUID:
+    """Rentrée de stock d'une ligne de retour, **sans** `reversal_of_movement_id`."""
+    movement_id = uuid4()
+    session.execute(
+        _RETURN_IN,
+        {
+            "id": movement_id,
+            "company_id": tenant.company_id,
+            "product_id": product_id,
+            "qty": Decimal(qty),
+            "unit_cost": Decimal(unit_cost),
+            "return_item_id": return_item_id,
+            "created_by": tenant.user_id,
+        },
+    )
+    return movement_id
+
+
+def refund_payment(
+    session: Session,
+    tenant: Tenant,
+    return_id: UUID | None,
+    *,
+    amount: str,
+    direction: str = "outflow",
+    method: str = "cash",
+) -> UUID:
+    """Un décaissement rattaché à un retour. `direction` est paramétrable pour T21."""
+    payment_id = uuid4()
+    session.execute(
+        _INSERT_REFUND_PAYMENT,
+        {
+            "id": payment_id,
+            "company_id": tenant.company_id,
+            "direction": direction,
+            "method": method,
+            "amount": Decimal(amount),
+            "sale_return_id": return_id,
+            "created_by": tenant.user_id,
+        },
+    )
+    return payment_id
+
+
+def letter_refund(
+    session: Session, tenant: Tenant, return_id: UUID, payment_id: UUID, *, amount: str
+) -> UUID:
+    """Lettrage retour ↔ paiement. C'est ici que `refund_check` arbitre."""
+    refund_id = uuid4()
+    session.execute(
+        _INSERT_REFUND,
+        {
+            "id": refund_id,
+            "company_id": tenant.company_id,
+            "sale_return_id": return_id,
+            "payment_id": payment_id,
+            "amount": Decimal(amount),
+        },
+    )
+    return refund_id
+
+
+def read_return(session: Session, return_id: UUID) -> Any:
+    """En-tête d'un retour : totaux et statut, tous maintenus par trigger."""
+    return session.execute(_READ_RETURN, {"return_id": return_id}).one()
 
 
 def read_sale(session: Session, sale_id: UUID) -> Any:

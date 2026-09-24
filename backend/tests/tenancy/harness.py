@@ -44,14 +44,19 @@ TENANT_TABLES: tuple[str, ...] = (
     "product_stock",
     "inventory_movements",
     # Phase 05 — ventes et finance. Les tables créées par la révision 0006 mais
-    # qu'aucun service n'écrit encore (retours, dépenses, allocations) entreront
-    # ici avec les phases 06 et 07, quand elles auront des lignes à semer. Leur
-    # RLS, elle, est déjà couverte : T37 est générique.
+    # qu'aucun service n'écrit encore (dépenses) entreront ici avec la phase 07,
+    # quand elles auront des lignes à semer. Leur RLS, elle, est déjà couverte :
+    # T37 est générique.
     "sales",
     "sale_items",
     "payments",
     "debts",
     "document_counters",
+    # Phase 06 — retours et remboursements.
+    "sale_returns",
+    "sale_return_items",
+    "sale_return_refunds",
+    "payment_allocations",
 )
 
 # Valeur factice : aucun mot de passe réel ne figure dans les tests.
@@ -81,6 +86,14 @@ class Tenant:
     sale_item_id: UUID
     payment_id: UUID
     debt_id: UUID
+    # Phase 06 — un retour, sa ligne, son remboursement et le décaissement qui le
+    # porte. Le paiement de la phase 05 est un `inflow` : `payments_return_outflow`
+    # en exige un second, en sens inverse, pour pouvoir lettrer un remboursement.
+    sale_return_id: UUID
+    sale_return_item_id: UUID
+    refund_payment_id: UUID
+    refund_id: UUID
+    allocation_id: UUID
 
     @property
     def ctx(self) -> TenantContext:
@@ -173,6 +186,11 @@ def create_tenant(
         sale_item_id=uuid4(),
         payment_id=uuid4(),
         debt_id=uuid4(),
+        sale_return_id=uuid4(),
+        sale_return_item_id=uuid4(),
+        refund_payment_id=uuid4(),
+        refund_id=uuid4(),
+        allocation_id=uuid4(),
     )
 
     with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
@@ -212,6 +230,7 @@ def create_tenant(
     _seed_referential(session_factory, tenant)
     _seed_inventory(session_factory, tenant)
     _seed_sales(session_factory, tenant)
+    _seed_returns(session_factory, tenant)
     return tenant
 
 
@@ -380,6 +399,95 @@ def _seed_sales(session_factory: sessionmaker[Any], tenant: Tenant) -> None:
         )
 
 
+def _seed_returns(session_factory: sessionmaker[Any], tenant: Tenant) -> None:
+    """Un retour, sa ligne, son remboursement et une allocation (phase 06).
+
+    L'ordre est imposé par les triggers : la ligne de retour renseigne
+    `total_refund` par `sri_totals`, et `refund_check` refuserait un lettrage qui
+    dépasserait ce total. Le décaissement doit exister avant d'être lettré, et il
+    doit être un `outflow` — d'où un **second** paiement, celui de `_seed_sales`
+    étant un encaissement.
+
+    `total_refund` et `refunded_total` ne sont jamais écrits ici : les triggers les
+    calculent, comme ils le feront pour le service.
+    """
+    with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
+        session.execute(
+            text(
+                "INSERT INTO sale_returns "
+                "(id, company_id, sale_id, return_no, reason, created_by) "
+                "VALUES (:id, :company_id, :sale_id, 'R-000001', 'Article defectueux', "
+                "        :created_by)"
+            ),
+            {
+                "id": tenant.sale_return_id,
+                "company_id": tenant.company_id,
+                "sale_id": tenant.sale_id,
+                "created_by": tenant.user_id,
+            },
+        )
+        session.execute(
+            text(
+                "INSERT INTO sale_return_items "
+                "(id, company_id, return_id, sale_item_id, qty, refund_amount, "
+                " tax_refund, unit_cost) "
+                "VALUES (:id, :company_id, :return_id, :sale_item_id, 1, 1770.00, "
+                "        270.00, 1000.0000)"
+            ),
+            {
+                "id": tenant.sale_return_item_id,
+                "company_id": tenant.company_id,
+                "return_id": tenant.sale_return_id,
+                "sale_item_id": tenant.sale_item_id,
+            },
+        )
+        session.execute(
+            text(
+                "INSERT INTO payments "
+                "(id, company_id, direction, method, amount, sale_return_id, created_by) "
+                "VALUES (:id, :company_id, 'outflow', 'cash', 1770.00, :sale_return_id, "
+                "        :created_by)"
+            ),
+            {
+                "id": tenant.refund_payment_id,
+                "company_id": tenant.company_id,
+                "sale_return_id": tenant.sale_return_id,
+                "created_by": tenant.user_id,
+            },
+        )
+        session.execute(
+            text(
+                # Partiel à dessein : le retour garde 770,00 de reste dû, sans quoi
+                # `refund_check` refuserait tout lettrage supplémentaire avant même
+                # que les clés étrangères de T5 n'aient leur mot à dire.
+                "INSERT INTO sale_return_refunds "
+                "(id, company_id, sale_return_id, payment_id, amount) "
+                "VALUES (:id, :company_id, :sale_return_id, :payment_id, 1000.00)"
+            ),
+            {
+                "id": tenant.refund_id,
+                "company_id": tenant.company_id,
+                "sale_return_id": tenant.sale_return_id,
+                "payment_id": tenant.refund_payment_id,
+            },
+        )
+        # Le lettrage paiement ↔ dette de la phase 05 : l'encaissement de 1 000
+        # s'impute sur la dette de la vente, qui passe `partially_paid`.
+        session.execute(
+            text(
+                "INSERT INTO payment_allocations "
+                "(id, company_id, payment_id, debt_id, amount) "
+                "VALUES (:id, :company_id, :payment_id, :debt_id, 1000.00)"
+            ),
+            {
+                "id": tenant.allocation_id,
+                "company_id": tenant.company_id,
+                "payment_id": tenant.payment_id,
+                "debt_id": tenant.debt_id,
+            },
+        )
+
+
 def own_row_ids(tenant: Tenant, table: str) -> dict[str, Any]:
     """Critère SQL qui désigne la ligne de `tenant` dans `table`."""
     criteria: dict[str, dict[str, Any]] = {
@@ -400,6 +508,10 @@ def own_row_ids(tenant: Tenant, table: str) -> dict[str, Any]:
         "sale_items": {"clause": "id = :value", "value": tenant.sale_item_id},
         "payments": {"clause": "id = :value", "value": tenant.payment_id},
         "debts": {"clause": "id = :value", "value": tenant.debt_id},
+        "sale_returns": {"clause": "id = :value", "value": tenant.sale_return_id},
+        "sale_return_items": {"clause": "id = :value", "value": tenant.sale_return_item_id},
+        "sale_return_refunds": {"clause": "id = :value", "value": tenant.refund_id},
+        "payment_allocations": {"clause": "id = :value", "value": tenant.allocation_id},
         "document_counters": {"clause": "company_id = :value", "value": tenant.company_id},
         "auth_sessions": {"clause": "company_id = :value", "value": tenant.company_id},
         "business_events": {"clause": "company_id = :value", "value": tenant.company_id},

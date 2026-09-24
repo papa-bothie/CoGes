@@ -354,3 +354,123 @@ def test_t05_a_debt_cannot_be_charged_to_a_foreign_customer(
         )
 
     _assert_foreign_key_violation(excinfo, "debts_customer_fk")
+
+
+def test_t05_a_return_cannot_be_attached_to_a_foreign_sale(
+    session_factory: sessionmaker[Any], tenant_a: Tenant, tenant_b: Tenant
+) -> None:
+    """Un retour de A sur une vente de B viole `sale_returns_sale_fk`."""
+    with (
+        pytest.raises(IntegrityError) as excinfo,
+        tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session,
+    ):
+        session.execute(
+            text(
+                "INSERT INTO sale_returns (company_id, sale_id, return_no, created_by) "
+                "VALUES (:company_id, :sale_id, 'R-INTRUS', :created_by)"
+            ),
+            {
+                "company_id": tenant_a.company_id,
+                "sale_id": tenant_b.sale_id,
+                "created_by": tenant_a.user_id,
+            },
+        )
+
+    _assert_foreign_key_violation(excinfo, "sale_returns_sale_fk")
+
+
+def test_t05_a_return_item_cannot_reference_a_foreign_sale_item(
+    session_factory: sessionmaker[Any], tenant_a: Tenant, tenant_b: Tenant
+) -> None:
+    """Une ligne de retour de A pointant une ligne de vente de B est refusée.
+
+    `return_item_check` ne peut rien ici, et pour la même raison que
+    `sale_items_frozen` au cas précédent : il cherche la ligne de vente **dans le
+    tenant courant**, ne la trouve pas, et lève « Ligne de vente introuvable » —
+    un refus, mais qui ne dit pas ce qui s'est réellement passé. Le test mesure la
+    clé étrangère, la barrière qui tiendrait si le trigger disparaissait, et
+    accepte donc l'un ou l'autre des deux refus.
+    """
+    with (
+        pytest.raises(DBAPIError) as excinfo,
+        tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session,
+    ):
+        session.execute(
+            text(
+                "INSERT INTO sale_return_items "
+                "(company_id, return_id, sale_item_id, qty, refund_amount, unit_cost) "
+                "VALUES (:company_id, :return_id, :sale_item_id, 1, 100.00, 10.0000)"
+            ),
+            {
+                "company_id": tenant_a.company_id,
+                "return_id": tenant_a.sale_return_id,
+                "sale_item_id": tenant_b.sale_item_id,
+            },
+        )
+
+    message = str(excinfo.value)
+    assert "sale_return_items_item_fk" in message or "Ligne de vente introuvable" in message, (
+        message
+    )
+
+
+def test_t05_a_refund_cannot_be_lettered_on_a_foreign_payment(
+    session_factory: sessionmaker[Any], tenant_a: Tenant, tenant_b: Tenant
+) -> None:
+    """Le second cas nommé par le § 10 : `sale_return_refunds` → paiement de B.
+
+    Sans cette barrière, une entreprise imputerait le remboursement de son propre
+    retour sur la trésorerie d'une autre : l'argent sortirait chez le voisin.
+
+    `refund_check` verrouille et lit le paiement **dans le tenant courant** ; ne le
+    trouvant pas, il laisse `v_dir` à NULL, et `NULL <> 'outflow'` ne vaut pas
+    `true` — le trigger ne refuse donc rien. C'est `srr_payment_fk` qui refuse.
+    """
+    with (
+        pytest.raises(IntegrityError) as excinfo,
+        tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session,
+    ):
+        session.execute(
+            text(
+                "INSERT INTO sale_return_refunds "
+                "(company_id, sale_return_id, payment_id, amount) "
+                "VALUES (:company_id, :sale_return_id, :payment_id, 100.00)"
+            ),
+            {
+                "company_id": tenant_a.company_id,
+                "sale_return_id": tenant_a.sale_return_id,
+                "payment_id": tenant_b.refund_payment_id,
+            },
+        )
+
+    _assert_foreign_key_violation(excinfo, "srr_payment_fk")
+
+
+def test_t05_a_refund_cannot_be_lettered_on_a_foreign_return(
+    session_factory: sessionmaker[Any], tenant_a: Tenant, tenant_b: Tenant
+) -> None:
+    """Le sens inverse : un décaissement de A lettré sur un retour de B.
+
+    `refund_check` cherche le retour chez A, ne le trouve pas et lève « Retour
+    introuvable » avant que `srr_return_fk` n'ait son mot à dire. Les deux refus
+    sont acceptés : ce qui compte est qu'aucune écriture ne passe.
+    """
+    with (
+        pytest.raises(DBAPIError) as excinfo,
+        tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session,
+    ):
+        session.execute(
+            text(
+                "INSERT INTO sale_return_refunds "
+                "(company_id, sale_return_id, payment_id, amount) "
+                "VALUES (:company_id, :sale_return_id, :payment_id, 100.00)"
+            ),
+            {
+                "company_id": tenant_a.company_id,
+                "sale_return_id": tenant_b.sale_return_id,
+                "payment_id": tenant_a.refund_payment_id,
+            },
+        )
+
+    message = str(excinfo.value)
+    assert "srr_return_fk" in message or "Retour introuvable" in message, message
