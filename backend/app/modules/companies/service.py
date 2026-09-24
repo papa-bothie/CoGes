@@ -44,6 +44,24 @@ def create_company(
     return company
 
 
+def is_tax_enabled(session: Session, ctx: TenantContext) -> bool:
+    """La TVA s'applique-t-elle aux ventes de cette entreprise ?
+
+    Façade pour Sales, qui fige `tax_rate` sur chaque ligne à la confirmation.
+    Le paramètre vit dans `settings`, où le § 8.2 range tout ce qui est propre à
+    l'entreprise ; il n'a pas de colonne.
+
+    **Absent vaut « activée »** (ADR 0022). Le vrai interrupteur est déjà le taux
+    du produit, qui vaut 0 par défaut : une entreprise non assujettie ne taxe rien
+    sans avoir rien à paramétrer. Mettre `tax_enabled` à `false` devient alors un
+    geste explicite, qui force 0 même sur un produit à 18 % — et les entreprises
+    créées avant cette phase, dont `settings` vaut `{}`, continuent de vendre
+    comme avant.
+    """
+    setting = get_current_company(session, ctx).settings.get("tax_enabled", True)
+    return bool(setting)
+
+
 def get_current_company(session: Session, ctx: TenantContext) -> Company:
     """Entreprise du contexte, ou 404."""
     company = CompanyRepository(session, ctx).get_current()

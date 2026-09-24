@@ -137,6 +137,7 @@ def get_current_price(session: Session, ctx: TenantContext, product_id: UUID) ->
     if price is None:
         raise ProductNotPricedError(details={"product_id": str(product.id)})
     return CurrentPrice(
+        price_id=price.id,
         product_id=product.id,
         unit_price=price.unit_price,
         cost_price=price.cost_price,
@@ -186,6 +187,7 @@ def get_summaries(
             category_id=product.category_id,
             unit=product.unit,
             is_stock_tracked=product.is_stock_tracked,
+            default_tax_rate=product.default_tax_rate,
             reorder_point=product.reorder_point,
         )
         for product_id, product in products.items()

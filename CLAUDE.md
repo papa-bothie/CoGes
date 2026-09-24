@@ -178,7 +178,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 02 Auth, utilisateurs, RBAC, audit, outbox | `02-auth-rbac-audit.md` | 01 | fuite générique, RBAC | ✅ |
 | 03 Référentiels et prix | `03-referentiels.md` | 02 | fuite, FK croisées (T5) | ✅ |
 | 04 Stock et CMP | `04-stock-cmp.md` | 03 | T6–T13, T38 | ✅ |
-| 05 Ventes (draft → confirm → cancel, reçu) | `05-ventes.md` | 04 | T14–T17, T23–T24, T39 | ⬜ |
+| 05 Ventes (draft → confirm → cancel, reçu) | `05-ventes.md` | 04 | T14–T17, T23–T24, T39 | ✅ |
 | 06 Retours et remboursements | `06-retours.md` | 05 | T18–T22 | ⬜ |
 | 07 Finance de gestion | `07-finance.md` | 06 | T25–T28 | ⬜ |
 | 08 Async, analytics, dashboard, notifications | `08-async-analytics.md` | 07 | T29–T32, T40 | ⬜ |
@@ -211,6 +211,11 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0016 | 2026-09-23 | Ajustement positif : `unit_cost` par défaut = CMP courant, surchargeable ; refus si aucun CMP à reprendre | `docs/decisions/0016-cout-d-un-ajustement-positif.md` |
 | 0017 | 2026-09-23 | Correction d'un mouvement par `POST /inventory/movements/{id}/reverse`, gérant seul, audit critique | `docs/decisions/0017-correction-par-mouvement-inverse.md` |
 | 0018 | 2026-09-23 | Écarts assumés au § 8.5 : SQLSTATE `CG020`/`CG021`, `insufficient_stock` en 409, aucun `REVOKE` (le `FOR SHARE` exige UPDATE), `refresh` après `flush` | `docs/decisions/0018-ecarts-assumes-au-paragraphe-8-5.md` |
+| 0019 | 2026-09-24 | **P6 tranché** : la révision 0006 crée toutes les tables des § 8.4 et § 8.6 ; un seul module `finance/` (sans router), services complétés en 06 et 07 | `docs/decisions/0019-ordre-des-phases-ventes-et-finance.md` |
+| 0020 | 2026-09-24 | DELETE accordé sur `sale_items` — quatrième et dernière exception, bornée par `sale_items_no_change` ; T36 passe à 4 tables | `docs/decisions/0020-delete-sur-les-lignes-de-brouillon.md` |
+| 0021 | 2026-09-24 | `document_counters` : suite sans trou par entreprise (`V-000123`), numéro attribué dès le brouillon, générique pour les retours et les dépenses | `docs/decisions/0021-numerotation-des-documents.md` |
+| 0022 | 2026-09-24 | `tax_enabled` absent ⇒ taxes actives ; reçu en JSON refusé sur brouillon ; second `confirm` ⇒ 409 `sale_not_draft` | `docs/decisions/0022-ce-que-la-vente-promet-au-client.md` |
+| 0023 | 2026-09-24 | Écarts assumés au § 8.7 : `sale_items_frozen` étendu à l'INSERT, SQLSTATE `CG030` ; annulation du § 5.2 appliquée telle quelle. **Corrigé par la révision 0007** : le plafond de crédit se lit `FOR UPDATE`, sans quoi il ne tient pas sous concurrence | `docs/decisions/0023-ecarts-assumes-au-paragraphe-8-7.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 

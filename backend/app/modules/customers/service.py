@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -66,6 +67,17 @@ def get_customer(session: Session, ctx: TenantContext, customer_id: UUID) -> Cus
 def assert_exists(session: Session, ctx: TenantContext, customer_id: UUID) -> None:
     """Façade pour les modules qui référencent un client (Sales, Debts)."""
     get_customer(session, ctx, customer_id)
+
+
+def get_credit_limit(session: Session, ctx: TenantContext, customer_id: UUID) -> Decimal | None:
+    """Encours autorisé du client, ou `None` s'il n'a aucun plafond.
+
+    Façade pour Finance, qui refuse une vente à crédit avant de l'écrire. Les deux
+    absences de plafond ne se confondent pas : `None` veut dire « aucune limite »,
+    `0` veut dire « crédit interdit ». Le trigger `debt_credit_limit` reste
+    l'autorité — ce contrôle-ci sert à nommer le montant qui manque (ADR 0014).
+    """
+    return get_customer(session, ctx, customer_id).credit_limit
 
 
 # ------------------------------------------------------------------- écritures

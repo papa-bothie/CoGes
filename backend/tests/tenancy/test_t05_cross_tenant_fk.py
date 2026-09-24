@@ -9,8 +9,9 @@ Ces tests attaquent la base directement, en `coges_app`, sans passer par l'API :
 un test qui ne passerait que parce que le service a vérifié quelque chose ne vaut
 rien (§ 10 du Modèle de données).
 
-Le § 10 illustre T5 avec `sale_items` et `sale_return_refunds`, tables de la phase
-05 ; la phase 03 couvre les mêmes chemins sur le référentiel.
+Le § 10 illustre T5 avec `sale_items`, table de la phase 05 : c'est le cas nommé par
+le modèle, et il est couvert plus bas. Les mêmes chemins sont fermés sur le
+référentiel (phase 03) et sur le stock (phase 04).
 """
 
 from __future__ import annotations
@@ -201,3 +202,155 @@ def test_t05_movement_cannot_reference_a_foreign_supplier(
         )
 
     _assert_foreign_key_violation(excinfo, "inv_supplier_fk")
+
+
+def _draft_sale(session_factory: sessionmaker[Any], tenant: Tenant) -> Any:
+    """Un brouillon neuf chez ce tenant.
+
+    La vente semée par le harnais est confirmée : `sale_items_no_change` la
+    protégerait et masquerait la clé étrangère qu'on cherche à mesurer ici.
+    """
+    sale_id = uuid4()
+    with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
+        session.execute(
+            text(
+                "INSERT INTO sales (id, company_id, sale_no, created_by) "
+                "VALUES (:id, :company_id, :sale_no, :created_by)"
+            ),
+            {
+                "id": sale_id,
+                "company_id": tenant.company_id,
+                "sale_no": f"V-{sale_id.hex[:6].upper()}",
+                "created_by": tenant.user_id,
+            },
+        )
+    return sale_id
+
+
+def test_t05_sale_item_cannot_reference_a_foreign_product(
+    session_factory: sessionmaker[Any], tenant_a: Tenant, tenant_b: Tenant
+) -> None:
+    """Le cas nommé par le § 10 : une ligne de A sur un produit de B.
+
+    Ce chemin-ci est le plus coûteux de tous s'il s'ouvre : il ferait sortir du
+    stock chez le concurrent, au prix du concurrent, sur une vente qu'il ne verra
+    jamais. `sale_items_product_fk` le referme.
+    """
+    sale_id = _draft_sale(session_factory, tenant_a)
+
+    with (
+        pytest.raises(IntegrityError) as excinfo,
+        tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session,
+    ):
+        session.execute(
+            text(
+                "INSERT INTO sale_items (company_id, sale_id, product_id, qty, unit_price) "
+                "VALUES (:company_id, :sale_id, :product_id, 1, 1000.00)"
+            ),
+            {
+                "company_id": tenant_a.company_id,
+                "sale_id": sale_id,
+                # Le produit existe, mais chez l'autre entreprise.
+                "product_id": tenant_b.product_id,
+            },
+        )
+
+    _assert_foreign_key_violation(excinfo, "sale_items_product_fk")
+
+
+def test_t05_sale_item_cannot_be_attached_to_a_foreign_sale(
+    session_factory: sessionmaker[Any], tenant_a: Tenant, tenant_b: Tenant
+) -> None:
+    """Une ligne de A greffée sur une vente de B viole `sale_items_sale_fk`.
+
+    `sale_items_frozen` ne peut rien ici : il cherche la vente **dans le tenant
+    courant**, ne la trouve pas, et laisse passer. C'est la clé étrangère
+    composite qui refuse — la barrière 1, celle qui ne dépend d'aucun trigger.
+    """
+    with (
+        pytest.raises(IntegrityError) as excinfo,
+        tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session,
+    ):
+        session.execute(
+            text(
+                "INSERT INTO sale_items (company_id, sale_id, product_id, qty, unit_price) "
+                "VALUES (:company_id, :sale_id, :product_id, 1, 1000.00)"
+            ),
+            {
+                "company_id": tenant_a.company_id,
+                "sale_id": tenant_b.sale_id,
+                "product_id": tenant_a.product_id,
+            },
+        )
+
+    _assert_foreign_key_violation(excinfo, "sale_items_sale_fk")
+
+
+def test_t05_a_sale_cannot_be_billed_to_a_foreign_customer(
+    session_factory: sessionmaker[Any], tenant_a: Tenant, tenant_b: Tenant
+) -> None:
+    """Une vente de A au nom d'un client de B viole `sales_customer_fk`."""
+    with (
+        pytest.raises(IntegrityError) as excinfo,
+        tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session,
+    ):
+        session.execute(
+            text(
+                "INSERT INTO sales (company_id, customer_id, sale_no, created_by) "
+                "VALUES (:company_id, :customer_id, 'V-INTRUS', :created_by)"
+            ),
+            {
+                "company_id": tenant_a.company_id,
+                "customer_id": tenant_b.customer_id,
+                "created_by": tenant_a.user_id,
+            },
+        )
+
+    _assert_foreign_key_violation(excinfo, "sales_customer_fk")
+
+
+def test_t05_a_payment_cannot_be_posted_on_a_foreign_sale(
+    session_factory: sessionmaker[Any], tenant_a: Tenant, tenant_b: Tenant
+) -> None:
+    """Un encaissement de A imputé à une vente de B viole `payments_sale_fk`.
+
+    C'est le pendant financier du cas précédent : sans cette barrière, on
+    solderait la vente d'un concurrent avec son propre argent.
+    """
+    with (
+        pytest.raises(IntegrityError) as excinfo,
+        tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session,
+    ):
+        session.execute(
+            text(
+                "INSERT INTO payments "
+                "(company_id, direction, method, amount, sale_id, created_by) "
+                "VALUES (:company_id, 'inflow', 'cash', 100.00, :sale_id, :created_by)"
+            ),
+            {
+                "company_id": tenant_a.company_id,
+                "sale_id": tenant_b.sale_id,
+                "created_by": tenant_a.user_id,
+            },
+        )
+
+    _assert_foreign_key_violation(excinfo, "payments_sale_fk")
+
+
+def test_t05_a_debt_cannot_be_charged_to_a_foreign_customer(
+    session_factory: sessionmaker[Any], tenant_a: Tenant, tenant_b: Tenant
+) -> None:
+    """Une dette de A au nom d'un client de B viole `debts_customer_fk`."""
+    with (
+        pytest.raises(IntegrityError) as excinfo,
+        tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session,
+    ):
+        session.execute(
+            text(
+                "INSERT INTO debts (company_id, party_type, customer_id, principal) "
+                "VALUES (:company_id, 'customer', :customer_id, 500.00)"
+            ),
+            {"company_id": tenant_a.company_id, "customer_id": tenant_b.customer_id},
+        )
+
+    _assert_foreign_key_violation(excinfo, "debts_customer_fk")

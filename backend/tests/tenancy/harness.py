@@ -43,6 +43,15 @@ TENANT_TABLES: tuple[str, ...] = (
     # Phase 04 — stock.
     "product_stock",
     "inventory_movements",
+    # Phase 05 — ventes et finance. Les tables créées par la révision 0006 mais
+    # qu'aucun service n'écrit encore (retours, dépenses, allocations) entreront
+    # ici avec les phases 06 et 07, quand elles auront des lignes à semer. Leur
+    # RLS, elle, est déjà couverte : T37 est générique.
+    "sales",
+    "sale_items",
+    "payments",
+    "debts",
+    "document_counters",
 )
 
 # Valeur factice : aucun mot de passe réel ne figure dans les tests.
@@ -67,6 +76,11 @@ class Tenant:
     product_id: UUID
     # Phase 04 — un mouvement, qui crée du même coup la ligne de `product_stock`.
     movement_id: UUID
+    # Phase 05 — une vente confirmée, sa ligne, son encaissement et sa dette.
+    sale_id: UUID
+    sale_item_id: UUID
+    payment_id: UUID
+    debt_id: UUID
 
     @property
     def ctx(self) -> TenantContext:
@@ -155,6 +169,10 @@ def create_tenant(
         category_id=uuid4(),
         product_id=uuid4(),
         movement_id=uuid4(),
+        sale_id=uuid4(),
+        sale_item_id=uuid4(),
+        payment_id=uuid4(),
+        debt_id=uuid4(),
     )
 
     with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
@@ -193,6 +211,7 @@ def create_tenant(
 
     _seed_referential(session_factory, tenant)
     _seed_inventory(session_factory, tenant)
+    _seed_sales(session_factory, tenant)
     return tenant
 
 
@@ -283,6 +302,84 @@ def _seed_inventory(session_factory: sessionmaker[Any], tenant: Tenant) -> None:
         )
 
 
+def _seed_sales(session_factory: sessionmaker[Any], tenant: Tenant) -> None:
+    """Une vente confirmée, sa ligne, son encaissement et sa dette (phase 05).
+
+    L'ordre n'est pas libre : `sale_items_no_change` refuse d'écrire une ligne sur
+    une vente qui n'est plus `draft` (ADR 0023). La vente est donc semée en
+    brouillon, garnie, puis confirmée — exactement ce que fait le service.
+
+    Les totaux ne sont jamais écrits ici : `sale_recompute_totals` les calcule
+    depuis la ligne, `sale_paid_rollup` renseigne `paid_total` depuis le paiement.
+    """
+    with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
+        session.execute(
+            text(
+                "INSERT INTO sales (id, company_id, customer_id, sale_no, created_by) "
+                "VALUES (:id, :company_id, :customer_id, 'V-000001', :created_by)"
+            ),
+            {
+                "id": tenant.sale_id,
+                "company_id": tenant.company_id,
+                "customer_id": tenant.customer_id,
+                "created_by": tenant.user_id,
+            },
+        )
+        session.execute(
+            text(
+                "INSERT INTO sale_items "
+                "(id, company_id, sale_id, product_id, qty, unit_price, tax_rate) "
+                "VALUES (:id, :company_id, :sale_id, :product_id, 2, 1500.00, 0.1800)"
+            ),
+            {
+                "id": tenant.sale_item_id,
+                "company_id": tenant.company_id,
+                "sale_id": tenant.sale_id,
+                "product_id": tenant.product_id,
+            },
+        )
+        session.execute(
+            text(
+                "UPDATE sales SET status = 'confirmed', confirmed_at = now() "
+                " WHERE company_id = :company_id AND id = :id"
+            ),
+            {"company_id": tenant.company_id, "id": tenant.sale_id},
+        )
+        session.execute(
+            text(
+                "INSERT INTO payments "
+                "(id, company_id, direction, method, amount, sale_id, created_by) "
+                "VALUES (:id, :company_id, 'inflow', 'cash', 1000.00, :sale_id, :created_by)"
+            ),
+            {
+                "id": tenant.payment_id,
+                "company_id": tenant.company_id,
+                "sale_id": tenant.sale_id,
+                "created_by": tenant.user_id,
+            },
+        )
+        session.execute(
+            text(
+                "INSERT INTO debts "
+                "(id, company_id, party_type, customer_id, sale_id, principal) "
+                "VALUES (:id, :company_id, 'customer', :customer_id, :sale_id, 2540.00)"
+            ),
+            {
+                "id": tenant.debt_id,
+                "company_id": tenant.company_id,
+                "customer_id": tenant.customer_id,
+                "sale_id": tenant.sale_id,
+            },
+        )
+        session.execute(
+            text(
+                "INSERT INTO document_counters (company_id, document_type, next_value) "
+                "VALUES (:company_id, 'sale', 2)"
+            ),
+            {"company_id": tenant.company_id},
+        )
+
+
 def own_row_ids(tenant: Tenant, table: str) -> dict[str, Any]:
     """Critère SQL qui désigne la ligne de `tenant` dans `table`."""
     criteria: dict[str, dict[str, Any]] = {
@@ -299,6 +396,11 @@ def own_row_ids(tenant: Tenant, table: str) -> dict[str, Any]:
         "product_prices": {"clause": "product_id = :value", "value": tenant.product_id},
         "product_stock": {"clause": "product_id = :value", "value": tenant.product_id},
         "inventory_movements": {"clause": "id = :value", "value": tenant.movement_id},
+        "sales": {"clause": "id = :value", "value": tenant.sale_id},
+        "sale_items": {"clause": "id = :value", "value": tenant.sale_item_id},
+        "payments": {"clause": "id = :value", "value": tenant.payment_id},
+        "debts": {"clause": "id = :value", "value": tenant.debt_id},
+        "document_counters": {"clause": "company_id = :value", "value": tenant.company_id},
         "auth_sessions": {"clause": "company_id = :value", "value": tenant.company_id},
         "business_events": {"clause": "company_id = :value", "value": tenant.company_id},
     }
