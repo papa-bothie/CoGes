@@ -16,10 +16,12 @@ pytestmark = pytest.mark.tenancy
 APP_ROLE = "coges_app"
 AUTH_ROLE = "coges_auth"
 
-#: Seules tables sur lesquelles `coges_app` a le droit de supprimer (ADR 0007).
-#: Deux tables de liaison et `roles` : aucune n'a de colonne de suppression logique,
-#: aucune ne porte de donnée métier historisée, et chaque suppression est auditée.
-DELETABLE_TABLES = ["role_permissions", "roles", "user_roles"]
+#: Seules tables sur lesquelles `coges_app` a le droit de supprimer (ADR 0007, 0020).
+#: Trois tables du RBAC : aucune n'a de colonne de suppression logique, aucune ne
+#: porte de donnée métier historisée, et chaque suppression est auditée.
+#: `sale_items` est la quatrième et dernière : retirer une ligne d'un brouillon est
+#: un DELETE, et `sale_items_no_change` borne ce droit à la vie du brouillon.
+DELETABLE_TABLES = ["role_permissions", "roles", "sale_items", "user_roles"]
 
 
 def test_t36_application_role_has_no_escape_hatch(app_engine: Engine) -> None:

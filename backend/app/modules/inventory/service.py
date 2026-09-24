@@ -1,7 +1,11 @@
 """Façade de services du module Inventory.
 
-Le stock n'a **qu'un** point d'entrée : `record_movement`. Sales l'appellera tel
-quel en phase 05 pour ses sorties, sans dupliquer une ligne de cette logique.
+Le stock n'a qu'une **table** d'entrée, `inventory_movements`, et trois portes vers
+elle : `record_movement` pour une saisie humaine, `record_sale_out` et
+`reverse_sale_out` pour les flux de vente. Les deux dernières existent parce que
+`sale_out` n'est pas un type saisissable — personne ne « saisit » une sortie de
+vente, elle est la conséquence d'une confirmation. Sales dit ce qui est vendu ;
+c'est Inventory qui compose le mouvement, ici et nulle part ailleurs.
 
 Ce que ce module ne fait pas, et ne fera jamais :
 
@@ -105,6 +109,9 @@ _TRIGGER_ERRORS: dict[str, type[BusinessRuleError]] = {
     "CG021": ProductNotStockTrackedError,
 }
 _UNIQUE_VIOLATION = "23505"
+
+#: `ref_type` des mouvements nés d'une ligne de vente (§ 5.1 étape 4).
+SALE_ITEM_REF = "sale_item"
 
 _REBUILD_SQL = text("SELECT * FROM rebuild_product_stock(:company_id)")
 
@@ -348,33 +355,7 @@ def reverse_movement(
     porte bien le même produit et la quantité opposée.
     """
     origin = get_movement(session, ctx, movement_id)
-    repository = InventoryMovementRepository(session, ctx)
-
-    if origin.reversal_of_movement_id is not None:
-        raise NotReversibleError(details={"movement_id": str(origin.id)})
-    if repository.reversal_of(origin.id) is not None:
-        # Contrôle applicatif indispensable, pas seulement confortable : les
-        # triggers `BEFORE INSERT` s'exécutent **avant** la vérification d'unicité,
-        # et une seconde annulation serait annoncée comme un manque de stock.
-        raise AlreadyReversedError(details={"movement_id": str(origin.id)})
-
-    reversal = repository.add(
-        InventoryMovement(
-            company_id=ctx.company_id,
-            product_id=origin.product_id,
-            # Le type de l'inverse reste sémantique (§ 4.8) : `customer_return_in`
-            # pour une sortie de vente annulée, `adjustment` pour toute correction
-            # d'inventaire — ce qui garde les rapports de mouvements lisibles.
-            type="customer_return_in" if origin.type == "sale_out" else "adjustment",
-            qty_delta=-origin.qty_delta,
-            # Écrasés par `t10_inv_check_reversal`, qui reprend ceux de l'origine.
-            unit_cost=origin.unit_cost,
-            reversal_of_movement_id=origin.id,
-            note=f"Annulation du mouvement {origin.id}",
-            created_by=ctx.user_id,
-        )
-    )
-    _flush(session, reversal, details={"movement_id": str(origin.id), "ref_type": origin.ref_type})
+    reversal = _write_reversal(session, ctx, origin)
 
     audit_critical(
         session,
@@ -386,8 +367,93 @@ def reverse_movement(
         after=_audited(reversal),
         ip_address=ip_address,
     )
-    _emit_stock_updated(session, ctx, reversal)
     return reversal
+
+
+def record_sale_out(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    product_id: UUID,
+    qty: Decimal,
+    sale_item_id: UUID,
+) -> InventoryMovement:
+    """Sortie de stock d'une ligne de vente confirmée (§ 5.1 étape 4).
+
+    `qty` est la quantité **vendue**, positive : c'est Inventory qui en fait un
+    `qty_delta` négatif, pour que Sales n'ait jamais à connaître la convention de
+    signe du journal.
+
+    Le `unit_cost` part à zéro et revient estampillé au CMP par `t20_inv_apply` —
+    c'est lui que Sales recopiera dans `sale_items.unit_cost`, le COGS historique
+    de la ligne. Le couple `('sale_item', sale_item_id)` rend l'opération
+    idempotente en base : `inv_ref_idempotence` refuse une seconde sortie pour la
+    même ligne (T17).
+
+    La date reste le `DEFAULT now()` de PostgreSQL : la marchandise part au moment
+    de la confirmation, pas à la date de la vente, qu'un brouillon peut porter
+    depuis plusieurs jours — et que la fenêtre d'antidatage refuserait (ADR 0015).
+    """
+    if not products_service.is_stock_tracked(session, ctx, product_id):
+        # Le trigger `CG021` reste l'autorité ; ce contrôle rend la main plus tôt.
+        raise ProductNotStockTrackedError(details={"product_id": str(product_id)})
+
+    stock_repository = ProductStockRepository(session, ctx)
+    current = stock_repository.get(product_id)
+    # Capturé avant le `flush` risqué : après un rejet, la transaction est morte
+    # et relire un attribut expiré échouerait à son tour (ADR 0010).
+    available = Decimal("0") if current is None else current.qty_on_hand
+
+    movement = InventoryMovementRepository(session, ctx).add(
+        InventoryMovement(
+            company_id=ctx.company_id,
+            product_id=product_id,
+            type="sale_out",
+            qty_delta=-qty,
+            unit_cost=Decimal("0"),
+            ref_type=SALE_ITEM_REF,
+            ref_id=sale_item_id,
+            created_by=ctx.user_id,
+        )
+    )
+    _flush(
+        session,
+        movement,
+        details={
+            "product_id": str(product_id),
+            "ref_type": SALE_ITEM_REF,
+            "requested": str(qty),
+            "available": str(available),
+        },
+    )
+    # Pas d'audit critique : une sortie de vente n'est pas une écriture de stock
+    # isolée, c'est une conséquence. La confirmation, elle, est auditée par Sales.
+    _emit_stock_updated(session, ctx, movement)
+    return movement
+
+
+def sale_out_movements(
+    session: Session, ctx: TenantContext, sale_item_ids: Sequence[UUID]
+) -> list[InventoryMovement]:
+    """Sorties de stock d'une vente, dans l'ordre où elles ont été écrites.
+
+    Façade de lecture pour l'annulation : Sales connaît ses lignes, pas le journal.
+    """
+    repository = InventoryMovementRepository(session, ctx)
+    return list(repository.for_references(SALE_ITEM_REF, sale_item_ids))
+
+
+def reverse_sale_out(
+    session: Session, ctx: TenantContext, movement: InventoryMovement
+) -> InventoryMovement:
+    """Rend au stock la marchandise d'une sortie de vente annulée (§ 5.2 étape 2).
+
+    Le mouvement d'origine n'est ni modifié ni supprimé : l'inverse le désigne par
+    `reversal_of_movement_id`, et `inv_reversal_uq` garantit qu'il n'y en aura
+    qu'un (T15). Aucun audit ici non plus : c'est l'annulation de la vente qui est
+    l'opération auditée, et elle porte le motif.
+    """
+    return _write_reversal(session, ctx, movement)
 
 
 def rebuild_stock(session: Session, ctx: TenantContext) -> list[StockRebuildLine]:
@@ -441,6 +507,41 @@ def _flush(session: Session, movement: InventoryMovement, *, details: dict[str, 
             raise
         raise business_error from exc
     session.refresh(movement)
+
+
+def _write_reversal(
+    session: Session, ctx: TenantContext, origin: InventoryMovement
+) -> InventoryMovement:
+    """Écrit l'inverse exact d'un mouvement, après avoir vérifié qu'il est annulable."""
+    repository = InventoryMovementRepository(session, ctx)
+
+    if origin.reversal_of_movement_id is not None:
+        raise NotReversibleError(details={"movement_id": str(origin.id)})
+    if repository.reversal_of(origin.id) is not None:
+        # Contrôle applicatif indispensable, pas seulement confortable : les
+        # triggers `BEFORE INSERT` s'exécutent **avant** la vérification d'unicité,
+        # et une seconde annulation serait annoncée comme un manque de stock.
+        raise AlreadyReversedError(details={"movement_id": str(origin.id)})
+
+    reversal = repository.add(
+        InventoryMovement(
+            company_id=ctx.company_id,
+            product_id=origin.product_id,
+            # Le type de l'inverse reste sémantique (§ 4.8) : `customer_return_in`
+            # pour une sortie de vente annulée, `adjustment` pour toute correction
+            # d'inventaire — ce qui garde les rapports de mouvements lisibles.
+            type="customer_return_in" if origin.type == "sale_out" else "adjustment",
+            qty_delta=-origin.qty_delta,
+            # Écrasés par `t10_inv_check_reversal`, qui reprend ceux de l'origine.
+            unit_cost=origin.unit_cost,
+            reversal_of_movement_id=origin.id,
+            note=f"Annulation du mouvement {origin.id}",
+            created_by=ctx.user_id,
+        )
+    )
+    _flush(session, reversal, details={"movement_id": str(origin.id), "ref_type": origin.ref_type})
+    _emit_stock_updated(session, ctx, reversal)
+    return reversal
 
 
 def _audited(movement: InventoryMovement) -> dict[str, Any]:

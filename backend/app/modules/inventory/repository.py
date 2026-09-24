@@ -112,6 +112,27 @@ class InventoryMovementRepository(TenantRepository[InventoryMovement]):
         stmt = self._select().where(InventoryMovement.reversal_of_movement_id == movement_id)
         return self.session.execute(stmt).scalar_one_or_none()
 
+    def for_references(self, ref_type: str, ref_ids: Sequence[UUID]) -> Sequence[InventoryMovement]:
+        """Mouvements **directs** rattachés à ces objets métier, les plus anciens d'abord.
+
+        Les inverses sont écartés : `t10_inv_check_reversal` leur recopie le
+        `ref_type` et le `ref_id` de leur origine, si bien qu'une sortie de vente et
+        son annulation portent la même référence. Sans ce filtre, annuler une vente
+        déjà annulée chercherait à inverser l'inverse. Sert l'index `inv_ref_lookup`.
+        """
+        if not ref_ids:
+            return []
+        stmt = (
+            self._select()
+            .where(
+                InventoryMovement.ref_type == ref_type,
+                InventoryMovement.ref_id.in_(ref_ids),
+                InventoryMovement.reversal_of_movement_id.is_(None),
+            )
+            .order_by(InventoryMovement.occurred_at.asc(), InventoryMovement.id.asc())
+        )
+        return self.session.execute(stmt).scalars().all()
+
 
 class ProductStockRepository:
     """Projection de stock. `TenantRepository` ne convient pas : la clé est le produit.

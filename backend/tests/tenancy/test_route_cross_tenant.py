@@ -64,6 +64,18 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
     "/api/v1/inventory/movements/{movement_id}/reverse": CrossTenantCase(
         parameters={"movement_id": "movement"}
     ),
+    "/api/v1/sales/{sale_id}": CrossTenantCase(parameters={"sale_id": "sale"}),
+    "/api/v1/sales/{sale_id}/receipt": CrossTenantCase(parameters={"sale_id": "sale"}),
+    "/api/v1/sales/{sale_id}/items": CrossTenantCase(
+        parameters={"sale_id": "sale"}, body={"product_id": "product", "qty": "1"}
+    ),
+    "/api/v1/sales/{sale_id}/items/{item_id}": CrossTenantCase(
+        parameters={"sale_id": "sale", "item_id": "sale_item"}
+    ),
+    "/api/v1/sales/{sale_id}/confirm": CrossTenantCase(parameters={"sale_id": "sale"}),
+    "/api/v1/sales/{sale_id}/cancel": CrossTenantCase(
+        parameters={"sale_id": "sale"}, body={"reason": "Test de fuite inter-tenant"}
+    ),
 }
 
 
@@ -99,6 +111,27 @@ def _beta_owned(client: TestClient, beta_token: str, resource: str, payload: dic
     return str(response.json()["id"])
 
 
+def _beta_sale(client: TestClient, beta_token: str, product_id: str) -> tuple[str, str]:
+    """Un brouillon de vente **chez Beta**, garni d'une ligne. Reste en brouillon.
+
+    Alpha doit se heurter à un 404 sur toutes les routes, y compris celles qui ne
+    répondraient qu'à une vente modifiable : une vente déjà confirmée renverrait
+    409 sur `confirm`, et le test ne prouverait plus rien sur l'isolation.
+    """
+    headers = auth_headers(beta_token)
+    sale = client.post("/api/v1/sales", headers=headers, json={})
+    assert sale.status_code == 201, sale.text
+    sale_id = str(sale.json()["id"])
+
+    item = client.post(
+        f"/api/v1/sales/{sale_id}/items",
+        headers=headers,
+        json={"product_id": product_id, "qty": "1"},
+    )
+    assert item.status_code == 201, item.text
+    return sale_id, str(item.json()["id"])
+
+
 def _beta_sources(client: TestClient, beta_token: str) -> dict[str, str]:
     """Une ressource de Beta par type d'identifiant manipulé par les routes."""
     marker = uuid4().hex[:8]
@@ -108,7 +141,10 @@ def _beta_sources(client: TestClient, beta_token: str) -> dict[str, str]:
         "products",
         {"sku": f"SKU-{marker}", "name": f"Produit {marker}", "unit_price": "1500.00"},
     )
+    sale_id, sale_item_id = _beta_sale(client, beta_token, product_id)
     return {
+        "sale": sale_id,
+        "sale_item": sale_item_id,
         "category": _beta_owned(client, beta_token, "categories", {"name": f"Cat-{marker}"}),
         "product": product_id,
         "customer": _beta_owned(client, beta_token, "customers", {"name": f"Client {marker}"}),
@@ -147,9 +183,12 @@ def test_cross_tenant_access_is_not_found(
     for parameter, source in case.parameters.items():
         concrete_path = concrete_path.replace(f"{{{parameter}}}", sources[source])
 
-    body = dict(case.body) if case.body else None
-    if body and body.get("role_id") == "role":
-        body["role_id"] = sources["role"]
+    # Toute valeur de corps qui nomme une source est remplacée par l'identifiant
+    # correspondant chez Beta ; les autres (un montant, un mot de passe) passent
+    # telles quelles.
+    body = (
+        {key: sources.get(value, value) for key, value in case.body.items()} if case.body else None
+    )
 
     methods = sorted(method.upper() for method in app.openapi()["paths"][path])
     assert methods, f"aucune méthode déclarée pour {path}"

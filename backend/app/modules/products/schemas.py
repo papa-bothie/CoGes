@@ -110,6 +110,9 @@ class ProductSummary(BaseModel):
     category_id: UUID | None
     unit: ProductUnit
     is_stock_tracked: bool
+    #: Taux **par défaut**, valeur de saisie. Sales le fige sur sa ligne à la
+    #: confirmation et ne le relit jamais ensuite (§ 4.5).
+    default_tax_rate: TaxRate
     reorder_point: ReorderPoint | None
 
 
@@ -200,6 +203,10 @@ class CurrentPrice(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    #: Identifiant de l'intervalle de `product_prices`. C'est lui que la ligne de
+    #: vente conserve : une vente reste rattachable au tarif qui s'appliquait,
+    #: même après plusieurs changements de prix (§ 5.1 étape 3).
+    price_id: UUID
     product_id: UUID
     unit_price: SellingPrice
     cost_price: CostPrice | None
