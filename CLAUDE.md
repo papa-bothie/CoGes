@@ -179,7 +179,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 03 Référentiels et prix | `03-referentiels.md` | 02 | fuite, FK croisées (T5) | ✅ |
 | 04 Stock et CMP | `04-stock-cmp.md` | 03 | T6–T13, T38 | ✅ |
 | 05 Ventes (draft → confirm → cancel, reçu) | `05-ventes.md` | 04 | T14–T17, T23–T24, T39 | ✅ |
-| 06 Retours et remboursements | `06-retours.md` | 05 | T18–T22 | ⬜ |
+| 06 Retours et remboursements | `06-retours.md` | 05 | T18–T22 | ✅ |
 | 07 Finance de gestion | `07-finance.md` | 06 | T25–T28 | ⬜ |
 | 08 Async, analytics, dashboard, notifications | `08-async-analytics.md` | 07 | T29–T32, T40 | ⬜ |
 | 09 CoGes Intelligence | `09-intelligence.md` | 08 | T33–T35 | ⬜ |
@@ -216,6 +216,9 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0021 | 2026-09-24 | `document_counters` : suite sans trou par entreprise (`V-000123`), numéro attribué dès le brouillon, générique pour les retours et les dépenses | `docs/decisions/0021-numerotation-des-documents.md` |
 | 0022 | 2026-09-24 | `tax_enabled` absent ⇒ taxes actives ; reçu en JSON refusé sur brouillon ; second `confirm` ⇒ 409 `sale_not_draft` | `docs/decisions/0022-ce-que-la-vente-promet-au-client.md` |
 | 0023 | 2026-09-24 | Écarts assumés au § 8.7 : `sale_items_frozen` étendu à l'INSERT, SQLSTATE `CG030` ; annulation du § 5.2 appliquée telle quelle. **Corrigé par la révision 0007** : le plafond de crédit se lit `FOR UPDATE`, sans quoi il ne tient pas sous concurrence | `docs/decisions/0023-ecarts-assumes-au-paragraphe-8-7.md` |
+| 0024 | 2026-09-24 | Compensation d'une dette par un retour : `offset` entre dans `pay_method`, deux paiements sans flux de caisse (un `outflow` lettré au retour, un `inflow` alloué à la dette) ; **la trésorerie exclut `method = 'offset'`** | `docs/decisions/0024-compensation-d-une-dette-par-un-retour.md` |
+| 0025 | 2026-09-24 | Retours : numéro `R-000123` par `document_counters`, règlement en une ou plusieurs fois après coup, `sale_returns:confirm` (gérant) garde l'argent, aucun délai maximal, aucun renoncement (`none_due` reste dérivé du montant nul) | `docs/decisions/0025-ce-que-le-retour-promet-et-ce-qu-il-ne-promet-pas.md` |
+| 0026 | 2026-09-24 | Écarts assumés au § 8.7 (suite) : SQLSTATE `CG040`–`CG045`, remboursable arrondi net et taxe séparément (retour total = `line_total`), aucun événement pour le paiement d'un remboursement | `docs/decisions/0026-ecarts-assumes-au-paragraphe-8-7-suite.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 

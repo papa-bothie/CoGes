@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Computed, DateTime, Numeric, Text
+from sqlalchemy import Computed, DateTime, Numeric, Text, text
 from sqlalchemy.dialects.postgresql import ENUM as PG_ENUM
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -80,4 +80,58 @@ class SaleItem(IdentifiedTenantBase):
             persisted=True,
         ),
     )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+# Type créé par la révision 0001 : dérivé par `return_refund_status_set`, jamais écrit.
+RETURN_REFUND_STATUS = PG_ENUM(
+    "none_due", "pending", "partial", "settled", name="return_refund_status", create_type=False
+)
+
+
+class SaleReturn(IdentifiedTenantBase):
+    """En-tête d'un retour client — un fait métier autonome, pas une annulation (§ 4.6).
+
+    Aucune colonne de statut de retour : un retour existe ou n'existe pas. Le seul
+    statut est celui de son **règlement**, et il est dérivé par trigger du couple
+    (`total_refund`, `refunded_total`). Le code ne l'écrit jamais.
+    """
+
+    __tablename__ = "sale_returns"
+
+    sale_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    return_no: Mapped[str] = mapped_column(Text)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    returned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    # Ces trois colonnes portent leur défaut serveur pour que l'ORM les **omette**
+    # de l'INSERT : sans cela, il y enverrait NULL. Le code ne les écrit jamais, et
+    # c'est le seul moyen de le rendre vrai plutôt que de le promettre en commentaire.
+    #: Maintenu par `return_recompute` depuis `sale_return_items`.
+    total_refund: Mapped[Decimal] = mapped_column(Numeric(14, 2), server_default=text("0"))
+    #: Maintenu par `refund_rollup` depuis `sale_return_refunds`.
+    refunded_total: Mapped[Decimal] = mapped_column(Numeric(14, 2), server_default=text("0"))
+    #: Dérivé par `return_refund_status_set`.
+    refund_status: Mapped[str] = mapped_column(
+        RETURN_REFUND_STATUS, server_default=text("'pending'")
+    )
+    created_by: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class SaleReturnItem(IdentifiedTenantBase):
+    """Ligne de retour, calculée sur les snapshots de la ligne de vente (§ 4.7).
+
+    `unit_cost` est recopié de `sale_items.unit_cost` : la marchandise revient au coût
+    auquel elle est sortie, pas au CMP du jour (§ 5.3). `refund_amount` est TTC.
+    """
+
+    __tablename__ = "sale_return_items"
+
+    return_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    sale_item_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    qty: Mapped[Decimal] = mapped_column(Numeric(14, 3))
+    refund_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    tax_refund: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    unit_cost: Mapped[Decimal] = mapped_column(Numeric(14, 4))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)

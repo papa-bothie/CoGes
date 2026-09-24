@@ -10,9 +10,8 @@ Ce que ce module n'écrit **jamais** en Python :
 * `debts.amount_paid`, `balance` et `status` — maintenus par `pa_rollup` depuis
   `payment_allocations`, et `balance` est une colonne générée.
 
-Les allocations, les dépenses et les remboursements arrivent en phases 06 et 07.
-Leurs tables et leurs triggers existent déjà : il n'y aura pas de migration
-structurante à écrire pour eux (ADR 0019).
+La phase 06 lui ajoute le remboursement d'un retour, et la compensation d'une dette
+par ce remboursement. Les dépenses arrivent en phase 07.
 """
 
 from __future__ import annotations
@@ -26,7 +25,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, audit_critical
-from app.core.errors import BusinessRuleError, sqlstate
+from app.core.errors import BusinessRuleError, NotFoundError, sqlstate
 from app.core.events.outbox import emit
 from app.core.events.types import EventType
 from app.core.tenancy import TenantContext
@@ -37,9 +36,14 @@ from app.modules.finance.events import (
     debt_created_payload,
     payment_received_payload,
 )
-from app.modules.finance.models import Debt, Payment
-from app.modules.finance.repository import DebtRepository, PaymentRepository
-from app.modules.finance.schemas import PaymentMethod
+from app.modules.finance.models import Debt, Payment, PaymentAllocation, SaleReturnRefund
+from app.modules.finance.repository import (
+    DebtRepository,
+    PaymentAllocationRepository,
+    PaymentRepository,
+    SaleReturnRefundRepository,
+)
+from app.modules.finance.schemas import OFFSET_METHOD, PaymentMethod, RefundMethod
 
 # --------------------------------------------------------------- erreurs métier
 
@@ -54,6 +58,30 @@ class CustomerRequiredForCreditError(BusinessRuleError):
     default_message = "Vente à crédit : un client identifié est obligatoire."
 
 
+class RefundExceedsDueError(BusinessRuleError):
+    code = "refund_exceeds_due"
+    default_message = "Remboursement supérieur au reste dû de ce retour."
+
+
+class RefundRequiresOutflowError(BusinessRuleError):
+    code = "refund_requires_outflow"
+    default_message = (
+        "Un remboursement de retour est une sortie : il ne peut pas être un encaissement."
+    )
+
+
+class PaymentOverAllocatedError(BusinessRuleError):
+    code = "payment_over_allocated"
+    default_message = (
+        "Paiement sur-affecté : le montant disponible ne couvre pas cette affectation."
+    )
+
+
+class AllocationExceedsBalanceError(BusinessRuleError):
+    code = "allocation_exceeds_balance"
+    default_message = "Affectation supérieure au solde restant de la dette."
+
+
 class DebtPartiallyPaidError(BusinessRuleError):
     code = "debt_partially_paid"
     default_message = (
@@ -62,18 +90,32 @@ class DebtPartiallyPaidError(BusinessRuleError):
     )
 
 
-#: SQLSTATE applicatif levé par `debt_credit_limit()` (migration 0006, ADR 0023).
-_CREDIT_LIMIT = "CG030"
+#: SQLSTATE applicatifs levés par les triggers financiers (ADR 0023 et 0026).
+#: Sans eux, ces refus arriveraient tous en `check_violation`, indistinguables.
+_TRIGGER_ERRORS: dict[str, type[BusinessRuleError]] = {
+    "CG030": CreditLimitExceededError,
+    "CG041": RefundExceedsDueError,
+    "CG042": RefundRequiresOutflowError,
+    "CG043": PaymentOverAllocatedError,
+    "CG044": AllocationExceedsBalanceError,
+    "CG045": PaymentOverAllocatedError,
+}
 
 
 def _translate(exc: DBAPIError, *, details: dict[str, Any]) -> BusinessRuleError | None:
     """Traduit un refus de PostgreSQL en erreur métier, ou rend None."""
-    if sqlstate(exc) == _CREDIT_LIMIT:
-        return CreditLimitExceededError(details=details)
+    trigger_error = _TRIGGER_ERRORS.get(sqlstate(exc) or "")
+    if trigger_error is not None:
+        return trigger_error(details=details)
     return None
 
 
-def _flush(session: Session, entity: Payment | Debt, *, details: dict[str, Any]) -> None:
+def _flush(
+    session: Session,
+    entity: Payment | Debt | PaymentAllocation | SaleReturnRefund,
+    *,
+    details: dict[str, Any],
+) -> None:
     """Pousse l'écriture, traduit le refus éventuel, puis relit la ligne.
 
     La relecture n'est pas une précaution : `debts.balance` est une colonne
@@ -112,6 +154,47 @@ def has_settled_payment(session: Session, ctx: TenantContext, sale_id: UUID) -> 
     n'existent pas, tout encaissement compte.
     """
     return PaymentRepository(session, ctx).inflow_count_for_sale(sale_id) > 0
+
+
+def payments_for_return(
+    session: Session, ctx: TenantContext, sale_return_id: UUID
+) -> list[Payment]:
+    """Décaissements rattachés à un retour, pour son détail."""
+    return list(PaymentRepository(session, ctx).for_return(sale_return_id))
+
+
+def refunds_for_return(
+    session: Session, ctx: TenantContext, sale_return_id: UUID
+) -> list[SaleReturnRefund]:
+    """Lettrages d'un retour : « quels remboursements pour ce retour » (§ 5.4)."""
+    return list(SaleReturnRefundRepository(session, ctx).for_return(sale_return_id))
+
+
+def refunds_for_payment(
+    session: Session, ctx: TenantContext, payment_id: UUID
+) -> list[SaleReturnRefund]:
+    """Lettrages d'un paiement : « quel retour a provoqué cette sortie » (§ 5.4)."""
+    return list(SaleReturnRefundRepository(session, ctx).for_payment(payment_id))
+
+
+def get_payment(session: Session, ctx: TenantContext, payment_id: UUID) -> Payment:
+    """Paiement du tenant courant. Celui d'une autre entreprise donne 404."""
+    payment = PaymentRepository(session, ctx).get(payment_id)
+    if payment is None:
+        raise NotFoundError("Paiement introuvable.")
+    return payment
+
+
+def open_debt_for_sale(session: Session, ctx: TenantContext, sale_id: UUID) -> Debt | None:
+    """La dette encore vivante née de cette vente, verrouillée.
+
+    Verrouillée parce que la compensation qui suit va la réduire : sans ce verrou,
+    deux retours concurrents liraient le même solde et l'épuiseraient deux fois. Le
+    trigger `allocation_check` prend le même verrou — celui-ci ne fait que l'avancer
+    pour que le refus applicatif parle du bon chiffre.
+    """
+    debt = DebtRepository(session, ctx).get_open_for_sale_for_update(sale_id)
+    return debt
 
 
 # ------------------------------------------------------------------- écritures
@@ -314,3 +397,153 @@ def _audited_debt(debt: Debt) -> dict[str, Any]:
         "status": debt.status,
         "sale_id": None if debt.sale_id is None else str(debt.sale_id),
     }
+
+
+def record_return_refund(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    sale_return_id: UUID,
+    amount: Decimal,
+    method: RefundMethod,
+    reference: str | None = None,
+    note: str | None = None,
+    ip_address: str | None = None,
+) -> tuple[Payment, SaleReturnRefund]:
+    """Rembourse un retour en trésorerie (§ 5.4 étapes 2-3).
+
+    Le paiement porte `direction = 'outflow'` et `sale_return_id` : le CHECK
+    `payments_return_outflow` rejette tout encaissement rattaché à un retour (T21),
+    et `payments_context_one` interdit qu'il pointe aussi la vente. Le rattachement
+    fin passe par le lettrage, qui autorise l'échelonnement et le versement couvrant
+    deux retours.
+
+    Aucun événement n'est émis ici. La liste des neuf types de la V1 est fermée et
+    n'a pas de `payment.sent` ; `payment.received` dirait le contraire de ce qui se
+    passe. C'est `sale_return.refunded`, émis par Sales, qui porte le fait.
+    """
+    payment = PaymentRepository(session, ctx).add(
+        Payment(
+            company_id=ctx.company_id,
+            direction="outflow",
+            method=method,
+            amount=amount,
+            sale_return_id=sale_return_id,
+            reference=reference,
+            note=note,
+            created_by=ctx.user_id,
+        )
+    )
+    details: dict[str, Any] = {"sale_return_id": str(sale_return_id), "amount": str(amount)}
+    _flush(session, payment, details=details)
+
+    refund = SaleReturnRefundRepository(session, ctx).add(
+        SaleReturnRefund(
+            company_id=ctx.company_id,
+            sale_return_id=sale_return_id,
+            payment_id=payment.id,
+            amount=amount,
+        )
+    )
+    # C'est ce flush-ci que `refund_check` arbitre : reste dû du retour, sens du
+    # paiement, et part encore libre du versement. Les trois sous verrou.
+    _flush(session, refund, details=details)
+
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.INSERT,
+        entity_table="payments",
+        entity_id=payment.id,
+        after=_audited_payment(payment),
+        ip_address=ip_address,
+    )
+    return payment, refund
+
+
+def record_return_offset(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    sale_return_id: UUID,
+    debt_id: UUID,
+    amount: Decimal,
+    ip_address: str | None = None,
+) -> tuple[Payment, Payment]:
+    """Éteint une dette du client par le remboursement qui lui est dû (ADR 0024).
+
+    Le § 4.6 prévoit cette extinction « via `payment_allocations` », sans dire comment
+    l'écrire : une allocation exige un paiement, et un paiement lié à un retour doit
+    être un `outflow`. Avec les cinq moyens de paiement existants, la compensation
+    s'écrirait comme une sortie de caisse qui n'a pas eu lieu, puis une entrée qui n'a
+    pas eu lieu non plus.
+
+    D'où **deux** paiements en `offset`, dans la même transaction :
+
+    1. un `outflow` rattaché au retour et lettré dans `sale_return_refunds` — le
+       retour est remboursé, `refunded_total` monte, `refund_status` suit ;
+    2. un `inflow` **sans contexte**, alloué à la dette — `pa_rollup` recalcule
+       `amount_paid`, `status` et `closed_at`.
+
+    L'`inflow` ne porte pas `sale_id`, et ce n'est pas un oubli : `sale_paid_rollup`
+    somme les encaissements d'une vente pour en faire `paid_total`, qui doit rester ce
+    qui est **encaissé**. Une compensation n'encaisse rien. Le chaînage reste lisible
+    par la dette, qui porte déjà `sale_id`.
+
+    Les deux écritures sont marquées `offset` : la trésorerie les exclut, les lettrages
+    les gardent.
+    """
+    details: dict[str, Any] = {
+        "sale_return_id": str(sale_return_id),
+        "debt_id": str(debt_id),
+        "amount": str(amount),
+    }
+
+    outflow, _refund = record_return_refund(
+        session,
+        ctx,
+        sale_return_id=sale_return_id,
+        amount=amount,
+        method=OFFSET_METHOD,
+        note="Compensation d'une dette du client",
+        ip_address=ip_address,
+    )
+
+    inflow = PaymentRepository(session, ctx).add(
+        Payment(
+            company_id=ctx.company_id,
+            direction="inflow",
+            method=OFFSET_METHOD,
+            amount=amount,
+            note="Compensation par un retour",
+            created_by=ctx.user_id,
+        )
+    )
+    _flush(session, inflow, details=details)
+
+    allocation = PaymentAllocationRepository(session, ctx).add(
+        PaymentAllocation(
+            company_id=ctx.company_id,
+            payment_id=inflow.id,
+            debt_id=debt_id,
+            amount=amount,
+        )
+    )
+    _flush(session, allocation, details=details)
+
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.INSERT,
+        entity_table="payment_allocations",
+        entity_id=allocation.id,
+        after={
+            "id": str(allocation.id),
+            "debt_id": str(debt_id),
+            "payment_id": str(inflow.id),
+            "amount": str(amount),
+            "sale_return_id": str(sale_return_id),
+        },
+        ip_address=ip_address,
+    )
+    return outflow, inflow

@@ -29,6 +29,7 @@ from uuid import UUID
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import money
 from app.core.audit import AuditAction, audit_critical
 from app.core.codes import next_document_number
 from app.core.errors import BusinessRuleError, NotFoundError, constraint_name, sqlstate
@@ -38,23 +39,38 @@ from app.core.tenancy import TenantContext
 from app.modules.companies import service as companies_service
 from app.modules.customers import service as customers_service
 from app.modules.finance import service as finance_service
-from app.modules.finance.schemas import DebtRead, PaymentRead
+from app.modules.finance.schemas import (
+    OFFSET_METHOD,
+    DebtRead,
+    PaymentRead,
+    RefundLinkRead,
+)
 from app.modules.inventory import service as inventory_service
 from app.modules.products import service as products_service
 from app.modules.products.schemas import ProductSummary
 from app.modules.sales.events import (
     AGGREGATE_TYPE,
+    RETURN_AGGREGATE_TYPE,
     confirmed_line_payload,
+    returned_line_payload,
     sale_cancelled_payload,
     sale_confirmed_payload,
+    sale_return_refunded_payload,
+    sale_returned_payload,
 )
-from app.modules.sales.models import Sale, SaleItem
-from app.modules.sales.repository import SaleItemRepository, SaleRepository
+from app.modules.sales.models import Sale, SaleItem, SaleReturn, SaleReturnItem
+from app.modules.sales.repository import (
+    SaleItemRepository,
+    SaleRepository,
+    SaleReturnItemRepository,
+    SaleReturnRepository,
+)
 from app.modules.sales.schemas import (
     ReceiptCompany,
     ReceiptCustomer,
     ReceiptLine,
     ReceiptRead,
+    RefundCreate,
     SaleCancel,
     SaleConfirm,
     SaleCreate,
@@ -63,11 +79,17 @@ from app.modules.sales.schemas import (
     SaleItemRead,
     SaleItemUpdate,
     SaleRead,
+    SaleReturnCreate,
+    SaleReturnDetail,
+    SaleReturnItemRead,
+    SaleReturnList,
+    SaleReturnRead,
     SaleUpdate,
 )
 
-#: Type de document numéroté par `document_counters` (ADR 0021).
+#: Types de documents numérotés par `document_counters` (ADR 0021).
 DOCUMENT_TYPE = "sale"
+RETURN_DOCUMENT_TYPE = "sale_return"
 
 # --------------------------------------------------------------- erreurs métier
 # Une classe par règle, avec son code stable en anglais et son message en français.
@@ -115,9 +137,42 @@ class DiscountExceedsLineError(BusinessRuleError):
     default_message = "La remise dépasse le montant de la ligne."
 
 
+class ReturnBeforeSaleError(BusinessRuleError):
+    code = "return_before_sale"
+    default_message = "Date invalide : un retour ne peut pas précéder la vente."
+
+
+class ReturnInFutureError(BusinessRuleError):
+    code = "return_in_future"
+    default_message = "Date invalide : un retour ne peut pas être daté dans le futur."
+
+
+class ReturnLineNotInSaleError(BusinessRuleError):
+    code = "return_line_not_in_sale"
+    default_message = "Ligne rendue inconnue : elle n'appartient pas à cette vente."
+
+
+class ReturnQtyExceedsSoldError(BusinessRuleError):
+    code = "return_qty_exceeds_sold"
+    default_message = "Quantité rendue supérieure à ce qui reste retournable sur cette ligne."
+
+
+class NoDebtToOffsetError(BusinessRuleError):
+    code = "no_debt_to_offset"
+    default_message = "Aucune dette ouverte sur cette vente : ce retour ne peut rien compenser."
+
+
+class OffsetExceedsDebtError(BusinessRuleError):
+    code = "offset_exceeds_debt"
+    default_message = "Compensation supérieure au solde de la dette."
+
+
 #: `restrict_violation` : `sale_items_frozen` refuse d'écrire sur une vente confirmée.
 _RESTRICT_VIOLATION = "23001"
 _CHECK_VIOLATION = "23514"
+
+#: SQLSTATE applicatif levé par `return_item_check()` (migration 0008, ADR 0026).
+_RETURN_QTY_CAP = "CG040"
 
 
 def _translate(exc: DBAPIError, *, details: dict[str, Any]) -> BusinessRuleError | None:
@@ -127,6 +182,8 @@ def _translate(exc: DBAPIError, *, details: dict[str, Any]) -> BusinessRuleError
     pas (ADR 0014). Rien d'autre n'est inspecté.
     """
     state = sqlstate(exc)
+    if state == _RETURN_QTY_CAP:
+        return ReturnQtyExceedsSoldError(details=details)
     if state == _RESTRICT_VIOLATION:
         return SaleNotDraftError(details=details)
     if state == _CHECK_VIOLATION and constraint_name(exc) == "sale_items_discount_bounds":
@@ -134,7 +191,12 @@ def _translate(exc: DBAPIError, *, details: dict[str, Any]) -> BusinessRuleError
     return None
 
 
-def _flush(session: Session, entity: Sale | SaleItem, *, details: dict[str, Any]) -> None:
+def _flush(
+    session: Session,
+    entity: Sale | SaleItem | SaleReturn | SaleReturnItem,
+    *,
+    details: dict[str, Any],
+) -> None:
     """Pousse l'écriture, traduit le refus éventuel, puis relit la ligne.
 
     La relecture n'est pas une précaution : `sale_recompute_totals` réécrit l'en-tête
@@ -174,10 +236,12 @@ def list_sales(
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     sale_no: str | None = None,
-) -> tuple[Sequence[Sale], int, set[UUID]]:
-    """Page de ventes, avec l'ensemble de celles qui portent un retour.
+) -> tuple[Sequence[Sale], int, dict[UUID, Decimal]]:
+    """Page de ventes, avec le total retourné de celles qui portent un retour.
 
-    Le troisième élément évite une requête par ligne pour un drapeau d'affichage.
+    Le troisième élément évite une requête par ligne : une vente absente de ce
+    dictionnaire n'a aucun retour, une vente présente en a au moins un — fût-il
+    intégralement remisé, donc d'un remboursable nul.
     """
     repository = SaleRepository(session, ctx)
     filters: dict[str, Any] = {
@@ -189,7 +253,7 @@ def list_sales(
     }
     sales = repository.page_filtered(page=page, page_size=page_size, **filters)
     total = repository.count_filtered(**filters)
-    return sales, total, repository.with_returns([sale.id for sale in sales])
+    return sales, total, repository.returned_totals([sale.id for sale in sales])
 
 
 def get_items(session: Session, ctx: TenantContext, sale_id: UUID) -> Sequence[SaleItem]:
@@ -630,11 +694,13 @@ def _audited(sale: Sale) -> dict[str, Any]:
 # façades. Le router, lui, ne fait que les appeler (ADR 0010).
 
 
-def build_read(sale: Sale, *, has_returns: bool) -> SaleRead:
+def build_read(sale: Sale, *, returned_total: Decimal | None) -> SaleRead:
     """En-tête d'une vente, tel que la liste l'affiche.
 
-    `balance` et `has_returns` sont dérivés, jamais stockés : le solde est une
-    soustraction, et « retournée » n'est pas un statut de `sale_status`.
+    Tout ce qui touche aux retours est dérivé, jamais stocké : le solde est une
+    soustraction, et « retournée » n'est pas un statut de `sale_status`. `None`
+    signifie « aucun retour » — et se distingue d'un retour intégralement remisé,
+    dont le remboursable est nul mais qui a bien eu lieu.
     """
     return SaleRead(
         id=sale.id,
@@ -648,7 +714,8 @@ def build_read(sale: Sale, *, has_returns: bool) -> SaleRead:
         total=sale.total,
         paid_total=sale.paid_total,
         balance=sale.total - sale.paid_total,
-        has_returns=has_returns,
+        has_returns=returned_total is not None,
+        returned_total=Decimal("0") if returned_total is None else returned_total,
         cancel_reason=sale.cancel_reason,
         confirmed_at=sale.confirmed_at,
         cancelled_at=sale.cancelled_at,
@@ -657,7 +724,9 @@ def build_read(sale: Sale, *, has_returns: bool) -> SaleRead:
 
 def build_detail(session: Session, ctx: TenantContext, sale: Sale) -> SaleDetail:
     """Vente complète : en-tête, lignes, règlements et dette éventuelle."""
-    header = build_read(sale, has_returns=has_returns(session, ctx, sale.id))
+    header = build_read(
+        sale, returned_total=SaleRepository(session, ctx).returned_totals([sale.id]).get(sale.id)
+    )
     debt = finance_service.debt_for_sale(session, ctx, sale.id)
     return SaleDetail(
         **header.model_dump(),
@@ -731,4 +800,365 @@ def build_receipt(session: Session, ctx: TenantContext, sale_id: UUID) -> Receip
             PaymentRead.model_validate(payment)
             for payment in finance_service.payments_for_sale(session, ctx, sale.id)
         ],
+    )
+
+
+# ------------------------------------------------------------------- retours
+# Un retour n'annule pas une vente : il enregistre que de la marchandise est
+# revenue. La vente reste vraie, ses totaux ne bougent pas, et son statut ne
+# change pas — « retournée » est une information dérivée (§ 4.6).
+
+
+def get_return(session: Session, ctx: TenantContext, return_id: UUID) -> SaleReturn:
+    """Retour du tenant courant. Celui d'une autre entreprise donne 404."""
+    sale_return = SaleReturnRepository(session, ctx).get(return_id)
+    if sale_return is None:
+        raise NotFoundError("Retour introuvable.")
+    return sale_return
+
+
+def list_returns_for_sale(
+    session: Session, ctx: TenantContext, sale_id: UUID
+) -> Sequence[SaleReturn]:
+    """Retours d'une vente, du plus récent au plus ancien."""
+    get_sale(session, ctx, sale_id)
+    return SaleReturnRepository(session, ctx).for_sale(sale_id)
+
+
+def _refund_amounts(item: SaleItem, qty: Decimal) -> tuple[Decimal, Decimal]:
+    """Remboursable TTC et part de taxe d'une quantité rendue (§ 4.7).
+
+    Le § 4.7 donne `qty × (unit_price − discount/qty) × (1 + tax_rate)`. La remise de
+    la ligne est donc **proratisée** : rendre 3 articles sur 10 rend trois dixièmes de
+    la remise, pas la remise entière ni rien.
+
+    L'arrondi, lui, reproduit exactement les colonnes générées de `sale_items` : on
+    arrondit le net et la taxe **séparément**, puis on les additionne. Un seul arrondi
+    sur le TTC ferait mieux au centime près sur un retour partiel, mais rendrait
+    parfois un centime de moins que `line_total` sur un retour **total** — et un
+    client qui rend tout ce qu'il a acheté doit récupérer ce qu'il a payé, à l'unité
+    de centime. Contrepartie assumée : la somme de plusieurs retours partiels peut
+    s'écarter d'un centime du total de la ligne.
+    """
+    gross = qty * item.unit_price
+    prorated_discount = item.discount * qty / item.qty
+    net_before_tax = gross - prorated_discount
+    tax_refund = money.amount(net_before_tax * item.tax_rate)
+    return money.amount(net_before_tax) + tax_refund, tax_refund
+
+
+def create_return(
+    session: Session,
+    ctx: TenantContext,
+    sale_id: UUID,
+    payload: SaleReturnCreate,
+    *,
+    ip_address: str | None = None,
+) -> SaleReturn:
+    """Enregistre un retour sur une vente confirmée, dans l'ordre du § 5.3.
+
+    Comme la confirmation, ce service n'ouvre ni ne valide aucune transaction. Si la
+    troisième ligne dépasse la quantité vendue, rien ne subsiste : ni l'en-tête, ni
+    les deux premières lignes, ni leurs rentrées de stock, ni le numéro de retour.
+    """
+    # 1. Vente verrouillée et confirmée. Un brouillon n'a rien vendu ; une vente
+    #    annulée a déjà tout repris — dans les deux cas il n'y a rien à rendre.
+    sale = SaleRepository(session, ctx).get_for_update(sale_id)
+    if sale is None:
+        raise NotFoundError("Vente introuvable.")
+    if sale.status != "confirmed":
+        raise SaleNotConfirmedError(details={"sale_id": str(sale.id), "status": sale.status})
+
+    # 2. Date métier bornée des deux côtés. Aucun délai maximal de retour en V1 : rien
+    #    dans le modèle n'en impose un, et l'inventer ferait refuser des retours
+    #    légitimes (ADR 0025).
+    now = datetime.now(UTC)
+    returned_at = now if payload.returned_at is None else payload.returned_at
+    if returned_at < sale.sold_at:
+        raise ReturnBeforeSaleError(
+            details={"returned_at": returned_at.isoformat(), "sold_at": sale.sold_at.isoformat()}
+        )
+    if returned_at > now:
+        raise ReturnInFutureError(details={"returned_at": returned_at.isoformat()})
+
+    # 3. Lignes demandées, rapportées aux lignes de la vente. L'ordre de parcours est
+    #    celui des `product_id` croissants, comme à la confirmation : c'est lui qui
+    #    élimine l'interblocage entre deux caisses touchant les deux mêmes articles.
+    #    `sri_check` verrouille en plus la ligne de vente, `t20_inv_apply` le stock.
+    requested = {line.sale_item_id: line.qty for line in payload.lines}
+    items = {
+        item.id: item
+        for item in SaleItemRepository(session, ctx).for_sale_ordered_by_product(sale.id)
+    }
+    unknown = set(requested) - set(items)
+    if unknown:
+        raise ReturnLineNotInSaleError(
+            details={"sale_item_ids": sorted(str(item_id) for item_id in unknown)}
+        )
+    returned_items = [items[item_id] for item_id in items if item_id in requested]
+    summaries = products_service.get_summaries(
+        session, ctx, [item.product_id for item in returned_items]
+    )
+
+    # 4. En-tête. `total_refund`, `refunded_total` et `refund_status` ne sont pas
+    #    fournis : les triggers `sri_totals` et `sr_status` les écrivent, et le
+    #    numéro vient du compteur de l'entreprise (ADR 0021).
+    sale_return = SaleReturnRepository(session, ctx).add(
+        SaleReturn(
+            company_id=ctx.company_id,
+            sale_id=sale.id,
+            return_no=next_document_number(session, ctx, RETURN_DOCUMENT_TYPE),
+            reason=payload.reason,
+            returned_at=returned_at,
+            created_by=ctx.user_id,
+        )
+    )
+    _flush(session, sale_return, details={"sale_id": str(sale.id)})
+
+    lines: list[dict[str, str]] = []
+    for item in returned_items:
+        qty = requested[item.id]
+        refund_amount, tax_refund = _refund_amounts(item, qty)
+
+        # 5. Montants figés aux prix et taux historiques, coût recopié de la ligne.
+        return_item = SaleReturnItemRepository(session, ctx).add(
+            SaleReturnItem(
+                company_id=ctx.company_id,
+                return_id=sale_return.id,
+                sale_item_id=item.id,
+                qty=qty,
+                refund_amount=refund_amount,
+                tax_refund=tax_refund,
+                unit_cost=item.unit_cost,
+            )
+        )
+        # Détails capturés avant le flush risqué : après un rejet, la transaction est
+        # morte et relire un attribut expiré échouerait à son tour (ADR 0010).
+        _flush(
+            session,
+            return_item,
+            details={
+                "sale_item_id": str(item.id),
+                "requested": str(qty),
+                "sold": str(item.qty),
+            },
+        )
+
+        # 6. Rentrée en stock, au coût de sortie. Un article non suivi n'en produit
+        #    aucune, exactement comme il n'avait produit aucune sortie.
+        summary = summaries.get(item.product_id)
+        if summary is not None and summary.is_stock_tracked:
+            inventory_service.record_customer_return_in(
+                session,
+                ctx,
+                product_id=item.product_id,
+                qty=qty,
+                unit_cost=item.unit_cost,
+                return_item_id=return_item.id,
+            )
+
+        lines.append(
+            returned_line_payload(
+                return_item_id=return_item.id,
+                sale_item_id=item.id,
+                product_id=item.product_id,
+                qty=qty,
+                refund_amount=refund_amount,
+                tax_refund=tax_refund,
+                unit_cost=item.unit_cost,
+            )
+        )
+
+    # 7. Audit critique, puis outbox — les deux dans la transaction.
+    session.refresh(sale_return)
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.INSERT,
+        entity_table="sale_returns",
+        entity_id=sale_return.id,
+        after=_audited_return(sale_return),
+        ip_address=ip_address,
+    )
+    emit(
+        session,
+        ctx,
+        event_type=EventType.SALE_RETURNED,
+        aggregate_type=AGGREGATE_TYPE,
+        aggregate_id=sale.id,
+        payload=sale_returned_payload(
+            return_id=sale_return.id,
+            return_no=sale_return.return_no,
+            sale_id=sale.id,
+            sale_no=sale.sale_no,
+            sold_at=sale.sold_at,
+            returned_at=sale_return.returned_at,
+            total_refund=sale_return.total_refund,
+            lines=lines,
+        ),
+    )
+    return sale_return
+
+
+def refund_return(
+    session: Session,
+    ctx: TenantContext,
+    return_id: UUID,
+    payload: RefundCreate,
+    *,
+    ip_address: str | None = None,
+) -> SaleReturn:
+    """Règle tout ou partie d'un retour, dans l'ordre du § 5.4.
+
+    Deux règlements sont possibles, et le gérant choisit : la trésorerie, ou la
+    compensation d'une dette du client par ce qui lui est dû (`offset`, ADR 0024).
+    Le troisième cas du § 5.3 — ne rien régler — ne s'appelle pas : c'est l'état dans
+    lequel le retour est né.
+
+    Rembourser en plusieurs fois est prévu : le reste dû se recalcule à chaque appel,
+    et `refund_status` passe par `partial` avant `settled` (T20).
+    """
+    # 1. Retour verrouillé, reste dû calculé sous ce verrou. Sans lui, deux
+    #    remboursements concurrents liraient le même `refunded_total` et
+    #    concluraient tous deux qu'il reste de quoi payer.
+    repository = SaleReturnRepository(session, ctx)
+    sale_return = repository.get_for_update(return_id)
+    if sale_return is None:
+        raise NotFoundError("Retour introuvable.")
+
+    before = _audited_return(sale_return)
+    due = sale_return.total_refund - sale_return.refunded_total
+    details: dict[str, Any] = {
+        "return_id": str(sale_return.id),
+        "amount": str(payload.amount),
+        "refund_due": str(due),
+    }
+    # Contrôle doublé, dans l'esprit de l'ADR 0014 : `refund_check` (`CG041`) reste
+    # l'autorité, celui-ci ne sert qu'à nommer le reste dû dans le cas courant.
+    if payload.amount > due:
+        raise finance_service.RefundExceedsDueError(details=details)
+
+    if payload.method == OFFSET_METHOD:
+        # 2a. Compensation : l'argent ne sort pas, il éteint ce que le client doit.
+        debt = finance_service.open_debt_for_sale(session, ctx, sale_return.sale_id)
+        if debt is None:
+            raise NoDebtToOffsetError(details=details)
+        if payload.amount > debt.balance:
+            raise OffsetExceedsDebtError(
+                details={**details, "debt_id": str(debt.id), "balance": str(debt.balance)}
+            )
+        payment, _inflow = finance_service.record_return_offset(
+            session,
+            ctx,
+            sale_return_id=sale_return.id,
+            debt_id=debt.id,
+            amount=payload.amount,
+            ip_address=ip_address,
+        )
+    else:
+        # 2b. Trésorerie : un `outflow` rattaché au retour, puis son lettrage.
+        payment, _refund = finance_service.record_return_refund(
+            session,
+            ctx,
+            sale_return_id=sale_return.id,
+            amount=payload.amount,
+            method=payload.method,
+            reference=payload.reference,
+            ip_address=ip_address,
+        )
+
+    # 3. `refunded_total` et `refund_status` viennent des triggers, jamais d'ici.
+    session.refresh(sale_return)
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.UPDATE,
+        entity_table="sale_returns",
+        entity_id=sale_return.id,
+        before=before,
+        after=_audited_return(sale_return),
+        ip_address=ip_address,
+    )
+    emit(
+        session,
+        ctx,
+        event_type=EventType.SALE_RETURN_REFUNDED,
+        aggregate_type=RETURN_AGGREGATE_TYPE,
+        aggregate_id=sale_return.id,
+        payload=sale_return_refunded_payload(
+            return_id=sale_return.id,
+            return_no=sale_return.return_no,
+            sale_id=sale_return.sale_id,
+            payment_id=payment.id,
+            amount=payload.amount,
+            method=payment.method,
+            refunded_total=sale_return.refunded_total,
+            total_refund=sale_return.total_refund,
+            refund_status=sale_return.refund_status,
+        ),
+    )
+    return sale_return
+
+
+def _audited_return(sale_return: SaleReturn) -> dict[str, Any]:
+    """Vue d'un retour pour l'audit : ce qui engage, rien de plus."""
+    return {
+        "id": str(sale_return.id),
+        "return_no": sale_return.return_no,
+        "sale_id": str(sale_return.sale_id),
+        "total_refund": str(sale_return.total_refund),
+        "refunded_total": str(sale_return.refunded_total),
+        "refund_status": sale_return.refund_status,
+        "reason": sale_return.reason,
+    }
+
+
+def build_return_read(sale_return: SaleReturn) -> SaleReturnRead:
+    """En-tête d'un retour. `refund_due` est dérivé, jamais stocké."""
+    return SaleReturnRead(
+        id=sale_return.id,
+        sale_id=sale_return.sale_id,
+        return_no=sale_return.return_no,
+        reason=sale_return.reason,
+        returned_at=sale_return.returned_at,
+        total_refund=sale_return.total_refund,
+        refunded_total=sale_return.refunded_total,
+        refund_status=sale_return.refund_status,
+        refund_due=sale_return.total_refund - sale_return.refunded_total,
+        created_at=sale_return.created_at,
+    )
+
+
+def build_return_detail(
+    session: Session, ctx: TenantContext, sale_return: SaleReturn
+) -> SaleReturnDetail:
+    """Retour complet : lignes rendues, lettrages et décaissements.
+
+    Les deux questions du § 5.4 se lisent ici dans le même sens : `refunds` donne les
+    lettrages, `payments` les sorties correspondantes. L'autre sens — d'un paiement
+    vers ses retours — est rendu par Finance, qui possède les paiements.
+    """
+    header = build_return_read(sale_return)
+    return SaleReturnDetail(
+        **header.model_dump(),
+        items=[
+            SaleReturnItemRead.model_validate(item)
+            for item in SaleReturnItemRepository(session, ctx).for_return(sale_return.id)
+        ],
+        refunds=[
+            RefundLinkRead.model_validate(refund)
+            for refund in finance_service.refunds_for_return(session, ctx, sale_return.id)
+        ],
+        payments=[
+            PaymentRead.model_validate(payment)
+            for payment in finance_service.payments_for_return(session, ctx, sale_return.id)
+        ],
+    )
+
+
+def build_return_list(session: Session, ctx: TenantContext, sale_id: UUID) -> SaleReturnList:
+    """Retours d'une vente. Une vente en porte une poignée : pas de pagination."""
+    returns = list_returns_for_sale(session, ctx, sale_id)
+    return SaleReturnList(
+        items=[build_return_read(sale_return) for sale_return in returns], total=len(returns)
     )

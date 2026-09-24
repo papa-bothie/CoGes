@@ -76,7 +76,33 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
     "/api/v1/sales/{sale_id}/cancel": CrossTenantCase(
         parameters={"sale_id": "sale"}, body={"reason": "Test de fuite inter-tenant"}
     ),
+    "/api/v1/sales/{sale_id}/returns": CrossTenantCase(
+        parameters={"sale_id": "sale"},
+        body={"lines": [{"sale_item_id": "sale_item", "qty": "1"}]},
+    ),
+    "/api/v1/sale-returns/{return_id}": CrossTenantCase(parameters={"return_id": "sale_return"}),
+    "/api/v1/sale-returns/{return_id}/refunds": CrossTenantCase(
+        parameters={"return_id": "sale_return"}, body={"amount": "100.00", "method": "cash"}
+    ),
+    "/api/v1/payments/{payment_id}/refunded-returns": CrossTenantCase(
+        parameters={"payment_id": "payment"}
+    ),
 }
+
+
+def _substitute(value: Any, sources: dict[str, str]) -> Any:
+    """Remplace récursivement les noms de source par les identifiants de Beta.
+
+    Récursivement, parce qu'un retour porte ses lignes : la substitution doit
+    descendre dans les listes et les objets, pas seulement dans les champs de tête.
+    """
+    if isinstance(value, str):
+        return sources.get(value, value)
+    if isinstance(value, list):
+        return [_substitute(item, sources) for item in value]
+    if isinstance(value, dict):
+        return {key: _substitute(item, sources) for key, item in value.items()}
+    return value
 
 
 def _parameterised_paths() -> list[str]:
@@ -132,6 +158,50 @@ def _beta_sale(client: TestClient, beta_token: str, product_id: str) -> tuple[st
     return sale_id, str(item.json()["id"])
 
 
+def _beta_returned_sale(client: TestClient, beta_token: str, product_id: str) -> dict[str, str]:
+    """Une vente **confirmée, payée et retournée** chez Beta.
+
+    Distincte du brouillon ci-dessus, et pour la même raison : un retour n'existe
+    que sur une vente confirmée, et un remboursement suppose un décaissement. Sans
+    ces trois objets réels, les routes de la phase 06 seraient appelées sur du vide
+    et le 404 ne prouverait rien.
+    """
+    headers = auth_headers(beta_token)
+    sale = client.post("/api/v1/sales", headers=headers, json={})
+    assert sale.status_code == 201, sale.text
+    sale_id = str(sale.json()["id"])
+
+    item = client.post(
+        f"/api/v1/sales/{sale_id}/items",
+        headers=headers,
+        json={"product_id": product_id, "qty": "1"},
+    )
+    assert item.status_code == 201, item.text
+    sale_item_id = str(item.json()["id"])
+
+    # Payée intégralement : sans client identifié, le solde ouvrirait une dette et
+    # `customer_required_for_credit` refuserait la confirmation.
+    total = client.get(f"/api/v1/sales/{sale_id}", headers=headers).json()["total"]
+    confirmed = client.post(
+        f"/api/v1/sales/{sale_id}/confirm",
+        headers=headers,
+        json={"paid_amount": total, "method": "cash"},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+    sale_return = client.post(
+        f"/api/v1/sales/{sale_id}/returns",
+        headers=headers,
+        json={"lines": [{"sale_item_id": sale_item_id, "qty": "1"}]},
+    )
+    assert sale_return.status_code == 201, sale_return.text
+
+    return {
+        "sale_return": str(sale_return.json()["id"]),
+        "payment": str(confirmed.json()["payments"][0]["id"]),
+    }
+
+
 def _beta_sources(client: TestClient, beta_token: str) -> dict[str, str]:
     """Une ressource de Beta par type d'identifiant manipulé par les routes."""
     marker = uuid4().hex[:8]
@@ -142,6 +212,12 @@ def _beta_sources(client: TestClient, beta_token: str) -> dict[str, str]:
         {"sku": f"SKU-{marker}", "name": f"Produit {marker}", "unit_price": "1500.00"},
     )
     sale_id, sale_item_id = _beta_sale(client, beta_token, product_id)
+    movement_id = _beta_owned(
+        client,
+        beta_token,
+        "inventory/movements",
+        {"product_id": product_id, "type": "initial", "qty_delta": "10", "unit_cost": "1000"},
+    )
     return {
         "sale": sale_id,
         "sale_item": sale_item_id,
@@ -149,17 +225,9 @@ def _beta_sources(client: TestClient, beta_token: str) -> dict[str, str]:
         "product": product_id,
         "customer": _beta_owned(client, beta_token, "customers", {"name": f"Client {marker}"}),
         "supplier": _beta_owned(client, beta_token, "suppliers", {"name": f"Fournisseur {marker}"}),
-        "movement": _beta_owned(
-            client,
-            beta_token,
-            "inventory/movements",
-            {
-                "product_id": product_id,
-                "type": "initial",
-                "qty_delta": "10",
-                "unit_cost": "1000",
-            },
-        ),
+        "movement": movement_id,
+        # Le stock existe désormais : une vente peut être confirmée puis retournée.
+        **_beta_returned_sale(client, beta_token, product_id),
     }
 
 
@@ -185,10 +253,8 @@ def test_cross_tenant_access_is_not_found(
 
     # Toute valeur de corps qui nomme une source est remplacée par l'identifiant
     # correspondant chez Beta ; les autres (un montant, un mot de passe) passent
-    # telles quelles.
-    body = (
-        {key: sources.get(value, value) for key, value in case.body.items()} if case.body else None
-    )
+    # telles quelles, à tous les niveaux du corps.
+    body = _substitute(case.body, sources) if case.body else None
 
     methods = sorted(method.upper() for method in app.openapi()["paths"][path])
     assert methods, f"aucune méthode déclarée pour {path}"
