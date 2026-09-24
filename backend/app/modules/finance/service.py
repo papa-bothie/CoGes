@@ -185,8 +185,11 @@ def open_customer_debt(
 
     Le plafond est vérifié deux fois, à dessein. Ici, pour nommer l'encours, le
     plafond et le montant qui ne passe pas ; et en base, par `debt_credit_limit`,
-    qui reste l'autorité sous concurrence — deux caisses peuvent ouvrir deux
-    crédits au même client au même instant (ADR 0014).
+    qui est l'autorité. Ce contrôle-ci lit sans verrou : sous concurrence, il peut
+    laisser passer une demande que le trigger refusera ensuite en `CG030`. C'est
+    voulu — le trigger, lui, verrouille la ligne client avant de sommer l'encours
+    (révision 0007), et deux caisses qui ouvrent un crédit au même client s'y
+    sérialisent. Redondance assumée, dans l'esprit de l'ADR 0014.
     """
     if customer_id is None:
         raise CustomerRequiredForCreditError(details={"sale_id": str(sale_id)})

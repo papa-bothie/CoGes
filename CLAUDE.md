@@ -215,7 +215,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0020 | 2026-09-24 | DELETE accordé sur `sale_items` — quatrième et dernière exception, bornée par `sale_items_no_change` ; T36 passe à 4 tables | `docs/decisions/0020-delete-sur-les-lignes-de-brouillon.md` |
 | 0021 | 2026-09-24 | `document_counters` : suite sans trou par entreprise (`V-000123`), numéro attribué dès le brouillon, générique pour les retours et les dépenses | `docs/decisions/0021-numerotation-des-documents.md` |
 | 0022 | 2026-09-24 | `tax_enabled` absent ⇒ taxes actives ; reçu en JSON refusé sur brouillon ; second `confirm` ⇒ 409 `sale_not_draft` | `docs/decisions/0022-ce-que-la-vente-promet-au-client.md` |
-| 0023 | 2026-09-24 | Écarts assumés au § 8.7 : `sale_items_frozen` étendu à l'INSERT, SQLSTATE `CG030` ; annulation du § 5.2 appliquée telle quelle | `docs/decisions/0023-ecarts-assumes-au-paragraphe-8-7.md` |
+| 0023 | 2026-09-24 | Écarts assumés au § 8.7 : `sale_items_frozen` étendu à l'INSERT, SQLSTATE `CG030` ; annulation du § 5.2 appliquée telle quelle. **Corrigé par la révision 0007** : le plafond de crédit se lit `FOR UPDATE`, sans quoi il ne tient pas sous concurrence | `docs/decisions/0023-ecarts-assumes-au-paragraphe-8-7.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 
