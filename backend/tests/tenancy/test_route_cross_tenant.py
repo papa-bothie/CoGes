@@ -14,14 +14,27 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.idempotency import IDEMPOTENCY_HEADER
 from app.main import app
 from tests.conftest import DemoCompany, auth_headers
+
+
+def _write_headers(token: str) -> dict[str, str]:
+    """Jeton **et** clé d'idempotence, neuve à chaque appel.
+
+    Depuis la phase 07, toute écriture financière exige `Idempotency-Key`. Le
+    poser partout ne change rien aux routes qui l'ignorent, et évite qu'un test
+    d'isolation ne prouve en réalité l'absence d'un en-tête (422 au lieu de 404).
+    """
+    return {**auth_headers(token), IDEMPOTENCY_HEADER: uuid4().hex}
+
 
 pytestmark = pytest.mark.tenancy
 
@@ -87,6 +100,16 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
     "/api/v1/payments/{payment_id}/refunded-returns": CrossTenantCase(
         parameters={"payment_id": "payment"}
     ),
+    "/api/v1/payments/{payment_id}": CrossTenantCase(parameters={"payment_id": "payment"}),
+    "/api/v1/debts/{debt_id}": CrossTenantCase(parameters={"debt_id": "debt"}),
+    "/api/v1/debts/{debt_id}/write-off": CrossTenantCase(
+        parameters={"debt_id": "debt"},
+        body={"reason": "Test de fuite inter-tenant, motif assez long"},
+    ),
+    "/api/v1/expense-categories/{category_id}": CrossTenantCase(
+        parameters={"category_id": "expense_category"}
+    ),
+    "/api/v1/expenses/{expense_id}": CrossTenantCase(parameters={"expense_id": "expense"}),
 }
 
 
@@ -132,7 +155,7 @@ def _beta_role_id(client: TestClient, beta_token: str) -> str:
 
 def _beta_owned(client: TestClient, beta_token: str, resource: str, payload: dict[str, Any]) -> str:
     """Crée une ressource **chez Beta**, que Alpha tentera ensuite d'atteindre."""
-    response = client.post(f"/api/v1/{resource}", headers=auth_headers(beta_token), json=payload)
+    response = client.post(f"/api/v1/{resource}", headers=_write_headers(beta_token), json=payload)
     assert response.status_code == 201, response.text
     return str(response.json()["id"])
 
@@ -144,7 +167,7 @@ def _beta_sale(client: TestClient, beta_token: str, product_id: str) -> tuple[st
     répondraient qu'à une vente modifiable : une vente déjà confirmée renverrait
     409 sur `confirm`, et le test ne prouverait plus rien sur l'isolation.
     """
-    headers = auth_headers(beta_token)
+    headers = _write_headers(beta_token)
     sale = client.post("/api/v1/sales", headers=headers, json={})
     assert sale.status_code == 201, sale.text
     sale_id = str(sale.json()["id"])
@@ -166,7 +189,7 @@ def _beta_returned_sale(client: TestClient, beta_token: str, product_id: str) ->
     ces trois objets réels, les routes de la phase 06 seraient appelées sur du vide
     et le 404 ne prouverait rien.
     """
-    headers = auth_headers(beta_token)
+    headers = _write_headers(beta_token)
     sale = client.post("/api/v1/sales", headers=headers, json={})
     assert sale.status_code == 201, sale.text
     sale_id = str(sale.json()["id"])
@@ -184,7 +207,7 @@ def _beta_returned_sale(client: TestClient, beta_token: str, product_id: str) ->
     total = client.get(f"/api/v1/sales/{sale_id}", headers=headers).json()["total"]
     confirmed = client.post(
         f"/api/v1/sales/{sale_id}/confirm",
-        headers=headers,
+        headers=_write_headers(beta_token),
         json={"paid_amount": total, "method": "cash"},
     )
     assert confirmed.status_code == 200, confirmed.text
@@ -218,14 +241,40 @@ def _beta_sources(client: TestClient, beta_token: str) -> dict[str, str]:
         "inventory/movements",
         {"product_id": product_id, "type": "initial", "qty_delta": "10", "unit_cost": "1000"},
     )
+    supplier_id = _beta_owned(client, beta_token, "suppliers", {"name": f"Fournisseur {marker}"})
+    expense_category_id = _beta_owned(
+        client, beta_token, "expense-categories", {"name": f"Charge {marker}", "kind": "fixed"}
+    )
+    expense_id = _beta_owned(
+        client,
+        beta_token,
+        "expenses",
+        {
+            "category_id": expense_category_id,
+            "label": f"Loyer {marker}",
+            "amount": "50000.00",
+            "spent_at": date.today().isoformat(),
+        },
+    )
+    # Une dette fournisseur, plutôt qu'une créance : elle reste ouverte et
+    # abandonnable, donc `write-off` se heurte bien à l'isolation et non à un état.
+    debt_id = _beta_owned(
+        client,
+        beta_token,
+        "debts",
+        {"party_type": "supplier", "supplier_id": supplier_id, "principal": "50000.00"},
+    )
     return {
         "sale": sale_id,
         "sale_item": sale_item_id,
         "category": _beta_owned(client, beta_token, "categories", {"name": f"Cat-{marker}"}),
         "product": product_id,
         "customer": _beta_owned(client, beta_token, "customers", {"name": f"Client {marker}"}),
-        "supplier": _beta_owned(client, beta_token, "suppliers", {"name": f"Fournisseur {marker}"}),
+        "supplier": supplier_id,
         "movement": movement_id,
+        "expense_category": expense_category_id,
+        "expense": expense_id,
+        "debt": debt_id,
         # Le stock existe désormais : une vente peut être confirmée puis retournée.
         **_beta_returned_sale(client, beta_token, product_id),
     }
@@ -265,7 +314,7 @@ def test_cross_tenant_access_is_not_found(
         # dont tous les champs sont optionnels.
         payload = (body or {}) if method in {"POST", "PATCH", "PUT"} else None
         response = api_client.request(
-            method, concrete_path, headers=auth_headers(alpha_token), json=payload
+            method, concrete_path, headers=_write_headers(alpha_token), json=payload
         )
         assert response.status_code == 404, (
             f"{method} {path} a répondu {response.status_code} sur la donnée d'un autre "

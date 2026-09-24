@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
@@ -27,6 +27,7 @@ from sqlalchemy.sql import text
 from app.cli import create_company
 from app.core.config import get_settings
 from app.core.database import create_app_engine
+from app.core.idempotency import IDEMPOTENCY_HEADER
 from app.core.tenancy import TenantContext, tenant_transaction
 from app.main import app
 from tests.tenancy.harness import Tenant, create_tenant
@@ -117,6 +118,25 @@ def tenant_b(session_factory: sessionmaker[Any], owner_engine: Engine) -> Tenant
     return create_tenant(session_factory, owner_engine, "entreprise-b", password=TEST_PASSWORD)
 
 
+@pytest.fixture
+def concurrent_session_factory(
+    migrated_database: str, database_urls: tuple[str, str]
+) -> Iterator[sessionmaker[Any]]:
+    """Fabrique de sessions sur un pool de **trois** connexions.
+
+    Le pool de la suite n'en contient qu'une — c'est ce qu'exige T4, qui prouve
+    qu'une connexion rendue au pool ne garde aucun contexte. Les tests de
+    concurrence en demandent trois : une pour le rendez-vous tenu par le test, deux
+    pour les acteurs qui se disputent la même ressource.
+    """
+    _, app_url = database_urls
+    engine: Engine = create_app_engine(app_url, pool_size=3, max_overflow=0)
+    try:
+        yield sessionmaker(bind=engine, expire_on_commit=False, future=True)
+    finally:
+        engine.dispose()
+
+
 @pytest.fixture(scope="session")
 def app_bound_to_test_database(session_factory: sessionmaker[Any]) -> Iterator[None]:
     """Fait pointer l'application sur `coges_test` au lieu de la base de développement.
@@ -133,10 +153,31 @@ def app_bound_to_test_database(session_factory: sessionmaker[Any]) -> Iterator[N
         patcher.undo()
 
 
+class _IdempotentClient(TestClient):
+    """Client de test qui pose une clé d'idempotence neuve sur chaque requête.
+
+    Depuis la phase 07, plusieurs écritures exigent `Idempotency-Key` (ADR 0027).
+    Le poser ici plutôt que dans chaque test reproduit ce que fait une vraie
+    bibliothèque cliente, et évite qu'un test d'autre chose n'échoue sur un
+    en-tête manquant.
+
+    Une clé **explicite** n'est jamais écrasée : c'est ainsi qu'un test rejoue une
+    requête à l'identique. Et parce que la clé est neuve par défaut, deux appels
+    successifs restent deux demandes distinctes — la confirmation d'une vente doit
+    pouvoir se heurter à `sale_not_draft` (ADR 0022), pas à un rejeu.
+    """
+
+    def request(self, *args: Any, **kwargs: Any) -> Any:
+        headers = dict(kwargs.get("headers") or {})
+        headers.setdefault(IDEMPOTENCY_HEADER, uuid4().hex)
+        kwargs["headers"] = headers
+        return super().request(*args, **kwargs)
+
+
 @pytest.fixture
 def api_client(app_bound_to_test_database: None) -> Iterator[TestClient]:
     """Client HTTP branché sur la base de test."""
-    with TestClient(app) as test_client:
+    with _IdempotentClient(app) as test_client:
         yield test_client
 
 
@@ -204,6 +245,16 @@ def beta_token(api_client: TestClient, company_beta: DemoCompany) -> str:
 
 def auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def write_headers(token: str, key: str | None = None) -> dict[str, str]:
+    """Jeton **et** clé d'idempotence, neuve par défaut.
+
+    Depuis la phase 07, toute écriture financière exige `Idempotency-Key`
+    (ADR 0027). Passer `key` explicitement permet de rejouer la même requête ; sans
+    argument, chaque appel est une demande neuve.
+    """
+    return {**auth_headers(token), IDEMPOTENCY_HEADER: key or uuid4().hex}
 
 
 def read_scalar_in_tenant(

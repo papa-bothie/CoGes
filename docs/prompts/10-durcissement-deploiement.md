@@ -1,15 +1,108 @@
-# Phase 10 — Import/export, durcissement, déploiement du backend
+# Phase 10 — Annulation de paiement, puis import/export, durcissement, déploiement du backend
 
 ---
 
 Tu es l'agent de développement du projet **CoGes**. Nous démarrons la **phase 10 : mise en état
-de production du backend**. Aucune nouvelle règle métier : on ajoute l'import/export prévu en V1,
-on durcit la sécurité et l'observabilité, on déploie selon le Diagramme 2, et on rend la CI
-bloquante sur les tests d'intégrité.
+de production du backend**. Elle comporte **deux temps, dans cet ordre** :
+
+- **Temps A (prioritaire, livré et mergé à part)** : l'annulation d'un paiement erroné, laissée
+  ouverte par l'ADR 0031 (décision 4). C'est la seule règle métier nouvelle de la phase.
+- **Temps B** : l'import/export prévu en V1, le durcissement de la sécurité et de
+  l'observabilité, le déploiement selon le Diagramme 2, et la CI bloquante sur les tests
+  d'intégrité.
+
+Ne commence **pas** le temps B tant que le temps A n'est pas terminé, testé et mergé.
+
+---
+
+## Temps A — Annulation d'un paiement erroné (contre-écriture)
+
+### A.0 Contexte
+
+Aujourd'hui, un caissier qui saisit 50 000 au lieu de 5 000 n'a **aucun** moyen de corriger :
+`payments` n'a ni statut ni suppression logique (§ 8.6), `coges_app` n'a pas `DELETE`, et
+`payments:update` / `payments:cancel` existent au catalogue sans endpoint (ADR 0031). C'est
+bloquant pour une mise en production réelle.
+
+Principe imposé, identique au mouvement inverse du stock (phase 04, ADR 0017) : **on n'efface
+jamais, on contre-passe**. Le paiement d'origine reste intact et lisible ; une écriture
+d'annulation le neutralise, et l'on corrige ensuite en saisissant le bon paiement.
+
+### A.1 À lire
+
+`CLAUDE.md`, ADR 0017 (inverse de stock), 0024 (compensation `offset`), 0027 (idempotence), 0029
+(dettes), 0031 (décision 4) ; Modèle § 4.9 (`payments`), § 5.5 (dettes et paiements), SQL § 8.6
+et § 8.7 (`allocation_check`, `debt_rollup`, `sale_paid_rollup`, `refund_rollup`) ; migrations
+0006 à 0009.
+
+### A.2 Questions à me poser (AskUserQuestion) avant de coder
+
+1. **Représentation de l'annulation** : nouvelle colonne `payments.reversal_of_payment_id`
+   (FK composite auto-référente, `UNIQUE (company_id, reversal_of_payment_id)` pour qu'un
+   paiement ne s'annule qu'une fois, `CHECK` : direction opposée et même montant que l'origine),
+   sur le modèle exact de `inventory_movements.reversal_of_movement_id` (Recommandé) / colonne
+   `cancelled_at` + motif sur le paiement d'origine (modifie une écriture financière : déconseillé) /
+   autre proposition.
+2. **Effet sur les lettrages** : l'annulation crée des allocations **négatives**… impossible
+   (`CHECK amount > 0`). Propose-moi la mécanique exacte pour que la dette remonte (et que
+   `sales.paid_total`, `sale_returns.refunded_total` reviennent en arrière le cas échéant) **sans
+   supprimer ni modifier** les lignes d'allocation d'origine. Par exemple : les triggers de rollup
+   ignorent les allocations dont le paiement est annulé, et `debt_rollup` repasse une dette
+   `paid` en `partially_paid` / `open` (`closed_at` remis à NULL). Montre-moi le SQL avant de
+   l'écrire. C'est le point le plus délicat du temps A.
+3. **Périmètre** : annulation d'un encaissement client, d'un décaissement fournisseur ou de
+   dépense, et d'un remboursement de retour (Recommandé : tous, même mécanique) / encaissements
+   seulement en V1. Les compensations `offset` (ADR 0024) : annulables par paire, en une seule
+   opération (Recommandé) / non annulables.
+4. **Délai** : annulation possible sans limite de date, avec motif obligatoire (Recommandé) /
+   limitée à N jours.
+5. **Droits** : gérant seul, `payments:cancel` (Recommandé, cohérent avec `sales:cancel`) / gérant
+   et comptable.
+6. **Correction** : pas d'endpoint « modifier un paiement » ; la correction = annulation + nouvelle
+   saisie, en deux appels (Recommandé) / un endpoint qui fait les deux dans une transaction.
+
+### A.3 Périmètre
+
+- Migration dédiée (numéro suivant), réversible, avec la colonne et les contraintes retenues,
+  les triggers de rollup adaptés (copiés depuis leur dernière version puis modifiés, avec
+  commentaire de l'écart), les SQLSTATE applicatifs nommés (`CG05x`) pour chaque refus.
+- `POST /api/v1/payments/{id}/cancel` : motif obligatoire, `Idempotency-Key` obligatoire, permission
+  `payments:cancel`, **audit critique** (valeur avant / après : paiement, dettes et soldes touchés),
+  événement dans l'outbox (demande-moi si un nouveau type d'événement est nécessaire : la liste des
+  9 est fermée, ajouter `payment.cancelled` est une décision à valider).
+- Refus nommés : paiement déjà annulé (`payment_already_cancelled`, garanti par l'unicité en base),
+  annulation d'une annulation (`cannot_cancel_a_reversal`), paiement d'un autre tenant ⇒ 404.
+- Vue « trésorerie » (phase 07) et agrégats (phase 08) : un paiement annulé et son annulation
+  s'annulent exactement ; vérifie et teste que les totaux reviennent à l'état antérieur.
+- Lecture : un paiement renvoie `cancelled: true`, la date, le motif et l'id de l'annulation.
+
+### A.4 Tests (base réelle, en `coges_app`)
+
+- Encaissement de 50 000 sur une dette de 60 000, annulé ⇒ dette revenue à 60 000 et `open`,
+  trésorerie revenue à l'identique, audit présent.
+- Dette soldée (`paid`, `closed_at` renseigné) dont on annule le dernier paiement ⇒
+  `partially_paid`, `closed_at` NULL.
+- Vente payée comptant dont on annule l'encaissement ⇒ `paid_total` revient à 0.
+- Remboursement de retour annulé ⇒ `refunded_total` et `refund_status` reviennent en arrière.
+- Double annulation ⇒ violation d'unicité traduite en `payment_already_cancelled`, aucun effet.
+- **Concurrence** : deux annulations simultanées du même paiement ⇒ une seule passe.
+- **Concurrence** : annulation et nouveau paiement simultanés sur la même dette ⇒ solde final exact.
+- Aucune ligne de `payments` ni de `payment_allocations` n'est modifiée ni supprimée (comparaison
+  avant / après sur les colonnes d'origine).
+- T25 à T28 et les tests de trésorerie de la phase 07 restent verts.
+
+### A.5 Clôture du temps A
+
+ADR dédiée ; `CLAUDE.md` mis à jour (décision au § 9) ; `make lint && make test` ; commit ; merge
+dans `main`. Résumé à l'utilisateur, **puis seulement** passage au temps B.
+
+---
+
+## Temps B — Import/export, durcissement, déploiement
 
 ## 0. Protocole
 
-1. Lis `CLAUDE.md` (phase 09 ✅ exigée) et tous les ADR.
+1. Lis `CLAUDE.md` (phase 09 ✅ et temps A ✅ exigés) et tous les ADR.
 2. Lis :
    - Architecture : Diagramme 2 (zones Vercel / Docker, règle d'affectation, contraintes acceptées) ;
      module Import/Export (≈340) ; Diagramme 8, étape 4 (pooling en mode transaction) ; tests de

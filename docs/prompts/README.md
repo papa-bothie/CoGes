@@ -27,7 +27,7 @@
 | 07 | `07-finance.md` | Paiements idempotents, dettes, allocations, dépenses, trésorerie, T25–T28 |
 | 08 | `08-async-analytics.md` | Relais outbox, Celery, notifications, daily_sales_facts, dashboard, analytics, T29–T32, T40 |
 | 09 | `09-intelligence.md` | Features, forecasts, insights, serving, T33–T35 |
-| 10 | `10-durcissement-deploiement.md` | Import/export, rate limiting, observabilité, Vercel + Docker, CI bloquante |
+| 10 | `10-durcissement-deploiement.md` | **A** : annulation d'un paiement erroné (contre-écriture) · **B** : import/export, rate limiting, observabilité, Vercel + Docker, CI bloquante |
 | 11 | `11-front-fondations.md` | Next.js, design tokens du prototype, client OpenAPI, auth, layout |
 | 12 | `12-front-operations.md` | Tableau de bord, référentiels, stock, ventes, retours |
 | 13 | `13-front-pilotage.md` | Finance, analytics, Intelligence, paramètres, audit |
