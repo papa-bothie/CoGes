@@ -18,10 +18,15 @@ mécanismes qui le tiennent :
 T28 a déjà son fichier, consacré à la concurrence (`test_t28_concurrent_credit_limit`).
 Le cas simple — une dette qui dépasse le plafond, sans rien de simultané — manquait :
 il est ici, parce que la règle doit tenir avant même qu'on parle de concurrence.
+
+T26 a l'exigence inverse : sa version séquentielle ne prouve rien sur deux caisses
+qui encaissent la même dette au même instant. Le dernier test de ce fichier
+**provoque** cette fenêtre, comme T38 et T28 le font pour le stock et le crédit.
 """
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
@@ -272,3 +277,73 @@ def test_t28_a_customer_without_a_limit_is_never_refused(
     """
     customer_id = _customer(session_factory, tenant_a)
     _debt(session_factory, tenant_a, customer_id, principal="10000000.00")
+
+
+def test_t26_concurrent_payments_on_one_debt_settle_it_once(
+    concurrent_session_factory: sessionmaker[Any], tenant_a: Tenant
+) -> None:
+    """Deux versements de 1 000 sur une dette de 1 000 : un seul passe.
+
+    C'est la moitié de T26 qu'un test séquentiel ne peut pas atteindre. Deux
+    caisses encaissent le même client au même instant ; sans verrou, toutes deux
+    liraient un solde de 1 000, toutes deux conclueraient que l'affectation tient,
+    et la dette ressortirait avec `amount_paid = 2000` — que `debts_paid_bounds`
+    rattraperait, mais seulement en faisant échouer l'une des deux *après* avoir
+    laissé croire qu'elle passait.
+
+    Le rendez-vous est la ligne de `debts` elle-même : `allocation_check` la lit
+    `FOR UPDATE` avant de comparer. Le test s'en empare d'abord, ce qui garantit
+    que les deux lettrages se présentent pendant qu'elle est tenue ; son COMMIT les
+    relâche, et le second relit en `READ COMMITTED` un solde déjà tombé à zéro.
+
+    Le refus attendu est donc `CG044` — le solde de la dette —, et non `CG045` :
+    chaque versement est intact, c'est la dette qui n'a plus rien à recevoir.
+    """
+    customer_id = _customer(concurrent_session_factory, tenant_a)
+    debt_id = _debt(concurrent_session_factory, tenant_a, customer_id, principal="1000.00")
+    payments = [_payment(concurrent_session_factory, tenant_a, amount="1000.00") for _ in range(2)]
+
+    def settle(payment_id: UUID) -> str:
+        """Une caisse qui impute la totalité de son versement sur la dette."""
+        try:
+            with tenant_transaction(
+                tenant_a.ctx, session_factory=concurrent_session_factory
+            ) as session:
+                _allocate(session, tenant_a, payment_id, debt_id, "1000.00")
+        except DBAPIError as exc:
+            assert sqlstate(exc) == ALLOCATION_EXCEEDS_BALANCE, str(exc)
+            return "refus"
+        return "succès"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        with tenant_transaction(
+            tenant_a.ctx, session_factory=concurrent_session_factory
+        ) as session:
+            # 1. Le test s'approprie la ligne de dette : les deux caisses vont
+            #    s'arrêter exactement là où `allocation_check` prend son verrou.
+            session.execute(
+                text("SELECT balance FROM debts WHERE id = :id FOR UPDATE"), {"id": debt_id}
+            )
+            # 2. Les deux lettrages partent et se bloquent.
+            futures = [pool.submit(settle, payment_id) for payment_id in payments]
+        # 3. Le COMMIT relâche le verrou : les deux reprennent, l'un après l'autre.
+        outcomes = sorted(future.result() for future in futures)
+
+    assert outcomes == ["refus", "succès"], (
+        f"exactement un versement doit solder la dette, obtenu : {outcomes}"
+    )
+
+    amount_paid, balance, status, closed_at = _debt_state(
+        concurrent_session_factory, tenant_a, debt_id
+    )
+    assert amount_paid == Decimal("1000.00"), "jamais plus que le principal"
+    assert balance == Decimal("0.00")
+    assert status == "paid"
+    assert closed_at is not None
+
+    with tenant_transaction(tenant_a.ctx, session_factory=concurrent_session_factory) as session:
+        written = session.execute(
+            text("SELECT count(*) FROM payment_allocations WHERE debt_id = :id"),
+            {"id": debt_id},
+        ).scalar_one()
+    assert written == 1, "le lettrage refusé n'a laissé aucune ligne"
