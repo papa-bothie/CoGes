@@ -19,9 +19,11 @@ from app.modules.auth.router import router as auth_router
 from app.modules.categories.router import router as categories_router
 from app.modules.companies.router import router as companies_router
 from app.modules.customers.router import router as customers_router
+from app.modules.finance.router import router as finance_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.products.router import router as products_router
 from app.modules.rbac.router import router as rbac_router
+from app.modules.sales.router import returns_router
 from app.modules.sales.router import router as sales_router
 from app.modules.suppliers.router import router as suppliers_router
 from app.modules.users.router import router as users_router
@@ -51,8 +53,11 @@ api_router.include_router(suppliers_router)
 # Bande C : Inventory lit Products, jamais l'inverse (ADR 0012).
 api_router.include_router(inventory_router)
 # Bande D : Sales lit tout ce qui précède par leurs façades ; rien ne le lit.
-# Finance n'a pas de router en V1-phase 05 : elle n'est appelée que par Sales.
 api_router.include_router(sales_router)
+api_router.include_router(returns_router)
+# Bande E : Finance n'expose qu'une lecture, la traçabilité inverse d'un
+# remboursement. Ses écritures restent appelées par Sales (ADR 0019 et 0024).
+api_router.include_router(finance_router)
 
 app.include_router(api_router)
 

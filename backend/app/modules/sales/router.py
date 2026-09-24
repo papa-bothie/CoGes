@@ -18,6 +18,7 @@ from app.core.repository import MAX_PAGE_SIZE
 from app.modules.sales import service
 from app.modules.sales.schemas import (
     ReceiptRead,
+    RefundCreate,
     SaleCancel,
     SaleConfirm,
     SaleCreate,
@@ -26,11 +27,18 @@ from app.modules.sales.schemas import (
     SaleItemRead,
     SaleItemUpdate,
     SalePage,
+    SaleReturnCreate,
+    SaleReturnDetail,
+    SaleReturnList,
     SaleStatus,
     SaleUpdate,
 )
 
 router = APIRouter(prefix="/sales", tags=["sales"])
+
+#: Un retour se crée **sur** une vente, mais se lit et se règle pour lui-même : il a
+#: son numéro, son reste dû et sa vie propre. D'où deux préfixes, et non un seul.
+returns_router = APIRouter(prefix="/sale-returns", tags=["sale_returns"])
 
 
 @router.post("", response_model=SaleDetail, status_code=status.HTTP_201_CREATED)
@@ -59,7 +67,7 @@ def list_sales(
     `search` cherche un **numéro exact** : un numéro se dicte et se retrouve
     entier, une recherche approximative n'y aiderait personne.
     """
-    sales, total, with_returns = service.list_sales(
+    sales, total, returned_totals = service.list_sales(
         tenant.session,
         tenant.ctx,
         page=page,
@@ -71,7 +79,9 @@ def list_sales(
         sale_no=sale_no,
     )
     return SalePage(
-        items=[service.build_read(sale, has_returns=sale.id in with_returns) for sale in sales],
+        items=[
+            service.build_read(sale, returned_total=returned_totals.get(sale.id)) for sale in sales
+        ],
         page=page,
         page_size=page_size,
         total=total,
@@ -177,3 +187,63 @@ def cancel_sale(
         tenant.session, tenant.ctx, sale_id, payload, ip_address=client_ip(request)
     )
     return service.build_detail(tenant.session, tenant.ctx, sale)
+
+
+@router.post(
+    "/{sale_id}/returns",
+    response_model=SaleReturnDetail,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_return(
+    sale_id: UUID,
+    payload: SaleReturnCreate,
+    request: Request,
+    tenant: Annotated[TenantSession, Depends(require_permission("sale_returns:create"))],
+) -> SaleReturnDetail:
+    """Enregistre un retour sur une vente confirmée : stock, montants, audit, événement.
+
+    Le retour naît **non réglé**. Le remboursement, qui touche à l'argent, passe par
+    `POST /sale-returns/{id}/refunds` et n'est pas ouvert au vendeur (ADR 0025).
+    """
+    sale_return = service.create_return(
+        tenant.session, tenant.ctx, sale_id, payload, ip_address=client_ip(request)
+    )
+    return service.build_return_detail(tenant.session, tenant.ctx, sale_return)
+
+
+@router.get("/{sale_id}/returns", response_model=SaleReturnList)
+def list_sale_returns(
+    sale_id: UUID,
+    tenant: Annotated[TenantSession, Depends(require_permission("sale_returns:read"))],
+) -> SaleReturnList:
+    """Retours d'une vente, du plus récent au plus ancien."""
+    return service.build_return_list(tenant.session, tenant.ctx, sale_id)
+
+
+@returns_router.get("/{return_id}", response_model=SaleReturnDetail)
+def get_return(
+    return_id: UUID,
+    tenant: Annotated[TenantSession, Depends(require_permission("sale_returns:read"))],
+) -> SaleReturnDetail:
+    """Retour complet : lignes rendues, lettrages et décaissements."""
+    sale_return = service.get_return(tenant.session, tenant.ctx, return_id)
+    return service.build_return_detail(tenant.session, tenant.ctx, sale_return)
+
+
+@returns_router.post("/{return_id}/refunds", response_model=SaleReturnDetail)
+def refund_return(
+    return_id: UUID,
+    payload: RefundCreate,
+    request: Request,
+    tenant: Annotated[TenantSession, Depends(require_permission("sale_returns:confirm"))],
+) -> SaleReturnDetail:
+    """Règle tout ou partie d'un retour, en trésorerie ou par compensation.
+
+    Réservé au gérant : `sale_returns:confirm` garde l'argent, comme
+    `sales:cancel` garde l'annulation (ADR 0007 et 0025). Un montant qui dépasse le
+    reste dû est refusé en 409, et les triggers le refuseraient de toute façon.
+    """
+    sale_return = service.refund_return(
+        tenant.session, tenant.ctx, return_id, payload, ip_address=client_ip(request)
+    )
+    return service.build_return_detail(tenant.session, tenant.ctx, sale_return)

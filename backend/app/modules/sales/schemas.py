@@ -16,12 +16,19 @@ from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from app.core.money import Amount, Quantity, Rate, UnitCost
-from app.modules.finance.schemas import DebtRead, PaymentMethod, PaymentRead
+from app.modules.finance.schemas import (
+    DebtRead,
+    PaymentMethod,
+    PaymentRead,
+    RefundLinkRead,
+    RefundMethod,
+)
 
 CANCEL_REASON_MAX_LENGTH = 500
+RETURN_REASON_MAX_LENGTH = 500
 
 #: Les trois valeurs de l'ENUM `sale_status` (§ 8.1). « Retournée » n'en est pas
 #: une : c'est une information dérivée, exposée par `has_returns`.
@@ -37,6 +44,19 @@ type CancelReason = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=CANCEL_REASON_MAX_LENGTH),
 ]
+
+#: Les quatre valeurs de l'ENUM `return_refund_status` (§ 8.1). Dérivé par trigger du
+#: couple (`total_refund`, `refunded_total`) : jamais choisi, jamais envoyé.
+type RefundStatus = Literal["none_due", "pending", "partial", "settled"]
+
+type ReturnReason = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=RETURN_REASON_MAX_LENGTH),
+]
+
+#: `CHECK (amount > 0)` de `sale_return_refunds`, doublé côté schéma : un
+#: remboursement de zéro n'est pas un remboursement.
+type RefundAmount = Annotated[Amount, Field(gt=Decimal("0"))]
 
 
 # ------------------------------------------------------------------- entrées
@@ -145,6 +165,9 @@ class SaleRead(BaseModel):
     balance: Amount
     #: La vente a au moins un retour. Dérivé : ce n'est pas un statut de la base.
     has_returns: bool
+    #: Total remboursable de ses retours. Dérivé lui aussi : « retournée » n'est pas
+    #: un statut, c'est la somme de faits qui ont eu lieu.
+    returned_total: Amount
     cancel_reason: str | None
     confirmed_at: datetime | None
     cancelled_at: datetime | None
@@ -227,3 +250,111 @@ class ReceiptRead(BaseModel):
     paid_total: Amount
     balance: Amount
     payments: list[PaymentRead]
+
+
+# --------------------------------------------------------- retours et remboursements
+
+
+class SaleReturnLineCreate(BaseModel):
+    """Une ligne rendue : la ligne de vente d'origine, et la quantité."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sale_item_id: UUID
+    qty: SaleQty
+
+
+class SaleReturnCreate(BaseModel):
+    """Enregistrement d'un retour sur une vente confirmée (§ 5.3).
+
+    Ni montant ni coût : ils se calculent sur les snapshots de la ligne de vente. Un
+    client qui pourrait fixer son remboursement ne serait pas un client.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    lines: list[SaleReturnLineCreate] = Field(min_length=1)
+    reason: ReturnReason | None = None
+    #: Date métier du retour. Par défaut `now()`, bornée par `sold_at` et l'instant
+    #: présent. Le mouvement de stock, lui, est daté de l'enregistrement.
+    returned_at: datetime | None = None
+
+    @field_validator("lines")
+    @classmethod
+    def _one_line_per_sale_item(
+        cls, lines: list[SaleReturnLineCreate]
+    ) -> list[SaleReturnLineCreate]:
+        """Refuse deux lignes visant la même ligne de vente.
+
+        Le trigger `sri_check` les accepterait l'une après l'autre en bornant leur
+        cumul, mais le retour porterait alors deux lignes pour un même article, sans
+        que rien ne dise pourquoi. Mieux vaut un 422 qui nomme le doublon.
+        """
+        seen = {line.sale_item_id for line in lines}
+        if len(seen) != len(lines):
+            raise ValueError("Une même ligne de vente ne peut apparaître qu'une fois.")
+        return lines
+
+
+class RefundCreate(BaseModel):
+    """Règlement, total ou partiel, d'un retour (§ 5.4).
+
+    `offset` n'est pas un moyen de payer : c'est la compensation d'une dette du
+    client par ce qui lui est dû, sans qu'aucune caisse ne bouge (ADR 0024).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    amount: RefundAmount
+    method: RefundMethod
+    reference: str | None = None
+
+
+class SaleReturnItemRead(BaseModel):
+    """Ligne de retour, avec ses montants figés."""
+
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    id: UUID
+    sale_item_id: UUID
+    qty: Quantity
+    #: TTC, calculé au prix et au taux historiques de la ligne (§ 4.7).
+    refund_amount: Amount
+    tax_refund: Amount
+    #: Coût auquel la marchandise est sortie, pas le CMP du jour (§ 5.3).
+    unit_cost: UnitCost
+
+
+class SaleReturnRead(BaseModel):
+    """Retour en liste : l'en-tête, sans ses lignes."""
+
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    id: UUID
+    sale_id: UUID
+    return_no: str
+    reason: str | None
+    returned_at: datetime
+    total_refund: Amount
+    refunded_total: Amount
+    refund_status: RefundStatus
+    #: Reste à rembourser. Dérivé : `total_refund - refunded_total`.
+    refund_due: Amount
+    created_at: datetime
+
+
+class SaleReturnDetail(SaleReturnRead):
+    """Retour complet : en-tête, lignes rendues et remboursements versés."""
+
+    items: list[SaleReturnItemRead]
+    refunds: list[RefundLinkRead]
+    payments: list[PaymentRead]
+
+
+class SaleReturnList(BaseModel):
+    """Retours d'une vente. Pas de pagination : une vente en porte une poignée."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[SaleReturnRead]
+    total: int

@@ -21,6 +21,9 @@ PAY_METHOD = PG_ENUM(
     "bank_transfer",
     "card",
     "cheque",
+    # Révision 0008 : marque d'une écriture **sans flux de caisse** (compensation
+    # d'une dette par un retour), et non un sixième moyen de payer (ADR 0024).
+    "offset",
     name="pay_method",
     create_type=False,
 )
@@ -69,3 +72,35 @@ class Debt(IdentifiedTenantBase):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class PaymentAllocation(IdentifiedTenantBase):
+    """Lettrage paiement ↔ dette (§ 5.5).
+
+    Le solde de la dette n'est pas écrit ici : `pa_rollup` recalcule `amount_paid`,
+    `status` et `closed_at` à chaque écriture, et `balance` est une colonne générée.
+    """
+
+    __tablename__ = "payment_allocations"
+
+    payment_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    debt_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class SaleReturnRefund(IdentifiedTenantBase):
+    """Lettrage retour ↔ paiement, symétrique de `PaymentAllocation` (§ 4.7).
+
+    Une simple FK `payments.sale_return_id` ne suffisait pas : elle interdirait de
+    rembourser deux retours d'un même versement, et d'échelonner un remboursement en
+    deux versements. `sale_return_id` reste un `uuid` nu — Finance est **sous** Sales
+    dans l'ordre des dépendances et ne connaît pas `SaleReturn`.
+    """
+
+    __tablename__ = "sale_return_refunds"
+
+    sale_return_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    payment_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)

@@ -1,11 +1,12 @@
 """Façade de services du module Inventory.
 
-Le stock n'a qu'une **table** d'entrée, `inventory_movements`, et trois portes vers
-elle : `record_movement` pour une saisie humaine, `record_sale_out` et
-`reverse_sale_out` pour les flux de vente. Les deux dernières existent parce que
-`sale_out` n'est pas un type saisissable — personne ne « saisit » une sortie de
-vente, elle est la conséquence d'une confirmation. Sales dit ce qui est vendu ;
-c'est Inventory qui compose le mouvement, ici et nulle part ailleurs.
+Le stock n'a qu'une **table** d'entrée, `inventory_movements`, et quatre portes vers
+elle : `record_movement` pour une saisie humaine, `record_sale_out`,
+`reverse_sale_out` et `record_customer_return_in` pour les flux de vente. Les trois
+dernières existent parce que `sale_out` et `customer_return_in` ne sont pas des types
+saisissables — personne ne « saisit » une sortie de vente, elle est la conséquence
+d'une confirmation. Sales dit ce qui est vendu ou rendu ; c'est Inventory qui compose
+le mouvement, ici et nulle part ailleurs.
 
 Ce que ce module ne fait pas, et ne fera jamais :
 
@@ -112,6 +113,9 @@ _UNIQUE_VIOLATION = "23505"
 
 #: `ref_type` des mouvements nés d'une ligne de vente (§ 5.1 étape 4).
 SALE_ITEM_REF = "sale_item"
+
+#: `ref_type` des mouvements nés d'une ligne de retour client (§ 5.3 étape 3).
+SALE_RETURN_ITEM_REF = "sale_return_item"
 
 _REBUILD_SQL = text("SELECT * FROM rebuild_product_stock(:company_id)")
 
@@ -428,6 +432,64 @@ def record_sale_out(
     )
     # Pas d'audit critique : une sortie de vente n'est pas une écriture de stock
     # isolée, c'est une conséquence. La confirmation, elle, est auditée par Sales.
+    _emit_stock_updated(session, ctx, movement)
+    return movement
+
+
+def record_customer_return_in(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    product_id: UUID,
+    qty: Decimal,
+    unit_cost: Decimal,
+    return_item_id: UUID,
+) -> InventoryMovement:
+    """Remet en stock la marchandise d'une ligne de retour (§ 5.3 étape 3).
+
+    Deux choses distinguent cette entrée de l'inverse écrit par `reverse_sale_out`,
+    et elles ne sont pas des détails :
+
+    * **aucun `reversal_of_movement_id`**. Un retour est un fait métier autonome, pas
+      l'annulation d'un mouvement. Le client a gardé la marchandise, l'a utilisée
+      peut-être, puis l'a rendue : la sortie de vente a bien eu lieu, et le journal
+      doit continuer de la montrer. C'est aussi ce qui rend possibles trois retours
+      partiels sur une même ligne, là où `inv_reversal_uq` n'en autorise qu'un ;
+    * **`unit_cost` est fourni**, et c'est celui de la ligne de vente. La marchandise
+      revient au coût auquel elle est sortie, pas au CMP du jour (T19) : le COGS
+      historique reste exactement compensé, et une variation du CMP entre la vente et
+      le retour ne fabrique ni profit ni perte. Conséquence assumée du § 5.3 : cette
+      entrée pèse ensuite sur le CMP courant comme n'importe quelle autre.
+
+    Le couple `('sale_return_item', return_item_id)` rend l'opération idempotente en
+    base par `inv_ref_idempotence`. La date reste le `DEFAULT now()` : la marchandise
+    rentre quand on la reçoit, pas à la date métier du retour, qu'un gérant peut
+    antidater et que la fenêtre de l'ADR 0015 refuserait.
+    """
+    movement = InventoryMovementRepository(session, ctx).add(
+        InventoryMovement(
+            company_id=ctx.company_id,
+            product_id=product_id,
+            type="customer_return_in",
+            qty_delta=qty,
+            unit_cost=unit_cost,
+            ref_type=SALE_RETURN_ITEM_REF,
+            ref_id=return_item_id,
+            created_by=ctx.user_id,
+        )
+    )
+    _flush(
+        session,
+        movement,
+        details={
+            "product_id": str(product_id),
+            "ref_type": SALE_RETURN_ITEM_REF,
+            "qty": str(qty),
+            "unit_cost": str(unit_cost),
+        },
+    )
+    # Pas d'audit critique : c'est le retour qui est l'opération auditée, pas la
+    # rentrée de stock qui en découle — même partage qu'à la confirmation de vente.
     _emit_stock_updated(session, ctx, movement)
     return movement
 
