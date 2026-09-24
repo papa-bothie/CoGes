@@ -16,6 +16,7 @@ par ce remboursement. Les dépenses arrivent en phase 07.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
@@ -25,7 +26,14 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, audit_critical
-from app.core.errors import BusinessRuleError, NotFoundError, sqlstate
+from app.core.errors import (
+    BusinessRuleError,
+    CogesError,
+    NotFoundError,
+    ValidationFailedError,
+    constraint_name,
+    sqlstate,
+)
 from app.core.events.outbox import emit
 from app.core.events.types import EventType
 from app.core.tenancy import TenantContext
@@ -34,6 +42,7 @@ from app.modules.finance.events import (
     DEBT_AGGREGATE,
     PAYMENT_AGGREGATE,
     debt_created_payload,
+    debt_settled_payload,
     payment_received_payload,
 )
 from app.modules.finance.models import Debt, Payment, PaymentAllocation, SaleReturnRefund
@@ -43,7 +52,18 @@ from app.modules.finance.repository import (
     PaymentRepository,
     SaleReturnRefundRepository,
 )
-from app.modules.finance.schemas import OFFSET_METHOD, PaymentMethod, RefundMethod
+from app.modules.finance.schemas import (
+    OFFSET_METHOD,
+    AllocationInput,
+    AllocationRead,
+    DebtCreate,
+    DebtDetail,
+    PaymentCreate,
+    PaymentDetail,
+    PaymentMethod,
+    RefundMethod,
+)
+from app.modules.suppliers import service as suppliers_service
 
 # --------------------------------------------------------------- erreurs métier
 
@@ -90,6 +110,72 @@ class DebtPartiallyPaidError(BusinessRuleError):
     )
 
 
+class DebtAlreadyClosedError(BusinessRuleError):
+    code = "debt_already_closed"
+    default_message = "Cette dette est soldée ou abandonnée : elle ne reçoit plus de règlement."
+
+
+class AllocationDirectionMismatchError(BusinessRuleError):
+    """Sens financier incompatible avec la nature de la dette.
+
+    Ni le § 8.7 ni le § 5.5 ne posent cette règle, et `allocation_check` ne regarde
+    pas `direction` — la compensation de l'ADR 0024 en dépend. Elle reste donc
+    **applicative** : on ne durcit pas la base sur une contrainte que les documents
+    n'écrivent pas. Elle n'en est pas moins vraie : une créance client s'éteint
+    quand de l'argent entre, une dette fournisseur quand de l'argent sort.
+    """
+
+    code = "allocation_direction_mismatch"
+    default_message = (
+        "Sens du paiement incompatible : une créance client s'éteint par un encaissement, "
+        "une dette fournisseur par un décaissement."
+    )
+
+
+class PaymentReferenceTakenError(BusinessRuleError):
+    code = "payment_reference_taken"
+    default_message = "Un paiement porte déjà cette référence."
+
+
+class AllocationsExceedPaymentError(ValidationFailedError):
+    """Somme des affectations supérieure au versement.
+
+    422 et non 409 : la requête se contredit elle-même, sans qu'il soit besoin de
+    lire l'état de la moindre dette.
+    """
+
+    code = "allocations_exceed_payment"
+    default_message = "La somme des affectations dépasse le montant du paiement."
+
+
+class DuplicateAllocationError(ValidationFailedError):
+    code = "duplicate_allocation"
+    default_message = "La même dette apparaît deux fois dans les affectations."
+
+
+#: Clés étrangères composites du § 8.6 dont la violation ne peut venir que d'un
+#: identifiant inexistant — ou appartenant à une autre entreprise, ce qui revient
+#: au même du point de vue du client (404, jamais 403).
+#:
+#: Ce détour par la contrainte remplace un contrôle applicatif impossible : Sales
+#: et Expenses sont **au-dessus** de Finance dans l'ordre des dépendances, Finance
+#: ne peut donc pas leur demander si la pièce existe.
+_FK_NOT_FOUND: dict[str, str] = {
+    "payments_sale_fk": "Vente introuvable.",
+    "payments_expense_fk": "Dépense introuvable.",
+    "debts_sale_fk": "Vente introuvable.",
+    "debts_expense_fk": "Dépense introuvable.",
+    "debts_customer_fk": "Client introuvable.",
+    "debts_supplier_fk": "Fournisseur introuvable.",
+    "pa_debt_fk": "Dette introuvable.",
+}
+
+#: Contraintes d'unicité traduites en refus nommés.
+_UNIQUE_ERRORS: dict[str, type[BusinessRuleError]] = {
+    "payments_ref_uq": PaymentReferenceTakenError,
+}
+
+
 #: SQLSTATE applicatifs levés par les triggers financiers (ADR 0023 et 0026).
 #: Sans eux, ces refus arriveraient tous en `check_violation`, indistinguables.
 _TRIGGER_ERRORS: dict[str, type[BusinessRuleError]] = {
@@ -102,11 +188,26 @@ _TRIGGER_ERRORS: dict[str, type[BusinessRuleError]] = {
 }
 
 
-def _translate(exc: DBAPIError, *, details: dict[str, Any]) -> BusinessRuleError | None:
-    """Traduit un refus de PostgreSQL en erreur métier, ou rend None."""
+def _translate(exc: DBAPIError, *, details: dict[str, Any]) -> CogesError | None:
+    """Traduit un refus de PostgreSQL en erreur nommée, ou rend None.
+
+    Trois familles, dans cet ordre : les SQLSTATE applicatifs des triggers, les
+    clés étrangères composites (une pièce qui n'existe pas, ou pas ici), et les
+    unicités. Le texte du message n'est jamais lu — seuls le SQLSTATE et le nom de
+    la contrainte sont stables (ADR 0014).
+    """
     trigger_error = _TRIGGER_ERRORS.get(sqlstate(exc) or "")
     if trigger_error is not None:
         return trigger_error(details=details)
+
+    name = constraint_name(exc) or ""
+    missing = _FK_NOT_FOUND.get(name)
+    if missing is not None:
+        return NotFoundError(missing, details=details)
+
+    unique_error = _UNIQUE_ERRORS.get(name)
+    if unique_error is not None:
+        return unique_error(details=details)
     return None
 
 
@@ -125,10 +226,10 @@ def _flush(
     try:
         session.flush()
     except (IntegrityError, DBAPIError) as exc:
-        business_error = _translate(exc, details=details)
-        if business_error is None:
+        named_error = _translate(exc, details=details)
+        if named_error is None:
             raise
-        raise business_error from exc
+        raise named_error from exc
     session.refresh(entity)
 
 
@@ -320,9 +421,12 @@ def open_customer_debt(
         aggregate_id=debt.id,
         payload=debt_created_payload(
             debt_id=debt.id,
+            party_type=debt.party_type,
             customer_id=customer_id,
+            supplier_id=None,
             principal=debt.principal,
             sale_id=debt.sale_id,
+            expense_id=None,
             due_date=debt.due_date,
         ),
     )
@@ -547,3 +651,449 @@ def record_return_offset(
         ip_address=ip_address,
     )
     return outflow, inflow
+
+
+# ------------------------------------------- écritures autonomes (phase 07)
+
+#: Sens d'un versement qui éteint la dette de chaque partie. Une créance client
+#: se solde quand de l'argent **entre** ; une dette fournisseur quand il **sort**.
+_SETTLING_DIRECTION: dict[str, str] = {"customer": "inflow", "supplier": "outflow"}
+
+
+def _allocation_total(allocations: Sequence[AllocationInput]) -> Decimal:
+    return sum((item.amount for item in allocations), Decimal("0"))
+
+
+def _allocate(
+    session: Session,
+    ctx: TenantContext,
+    payment: Payment,
+    allocations: Sequence[AllocationInput],
+) -> list[Debt]:
+    """Impute un versement sur des dettes, dans l'ordre de leurs identifiants.
+
+    L'ordre n'est pas cosmétique : deux versements affectant les deux mêmes dettes
+    en sens inverse s'interbloqueraient. Trier par `id` donne à toutes les
+    transactions la même séquence de verrous — la discipline déjà tenue par
+    `confirm_sale` sur les lignes de vente.
+
+    Chaque dette est lue `FOR UPDATE` **avant** d'être comparée à l'affectation.
+    Le trigger `pa_check` reprend ce verrou et reste l'autorité ; le contrôle
+    applicatif ne sert qu'à nommer le solde dans le refus (ADR 0014).
+    """
+    repository = DebtRepository(session, ctx)
+    allocation_repository = PaymentAllocationRepository(session, ctx)
+    settled: list[Debt] = []
+
+    for item in sorted(allocations, key=lambda entry: entry.debt_id):
+        debt = repository.get_for_update(item.debt_id)
+        if debt is None:
+            raise NotFoundError("Dette introuvable.", details={"debt_id": str(item.debt_id)})
+
+        details: dict[str, Any] = {
+            "debt_id": str(debt.id),
+            "balance": str(debt.balance),
+            "requested": str(item.amount),
+        }
+        if debt.status in ("paid", "written_off"):
+            raise DebtAlreadyClosedError(details={**details, "status": debt.status})
+        if payment.direction != _SETTLING_DIRECTION[debt.party_type]:
+            raise AllocationDirectionMismatchError(
+                details={**details, "party_type": debt.party_type, "direction": payment.direction}
+            )
+        if item.amount > debt.balance:
+            raise AllocationExceedsBalanceError(details=details)
+
+        allocation = allocation_repository.add(
+            PaymentAllocation(
+                company_id=ctx.company_id,
+                payment_id=payment.id,
+                debt_id=debt.id,
+                amount=item.amount,
+            )
+        )
+        _flush(session, allocation, details=details)
+
+        # `pa_rollup` vient de réécrire `amount_paid`, `status` et `closed_at` :
+        # l'objet en mémoire est périmé tant qu'on ne le relit pas.
+        session.refresh(debt)
+        if debt.status == "paid":
+            settled.append(debt)
+
+    return settled
+
+
+def record_payment(
+    session: Session,
+    ctx: TenantContext,
+    payload: PaymentCreate,
+    *,
+    ip_address: str | None = None,
+) -> Payment:
+    """Enregistre un encaissement ou un décaissement, et l'impute (Diagramme 5).
+
+    L'ordre est celui du diagramme : cohérence de la demande, paiement, lettrages
+    sous verrou, soldes recalculés par trigger, dettes soldées annoncées, audit
+    critique, outbox. La clé d'idempotence, première étape du diagramme, est posée
+    **avant** par le router — elle appartient au transport, pas à la règle.
+
+    Le sur-paiement est refusé : la somme des affectations ne peut dépasser ni le
+    versement (422, la demande se contredit) ni le solde de chaque dette (409,
+    l'état refuse). Aucun avoir, aucun solde créditeur en V1.
+    """
+    debt_ids = [item.debt_id for item in payload.allocations]
+    if len(set(debt_ids)) != len(debt_ids):
+        raise DuplicateAllocationError(details={"debt_ids": [str(value) for value in debt_ids]})
+
+    allocated = _allocation_total(payload.allocations)
+    if allocated > payload.amount:
+        raise AllocationsExceedPaymentError(
+            details={"allocated": str(allocated), "amount": str(payload.amount)}
+        )
+
+    payment = PaymentRepository(session, ctx).add(
+        Payment(
+            company_id=ctx.company_id,
+            direction=payload.direction,
+            method=payload.method,
+            amount=payload.amount,
+            sale_id=payload.sale_id,
+            expense_id=payload.expense_id,
+            reference=payload.reference,
+            note=payload.note,
+            created_by=ctx.user_id,
+        )
+    )
+    if payload.paid_at is not None:
+        # Sans date saisie, on laisse le `DEFAULT now()` de PostgreSQL : affecter
+        # `None` enverrait un NULL sur une colonne qui n'en accepte pas.
+        payment.paid_at = payload.paid_at
+    _flush(session, payment, details={"amount": str(payload.amount)})
+
+    settled = _allocate(session, ctx, payment, payload.allocations)
+
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.INSERT,
+        entity_table="payments",
+        entity_id=payment.id,
+        after={
+            **_audited_payment(payment),
+            "allocations": [
+                {"debt_id": str(item.debt_id), "amount": str(item.amount)}
+                for item in payload.allocations
+            ],
+        },
+        ip_address=ip_address,
+    )
+
+    if payment.direction == "inflow":
+        # Aucun `payment.sent` dans la liste fermée des neuf événements : un
+        # décaissement n'émet rien plutôt que de se faire passer pour une recette
+        # (ADR 0026, décision 3).
+        emit(
+            session,
+            ctx,
+            event_type=EventType.PAYMENT_RECEIVED,
+            aggregate_type=PAYMENT_AGGREGATE,
+            aggregate_id=payment.id,
+            payload=payment_received_payload(
+                payment_id=payment.id,
+                amount=payment.amount,
+                method=payment.method,
+                sale_id=payment.sale_id,
+            ),
+        )
+
+    for debt in settled:
+        emit(
+            session,
+            ctx,
+            event_type=EventType.DEBT_SETTLED,
+            aggregate_type=DEBT_AGGREGATE,
+            aggregate_id=debt.id,
+            payload=debt_settled_payload(
+                debt_id=debt.id,
+                party_type=debt.party_type,
+                customer_id=debt.customer_id,
+                supplier_id=debt.supplier_id,
+                principal=debt.principal,
+                payment_id=payment.id,
+                closed_at=debt.closed_at,
+            ),
+        )
+    return payment
+
+
+def create_debt(
+    session: Session,
+    ctx: TenantContext,
+    payload: DebtCreate,
+    *,
+    ip_address: str | None = None,
+) -> Debt:
+    """Ouvre une dette à la main : engagement fournisseur, ou créance hors vente.
+
+    Le tiers est vérifié par sa façade — Customers et Suppliers sont **sous**
+    Finance, elle a le droit de les interroger. La pièce d'origine facultative
+    (`expense_id`), elle, appartient à un module situé **au-dessus** : c'est la clé
+    étrangère composite qui la valide, et sa violation ressort en 404.
+    """
+    details: dict[str, Any] = {
+        "party_type": payload.party_type,
+        "principal": str(payload.principal),
+    }
+
+    if payload.party_type == "customer" and payload.customer_id is not None:
+        customers_service.assert_exists(session, ctx, payload.customer_id)
+        limit = customers_service.get_credit_limit(session, ctx, payload.customer_id)
+        outstanding = DebtRepository(session, ctx).open_balance_for_customer(payload.customer_id)
+        details |= {
+            "customer_id": str(payload.customer_id),
+            "outstanding": str(outstanding),
+            "credit_limit": None if limit is None else str(limit),
+        }
+        if limit is not None and outstanding + payload.principal > limit:
+            raise CreditLimitExceededError(details=details)
+    elif payload.supplier_id is not None:
+        suppliers_service.assert_exists(session, ctx, payload.supplier_id)
+        details["supplier_id"] = str(payload.supplier_id)
+
+    debt = DebtRepository(session, ctx).add(
+        Debt(
+            company_id=ctx.company_id,
+            party_type=payload.party_type,
+            customer_id=payload.customer_id,
+            supplier_id=payload.supplier_id,
+            expense_id=payload.expense_id,
+            principal=payload.principal,
+            amount_paid=Decimal("0"),
+            due_date=payload.due_date,
+            status="open",
+        )
+    )
+    _flush(session, debt, details=details)
+
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.INSERT,
+        entity_table="debts",
+        entity_id=debt.id,
+        after=_audited_debt(debt),
+        ip_address=ip_address,
+    )
+    emit(
+        session,
+        ctx,
+        event_type=EventType.DEBT_CREATED,
+        aggregate_type=DEBT_AGGREGATE,
+        aggregate_id=debt.id,
+        payload=debt_created_payload(
+            debt_id=debt.id,
+            party_type=debt.party_type,
+            customer_id=debt.customer_id,
+            supplier_id=debt.supplier_id,
+            principal=debt.principal,
+            sale_id=debt.sale_id,
+            expense_id=debt.expense_id,
+            due_date=debt.due_date,
+        ),
+    )
+    return debt
+
+
+def write_off_debt(
+    session: Session,
+    ctx: TenantContext,
+    debt_id: UUID,
+    *,
+    reason: str,
+    ip_address: str | None = None,
+) -> Debt:
+    """Abandonne une créance : renonciation à un actif, donc audit critique.
+
+    `principal` n'est **jamais** réécrit (§ 5.5) : la dette est close, pas effacée,
+    et son reste dû reste lisible. `closed_at` est renseigné, sans quoi le `CHECK`
+    `debts_closed_coherent` refuserait le statut.
+
+    Une dette déjà partiellement réglée **est** abandonnable, contrairement à
+    `write_off_sale_debt` : renoncer au reliquat d'un client qui a payé la moitié
+    puis disparu est le cas réel. L'autre fonction sert l'annulation d'une vente,
+    où de l'argent reçu doit d'abord être rendu — deux gestes, deux règles.
+
+    Aucun événement : `debt.settled` dirait qu'elle a été réglée. Elle ne l'a pas été.
+    """
+    debt = DebtRepository(session, ctx).get_for_update(debt_id)
+    if debt is None:
+        raise NotFoundError("Dette introuvable.")
+    if debt.status in ("paid", "written_off"):
+        raise DebtAlreadyClosedError(details={"debt_id": str(debt.id), "status": debt.status})
+
+    before = _audited_debt(debt)
+    debt.status = "written_off"
+    debt.closed_at = datetime.now(UTC)
+    session.flush()
+    session.refresh(debt)
+
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.CANCEL,
+        entity_table="debts",
+        entity_id=debt.id,
+        before=before,
+        after={**_audited_debt(debt), "reason": reason},
+        ip_address=ip_address,
+    )
+    return debt
+
+
+# ---------------------------------------------- lectures paginées (phase 07)
+
+
+def get_debt(session: Session, ctx: TenantContext, debt_id: UUID) -> Debt:
+    """Dette du tenant courant. Celle d'une autre entreprise donne 404."""
+    debt = DebtRepository(session, ctx).get(debt_id)
+    if debt is None:
+        raise NotFoundError("Dette introuvable.")
+    return debt
+
+
+def list_payments(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    page: int,
+    page_size: int,
+    direction: str | None = None,
+    period_from: datetime | None = None,
+    period_to: datetime | None = None,
+) -> tuple[Sequence[Payment], int]:
+    repository = PaymentRepository(session, ctx)
+    items = repository.page_filtered(
+        page=page,
+        page_size=page_size,
+        direction=direction,
+        period_from=period_from,
+        period_to=period_to,
+    )
+    total = repository.count_filtered(
+        direction=direction, period_from=period_from, period_to=period_to
+    )
+    return items, total
+
+
+def list_debts(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    page: int,
+    page_size: int,
+    party_type: str | None = None,
+    status: str | None = None,
+    overdue: bool = False,
+) -> tuple[Sequence[Debt], int]:
+    """Page de dettes. `overdue` borne sur aujourd'hui, pas sur une date saisie."""
+    repository = DebtRepository(session, ctx)
+    overdue_on = datetime.now(UTC).date() if overdue else None
+    items = repository.page_filtered(
+        page=page,
+        page_size=page_size,
+        party_type=party_type,
+        status=status,
+        overdue_on=overdue_on,
+    )
+    total = repository.count_filtered(party_type=party_type, status=status, overdue_on=overdue_on)
+    return items, total
+
+
+def allocations_of_payments(
+    session: Session, ctx: TenantContext, payment_ids: Sequence[UUID]
+) -> dict[UUID, list[PaymentAllocation]]:
+    """Affectations d'un lot de versements, groupées — une requête, pas N."""
+    grouped: dict[UUID, list[PaymentAllocation]] = {}
+    for allocation in PaymentAllocationRepository(session, ctx).for_payments(payment_ids):
+        grouped.setdefault(allocation.payment_id, []).append(allocation)
+    return grouped
+
+
+def allocations_of_debts(
+    session: Session, ctx: TenantContext, debt_ids: Sequence[UUID]
+) -> dict[UUID, list[PaymentAllocation]]:
+    """Règlements reçus par un lot de dettes, groupés."""
+    grouped: dict[UUID, list[PaymentAllocation]] = {}
+    for allocation in PaymentAllocationRepository(session, ctx).for_debts(debt_ids):
+        grouped.setdefault(allocation.debt_id, []).append(allocation)
+    return grouped
+
+
+def build_payment_detail(
+    payment: Payment, allocations: Sequence[PaymentAllocation]
+) -> PaymentDetail:
+    """Vue publique d'un paiement, ses affectations comprises."""
+    return PaymentDetail(
+        id=payment.id,
+        direction=payment.direction,
+        method=payment.method,
+        amount=payment.amount,
+        paid_at=payment.paid_at,
+        sale_id=payment.sale_id,
+        expense_id=payment.expense_id,
+        sale_return_id=payment.sale_return_id,
+        reference=payment.reference,
+        note=payment.note,
+        created_at=payment.created_at,
+        allocations=[AllocationRead.model_validate(item) for item in allocations],
+    )
+
+
+def build_debt_detail(debt: Debt, allocations: Sequence[PaymentAllocation]) -> DebtDetail:
+    """Vue publique d'une dette, ses règlements compris."""
+    return DebtDetail(
+        id=debt.id,
+        party_type=debt.party_type,
+        customer_id=debt.customer_id,
+        supplier_id=debt.supplier_id,
+        sale_id=debt.sale_id,
+        expense_id=debt.expense_id,
+        principal=debt.principal,
+        amount_paid=debt.amount_paid,
+        balance=debt.balance,
+        due_date=debt.due_date,
+        status=debt.status,
+        closed_at=debt.closed_at,
+        created_at=debt.created_at,
+        allocations=[AllocationRead.model_validate(item) for item in allocations],
+    )
+
+
+# ------------------------------------- façades de restitution (bande E)
+
+
+def cash_summary(
+    session: Session, ctx: TenantContext, *, period_from: datetime, period_to: datetime
+) -> dict[str, Decimal]:
+    """Encaissé et décaissé de la période, compensations exclues (ADR 0024)."""
+    return PaymentRepository(session, ctx).cash_totals(period_from=period_from, period_to=period_to)
+
+
+def daily_cash(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    period_from: datetime,
+    period_to: datetime,
+    timezone: str,
+) -> list[tuple[date, str, Decimal]]:
+    """Série jour × sens, dans le fuseau de l'entreprise."""
+    rows = PaymentRepository(session, ctx).daily_cash(
+        period_from=period_from, period_to=period_to, timezone=timezone
+    )
+    return [(row[0], row[1], Decimal(row[2])) for row in rows]
+
+
+def open_debt_totals(session: Session, ctx: TenantContext) -> dict[str, Decimal]:
+    """Créances clients et dettes fournisseurs encore ouvertes, à l'instant t."""
+    return DebtRepository(session, ctx).open_totals_by_party()

@@ -17,7 +17,6 @@ Comme T38, le test ne **court** pas après la fenêtre de concurrence, il la **p
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from typing import Any
@@ -29,7 +28,6 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import text
 
-from app.core.database import create_app_engine
 from app.core.errors import sqlstate
 from app.core.tenancy import tenant_transaction
 from tests.tenancy.harness import Tenant
@@ -38,23 +36,6 @@ pytestmark = pytest.mark.integration
 
 #: SQLSTATE applicatif du plafond de crédit (révision 0006, ADR 0023).
 CREDIT_LIMIT_EXCEEDED = "CG030"
-
-
-@pytest.fixture
-def concurrent_session_factory(
-    migrated_database: str, database_urls: tuple[str, str]
-) -> Iterator[sessionmaker[Any]]:
-    """Fabrique de sessions sur un pool de **trois** connexions.
-
-    Le pool de la suite n'en contient qu'une — c'est ce qu'exige T4. Il en faut trois
-    ici : une pour le verrou tenu par le test, deux pour les caisses concurrentes.
-    """
-    _, app_url = database_urls
-    engine: Engine = create_app_engine(app_url, pool_size=3, max_overflow=0)
-    try:
-        yield sessionmaker(bind=engine, expire_on_commit=False, future=True)
-    finally:
-        engine.dispose()
 
 
 def _make_customer(

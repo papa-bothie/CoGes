@@ -64,6 +64,7 @@ from app.modules.sales.repository import (
     SaleRepository,
     SaleReturnItemRepository,
     SaleReturnRepository,
+    SaleRevenueRepository,
 )
 from app.modules.sales.schemas import (
     ReceiptCompany,
@@ -1162,3 +1163,38 @@ def build_return_list(session: Session, ctx: TenantContext, sale_id: UUID) -> Sa
     return SaleReturnList(
         items=[build_return_read(sale_return) for sale_return in returns], total=len(returns)
     )
+
+
+# ------------------------------------- façade de restitution (bande E)
+
+
+def revenue_totals(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    period_from: datetime,
+    period_to: datetime,
+) -> dict[str, Decimal]:
+    """Mesures de revenu et de coût de la période, telles que le § 4.10 les définit.
+
+    Façade **lecture seule** pour la bande E : Analytics compose, Sales calcule sur
+    ses propres tables. Aucun module ne lit `sale_items` à sa place.
+
+        net_revenue = gross_revenue − discount_total − refund_net_amount
+        cogs_net    = cogs_gross − cogs_returned
+
+    Les retours sont rattachés au jour de la **vente d'origine**, et les ventes
+    annulées comme les brouillons sont exclus. `tax_total` reste isolé : une taxe
+    n'est pas un revenu (§ 4.10).
+    """
+    repository = SaleRevenueRepository(session, ctx)
+    totals = repository.gross_totals(period_from=period_from, period_to=period_to)
+    totals |= repository.return_totals(period_from=period_from, period_to=period_to)
+    totals["net_revenue"] = (
+        totals["gross_revenue"] - totals["discount_total"] - totals["refund_net_amount"]
+    )
+    totals["cogs_net"] = totals["cogs_gross"] - totals["cogs_returned"]
+    totals["sale_count"] = Decimal(
+        repository.confirmed_sale_count(period_from=period_from, period_to=period_to)
+    )
+    return totals

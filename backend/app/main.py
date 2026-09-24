@@ -15,11 +15,15 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.errors import CogesError, ValidationFailedError
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
+from app.modules.analytics.router import router as analytics_router
 from app.modules.auth.router import router as auth_router
 from app.modules.categories.router import router as categories_router
 from app.modules.companies.router import router as companies_router
 from app.modules.customers.router import router as customers_router
-from app.modules.finance.router import router as finance_router
+from app.modules.expenses.router import categories_router as expense_categories_router
+from app.modules.expenses.router import router as expenses_router
+from app.modules.finance.router import debts_router
+from app.modules.finance.router import router as payments_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.products.router import router as products_router
 from app.modules.rbac.router import router as rbac_router
@@ -55,9 +59,15 @@ api_router.include_router(inventory_router)
 # Bande D : Sales lit tout ce qui précède par leurs façades ; rien ne le lit.
 api_router.include_router(sales_router)
 api_router.include_router(returns_router)
-# Bande E : Finance n'expose qu'une lecture, la traçabilité inverse d'un
-# remboursement. Ses écritures restent appelées par Sales (ADR 0019 et 0024).
-api_router.include_router(finance_router)
+# Bande D : Finance porte les écritures d'argent et la vie des dettes ; Expenses
+# ne dépend que d'elle.
+api_router.include_router(payments_router)
+api_router.include_router(debts_router)
+api_router.include_router(expense_categories_router)
+api_router.include_router(expenses_router)
+# Bande E : Analytics ne possède aucune table — elle compose les façades des bandes
+# du dessous, seul sens que l'ordre des dépendances autorise.
+api_router.include_router(analytics_router)
 
 app.include_router(api_router)
 

@@ -43,10 +43,7 @@ TENANT_TABLES: tuple[str, ...] = (
     # Phase 04 — stock.
     "product_stock",
     "inventory_movements",
-    # Phase 05 — ventes et finance. Les tables créées par la révision 0006 mais
-    # qu'aucun service n'écrit encore (dépenses) entreront ici avec la phase 07,
-    # quand elles auront des lignes à semer. Leur RLS, elle, est déjà couverte :
-    # T37 est générique.
+    # Phase 05 — ventes et finance.
     "sales",
     "sale_items",
     "payments",
@@ -57,6 +54,10 @@ TENANT_TABLES: tuple[str, ...] = (
     "sale_return_items",
     "sale_return_refunds",
     "payment_allocations",
+    # Phase 07 — charges, et les clés d'idempotence des écritures financières.
+    "expense_categories",
+    "expenses",
+    "idempotency_keys",
 )
 
 # Valeur factice : aucun mot de passe réel ne figure dans les tests.
@@ -94,6 +95,10 @@ class Tenant:
     refund_payment_id: UUID
     refund_id: UUID
     allocation_id: UUID
+    # Phase 07 — une famille de charges, une dépense, et une clé d'idempotence.
+    expense_category_id: UUID
+    expense_id: UUID
+    idempotency_key: str
 
     @property
     def ctx(self) -> TenantContext:
@@ -191,6 +196,9 @@ def create_tenant(
         refund_payment_id=uuid4(),
         refund_id=uuid4(),
         allocation_id=uuid4(),
+        expense_category_id=uuid4(),
+        expense_id=uuid4(),
+        idempotency_key=uuid4().hex,
     )
 
     with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
@@ -231,6 +239,7 @@ def create_tenant(
     _seed_inventory(session_factory, tenant)
     _seed_sales(session_factory, tenant)
     _seed_returns(session_factory, tenant)
+    _seed_expenses(session_factory, tenant)
     return tenant
 
 
@@ -488,6 +497,48 @@ def _seed_returns(session_factory: sessionmaker[Any], tenant: Tenant) -> None:
         )
 
 
+def _seed_expenses(session_factory: sessionmaker[Any], tenant: Tenant) -> None:
+    """Une famille de charges, une dépense et une clé d'idempotence (phase 07).
+
+    La clé est semée directement plutôt qu'obtenue par un appel d'API : ce harnais
+    attaque la base, et une ligne de `idempotency_keys` doit exister chez chaque
+    tenant pour que T1 et T2 aient quelque chose à ne pas voir.
+    """
+    with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
+        session.execute(
+            text(
+                "INSERT INTO expense_categories (id, company_id, name, kind) "
+                "VALUES (:id, :company_id, 'Loyer', 'fixed')"
+            ),
+            {"id": tenant.expense_category_id, "company_id": tenant.company_id},
+        )
+        session.execute(
+            text(
+                "INSERT INTO expenses "
+                "(id, company_id, expense_no, category_id, supplier_id, label, amount, "
+                " spent_at, created_by) "
+                "VALUES (:id, :company_id, 'D-000001', :category_id, :supplier_id, "
+                "        'Loyer du mois', 50000.00, current_date, :created_by)"
+            ),
+            {
+                "id": tenant.expense_id,
+                "company_id": tenant.company_id,
+                "category_id": tenant.expense_category_id,
+                "supplier_id": tenant.supplier_id,
+                "created_by": tenant.user_id,
+            },
+        )
+        session.execute(
+            text(
+                "INSERT INTO idempotency_keys "
+                "(company_id, key, endpoint, request_hash, response_status, expires_at) "
+                "VALUES (:company_id, :key, 'POST /api/v1/payments', 'seed', 201, "
+                "        now() + interval '24 hours')"
+            ),
+            {"company_id": tenant.company_id, "key": tenant.idempotency_key},
+        )
+
+
 def own_row_ids(tenant: Tenant, table: str) -> dict[str, Any]:
     """Critère SQL qui désigne la ligne de `tenant` dans `table`."""
     criteria: dict[str, dict[str, Any]] = {
@@ -515,5 +566,8 @@ def own_row_ids(tenant: Tenant, table: str) -> dict[str, Any]:
         "document_counters": {"clause": "company_id = :value", "value": tenant.company_id},
         "auth_sessions": {"clause": "company_id = :value", "value": tenant.company_id},
         "business_events": {"clause": "company_id = :value", "value": tenant.company_id},
+        "expense_categories": {"clause": "id = :value", "value": tenant.expense_category_id},
+        "expenses": {"clause": "id = :value", "value": tenant.expense_id},
+        "idempotency_keys": {"clause": "key = :value", "value": tenant.idempotency_key},
     }
     return criteria[table]

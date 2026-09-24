@@ -474,3 +474,130 @@ def test_t05_a_refund_cannot_be_lettered_on_a_foreign_return(
 
     message = str(excinfo.value)
     assert "srr_return_fk" in message or "Retour introuvable" in message, message
+
+
+def _free_payment(session_factory: sessionmaker[Any], tenant: Tenant) -> Any:
+    """Un encaissement neuf, entièrement disponible pour un lettrage."""
+    payment_id = uuid4()
+    with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
+        session.execute(
+            text(
+                "INSERT INTO payments "
+                "(id, company_id, direction, method, amount, created_by) "
+                "VALUES (:id, :company_id, 'inflow', 'cash', 1000.00, :created_by)"
+            ),
+            {"id": payment_id, "company_id": tenant.company_id, "created_by": tenant.user_id},
+        )
+    return payment_id
+
+
+def test_t05_an_allocation_cannot_settle_a_foreign_debt(
+    session_factory: sessionmaker[Any], tenant_a: Tenant, tenant_b: Tenant
+) -> None:
+    """Phase 07 : un versement de A lettré sur une dette de B.
+
+    C'est le chemin financier qu'ouvrent les allocations manuelles : sans barrière,
+    on éteindrait la créance d'un concurrent avec son propre argent, et le solde du
+    voisin baisserait sans qu'aucune de ses caisses n'ait encaissé.
+
+    `allocation_check` ne refuse rien sur la **dette** : il la cherche dans le
+    tenant courant, ne la trouve pas, laisse `v_bal` à NULL, et `NEW.amount > NULL`
+    ne vaut pas `true`. C'est `pa_debt_fk` qui refuse — la barrière qui tient sans
+    aucun trigger.
+
+    Le versement est neuf, et pas celui du harnais : ce dernier est déjà affecté
+    en totalité, et `allocation_check` refuserait la sur-affectation **avant** que
+    la clé étrangère n'ait son mot à dire. Le test mesurerait alors la mauvaise
+    barrière.
+    """
+    payment_id = _free_payment(session_factory, tenant_a)
+
+    with (
+        pytest.raises(IntegrityError) as excinfo,
+        tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session,
+    ):
+        session.execute(
+            text(
+                "INSERT INTO payment_allocations (company_id, payment_id, debt_id, amount) "
+                "VALUES (:company_id, :payment_id, :debt_id, 100.00)"
+            ),
+            {
+                "company_id": tenant_a.company_id,
+                "payment_id": payment_id,
+                "debt_id": tenant_b.debt_id,
+            },
+        )
+
+    _assert_foreign_key_violation(excinfo, "pa_debt_fk")
+
+
+def test_t05_an_allocation_cannot_draw_on_a_foreign_payment(
+    session_factory: sessionmaker[Any], tenant_a: Tenant, tenant_b: Tenant
+) -> None:
+    """Le sens inverse : une dette de A soldée par le versement de B."""
+    with (
+        pytest.raises(IntegrityError) as excinfo,
+        tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session,
+    ):
+        session.execute(
+            text(
+                "INSERT INTO payment_allocations (company_id, payment_id, debt_id, amount) "
+                "VALUES (:company_id, :payment_id, :debt_id, 100.00)"
+            ),
+            {
+                "company_id": tenant_a.company_id,
+                "payment_id": tenant_b.payment_id,
+                "debt_id": tenant_a.debt_id,
+            },
+        )
+
+    _assert_foreign_key_violation(excinfo, "pa_payment_fk")
+
+
+def test_t05_an_expense_cannot_be_filed_under_a_foreign_category(
+    session_factory: sessionmaker[Any], tenant_a: Tenant, tenant_b: Tenant
+) -> None:
+    """Une charge de A rangée dans une famille de B viole `expenses_category_fk`."""
+    with (
+        pytest.raises(IntegrityError) as excinfo,
+        tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session,
+    ):
+        session.execute(
+            text(
+                "INSERT INTO expenses "
+                "(company_id, expense_no, category_id, label, amount, spent_at, created_by) "
+                "VALUES (:company_id, 'D-INTRUS', :category_id, 'Charge intruse', "
+                "        1000.00, current_date, :created_by)"
+            ),
+            {
+                "company_id": tenant_a.company_id,
+                "category_id": tenant_b.expense_category_id,
+                "created_by": tenant_a.user_id,
+            },
+        )
+
+    _assert_foreign_key_violation(excinfo, "expenses_category_fk")
+
+
+def test_t05_a_debt_cannot_be_backed_by_a_foreign_expense(
+    session_factory: sessionmaker[Any], tenant_a: Tenant, tenant_b: Tenant
+) -> None:
+    """Une dette fournisseur de A adossée à une charge de B viole `debts_expense_fk`."""
+    with (
+        pytest.raises(IntegrityError) as excinfo,
+        tenant_transaction(tenant_a.ctx, session_factory=session_factory) as session,
+    ):
+        session.execute(
+            text(
+                "INSERT INTO debts "
+                "(company_id, party_type, supplier_id, expense_id, principal) "
+                "VALUES (:company_id, 'supplier', :supplier_id, :expense_id, 500.00)"
+            ),
+            {
+                "company_id": tenant_a.company_id,
+                "supplier_id": tenant_a.supplier_id,
+                "expense_id": tenant_b.expense_id,
+            },
+        )
+
+    _assert_foreign_key_violation(excinfo, "debts_expense_fk")

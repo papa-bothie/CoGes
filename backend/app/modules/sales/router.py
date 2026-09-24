@@ -13,7 +13,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 
+from app.core import idempotency
 from app.core.deps import TenantSession, client_ip, require_permission
+from app.core.idempotency import IdempotencyKey
 from app.core.repository import MAX_PAGE_SIZE
 from app.modules.sales import service
 from app.modules.sales.schemas import (
@@ -39,6 +41,13 @@ router = APIRouter(prefix="/sales", tags=["sales"])
 #: Un retour se crée **sur** une vente, mais se lit et se règle pour lui-même : il a
 #: son numéro, son reste dû et sa vie propre. D'où deux préfixes, et non un seul.
 returns_router = APIRouter(prefix="/sale-returns", tags=["sale_returns"])
+
+#: Identifient l'écriture dans `idempotency_keys`. Ces deux endpoints déplacent de
+#: l'argent — la confirmation encaisse et ouvre une dette, le remboursement
+#: décaisse — et relèvent donc de la même règle que `POST /payments` : un double
+#: clic ne doit pas produire deux écritures (décision 16, ADR 0027).
+CONFIRM_SALE_ENDPOINT = "POST /api/v1/sales/{id}/confirm"
+REFUND_RETURN_ENDPOINT = "POST /api/v1/sale-returns/{id}/refunds"
 
 
 @router.post("", response_model=SaleDetail, status_code=status.HTTP_201_CREATED)
@@ -158,17 +167,36 @@ def confirm_sale(
     payload: SaleConfirm,
     request: Request,
     tenant: Annotated[TenantSession, Depends(require_permission("sales:confirm"))],
-) -> SaleDetail:
+    idempotency_key: IdempotencyKey,
+) -> Response:
     """Confirme la vente : stock, encaissement, dette, audit et événement.
 
-    Une vente déjà confirmée est refusée en 409 `sale_not_draft` : la confirmation
-    n'est pas idempotente, et un second appel doit être vu comme le conflit qu'il
-    est — deux caissiers présentant deux règlements différents (ADR 0022).
+    Deux garde-fous qu'il ne faut pas confondre. La **clé d'idempotence** protège
+    du réseau : la requête partie deux fois rejoue la même réponse. Le refus
+    `sale_not_draft` (409) protège du métier : une seconde confirmation, avec une
+    clé neuve, est un conflit réel — deux caissiers présentant deux règlements
+    différents (ADR 0022). La première n'annule pas le second.
     """
+    replay = idempotency.reserve(
+        tenant.session,
+        tenant.ctx,
+        key=idempotency_key,
+        endpoint=CONFIRM_SALE_ENDPOINT,
+        payload=payload,
+    )
+    if replay is not None:
+        return idempotency.replay_response(replay)
+
     sale = service.confirm_sale(
         tenant.session, tenant.ctx, sale_id, payload, ip_address=client_ip(request)
     )
-    return service.build_detail(tenant.session, tenant.ctx, sale)
+    return idempotency.completed(
+        tenant.session,
+        tenant.ctx,
+        key=idempotency_key,
+        status_code=status.HTTP_200_OK,
+        model=service.build_detail(tenant.session, tenant.ctx, sale),
+    )
 
 
 @router.post("/{sale_id}/cancel", response_model=SaleDetail)
@@ -236,14 +264,34 @@ def refund_return(
     payload: RefundCreate,
     request: Request,
     tenant: Annotated[TenantSession, Depends(require_permission("sale_returns:confirm"))],
-) -> SaleReturnDetail:
+    idempotency_key: IdempotencyKey,
+) -> Response:
     """Règle tout ou partie d'un retour, en trésorerie ou par compensation.
 
     Réservé au gérant : `sale_returns:confirm` garde l'argent, comme
     `sales:cancel` garde l'annulation (ADR 0007 et 0025). Un montant qui dépasse le
     reste dû est refusé en 409, et les triggers le refuseraient de toute façon.
+
+    Écriture financière, donc clé d'idempotence obligatoire : un remboursement
+    envoyé deux fois rend la même réponse, et ne sort l'argent qu'une seule fois.
     """
+    replay = idempotency.reserve(
+        tenant.session,
+        tenant.ctx,
+        key=idempotency_key,
+        endpoint=REFUND_RETURN_ENDPOINT,
+        payload=payload,
+    )
+    if replay is not None:
+        return idempotency.replay_response(replay)
+
     sale_return = service.refund_return(
         tenant.session, tenant.ctx, return_id, payload, ip_address=client_ip(request)
     )
-    return service.build_return_detail(tenant.session, tenant.ctx, sale_return)
+    return idempotency.completed(
+        tenant.session,
+        tenant.ctx,
+        key=idempotency_key,
+        status_code=status.HTTP_200_OK,
+        model=service.build_return_detail(tenant.session, tenant.ctx, sale_return),
+    )

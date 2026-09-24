@@ -241,3 +241,102 @@ class SaleReturnItemRepository(TenantRepository[SaleReturnItem]):
             .order_by(SaleReturnItem.created_at.asc(), SaleReturnItem.id.asc())
         )
         return self.session.execute(stmt).scalars().all()
+
+
+class SaleRevenueRepository(TenantRepository[Sale]):
+    """Agrégats de revenu et de coût des ventes, pour la bande E (lecture seule).
+
+    Les mesures sont celles du § 4.10, à la lettre : la phase 08 remplacera la
+    source par `daily_sales_facts` sans changer un seul chiffre, et l'écart entre
+    les deux deviendra le test T32.
+
+    Deux requêtes plutôt qu'une jointure unique : agréger les lignes de vente et
+    leurs retours ensemble **dupliquerait** chaque ligne vendue autant de fois
+    qu'elle a été retournée. C'est exactement la surestimation que la V1.1 corrige
+    en pré-agrégeant les retours (§ 6.1) ; le même piège attend ici.
+    """
+
+    model = Sale
+
+    #: Une vente annulée n'a produit ni revenu ni coût, un brouillon non plus.
+    CONFIRMED = "confirmed"
+
+    def gross_totals(self, *, period_from: datetime, period_to: datetime) -> dict[str, Decimal]:
+        """CA brut, remises, taxes et coût des marchandises sorties."""
+        stmt = (
+            select(
+                func.coalesce(func.sum(SaleItem.qty * SaleItem.unit_price), 0),
+                func.coalesce(func.sum(SaleItem.discount), 0),
+                func.coalesce(func.sum(SaleItem.tax_amount), 0),
+                func.coalesce(func.sum(SaleItem.qty * SaleItem.unit_cost), 0),
+            )
+            .select_from(SaleItem)
+            .join(
+                Sale,
+                (Sale.company_id == SaleItem.company_id) & (Sale.id == SaleItem.sale_id),
+            )
+            .where(
+                Sale.company_id == self.ctx.company_id,
+                Sale.status == self.CONFIRMED,
+                Sale.sold_at >= period_from,
+                Sale.sold_at <= period_to,
+            )
+        )
+        gross, discount, tax, cogs = self.session.execute(stmt).one()
+        return {
+            "gross_revenue": Decimal(gross),
+            "discount_total": Decimal(discount),
+            "tax_total": Decimal(tax),
+            "cogs_gross": Decimal(cogs),
+        }
+
+    def return_totals(self, *, period_from: datetime, period_to: datetime) -> dict[str, Decimal]:
+        """Montant HT rendu et coût réintégré, **rattachés au jour de la vente**.
+
+        Un retour enregistré aujourd'hui corrige une vente d'il y a trois semaines
+        (§ 4.10) : la période porte donc sur `sales.sold_at`, jamais sur la date du
+        retour. Sinon la marge d'un mois clos changerait après coup.
+        """
+        stmt = (
+            select(
+                func.coalesce(
+                    func.sum(SaleReturnItem.refund_amount - SaleReturnItem.tax_refund), 0
+                ),
+                func.coalesce(func.sum(SaleReturnItem.qty * SaleReturnItem.unit_cost), 0),
+            )
+            .select_from(SaleReturnItem)
+            .join(
+                SaleItem,
+                (SaleItem.company_id == SaleReturnItem.company_id)
+                & (SaleItem.id == SaleReturnItem.sale_item_id),
+            )
+            .join(
+                Sale,
+                (Sale.company_id == SaleItem.company_id) & (Sale.id == SaleItem.sale_id),
+            )
+            .where(
+                Sale.company_id == self.ctx.company_id,
+                Sale.status == self.CONFIRMED,
+                Sale.sold_at >= period_from,
+                Sale.sold_at <= period_to,
+            )
+        )
+        refund_net, cogs_returned = self.session.execute(stmt).one()
+        return {
+            "refund_net_amount": Decimal(refund_net),
+            "cogs_returned": Decimal(cogs_returned),
+        }
+
+    def confirmed_sale_count(self, *, period_from: datetime, period_to: datetime) -> int:
+        """Nombre de ventes confirmées sur la période."""
+        stmt = (
+            select(func.count())
+            .select_from(Sale)
+            .where(
+                Sale.company_id == self.ctx.company_id,
+                Sale.status == self.CONFIRMED,
+                Sale.sold_at >= period_from,
+                Sale.sold_at <= period_to,
+            )
+        )
+        return int(self.session.execute(stmt).scalar_one())

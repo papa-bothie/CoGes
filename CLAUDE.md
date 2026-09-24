@@ -180,7 +180,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 04 Stock et CMP | `04-stock-cmp.md` | 03 | T6–T13, T38 | ✅ |
 | 05 Ventes (draft → confirm → cancel, reçu) | `05-ventes.md` | 04 | T14–T17, T23–T24, T39 | ✅ |
 | 06 Retours et remboursements | `06-retours.md` | 05 | T18–T22 | ✅ |
-| 07 Finance de gestion | `07-finance.md` | 06 | T25–T28 | ⬜ |
+| 07 Finance de gestion | `07-finance.md` | 06 | T25–T28 | ✅ |
 | 08 Async, analytics, dashboard, notifications | `08-async-analytics.md` | 07 | T29–T32, T40 | ⬜ |
 | 09 CoGes Intelligence | `09-intelligence.md` | 08 | T33–T35 | ⬜ |
 | 10 Import/export, durcissement, déploiement | `10-durcissement-deploiement.md` | 09 | T1–T40 en CI | ⬜ |
@@ -219,8 +219,15 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0024 | 2026-09-24 | Compensation d'une dette par un retour : `offset` entre dans `pay_method`, deux paiements sans flux de caisse (un `outflow` lettré au retour, un `inflow` alloué à la dette) ; **la trésorerie exclut `method = 'offset'`** | `docs/decisions/0024-compensation-d-une-dette-par-un-retour.md` |
 | 0025 | 2026-09-24 | Retours : numéro `R-000123` par `document_counters`, règlement en une ou plusieurs fois après coup, `sale_returns:confirm` (gérant) garde l'argent, aucun délai maximal, aucun renoncement (`none_due` reste dérivé du montant nul) | `docs/decisions/0025-ce-que-le-retour-promet-et-ce-qu-il-ne-promet-pas.md` |
 | 0026 | 2026-09-24 | Écarts assumés au § 8.7 (suite) : SQLSTATE `CG040`–`CG045`, remboursable arrondi net et taxe séparément (retour total = `line_total`), aucun événement pour le paiement d'un remboursement | `docs/decisions/0026-ecarts-assumes-au-paragraphe-8-7-suite.md` |
+| 0027 | 2026-09-24 | **P4 tranché** : table `idempotency_keys` sous RLS, `Idempotency-Key` obligatoire sur **toutes** les écritures financières (y compris `confirm` et les remboursements) ; réservation sous `SAVEPOINT`, concurrence réglée par l'index unique | `docs/decisions/0027-cles-d-idempotence.md` |
+| 0028 | 2026-09-24 | Module `expenses/` à part ; `kind` reste sur la catégorie et se fige dès qu'elle porte des charges ; colonne `expenses.expense_no` (`D-000001`), écart assumé au § 8.6 | `docs/decisions/0028-module-depenses.md` |
+| 0029 | 2026-09-24 | Dette fournisseur saisie à la main ; abandon de créance réservé au gérant (`debts:write_off`, motif obligatoire, audit critique, aucun événement), autorisé sur une dette partiellement payée | `docs/decisions/0029-dettes-manuelles-et-abandon.md` |
+| 0030 | 2026-09-24 | **Module `analytics/` de bande E** : `GET /api/v1/analytics/overview`, composition des façades (Finance ne peut pas appeler Sales) ; marge aux définitions du § 4.10, calcul direct puis agrégats en phase 08 | `docs/decisions/0030-marge-estimee-et-module-analytics.md` |
+| 0031 | 2026-09-24 | Écarts assumés de la phase 07 : 409 pour l'état / 422 pour la demande, sens de l'allocation en applicatif, `paid_at` jamais futur, **correction d'un paiement repoussée** (aucune colonne au § 8.6) | `docs/decisions/0031-ecarts-assumes-de-la-phase-07.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
+P1 à P6 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019) ; restent **P7** (signalé, hors V1
+technique) et **P8** (facturation par palier, phase 10).
 
 ## 10. Ce que tu ne fais jamais
 

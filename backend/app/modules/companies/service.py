@@ -70,6 +70,16 @@ def get_current_company(session: Session, ctx: TenantContext) -> Company:
     return company
 
 
+def get_timezone(session: Session, ctx: TenantContext) -> str:
+    """Fuseau de l'entreprise, pour découper une série en journées vécues.
+
+    Façade pour la bande E : `paid_at` est stocké en UTC, mais une caisse ferme à
+    l'heure locale. Sans cette conversion, un encaissement de 23 h tomberait le
+    lendemain sur le graphique du gérant.
+    """
+    return get_current_company(session, ctx).timezone
+
+
 def update_current_company(
     session: Session,
     ctx: TenantContext,
