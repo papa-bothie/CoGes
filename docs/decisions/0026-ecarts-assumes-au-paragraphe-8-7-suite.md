@@ -93,6 +93,34 @@ audite en plus l'écriture de trésorerie elle-même (`INSERT` sur `payments`, e
 s'est passé, et ajouter une valeur imposerait de toucher le CHECK de `audit_logs`, table
 partitionnée et append-only.
 
+## Décision 5 — L'ordre du § 5.4 est un ordre de verrous, pas une mise en page
+
+Écrire les tests de concurrence a mis au jour une propriété que le § 5.4 énonce sans
+l'expliquer. Son étape 1 — « verrouiller `sale_returns` FOR UPDATE » — précède son étape 2
+— « insérer `payments` ». Inverser les deux **interbloque**.
+
+`payments.sale_return_id` porte une clé étrangère vers `sale_returns`. Insérer le décaissement
+prend donc un verrou `FOR KEY SHARE` sur la ligne du retour : partagé, donc accordé aux deux
+caisses à la fois. Chacune demande ensuite le `FOR UPDATE` de `refund_check`, qui attend que
+l'autre lâche son verrou partagé. Les deux s'attendent, et PostgreSQL en abat une en `40P01`.
+
+Le résultat reste **sûr** — aucun double remboursement, la transaction perdante est annulée
+entière — mais il est opaque : un `deadlock_detected` n'est pas un `refund_exceeds_due`, il ne
+dit rien au caissier et désigne sa victime au hasard.
+
+`sales.refund_return` prend donc le verrou fort **en premier**, par
+`SaleReturnRepository.get_for_update`, avant de passer la main à Finance. La règle est générale
+et vaut pour la phase 07 : ne jamais prendre un verrou partagé qu'il faudra ensuite élever.
+
+`sale_return_items` n'a pas ce défaut, et la raison est instructive : `return_item_check` est un
+trigger **BEFORE INSERT**, il prend son `FOR UPDATE` sur la ligne de vente *avant* que la clé
+étrangère ne demande son `KEY SHARE`. L'ordre y est déjà le bon sans que personne ait eu à y
+penser — ce qui explique qu'on ne s'en soit jamais aperçu ailleurs.
+
+Un test fige chacune des deux moitiés : `test_t20_concurrent_refunds` prouve que l'ordre correct
+sérialise et rend `CG041`, et `test_t20_refunding_without_locking_the_return_first_deadlocks`
+prouve que l'inverser coûte un `40P01`.
+
 ## Conséquences
 
 - La révision 0008 ne crée aucune table et n'accorde aucun privilège. Elle ne fait que remplacer
@@ -102,3 +130,8 @@ partitionnée et append-only.
 - Le test unitaire `test_refund_amounts.py` fixe la forme de l'arrondi, y compris l'égalité
   « retour total = `line_total` » qui la justifie. Il ne touche pas la base : c'est le seul calcul
   que la phase 06 fait en Python.
+- `test_t18_t20_concurrent_returns.py` provoque les deux fenêtres de concurrence à trois
+  connexions, comme T28 et T38 : une troisième transaction s'approprie la ligne de rendez-vous, les
+  deux caisses viennent s'y bloquer, et c'est le COMMIT du test qui les relâche. Les verrous du
+  § 8.7 étaient déjà là — contrairement au plafond de crédit, rien n'a dû être corrigé ; ces tests
+  prouvent qu'ils tiennent, et l'ordre de la décision 5 avec eux.
