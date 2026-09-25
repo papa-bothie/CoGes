@@ -156,6 +156,18 @@ clients au démarrage d'une entreprise.
   maximale des requêtes et des fichiers ; revue des schémas Pydantic (`extra = forbid`, bornes) ;
   vérification que `Idempotency-Key` est exigé sur **toutes** les écritures financières.
 - Revue des secrets : aucun dans le dépôt, rotation documentée de la clé JWT.
+- **Cloisonnement du rôle `coges_owner`** : il est membre (`WITH INHERIT FALSE`) de `coges_auth` et
+  de `coges_bus`, tous deux `BYPASSRLS` (ADR 0005, 0032). Il peut donc lire toutes les entreprises
+  par un `SET ROLE`. Mets en place les trois garde-fous suivants, et teste-les :
+  1. au démarrage de l'API **et** des workers, refus de démarrer si l'utilisateur du DSN
+     applicatif est `coges_owner` ou possède `rolbypassrls` (vérification via `current_user` et
+     `pg_roles`) ;
+  2. en production, le DSN `coges_owner` n'existe **que** dans le job de migration de la CI :
+     absent des variables d'environnement de Vercel et des conteneurs workers (vérifié par un
+     script de contrôle dans la CI de déploiement) ;
+  3. propose-moi (AskUserQuestion) de retirer l'appartenance `coges_owner → coges_auth/coges_bus`
+     après chaque migration et de la rétablir seulement le temps d'une migration qui en a besoin,
+     ou de la garder en la documentant dans `deploy/README-infra.md`.
 
 **Déploiement**
 - `vercel.json` et point d'entrée `backend/app/main.py` ; `Dockerfile.worker` ;
