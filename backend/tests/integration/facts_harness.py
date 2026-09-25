@@ -1,21 +1,29 @@
-"""Outils communs aux tests d'agrégation (T29 à T32).
+"""Outils communs aux tests qui dépendent de `daily_sales_facts`.
 
-Comme les autres harnais, tout passe par du SQL brut en `coges_app` : le sujet du
-test est la **requête de reconstruction**, pas le service qui l'appelle. On construit
-donc des ventes et des retours à la main, on lance `rebuild_days`, et on relit les
-faits produits.
+Pour T29 à T32, tout passe par du SQL brut en `coges_app` : le sujet du test est la
+**requête de reconstruction**, pas le service qui l'appelle. On construit donc des
+ventes et des retours à la main, on lance `rebuild_days`, et on relit les faits
+produits.
+
+Depuis la phase 08, `/analytics/overview` et `/dashboard` lisent eux aussi ces faits.
+Les tests d'API n'ont pas de worker pour les construire : `rebuild` et `rebuild_around`
+font ce travail à leur place, sous le rôle qui le fait en production.
 """
 
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql import text
 
+from app.core.tenancy import TenantContext, tenant_transaction
+from app.modules.analytics import service as analytics_service
+from app.modules.analytics.repository import DailySalesFactRepository
 from tests.integration import sales_harness as sales
 from tests.tenancy.harness import Tenant
 
@@ -155,3 +163,55 @@ def read_fact(session: Session, tenant: Tenant, day: dt.date, product_id: UUID) 
 def read_day(session: Session, tenant: Tenant, day: dt.date) -> Any:
     """Toutes les lignes de fait d'un jour, triées, pour comparer deux passages."""
     return session.execute(_READ_DAY, {"company_id": tenant.company_id, "day": day}).all()
+
+
+# ------------------------------------------------------ reconstruction des faits
+
+
+def rebuild(
+    analytics_factory: sessionmaker[Any], company_id: UUID, days: Sequence[dt.date]
+) -> None:
+    """Reconstruit `daily_sales_facts` pour ces jours, **en `coges_analytics`**.
+
+    Ce que le worker analytique fait après COMMIT, fait ici à la main : aucune tâche
+    Celery ne tourne pendant la suite, et depuis la phase 08 l'overview lit les faits
+    plutôt que `sale_items`. Un test qui confirme une vente puis interroge
+    `/analytics/overview` sans passer par ici mesure une projection vide.
+
+    Le rôle importe. La purge des faits devenus vides est un `DELETE`, que `coges_app`
+    n'a le droit de faire nulle part (T36) : lancer la reconstruction sous le rôle
+    applicatif ferait échouer T31 pour une raison qui n'existe pas en production.
+    """
+    ctx = TenantContext.bootstrap(company_id)
+    with tenant_transaction(ctx, session_factory=analytics_factory) as session:
+        DailySalesFactRepository(session, ctx).rebuild_days(list(days))
+
+
+def rebuild_around(
+    analytics_factory: sessionmaker[Any],
+    session_factory: sessionmaker[Any],
+    company_id: UUID,
+    *,
+    back: int = 0,
+) -> dt.date:
+    """Reconstruit le jour courant de l'entreprise, et les `back` jours qui précèdent.
+
+    Le jour est celui du **fuseau de l'entreprise** (§ 4.10), pas celui d'UTC : à
+    Dakar comme à Londres ils coïncident, mais la borne de `/analytics/overview` est
+    calculée dans le fuseau, et deux définitions du « jour » feraient diverger le test
+    du code qu'il éprouve. Renvoie ce jour, pour que l'appelant puisse le réutiliser.
+    """
+    today = today_in_company(session_factory, company_id)
+    rebuild(
+        analytics_factory,
+        company_id,
+        [today - dt.timedelta(days=offset) for offset in range(back + 1)],
+    )
+    return today
+
+
+def today_in_company(session_factory: sessionmaker[Any], company_id: UUID) -> dt.date:
+    """Date du jour dans le fuseau de l'entreprise."""
+    ctx = TenantContext.bootstrap(company_id)
+    with tenant_transaction(ctx, session_factory=session_factory) as session:
+        return analytics_service.today_in_company(session, ctx)

@@ -38,20 +38,12 @@ TOLERANCE = Decimal("0.01")
 
 
 def _rebuild(analytics_factory: sessionmaker[Any], tenant: Tenant, days: list[dt.date]) -> None:
-    """Reconstruit dans une transaction à part, **en `coges_analytics`**.
-
-    Le rôle importe : la purge des faits devenus vides est un `DELETE`, que
-    `coges_app` n'a le droit de faire nulle part (T36). Lancer la reconstruction sous
-    le rôle applicatif ferait échouer T31 pour une raison qui n'existe pas en
-    production.
-    """
-    with tenant_transaction(tenant.ctx, session_factory=analytics_factory) as session:
-        DailySalesFactRepository(session, tenant.ctx).rebuild_days(days)
+    """Reconstruit dans une transaction à part, **en `coges_analytics`** (cf. harnais)."""
+    facts.rebuild(analytics_factory, tenant.company_id, days)
 
 
 def _today(session_factory: sessionmaker[Any], tenant: Tenant) -> dt.date:
-    with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
-        return analytics_service.today_in_company(session, tenant.ctx)
+    return facts.today_in_company(session_factory, tenant.company_id)
 
 
 def test_t29_three_partial_returns_do_not_inflate_the_fact(
