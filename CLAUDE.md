@@ -152,6 +152,7 @@ make relay                   # relais de l'outbox (rôle coges_relay, processus 
 make seed-demo               # entreprise de démo : 20 produits, 50 ventes sur 60 jours
 uv run --directory backend python -m app.cli create-company --help   # créer une entreprise
 uv run --directory backend python -m app.cli rebuild-stock --company-id <uuid>   # recalcul stock/CMP
+uv run --directory backend python -m app.cli run-intelligence --company-id <uuid> [--as-of AAAA-MM-JJ] [--train]
 cd frontend && pnpm dev      # à partir de la phase 11 (corepack enable pnpm)
 ```
 
@@ -185,7 +186,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 06 Retours et remboursements | `06-retours.md` | 05 | T18–T22 | ✅ |
 | 07 Finance de gestion | `07-finance.md` | 06 | T25–T28 | ✅ |
 | 08 Async, analytics, dashboard, notifications | `08-async-analytics.md` | 07 | T29–T32, T40 | ✅ |
-| 09 CoGes Intelligence | `09-intelligence.md` | 08 | T33–T35 | ⬜ |
+| 09 CoGes Intelligence | `09-intelligence.md` | 08 | T33–T35 | ✅ |
 | 10 Import/export, durcissement, déploiement | `10-durcissement-deploiement.md` | 09 | T1–T40 en CI | ⬜ |
 | 11 Front : fondations et design system | `11-front-fondations.md` | 10 (ou 07 + OpenAPI stable) | e2e login | ⬜ |
 | 12 Front : opérations | `12-front-operations.md` | 11 | e2e vente | ⬜ |
@@ -230,6 +231,9 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0032 | 2026-09-25 | **Chemin asynchrone** : relais en processus dédié sous `coges_relay` (aucune table, deux fonctions `SECURITY DEFINER` de `coges_bus`), `coges_analytics` seul rôle avec DELETE ; `processed_events` écrite dans la transaction de l'effet ; rebut **en base** après 10 tentatives, exposé par `GET /system/outbox` ; alertes adressées par **droit**, dédoublonnées 24 h, canal in-app derrière un `Protocol` ; cache Redis par tenant, TTL 60 s + invalidation par événement | `docs/decisions/0032-chemin-asynchrone.md` |
 | 0033 | 2026-09-25 | **Huit métriques produit** : 1 à 7 calculées à la lecture, `future_potential` renvoyée à la phase 09 ; stock moyen reconstitué fin de journée par fin de journée (pas `(début+fin)/2`) ; un stock moyen nul **écarte** le produit ; chaque réponse nomme sa métrique, son libellé et son unité | `docs/decisions/0033-metriques-produit-et-rotation.md` |
 | 0034 | 2026-09-25 | Écarts assumés de la phase 08 : l'overview devient **éventuellement cohérent**, `sale_count` reste compté sur `sales`, produits arrondis **à la ligne** dans les deux sources de T32, bornes de période dans le fuseau de l'entreprise, `SET LOCAL ROLE` dans la révision 0010 | `docs/decisions/0034-ecarts-assumes-de-la-phase-08.md` |
+| 0035 | 2026-09-25 | **Intelligence** : numpy + pandas + statsmodels (groupe `ml`, worker seul, test d'architecture), seuil 28 j + 5 jours vendus/60, artefacts JSON sur le volume du worker, **point-in-time strict** sur les horodatages métier | `docs/decisions/0035-intelligence-bibliotheques-seuils-artefacts.md` |
+| 0036 | 2026-09-25 | `settings.intelligence_enabled` par entreprise (absent = activée), aucun palier ; **privilèges en GRANT** : `coges_app` sans accès aux snapshots, SELECT seul sur `forecasts`, UPDATE (`status`, dates) sur `insights` ; aucun DELETE | `docs/decisions/0036-desactivation-et-privileges-intelligence.md` |
+| 0037 | 2026-09-25 | Écarts de la phase 09 : ENUM `insufficient_history`, dossier `estimators/`, révision 0011, horizons J+14 / rupture sous 28 j, champs additifs de la métrique 8 | `docs/decisions/0037-ecarts-assumes-de-la-phase-09.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019) ; restent **P7** (signalé, hors V1
