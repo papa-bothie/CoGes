@@ -13,7 +13,11 @@ Arbitrages consignés dans l'ADR :
 * l'ajustement manuel de stock (`inventory:update`) est réservé au gérant : c'est la
   seule écriture de stock qui ne vient pas d'un flux métier ;
 * le comptable ne confirme aucune vente et ne touche pas au stock ;
-* utilisateurs, rôles et paramètres d'entreprise : gérant uniquement.
+* utilisateurs, rôles et paramètres d'entreprise : gérant uniquement ;
+* le fil d'alertes est **personnel** : chacun lit et marque le sien, donc les trois
+  rôles portent `notifications:read` et `notifications:update`. En revanche
+  `system:read` — la santé du chemin asynchrone — reste au gérant seul : ce n'est ni
+  une information comptable, ni une information de caisse (ADR 0032).
 """
 
 from __future__ import annotations
@@ -50,6 +54,8 @@ SALESPERSON_PERMISSIONS: Final[frozenset[str]] = frozenset(
         "payments:read",
         "payments:create",
         "dashboard:read",
+        "notifications:read",
+        "notifications:update",
     }
 )
 
@@ -84,6 +90,8 @@ ACCOUNTANT_PERMISSIONS: Final[frozenset[str]] = frozenset(
         "audit:read",
         "audit:export",
         "importexport:export",
+        "notifications:read",
+        "notifications:update",
     }
 )
 

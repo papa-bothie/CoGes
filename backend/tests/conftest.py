@@ -102,6 +102,53 @@ def session_factory(app_engine: Engine) -> sessionmaker[Any]:
     return sessionmaker(bind=app_engine, expire_on_commit=False, future=True)
 
 
+@pytest.fixture(scope="session")
+def worker_urls() -> tuple[str, str]:
+    """DSN des deux rôles de workers : (relais, analytique).
+
+    Les tests de la phase 08 ne peuvent pas se contenter de `coges_app` : la purge des
+    faits exige DELETE, que le rôle applicatif n'a nulle part, et la lecture de
+    l'outbox exige les fonctions réservées au relais. Utiliser `coges_app` ferait
+    passer les tests pour de mauvaises raisons — ou les ferait échouer alors que le
+    code de production, lui, fonctionne.
+    """
+    settings = get_settings()
+    relay_url = settings.test_database_url_relay
+    analytics_url = settings.test_database_url_analytics
+    if not relay_url or not analytics_url:
+        pytest.skip(
+            "COGES_TEST_DATABASE_URL_RELAY et COGES_TEST_DATABASE_URL_ANALYTICS sont "
+            "requis pour les tests du chemin asynchrone."
+        )
+    return relay_url, analytics_url
+
+
+@pytest.fixture(scope="session")
+def analytics_session_factory(
+    migrated_database: str, worker_urls: tuple[str, str]
+) -> Iterator[sessionmaker[Any]]:
+    """Sessions en `coges_analytics` : SELECT partout, écriture sur les projections."""
+    _, analytics_url = worker_urls
+    engine: Engine = create_app_engine(analytics_url, pool_size=2, max_overflow=0)
+    try:
+        yield sessionmaker(bind=engine, expire_on_commit=False, future=True)
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def relay_session_factory(
+    migrated_database: str, worker_urls: tuple[str, str]
+) -> Iterator[sessionmaker[Any]]:
+    """Sessions en `coges_relay` : aucune table, trois fonctions."""
+    relay_url, _ = worker_urls
+    engine: Engine = create_app_engine(relay_url, pool_size=2, max_overflow=0)
+    try:
+        yield sessionmaker(bind=engine, expire_on_commit=False, future=True)
+    finally:
+        engine.dispose()
+
+
 #: Mot de passe des comptes de test. Valeur factice, sans usage hors de la suite.
 TEST_PASSWORD = "mot-de-passe-de-test-01"  # noqa: S105
 

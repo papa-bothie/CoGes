@@ -194,6 +194,16 @@ def get_summaries(
     }
 
 
+def reorder_points(session: Session, ctx: TenantContext) -> dict[UUID, Decimal]:
+    """Seuils d'alerte de l'entreprise, par produit.
+
+    Façade pour Inventory, qui possède `product_stock` mais pas `products` : le
+    comptage des alertes de stock compose les deux façades plutôt que de joindre la
+    table d'un autre module (décision 01).
+    """
+    return ProductRepository(session, ctx).reorder_points()
+
+
 def count_active_in_category(session: Session, ctx: TenantContext, category_id: UUID) -> int:
     """Nombre de produits actifs dans une catégorie."""
     return ProductRepository(session, ctx).count_live_in_category(category_id)

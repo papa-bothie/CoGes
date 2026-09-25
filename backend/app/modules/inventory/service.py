@@ -22,7 +22,7 @@ nommées, écrire l'audit critique des ajustements manuels, et poser l'événeme
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -39,7 +39,11 @@ from app.core.tenancy import TenantContext
 from app.modules.categories import service as categories_service
 from app.modules.inventory.events import AGGREGATE_TYPE, stock_updated_payload
 from app.modules.inventory.models import InventoryMovement, ProductStock
-from app.modules.inventory.repository import InventoryMovementRepository, ProductStockRepository
+from app.modules.inventory.repository import (
+    InventoryMovementRepository,
+    ProductStockRepository,
+    StockHistoryRepository,
+)
 from app.modules.inventory.schemas import (
     TYPES_REQUIRING_NOTE,
     MovementCreate,
@@ -516,6 +520,51 @@ def reverse_sale_out(
     l'opération auditée, et elle porte le motif.
     """
     return _write_reversal(session, ctx, movement)
+
+
+def stock_alert_count(session: Session, ctx: TenantContext) -> int:
+    """Nombre de produits dont le stock est retombé à son seuil d'alerte ou en dessous.
+
+    Deux requêtes, pas une jointure : `products` porte le seuil, `product_stock` porte
+    la quantité, et les deux tables appartiennent à des modules différents. Inventory
+    passe donc par la façade de Products (décision 01).
+    """
+    thresholds = products_service.reorder_points(session, ctx)
+    if not thresholds:
+        return 0
+    stocks = ProductStockRepository(session, ctx).many(list(thresholds))
+    return sum(
+        1
+        for product_id, threshold in thresholds.items()
+        if (stock := stocks.get(product_id)) is not None and stock.qty_on_hand <= threshold
+    )
+
+
+def average_on_hand(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    product_ids: Sequence[UUID],
+    period_from: date,
+    period_to: date,
+    timezone: str,
+) -> dict[UUID, Decimal]:
+    """Stock moyen détenu par produit sur la période, reconstitué depuis le journal.
+
+    Exposé pour la métrique « rotation du stock » de la bande E (ADR 0033). Le stock
+    courant ne suffit pas : un article écoulé puis réapprovisionné afficherait une
+    rotation absurde. La moyenne porte sur les quantités de **fin de journée**, jours
+    creux compris.
+
+    Aucun module ne lit `inventory_movements` directement : cette façade est le seul
+    accès, comme l'exige la règle des dépendances.
+    """
+    return StockHistoryRepository(session, ctx).average_on_hand(
+        product_ids=product_ids,
+        period_from=period_from,
+        period_to=period_to,
+        timezone=timezone,
+    )
 
 
 def rebuild_stock(session: Session, ctx: TenantContext) -> list[StockRebuildLine]:

@@ -7,10 +7,11 @@ applicatif, c'est le trigger `t20_inv_apply` qui la maintient (§ 5.6).
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Select, func, select
+from sqlalchemy import ColumnElement, Select, func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.repository import MAX_PAGE_SIZE, TenantRepository
@@ -175,3 +176,91 @@ class ProductStockRepository:
             .where(ProductStock.company_id == self.ctx.company_id)
         )
         return int(self.session.execute(stmt).scalar_one())
+
+
+#: Stock moyen détenu sur une période, reconstitué depuis le journal (ADR 0033).
+#:
+#: Le stock est une projection des mouvements (décision 10) : la quantité détenue au
+#: soir d'un jour passé n'est stockée nulle part, elle se rejoue. `base` donne l'état
+#: à la veille du début, `mouvements` les variations de chaque jour, et la somme
+#: cumulée fenêtrée reconstitue chaque fin de journée.
+#:
+#: Les jours sans mouvement doivent exister dans la série, sinon la moyenne est
+#: biaisée : un article immobile pendant vingt jours puis écoulé en un jour aurait
+#: sinon le même stock moyen qu'un article en rotation constante. D'où le
+#: `generate_series` et le `CROSS JOIN`.
+_AVERAGE_ON_HAND = text(
+    """
+    WITH jours AS (
+         SELECT generate_series(CAST(:period_from AS date),
+                                CAST(:period_to   AS date),
+                                interval '1 day')::date AS day
+    ),
+    produits AS (
+         SELECT unnest(CAST(:product_ids AS uuid[])) AS product_id
+    ),
+    base AS (
+         SELECT m.product_id, SUM(m.qty_delta) AS qty
+           FROM inventory_movements m
+          WHERE m.company_id = :company_id
+            AND m.product_id = ANY(CAST(:product_ids AS uuid[]))
+            AND (m.occurred_at AT TIME ZONE :timezone)::date < CAST(:period_from AS date)
+          GROUP BY m.product_id
+    ),
+    mouvements AS (
+         SELECT m.product_id,
+                (m.occurred_at AT TIME ZONE :timezone)::date AS day,
+                SUM(m.qty_delta) AS delta
+           FROM inventory_movements m
+          WHERE m.company_id = :company_id
+            AND m.product_id = ANY(CAST(:product_ids AS uuid[]))
+            AND (m.occurred_at AT TIME ZONE :timezone)::date
+                BETWEEN CAST(:period_from AS date) AND CAST(:period_to AS date)
+          GROUP BY m.product_id, 2
+    ),
+    soirs AS (
+         SELECT pr.product_id,
+                COALESCE(b.qty, 0)
+                  + COALESCE(SUM(mv.delta) OVER (PARTITION BY pr.product_id ORDER BY j.day), 0)
+                  AS on_hand
+           FROM jours j
+           CROSS JOIN produits pr
+           LEFT JOIN base b       ON b.product_id = pr.product_id
+           LEFT JOIN mouvements mv ON mv.product_id = pr.product_id AND mv.day = j.day
+    )
+    SELECT product_id, AVG(on_hand) AS avg_on_hand
+      FROM soirs
+     GROUP BY product_id
+    """
+)
+
+
+class StockHistoryRepository:
+    """Lectures historiques du journal, pour la bande E."""
+
+    def __init__(self, session: Session, ctx: TenantContext) -> None:
+        self.session = session
+        self.ctx = ctx
+
+    def average_on_hand(
+        self,
+        *,
+        product_ids: Sequence[UUID],
+        period_from: date,
+        period_to: date,
+        timezone: str,
+    ) -> dict[UUID, Decimal]:
+        """Stock moyen de fin de journée, par produit, sur la période."""
+        if not product_ids:
+            return {}
+        rows = self.session.execute(
+            _AVERAGE_ON_HAND,
+            {
+                "company_id": self.ctx.company_id,
+                "product_ids": list(dict.fromkeys(product_ids)),
+                "period_from": period_from,
+                "period_to": period_to,
+                "timezone": timezone,
+            },
+        ).all()
+        return {row.product_id: Decimal(row.avg_on_hand) for row in rows}

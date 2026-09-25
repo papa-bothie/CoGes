@@ -10,7 +10,12 @@ importantes, changements de rôle ou de permission, paramètres sensibles, dette
 paiements, annulations et retours de vente, ajustements manuels de stock.
 
 Tout le reste — consultation, export, **connexion réussie**, notification — relève
-du canal asynchrone (phase 08).
+du canal asynchrone, `audit_secondary`, appelé par un worker après COMMIT.
+
+Les deux canaux écrivent la **même** table, avec la même forme : ce qui les distingue
+n'est pas le contenu, c'est la garantie. Le premier est perdu si et seulement si son
+opération est annulée ; le second tolère un retard et une reprise, et ne porte jamais
+seul la preuve d'une opération critique (Figure 7).
 """
 
 from __future__ import annotations
@@ -80,3 +85,34 @@ def audit_critical(
         },
     )
     return int(result.scalar_one())
+
+
+def audit_secondary(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    action: AuditAction,
+    entity_table: str,
+    entity_id: UUID | None,
+    context: dict[str, Any] | None = None,
+    ip_address: str | None = None,
+) -> int:
+    """Écrit une ligne d'audit **secondaire** : connexion, export, consultation.
+
+    Même table, même forme, garantie différente : cet appel vient d'un worker, après
+    le COMMIT de l'opération d'origine. Il n'y a donc pas d'état « avant » — rien n'a
+    été modifié — seulement le contexte de ce qui s'est passé.
+
+    Le choix du canal appartient à l'appelant, et le refus d'écrire une action
+    critique par ici est posé côté worker : le noyau fournit l'outil, la tâche décide.
+    """
+    return audit_critical(
+        session,
+        ctx,
+        action=action,
+        entity_table=entity_table,
+        entity_id=entity_id,
+        before=None,
+        after=context,
+        ip_address=ip_address,
+    )

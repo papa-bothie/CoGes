@@ -44,3 +44,9 @@ class UserRepository(TenantRepository[User]):
             .offset((page - 1) * page_size)
         )
         return self.session.execute(stmt).scalars().all()
+
+    def active_ids(self, user_ids: Sequence[UUID]) -> list[UUID]:
+        """Identifiants encore actifs parmi ceux fournis, dans l'ordre d'entrée."""
+        stmt = self._live().where(User.id.in_(list(user_ids)), User.is_active.is_(True))
+        found = {row for row in self.session.execute(stmt.with_only_columns(User.id)).scalars()}
+        return [user_id for user_id in dict.fromkeys(user_ids) if user_id in found]

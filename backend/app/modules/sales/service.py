@@ -1198,3 +1198,21 @@ def revenue_totals(
         repository.confirmed_sale_count(period_from=period_from, period_to=period_to)
     )
     return totals
+
+
+def confirmed_sale_count(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    period_from: datetime,
+    period_to: datetime,
+) -> int:
+    """Nombre de ventes confirmées sur la période — des tickets, pas des lignes.
+
+    Exposé à part pour la bande E : ce compte ne peut **pas** se lire sur
+    `daily_sales_facts`, dont le grain est jour × produit. Sommer `sale_count` sur les
+    produits compterait deux fois une vente à deux articles (ADR 0034).
+    """
+    return SaleRevenueRepository(session, ctx).confirmed_sale_count(
+        period_from=period_from, period_to=period_to
+    )

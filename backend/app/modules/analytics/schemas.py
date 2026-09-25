@@ -8,6 +8,8 @@ un flottant. `tax_total` reste isolé — une taxe collectée n'a jamais été u
 from __future__ import annotations
 
 from datetime import date
+from enum import StrEnum
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
@@ -77,3 +79,103 @@ class FinanceOverview(BaseModel):
     payables_open: Amount
 
     daily: list[DailyCashPoint]
+
+
+# --------------------------------------------------------- classements par métrique
+
+
+class ProductMetric(StrEnum):
+    """Les huit métriques du Diagramme 7, **jamais équivalentes**.
+
+    Un « produit à forte valeur » n'existe pas comme mesure unique. Chaque classement
+    porte donc le nom de sa métrique, et aucune n'est fusionnée avec une autre dans un
+    score opaque (décision 12).
+    """
+
+    REVENUE = "revenue"
+    MARGIN = "margin"
+    QUANTITY = "quantity"
+    FREQUENCY = "frequency"
+    ROTATION = "rotation"
+    VELOCITY = "velocity"
+    DEMAND_TREND = "demand_trend"
+    FUTURE_POTENTIAL = "future_potential"
+
+
+#: Libellé affiché et unité de chaque métrique. Le libellé est la phrase que le § 7
+#: de l'Architecture attend à l'écran ; l'unité empêche de lire des unités par jour
+#: comme des francs.
+METRIC_LABELS: dict[ProductMetric, tuple[str, str]] = {
+    ProductMetric.REVENUE: ("Chiffre d'affaires généré", "XOF"),
+    ProductMetric.MARGIN: ("Marge générée", "XOF"),
+    ProductMetric.QUANTITY: ("Quantité vendue", "unité"),
+    ProductMetric.FREQUENCY: ("Fréquence de vente", "vente"),
+    ProductMetric.ROTATION: ("Rotation du stock", "fois"),
+    ProductMetric.VELOCITY: ("Vélocité des ventes", "unité/jour"),
+    ProductMetric.DEMAND_TREND: ("Évolution de la demande", "%"),
+    ProductMetric.FUTURE_POTENTIAL: ("Potentiel futur estimé", "unité"),
+}
+
+#: Longueur maximale d'un classement. Dix lignes suffisent à décider ; cent lignes
+#: sont un export, et un export est une autre route.
+MAX_RANKING_LIMIT = 50
+
+
+class ProductRankRow(BaseModel):
+    """Un produit et **sa** valeur pour la métrique demandée."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    product_name: str
+    #: Chaîne, comme tout nombre décimal du projet. La précision dépend de la
+    #: métrique : deux décimales pour un montant, trois pour une quantité.
+    value: str
+
+
+class ProductRanking(BaseModel):
+    """Classement pour **une seule** métrique, qui se nomme dans la réponse."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    metric: ProductMetric
+    metric_label: str
+    unit: str
+    period_from: date
+    period_to: date
+    #: Renseigné quand la métrique n'est pas encore calculable ; `items` est alors
+    #: vide. « Données insuffisantes » plutôt qu'une valeur inventée (décision 13).
+    unavailable_reason: str | None = None
+    items: list[ProductRankRow]
+
+
+class TimeseriesMeasure(StrEnum):
+    """Les deux séries que la V1 sait tracer."""
+
+    REVENUE = "revenue"
+    MARGIN = "margin"
+
+
+class TimeseriesPoint(BaseModel):
+    """Un jour de la série, dans le fuseau de l'entreprise."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    day: date
+    value: Amount
+
+
+class Timeseries(BaseModel):
+    """Série journalière d'une mesure nommée, jours creux à zéro.
+
+    Les jours sans vente valent zéro et ne sont jamais omis : une courbe trouée se lit
+    comme une absence de données, pas comme une caisse immobile.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    measure: TimeseriesMeasure
+    measure_label: str
+    period_from: date
+    period_to: date
+    points: list[TimeseriesPoint]

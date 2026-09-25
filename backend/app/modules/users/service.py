@@ -163,3 +163,15 @@ def record_login(session: Session, user: User) -> None:
     """Horodate la dernière connexion. L'audit de connexion est **asynchrone**."""
     user.last_login_at = datetime.now(UTC)
     session.flush()
+
+
+def active_among(session: Session, ctx: TenantContext, user_ids: Sequence[UUID]) -> list[UUID]:
+    """Filtre une liste d'identifiants pour ne garder que les comptes vivants et actifs.
+
+    Façade lecture seule pour la bande E : une alerte ne part pas vers un compte
+    désactivé, et RBAC — qui sait *qui détient un droit* — n'a pas le droit de lire
+    `users` pour le vérifier lui-même (décision 01).
+    """
+    if not user_ids:
+        return []
+    return UserRepository(session, ctx).active_ids(user_ids)

@@ -254,6 +254,13 @@ class SaleRevenueRepository(TenantRepository[Sale]):
     leurs retours ensemble **dupliquerait** chaque ligne vendue autant de fois
     qu'elle a été retournée. C'est exactement la surestimation que la V1.1 corrige
     en pré-agrégeant les retours (§ 6.1) ; le même piège attend ici.
+
+    Les produits `qty × prix` et `qty × coût` sont arrondis **à la ligne**, comme
+    `sale_items.net_amount` l'est déjà par sa définition générée en base. C'est ce qui
+    rend cette source et `daily_sales_facts` égales par construction : sans cet
+    arrondi, la table de faits arrondirait chaque total jour × produit dans ses
+    colonnes `numeric(14,2)` et l'écart s'accumulerait sur 90 jours — T32 passerait
+    ou échouerait selon le jeu de données (ADR 0034).
     """
 
     model = Sale
@@ -265,10 +272,10 @@ class SaleRevenueRepository(TenantRepository[Sale]):
         """CA brut, remises, taxes et coût des marchandises sorties."""
         stmt = (
             select(
-                func.coalesce(func.sum(SaleItem.qty * SaleItem.unit_price), 0),
+                func.coalesce(func.sum(func.round(SaleItem.qty * SaleItem.unit_price, 2)), 0),
                 func.coalesce(func.sum(SaleItem.discount), 0),
                 func.coalesce(func.sum(SaleItem.tax_amount), 0),
-                func.coalesce(func.sum(SaleItem.qty * SaleItem.unit_cost), 0),
+                func.coalesce(func.sum(func.round(SaleItem.qty * SaleItem.unit_cost, 2)), 0),
             )
             .select_from(SaleItem)
             .join(
@@ -302,7 +309,9 @@ class SaleRevenueRepository(TenantRepository[Sale]):
                 func.coalesce(
                     func.sum(SaleReturnItem.refund_amount - SaleReturnItem.tax_refund), 0
                 ),
-                func.coalesce(func.sum(SaleReturnItem.qty * SaleReturnItem.unit_cost), 0),
+                func.coalesce(
+                    func.sum(func.round(SaleReturnItem.qty * SaleReturnItem.unit_cost, 2)), 0
+                ),
             )
             .select_from(SaleReturnItem)
             .join(

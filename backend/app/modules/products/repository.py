@@ -7,6 +7,7 @@ même module : `product_prices` n'existe que pour `products`.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import ColumnElement, Select, func, or_, select, update
@@ -58,6 +59,20 @@ class ProductRepository(TenantRepository[Product]):
             return {}
         stmt = self._live().where(Product.id.in_(product_ids))
         return {product.id: product for product in self.session.execute(stmt).scalars()}
+
+    def reorder_points(self) -> dict[UUID, Decimal]:
+        """Seuils d'alerte des produits suivis en stock qui en ont un.
+
+        Les produits sans seuil sont absents : ils ne peuvent pas déclencher d'alerte,
+        et les faire remonter pour les écarter ensuite serait lire pour rien.
+        """
+        stmt = self._live().where(
+            Product.reorder_point.is_not(None),
+            Product.is_stock_tracked.is_(True),
+            Product.is_active.is_(True),
+        )
+        rows = self.session.execute(stmt.with_only_columns(Product.id, Product.reorder_point)).all()
+        return {row[0]: row[1] for row in rows}
 
     def get_by_sku(self, sku: str) -> Product | None:
         """Homonyme de SKU, **y compris supprimé**.
