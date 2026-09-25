@@ -90,3 +90,8 @@ jobs:
       # Bloquant : une fuite inter-tenant arrête le déploiement (décision 07).
       - name: Tests de fuite inter-tenant
         run: make test-tenancy
+
+      # La cible « moins de 200 ms » du § 1 de la phase 08, mesurée sur le jeu de
+      # `make seed-demo`. Hors de `make test` : elle sème une entreprise entière.
+      - name: Latence du tableau de bord
+        run: make test-perf

@@ -10,7 +10,7 @@ endif
 
 UV := uv run --directory backend
 
-.PHONY: help install up down logs psql migrate test test-tenancy lint format api worker relay seed-demo
+.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format api worker relay seed-demo
 
 help: ## Liste les cibles disponibles
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -39,6 +39,9 @@ test: ## Lance toutes les suites de tests
 
 test-tenancy: ## Lance uniquement les tests de fuite inter-tenant (bloquants en CI)
 	$(UV) pytest tests/tenancy
+
+test-perf: ## Mesure GET /dashboard sur le jeu de démonstration (cible < 200 ms)
+	$(UV) pytest -m perf tests/perf
 
 lint: ## ruff (lint + format) puis mypy --strict sur app/
 	$(UV) ruff check .

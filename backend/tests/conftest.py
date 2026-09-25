@@ -200,6 +200,36 @@ def app_bound_to_test_database(session_factory: sessionmaker[Any]) -> Iterator[N
         patcher.undo()
 
 
+@pytest.fixture
+def workers_bound_to_test_database(
+    app_bound_to_test_database: None,
+    session_factory: sessionmaker[Any],
+    analytics_session_factory: sessionmaker[Any],
+) -> Iterator[None]:
+    """Fait pointer les **tâches** sur `coges_test`, comme `api_client` le fait pour l'API.
+
+    Une tâche n'a pas de client HTTP pour la brancher : elle ouvre sa session
+    elle-même, par la fabrique de son rôle. Trois points d'entrée sont donc
+    redirigés — le gestionnaire transactionnel commun (déjà fait par
+    `app_bound_to_test_database`), la fabrique analytique, et l'énumération des
+    entreprises des batchs.
+
+    Sans cette fixture, une tâche appelée depuis un test écrirait dans la base de
+    **développement** : elle n'y trouverait pas le tenant du test, et la clé étrangère
+    vers `companies` le dirait — tardivement, et de façon déroutante.
+    """
+    patcher = MonkeyPatch()
+    patcher.setattr(
+        "app.workers.tasks.analytics.get_analytics_session_factory",
+        lambda: analytics_session_factory,
+    )
+    patcher.setattr("app.workers.tenants.get_session_factory", lambda: session_factory)
+    try:
+        yield
+    finally:
+        patcher.undo()
+
+
 class _IdempotentClient(TestClient):
     """Client de test qui pose une clé d'idempotence neuve sur chaque requête.
 
