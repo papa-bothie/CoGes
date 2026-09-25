@@ -64,6 +64,17 @@ def get_customer(session: Session, ctx: TenantContext, customer_id: UUID) -> Cus
     return customer
 
 
+def names_by_ids(
+    session: Session, ctx: TenantContext, customer_ids: Sequence[UUID]
+) -> dict[UUID, str]:
+    """Noms des clients d'un lot d'identifiants, pour les listes de la bande E.
+
+    Un client supprimé est simplement absent : une liste d'accueil affiche alors
+    « client anonyme » plutôt que de disparaître.
+    """
+    return CustomerRepository(session, ctx).names_by_ids(customer_ids)
+
+
 def assert_exists(session: Session, ctx: TenantContext, customer_id: UUID) -> None:
     """Façade pour les modules qui référencent un client (Sales, Debts)."""
     get_customer(session, ctx, customer_id)

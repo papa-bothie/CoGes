@@ -1,0 +1,54 @@
+"""Aucun événement ne se perd entre l'outbox et les tâches.
+
+`app/workers/subscriptions.py` est le seul endroit où un type d'événement est relié
+à une tâche. Le lien y est déclaré par **nom**, pour éviter un cycle d'import entre
+le bus, l'application Celery et les tâches — mais un nom ne se vérifie pas tout seul.
+C'est ce que font ces tests : un type sans abonné serait écrit, publié, puis perdu ;
+un abonné dont le nom ne correspond à aucune tâche enregistrée ferait échouer la
+publication à chaud, en production, sur le premier événement de ce type.
+
+La forme de panne la plus difficile à voir est la première : rien n'échoue, le
+tableau de bord se contente de ne jamais bouger.
+"""
+
+from __future__ import annotations
+
+from app.core.events.types import EventType
+from app.workers import subscriptions
+from app.workers.beat import BEAT_SCHEDULE
+from app.workers.celery_app import celery_app
+
+# Importés pour leur effet de bord : l'enregistrement des tâches auprès de Celery.
+import app.workers.tasks.analytics  # noqa: F401  isort:skip
+import app.workers.tasks.audit  # noqa: F401  isort:skip
+import app.workers.tasks.notifications  # noqa: F401  isort:skip
+import app.workers.tasks.reconcile  # noqa: F401  isort:skip
+
+
+def test_every_event_type_has_at_least_one_subscriber() -> None:
+    """Les neuf types de la notation fermée sont tous écoutés."""
+    unheard = [kind.value for kind in EventType if not subscriptions.SUBSCRIPTIONS.get(kind)]
+    assert unheard == [], f"Types d'événement sans abonné : {unheard}"
+
+
+def test_the_subscription_table_invents_no_event_type() -> None:
+    """Et réciproquement : aucun abonnement ne vise un type qui n'existe pas.
+
+    La liste des neuf notations est fermée (`CLAUDE.md` § 4) ; un abonnement à un
+    dixième type serait le premier symptôme d'une notation ajoutée en douce.
+    """
+    assert set(subscriptions.SUBSCRIPTIONS) == set(EventType)
+
+
+def test_every_subscribed_name_is_a_registered_task() -> None:
+    """Chaque nom déclaré correspond à une tâche réellement enregistrée."""
+    declared = {name for names in subscriptions.SUBSCRIPTIONS.values() for name in names}
+    missing = sorted(name for name in declared if name not in celery_app.tasks)
+    assert missing == [], f"Abonnements fantômes : {missing}"
+
+
+def test_every_scheduled_name_is_a_registered_task() -> None:
+    """Même exigence pour le planificateur : un batch fantôme ne se plaint jamais."""
+    scheduled = {entry["task"] for entry in BEAT_SCHEDULE.values()}
+    missing = sorted(name for name in scheduled if name not in celery_app.tasks)
+    assert missing == [], f"Tâches planifiées introuvables : {missing}"

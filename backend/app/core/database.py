@@ -138,3 +138,35 @@ def get_engine() -> Engine:
 def get_session_factory() -> sessionmaker[Any]:
     """Fabrique de sessions liée à l'engine du processus."""
     return sessionmaker(bind=get_engine(), expire_on_commit=False, future=True)
+
+
+# --------------------------------------------------------------- rôles des workers
+#
+# Deux fabriques supplémentaires, pour les deux rôles de la phase 08 (ADR 0032). Elles
+# passent par `create_app_engine`, donc elles héritent du `RESET ALL` au checkin : un
+# `app.company_id` ne survit pas davantage sur une connexion de worker que sur une
+# connexion d'API. Le contexte tenant reste posé par le seul
+# `tenant_transaction(ctx, session_factory=…)`.
+
+
+@lru_cache
+def get_relay_session_factory() -> sessionmaker[Any]:
+    """Sessions du relais, en `coges_relay` — trois fonctions, aucune table.
+
+    Pool volontairement minuscule : un seul processus, une seule boucle, une
+    transaction à la fois. Ouvrir plus de connexions ne publierait pas plus vite et
+    prendrait des places dans le pooler à l'API.
+    """
+    engine = create_app_engine(get_settings().require_relay_url(), pool_size=1, max_overflow=1)
+    return sessionmaker(bind=engine, expire_on_commit=False, future=True)
+
+
+@lru_cache
+def get_analytics_session_factory() -> sessionmaker[Any]:
+    """Sessions du job analytique, en `coges_analytics`.
+
+    Seul rôle du projet autorisé à supprimer, et seulement sur `daily_sales_facts` —
+    une table intégralement reconstruisible depuis le transactionnel (§ 4.10).
+    """
+    engine = create_app_engine(get_settings().require_analytics_url())
+    return sessionmaker(bind=engine, expire_on_commit=False, future=True)

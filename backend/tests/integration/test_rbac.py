@@ -15,51 +15,21 @@ from sqlalchemy.orm import sessionmaker
 
 from app.modules.rbac.matrix import ACCOUNTANT_PERMISSIONS, SALESPERSON_PERMISSIONS
 from tests.conftest import (
-    TEST_PASSWORD,
     DemoCompany,
     auth_headers,
+    create_user_with_role,
     read_scalar_in_tenant,
 )
+from tests.conftest import role_id as _role_id
 
 pytestmark = pytest.mark.integration
-
-
-def _role_id(client: TestClient, token: str, name: str) -> str:
-    response = client.get("/api/v1/roles?page_size=50", headers=auth_headers(token))
-    assert response.status_code == 200, response.text
-    return next(role["id"] for role in response.json()["items"] if role["name"] == name)
-
-
-def _create_user_with_role(
-    client: TestClient, token: str, company: DemoCompany, *, role: str, email: str
-) -> str:
-    """Crée un compte porteur d'un rôle système et renvoie son jeton d'accès."""
-    created = client.post(
-        "/api/v1/users",
-        headers=auth_headers(token),
-        json={
-            "email": email,
-            "full_name": f"Compte {role}",
-            "password": TEST_PASSWORD,
-            "role_ids": [_role_id(client, token, role)],
-        },
-    )
-    assert created.status_code == 201, created.text
-
-    login = client.post(
-        "/api/v1/auth/login",
-        json={"company_slug": company.slug, "email": email, "password": TEST_PASSWORD},
-    )
-    assert login.status_code == 200, login.text
-    access_token: str = login.json()["access_token"]
-    return access_token
 
 
 @pytest.fixture
 def salesperson_token(api_client: TestClient, company_alpha: DemoCompany, alpha_token: str) -> str:
     # E-mail unique : la fixture est appelée par plusieurs tests, et l'unicité
     # de `users_email_uq` est justement ce que l'on ne veut pas tester ici.
-    return _create_user_with_role(
+    return create_user_with_role(
         api_client,
         alpha_token,
         company_alpha,

@@ -20,9 +20,12 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import sessionmaker
 
 from app.core.idempotency import IDEMPOTENCY_HEADER
+from app.core.tenancy import TenantContext, tenant_transaction
 from app.main import app
+from app.modules.notifications.repository import NotificationRepository
 from tests.conftest import DemoCompany, auth_headers
 
 
@@ -110,6 +113,9 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
         parameters={"category_id": "expense_category"}
     ),
     "/api/v1/expenses/{expense_id}": CrossTenantCase(parameters={"expense_id": "expense"}),
+    "/api/v1/notifications/{notification_id}": CrossTenantCase(
+        parameters={"notification_id": "notification"}, body={"read": True}
+    ),
 }
 
 
@@ -225,6 +231,27 @@ def _beta_returned_sale(client: TestClient, beta_token: str, product_id: str) ->
     }
 
 
+def _beta_notification(session_factory: sessionmaker[Any], company: DemoCompany) -> str:
+    """Une alerte **chez Beta**, posée par la façade du module.
+
+    Aucune route ne crée de notification — une alerte naît d'un worker, jamais d'un
+    appel client (ADR 0032). Elle est donc semée par le service, dans une transaction
+    tenant comme le ferait la tâche. Sans elle, le 404 croisé prouverait seulement
+    qu'un identifiant au hasard n'existe pas.
+    """
+    ctx = TenantContext(user_id=company.manager_id, company_id=company.company_id)
+    with tenant_transaction(ctx, session_factory=session_factory) as session:
+        notification = NotificationRepository(ctx=ctx, session=session).add_for_user(
+            user_id=company.manager_id,
+            notification_type="stock_low",
+            title="Stock bas — article de Beta",
+            body=None,
+            data={},
+        )
+        session.flush()
+        return str(notification.id)
+
+
 def _beta_sources(client: TestClient, beta_token: str) -> dict[str, str]:
     """Une ressource de Beta par type d'identifiant manipulé par les routes."""
     marker = uuid4().hex[:8]
@@ -286,6 +313,7 @@ def test_cross_tenant_access_is_not_found(
     alpha_token: str,
     beta_token: str,
     company_beta: DemoCompany,
+    session_factory: sessionmaker[Any],
     path: str,
 ) -> None:
     """Alpha appelle les ressources de Beta : chaque méthode doit répondre 404."""
@@ -293,6 +321,7 @@ def test_cross_tenant_access_is_not_found(
     sources = {
         "manager": str(company_beta.manager_id),
         "role": _beta_role_id(api_client, beta_token),
+        "notification": _beta_notification(session_factory, company_beta),
         **_beta_sources(api_client, beta_token),
     }
 

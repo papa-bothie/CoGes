@@ -119,6 +119,30 @@ class UserRoleRepository:
         )
         return int(self.session.execute(statement).rowcount or 0)  # type: ignore[attr-defined]
 
+    def user_ids_with_permission(self, code: str) -> list[UUID]:
+        """Utilisateurs de l'entreprise détenant ce droit, actifs ou non.
+
+        Le filtre « actif » n'est **pas** posé ici : `users` appartient à un autre
+        module, et RBAC n'a pas le droit d'en joindre les tables. C'est l'appelant qui
+        compose les deux façades (décision 01).
+        """
+        stmt = (
+            select(UserRole.user_id)
+            .join(
+                RolePermission,
+                (RolePermission.role_id == UserRole.role_id)
+                & (RolePermission.company_id == UserRole.company_id),
+            )
+            .join(Permission, Permission.id == RolePermission.permission_id)
+            .where(
+                UserRole.company_id == self.ctx.company_id,
+                Permission.code == code,
+            )
+            .distinct()
+            .order_by(UserRole.user_id)
+        )
+        return list(self.session.execute(stmt).scalars().all())
+
     def permission_codes_for_user(self, user_id: UUID) -> list[str]:
         stmt = (
             select(Permission.code)

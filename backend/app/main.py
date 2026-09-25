@@ -20,16 +20,19 @@ from app.modules.auth.router import router as auth_router
 from app.modules.categories.router import router as categories_router
 from app.modules.companies.router import router as companies_router
 from app.modules.customers.router import router as customers_router
+from app.modules.dashboard.router import router as dashboard_router
 from app.modules.expenses.router import categories_router as expense_categories_router
 from app.modules.expenses.router import router as expenses_router
 from app.modules.finance.router import debts_router
 from app.modules.finance.router import router as payments_router
 from app.modules.inventory.router import router as inventory_router
+from app.modules.notifications.router import router as notifications_router
 from app.modules.products.router import router as products_router
 from app.modules.rbac.router import router as rbac_router
 from app.modules.sales.router import returns_router
 from app.modules.sales.router import router as sales_router
 from app.modules.suppliers.router import router as suppliers_router
+from app.modules.system.router import router as system_router
 from app.modules.users.router import router as users_router
 
 configure_logging()
@@ -65,9 +68,14 @@ api_router.include_router(payments_router)
 api_router.include_router(debts_router)
 api_router.include_router(expense_categories_router)
 api_router.include_router(expenses_router)
-# Bande E : Analytics ne possède aucune table — elle compose les façades des bandes
-# du dessous, seul sens que l'ordre des dépendances autorise.
+# Bande E : restitution. Elle lit les bandes du dessous par leurs façades, et rien
+# ne la lit — seul sens que l'ordre des dépendances autorise. Analytics possède la
+# seule table de la bande, `daily_sales_facts`, qui est une projection reconstruisible.
 api_router.include_router(analytics_router)
+api_router.include_router(notifications_router)
+api_router.include_router(dashboard_router)
+# Hors commerce : santé du chemin asynchrone, gérant seul.
+api_router.include_router(system_router)
 
 app.include_router(api_router)
 

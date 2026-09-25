@@ -242,6 +242,28 @@ class DebtRepository(TenantRepository[Debt]):
         )
         return self.session.execute(stmt).scalars().all()
 
+    def due_on_or_before(self, reference: date, *, limit: int) -> Sequence[Debt]:
+        """Dettes encore ouvertes dont l'échéance est atteinte ou dépassée.
+
+        `<=` et non `<` : une dette due aujourd'hui est due aujourd'hui. Le filtre
+        `overdue_on` existant sert un autre besoin — lister ce qui est **en retard** —
+        et les deux ne se confondent pas.
+
+        Bornée : un balayage nocturne ne doit pas construire dix mille alertes d'un
+        coup sur une entreprise qui découvre la fonctionnalité.
+        """
+        stmt = (
+            self._select()
+            .where(
+                Debt.due_date.is_not(None),
+                Debt.due_date <= reference,
+                Debt.status.in_(OPEN_STATUSES),
+            )
+            .order_by(Debt.due_date.asc(), Debt.id.asc())
+            .limit(limit)
+        )
+        return self.session.execute(stmt).scalars().all()
+
     def open_totals_by_party(self) -> dict[str, Decimal]:
         """Créances clients et dettes fournisseurs encore ouvertes, à l'instant t.
 

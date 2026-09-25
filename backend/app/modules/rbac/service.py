@@ -254,3 +254,16 @@ def create_system_roles(session: Session, ctx: TenantContext) -> dict[str, Role]
 
     session.flush()
     return created
+
+
+def user_ids_with_permission(session: Session, ctx: TenantContext, code: str) -> list[UUID]:
+    """Utilisateurs détenant ce droit — sans distinguer actifs et désactivés.
+
+    Façade lecture seule pour la bande E (ADR 0032). Alerter par **droit** plutôt que
+    par nom de rôle survit aux rôles personnalisés : c'est la même matrice qui décide
+    qui peut annuler une vente et qui apprend qu'une vente a été annulée.
+
+    Le tri entre comptes actifs et désactivés appartient à Users : l'appelant compose
+    les deux façades, RBAC ne joint pas la table d'un autre module.
+    """
+    return UserRoleRepository(session, ctx).user_ids_with_permission(code)

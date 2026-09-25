@@ -15,6 +15,29 @@ pytestmark = pytest.mark.tenancy
 
 APP_ROLE = "coges_app"
 AUTH_ROLE = "coges_auth"
+#: Rôles du chemin asynchrone (phase 08, ADR 0032).
+RELAY_ROLE = "coges_relay"
+ANALYTICS_ROLE = "coges_analytics"
+BUS_ROLE = "coges_bus"
+
+#: Seules tables où le rôle analytique peut supprimer. Elles sont intégralement
+#: reconstruisibles depuis le transactionnel : c'est ce qui justifie l'exception.
+ANALYTICS_DELETABLE = ["daily_sales_facts"]
+
+#: Tables que le propriétaire des fonctions du bus peut atteindre. Il a BYPASSRLS,
+#: donc cette liste **est** la portée réelle du contournement.
+BUS_TABLES = ["business_events", "companies", "idempotency_keys"]
+
+#: Les fonctions du projet dont `EXECUTE` a été retiré à `PUBLIC`. Ce sont celles qui
+#: franchissent la RLS ou qui accordent un geste que le rôle appelant n'a pas.
+PRIVILEGED_FUNCTIONS = {
+    "auth_lookup",
+    "ensure_audit_partition",
+    "outbox_claim",
+    "outbox_mark_published",
+    "active_company_ids",
+    "purge_expired_idempotency_keys",
+}
 
 #: Seules tables sur lesquelles `coges_app` a le droit de supprimer (ADR 0007, 0020).
 #: Trois tables du RBAC : aucune n'a de colonne de suppression logique, aucune ne
@@ -254,3 +277,185 @@ def test_t36_audit_log_is_append_only(app_engine: Engine) -> None:
         assert row.can_insert is True, f"{row.relname} : écriture d'audit impossible"
         assert row.can_update is False, f"{row.relname} : une trace d'audit est modifiable"
         assert row.can_delete is False, f"{row.relname} : une trace d'audit est supprimable"
+
+
+# --------------------------------------------------- phase 08 : chemin asynchrone
+
+
+def _table_privileges(connection: object, role: str, privilege: str) -> list[str]:
+    """Tables `public` sur lesquelles `role` détient `privilege`."""
+    return (
+        connection.execute(  # type: ignore[attr-defined]
+            text(
+                """
+                SELECT c.relname
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public'
+                  AND c.relkind IN ('r', 'p')
+                  AND has_table_privilege(:role, c.oid, :privilege)
+                ORDER BY c.relname
+                """
+            ),
+            {"role": role, "privilege": privilege},
+        )
+        .scalars()
+        .all()
+    )
+
+
+def test_t36_worker_roles_cannot_bypass_rls(app_engine: Engine) -> None:
+    """T36 — les deux rôles des workers sont connectables, donc sans BYPASSRLS.
+
+    Ils posent le même `SET LOCAL` que l'API et vivent sous les mêmes politiques.
+    Le seul contournement du projet reste confiné à des fonctions `SECURITY DEFINER`
+    appartenant à des rôles NOLOGIN (ADR 0005, 0032).
+    """
+    with app_engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT rolname, rolcanlogin, rolbypassrls, rolsuper FROM pg_roles "
+                "WHERE rolname IN (:relay, :analytics) ORDER BY rolname"
+            ),
+            {"relay": RELAY_ROLE, "analytics": ANALYTICS_ROLE},
+        ).all()
+
+    assert [row.rolname for row in rows] == [ANALYTICS_ROLE, RELAY_ROLE], (
+        "les rôles des workers ne sont pas créés : voir deploy/postgres/init/01-roles.sql"
+    )
+    for row in rows:
+        assert row.rolcanlogin is True, f"{row.rolname} doit pouvoir se connecter"
+        assert row.rolbypassrls is False, f"{row.rolname} contourne la RLS"
+        assert row.rolsuper is False, f"{row.rolname} est superutilisateur"
+
+
+def test_t36_relay_role_holds_no_table_privilege(app_engine: Engine) -> None:
+    """T36 — le relais ne touche **aucune** table : il n'exécute que trois fonctions.
+
+    C'est ce qui rend acceptable qu'il voie toutes les entreprises. S'il obtenait un
+    jour un `SELECT` direct sur `business_events`, il lirait les données de tous les
+    tenants sans passer par la fonction qui borne ce qu'il en voit.
+    """
+    with app_engine.connect() as connection:
+        for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE"):
+            granted = _table_privileges(connection, RELAY_ROLE, privilege)
+            assert granted == [], f"{RELAY_ROLE} détient {privilege} sur : {granted}"
+
+
+def test_t36_privileged_functions_are_revoked_from_public(app_engine: Engine) -> None:
+    """T36 — aucune fonction privilégiée n'est exécutable par `PUBLIC`.
+
+    `EXECUTE` est accordé à `PUBLIC` par défaut sur **toute** fonction. Sans un
+    `REVOKE` qui a réellement pris effet, n'importe quel rôle connecté pourrait
+    appeler `outbox_claim` et lire l'outbox de toutes les entreprises, ou
+    `auth_lookup` et résoudre une identité sans contexte tenant.
+
+    Le piège est qu'un `REVOKE` émis après un transfert de propriété est un **no-op
+    silencieux** : PostgreSQL émet un WARNING, pas une erreur. Une entrée d'ACL dont
+    le bénéficiaire est vide (`=X/...`) est la signature de cet oubli.
+    """
+    with app_engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                """
+                SELECT p.proname, p.proacl::text AS acl
+                FROM pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname = 'public' AND p.proname = ANY(:names)
+                ORDER BY p.proname
+                """
+            ),
+            {"names": sorted(PRIVILEGED_FUNCTIONS)},
+        ).all()
+
+    assert {row.proname for row in rows} == PRIVILEGED_FUNCTIONS, (
+        "fonctions privilégiées absentes du schéma : "
+        f"{PRIVILEGED_FUNCTIONS - {row.proname for row in rows}}"
+    )
+    open_to_public = [
+        row.proname
+        for row in rows
+        if row.acl is None or any(entry.startswith("=") for entry in row.acl.strip("{}").split(","))
+    ]
+    assert open_to_public == [], f"EXECUTE laissé à PUBLIC sur : {open_to_public}"
+
+
+def test_t36_who_may_call_the_privileged_functions(app_engine: Engine) -> None:
+    """T36 — et la liste de qui peut les appeler est exactement celle-ci.
+
+    Le relais réclame l'outbox, personne d'autre. Le rôle applicatif purge les clés
+    expirées — ce que son absence de droit DELETE lui interdirait autrement — mais ne
+    touche pas à l'outbox. Chaque ligne ci-dessous est une décision, pas un effet de
+    bord d'un `GRANT` trop large.
+    """
+    expected = {
+        ("outbox_claim", RELAY_ROLE): True,
+        ("outbox_claim", APP_ROLE): False,
+        ("outbox_claim", ANALYTICS_ROLE): False,
+        ("outbox_mark_published", RELAY_ROLE): True,
+        ("outbox_mark_published", APP_ROLE): False,
+        ("active_company_ids", RELAY_ROLE): True,
+        ("active_company_ids", APP_ROLE): True,
+        ("active_company_ids", ANALYTICS_ROLE): True,
+        ("purge_expired_idempotency_keys", APP_ROLE): True,
+        ("purge_expired_idempotency_keys", RELAY_ROLE): False,
+        ("auth_lookup", APP_ROLE): True,
+        ("auth_lookup", RELAY_ROLE): False,
+    }
+    signatures = {
+        "outbox_claim": "outbox_claim(integer)",
+        "outbox_mark_published": "outbox_mark_published(bigint[])",
+        "active_company_ids": "active_company_ids()",
+        "purge_expired_idempotency_keys": "purge_expired_idempotency_keys()",
+        "auth_lookup": "auth_lookup(citext, citext)",
+    }
+
+    with app_engine.connect() as connection:
+        observed = {
+            (function, role): connection.execute(
+                text("SELECT has_function_privilege(:role, :signature, 'EXECUTE')"),
+                {"role": role, "signature": signatures[function]},
+            ).scalar_one()
+            for function, role in expected
+        }
+
+    wrong = {key: value for key, value in observed.items() if value != expected[key]}
+    assert wrong == {}, f"droits d'exécution inattendus : {wrong}"
+
+
+def test_t36_analytics_role_deletes_only_reconstructible_tables(app_engine: Engine) -> None:
+    """T36 — le rôle analytique supprime, mais seulement ce qui se reconstruit.
+
+    C'est la cinquième et dernière exception à « pas de suppression physique », et
+    elle ne porte sur aucune donnée : `daily_sales_facts` est une projection.
+    """
+    with app_engine.connect() as connection:
+        granted = _table_privileges(connection, ANALYTICS_ROLE, "DELETE")
+
+    assert granted == ANALYTICS_DELETABLE, (
+        f"DELETE accordé à {ANALYTICS_ROLE} sur un jeu de tables inattendu : {granted}"
+    )
+
+
+def test_t36_bus_role_reach_is_named(app_engine: Engine) -> None:
+    """T36 — `coges_bus` a BYPASSRLS : la liste des tables qu'il atteint est la portée réelle.
+
+    Elle doit rester courte et explicite. Une table qui s'y ajouterait par mégarde —
+    par un `GRANT … ON ALL TABLES` distrait — deviendrait lisible pour toutes les
+    entreprises à la fois.
+    """
+    with app_engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT rolcanlogin, rolbypassrls FROM pg_roles WHERE rolname = :role"),
+            {"role": BUS_ROLE},
+        ).one()
+        reachable = sorted(
+            set(_table_privileges(connection, BUS_ROLE, "SELECT"))
+            | set(_table_privileges(connection, BUS_ROLE, "INSERT"))
+            | set(_table_privileges(connection, BUS_ROLE, "UPDATE"))
+            | set(_table_privileges(connection, BUS_ROLE, "DELETE"))
+        )
+
+    assert row.rolcanlogin is False, f"{BUS_ROLE} doit rester NOLOGIN"
+    assert row.rolbypassrls is True, f"{BUS_ROLE} doit franchir la RLS pour ses fonctions"
+    assert reachable == BUS_TABLES, f"portée du contournement inattendue : {reachable}"

@@ -31,6 +31,14 @@ class CustomerRepository(TenantRepository[Customer]):
             self._live().where(Customer.id == customer_id)
         ).scalar_one_or_none()
 
+    def names_by_ids(self, customer_ids: Sequence[UUID]) -> dict[UUID, str]:
+        """Noms d'un lot de clients, en une requête plutôt qu'une par ligne."""
+        if not customer_ids:
+            return {}
+        stmt = self._live().where(Customer.id.in_(list(customer_ids)))
+        rows = self.session.execute(stmt.with_only_columns(Customer.id, Customer.name)).all()
+        return {row[0]: row[1] for row in rows}
+
     def get_by_code(self, code: str) -> Customer | None:
         """Homonyme de code vivant (`customers_code_uq` est partielle)."""
         return self.session.execute(self._live().where(Customer.code == code)).scalar_one_or_none()

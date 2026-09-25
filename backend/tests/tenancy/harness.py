@@ -14,6 +14,7 @@ RLS ni fonction `SECURITY DEFINER`.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -58,6 +59,10 @@ TENANT_TABLES: tuple[str, ...] = (
     "expense_categories",
     "expenses",
     "idempotency_keys",
+    # Phase 08 — restitution et chemin asynchrone.
+    "daily_sales_facts",
+    "notifications",
+    "processed_events",
 )
 
 # Valeur factice : aucun mot de passe réel ne figure dans les tests.
@@ -99,6 +104,11 @@ class Tenant:
     expense_category_id: UUID
     expense_id: UUID
     idempotency_key: str
+    # Phase 08 — un fait analytique, une alerte, une marque de consommation. Semés
+    # comme le reste : le harnais attaque la base, et chaque tenant doit posséder
+    # une ligne dans chaque table pour que T1 et T2 aient quelque chose à ne pas voir.
+    fact_day: date
+    notification_id: UUID
 
     @property
     def ctx(self) -> TenantContext:
@@ -199,6 +209,8 @@ def create_tenant(
         expense_category_id=uuid4(),
         expense_id=uuid4(),
         idempotency_key=uuid4().hex,
+        fact_day=date(2026, 9, 1),
+        notification_id=uuid4(),
     )
 
     with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
@@ -240,6 +252,7 @@ def create_tenant(
     _seed_sales(session_factory, tenant)
     _seed_returns(session_factory, tenant)
     _seed_expenses(session_factory, tenant)
+    _seed_restitution(session_factory, tenant)
     return tenant
 
 
@@ -539,6 +552,63 @@ def _seed_expenses(session_factory: sessionmaker[Any], tenant: Tenant) -> None:
         )
 
 
+def _seed_restitution(session_factory: sessionmaker[Any], tenant: Tenant) -> None:
+    """Un fait analytique, une alerte et une marque de consommation (phase 08).
+
+    Le fait est écrit à la main plutôt que reconstruit : ce harnais mesure la RLS, pas
+    l'exactitude des agrégats — celle-là, ce sont T29 à T32 qui la prouvent. Les
+    valeurs respectent tout de même `net_qty_sold = qty_sold - returned_qty`, sans
+    quoi le `CHECK` refuserait la ligne.
+
+    `processed_events.event_id` réutilise l'identifiant de l'événement semé dans
+    l'outbox : une marque doit désigner un événement réel pour être lisible.
+    """
+    with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
+        session.execute(
+            text(
+                "INSERT INTO daily_sales_facts "
+                "(company_id, day, product_id, category_id, qty_sold, returned_qty, "
+                " net_qty_sold, gross_revenue, discount_total, tax_total, "
+                " refund_net_amount, net_revenue, cogs_gross, cogs_returned, cogs_net, "
+                " sale_count) "
+                "VALUES (:company_id, :day, :product_id, :category_id, 4.000, 1.000, "
+                "        3.000, 4000.00, 0.00, 720.00, 1000.00, 3000.00, 2400.00, "
+                "        600.00, 1800.00, 2)"
+            ),
+            {
+                "company_id": tenant.company_id,
+                "day": tenant.fact_day,
+                "product_id": tenant.product_id,
+                "category_id": tenant.category_id,
+            },
+        )
+        session.execute(
+            text(
+                "INSERT INTO notifications (id, company_id, user_id, type, title, body) "
+                "VALUES (:id, :company_id, :user_id, 'stock_low', "
+                "        'Stock bas — article de test', 'Semé par le harnais')"
+            ),
+            {
+                "id": tenant.notification_id,
+                "company_id": tenant.company_id,
+                "user_id": tenant.user_id,
+            },
+        )
+        event_id = session.execute(
+            text(
+                "SELECT id FROM business_events WHERE company_id = :company_id ORDER BY id LIMIT 1"
+            ),
+            {"company_id": tenant.company_id},
+        ).scalar_one()
+        session.execute(
+            text(
+                "INSERT INTO processed_events (company_id, consumer, event_id) "
+                "VALUES (:company_id, 'harness', :event_id)"
+            ),
+            {"company_id": tenant.company_id, "event_id": event_id},
+        )
+
+
 def own_row_ids(tenant: Tenant, table: str) -> dict[str, Any]:
     """Critère SQL qui désigne la ligne de `tenant` dans `table`."""
     criteria: dict[str, dict[str, Any]] = {
@@ -569,5 +639,12 @@ def own_row_ids(tenant: Tenant, table: str) -> dict[str, Any]:
         "expense_categories": {"clause": "id = :value", "value": tenant.expense_category_id},
         "expenses": {"clause": "id = :value", "value": tenant.expense_id},
         "idempotency_keys": {"clause": "key = :value", "value": tenant.idempotency_key},
+        # Le critère doit désigner **une** entreprise, sinon le test croisé
+        # retrouverait sa propre ligne et conclurait à une fuite. `day` et
+        # `consumer` sont identiques chez A et B : on passe par le produit et par
+        # l'entreprise, comme le font déjà `business_events` et `document_counters`.
+        "daily_sales_facts": {"clause": "product_id = :value", "value": tenant.product_id},
+        "notifications": {"clause": "id = :value", "value": tenant.notification_id},
+        "processed_events": {"clause": "company_id = :value", "value": tenant.company_id},
     }
     return criteria[table]

@@ -1097,3 +1097,22 @@ def daily_cash(
 def open_debt_totals(session: Session, ctx: TenantContext) -> dict[str, Decimal]:
     """Créances clients et dettes fournisseurs encore ouvertes, à l'instant t."""
     return DebtRepository(session, ctx).open_totals_by_party()
+
+
+#: Plafond d'alertes de dettes par entreprise et par passage.
+DUE_DEBT_SCAN_LIMIT = 200
+
+
+def debts_due(
+    session: Session, ctx: TenantContext, *, on: date | None = None, limit: int | None = None
+) -> Sequence[Debt]:
+    """Dettes encore ouvertes dont l'échéance est atteinte, la plus ancienne d'abord.
+
+    Façade lecture seule pour les alertes de la phase 08. `on` vaut aujourd'hui par
+    défaut ; le paramètre existe pour que les tests puissent fixer la date sans geler
+    l'horloge du processus.
+    """
+    reference = on or datetime.now(UTC).date()
+    return DebtRepository(session, ctx).due_on_or_before(
+        reference, limit=limit or DUE_DEBT_SCAN_LIMIT
+    )

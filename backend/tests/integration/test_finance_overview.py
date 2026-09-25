@@ -11,6 +11,13 @@ basculer sur `daily_sales_facts` sans changer un seul résultat :
 Deux propriétés méritent leur propre test : la trésorerie **exclut** les écritures
 de compensation (`method = 'offset'`, ADR 0024), et les retours sont rattachés au
 jour de la **vente d'origine**, pas au leur.
+
+Depuis la phase 08, le revenu et le coût des ventes viennent de `daily_sales_facts`
+et non plus de `sale_items` (ADR 0034) : l'overview est **éventuellement cohérent**.
+Aucun worker ne tourne pendant la suite, donc chaque test qui mesure un revenu
+reconstruit d'abord les faits du jour, comme le fait la tâche analytique après COMMIT.
+Les tests qui ne portent que sur la trésorerie ou les encours n'en ont pas besoin :
+ces mesures-là restent lues sur le transactionnel.
 """
 
 from __future__ import annotations
@@ -31,6 +38,7 @@ from tests.conftest import (
     read_scalar_in_tenant,
     write_headers,
 )
+from tests.integration import facts_harness as facts
 
 pytestmark = pytest.mark.integration
 
@@ -109,13 +117,18 @@ def _overview(client: TestClient, token: str, query: str | None = None) -> dict[
 
 
 def test_the_overview_adds_up_revenue_cost_margin_and_expenses(
-    api_client: TestClient, alpha_token: str
+    api_client: TestClient,
+    alpha_token: str,
+    company_alpha: DemoCompany,
+    session_factory: sessionmaker[Any],
+    analytics_session_factory: sessionmaker[Any],
 ) -> None:
     """Une vente, une charge : marge et résultat estimé se recalculent à la main.
 
     2 unités vendues 1 000 au coût de 600 ⇒ CA net 2 000, coût 1 200, marge 800.
     Une charge de 300 ⇒ résultat estimé 500.
     """
+    facts.rebuild_around(analytics_session_factory, session_factory, company_alpha.company_id)
     before = _overview(api_client, alpha_token)
     product_id = _product(api_client, alpha_token, unit_price="1000.00", unit_cost="600.00")
     _confirmed_sale(api_client, alpha_token, product_id, qty="2", paid="2000.00")
@@ -138,6 +151,7 @@ def test_the_overview_adds_up_revenue_cost_margin_and_expenses(
     )
     assert expense.status_code == 201, expense.text
 
+    facts.rebuild_around(analytics_session_factory, session_factory, company_alpha.company_id)
     after = _overview(api_client, alpha_token)
     delta = {
         key: Decimal(after[key]) - Decimal(before[key])
@@ -171,7 +185,11 @@ def test_the_overview_adds_up_revenue_cost_margin_and_expenses(
 
 
 def test_a_return_reduces_the_revenue_and_the_cost_of_its_sale(
-    api_client: TestClient, alpha_token: str
+    api_client: TestClient,
+    alpha_token: str,
+    company_alpha: DemoCompany,
+    session_factory: sessionmaker[Any],
+    analytics_session_factory: sessionmaker[Any],
 ) -> None:
     """Le retour compense exactement ce que la vente avait produit.
 
@@ -181,6 +199,7 @@ def test_a_return_reduces_the_revenue_and_the_cost_of_its_sale(
     """
     product_id = _product(api_client, alpha_token, unit_price="1000.00", unit_cost="600.00")
     sale = _confirmed_sale(api_client, alpha_token, product_id, qty="4", paid="4000.00")
+    facts.rebuild_around(analytics_session_factory, session_factory, company_alpha.company_id)
     before = _overview(api_client, alpha_token)
 
     returned = api_client.post(
@@ -190,6 +209,9 @@ def test_a_return_reduces_the_revenue_and_the_cost_of_its_sale(
     )
     assert returned.status_code == 201, returned.text
 
+    # Le retour est rattaché au jour de la **vente d'origine** (§ 4.10) : c'est ce
+    # jour-là qu'il faut réécrire, et c'est aujourd'hui puisque la vente est du jour.
+    facts.rebuild_around(analytics_session_factory, session_factory, company_alpha.company_id)
     after = _overview(api_client, alpha_token)
     assert Decimal(after["refund_net_amount"]) - Decimal(before["refund_net_amount"]) == Decimal(
         "2000.00"

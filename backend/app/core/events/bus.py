@@ -1,31 +1,29 @@
 """Interface du bus d'événements.
 
-Le transport (Redis) et le relais sont livrés en **phase 08**. Cette interface
-existe dès maintenant pour que les modules métier dépendent d'un contrat stable et
-non d'une implémentation : remplacer le transport ne touchera aucun émetteur
-(décision 04).
+Cette interface existe depuis la phase 02 pour que les modules métier dépendent d'un
+contrat stable et non d'une implémentation : remplacer le transport ne touche aucun
+émetteur (décision 04). Le transport Redis est livré en phase 08, dans l'image
+worker (`app/workers/bus.py`) — le noyau continue d'ignorer que Celery existe.
+
+Elle prend un `Event` entier plutôt qu'une liste de champs : le relais lit l'outbox,
+il a la ligne complète, et un paramètre oublié en route serait un champ perdu pour
+tous les abonnés.
 """
 
 from __future__ import annotations
 
-from typing import Any, Protocol
-from uuid import UUID
+from typing import Protocol
 
-from app.core.events.types import EventType
+from app.core.events.inbox import Event
 
 
 class EventBus(Protocol):
-    """Contrat de publication, implémenté par le relais en phase 08."""
+    """Contrat de publication, implémenté par le relais."""
 
-    def publish(
-        self,
-        *,
-        event_id: int,
-        company_id: UUID,
-        event_type: EventType,
-        aggregate_type: str,
-        aggregate_id: UUID,
-        payload: dict[str, Any],
-    ) -> None:
-        """Publie un événement déjà commité. Doit être idempotent côté consommateur."""
+    def publish(self, event: Event) -> None:
+        """Publie un événement **déjà commité**.
+
+        Au moins une fois : l'implémentation peut republier après un incident. C'est
+        aux consommateurs d'être idempotents (`app.core.events.inbox.handle`).
+        """
         ...

@@ -102,6 +102,53 @@ def session_factory(app_engine: Engine) -> sessionmaker[Any]:
     return sessionmaker(bind=app_engine, expire_on_commit=False, future=True)
 
 
+@pytest.fixture(scope="session")
+def worker_urls() -> tuple[str, str]:
+    """DSN des deux rôles de workers : (relais, analytique).
+
+    Les tests de la phase 08 ne peuvent pas se contenter de `coges_app` : la purge des
+    faits exige DELETE, que le rôle applicatif n'a nulle part, et la lecture de
+    l'outbox exige les fonctions réservées au relais. Utiliser `coges_app` ferait
+    passer les tests pour de mauvaises raisons — ou les ferait échouer alors que le
+    code de production, lui, fonctionne.
+    """
+    settings = get_settings()
+    relay_url = settings.test_database_url_relay
+    analytics_url = settings.test_database_url_analytics
+    if not relay_url or not analytics_url:
+        pytest.skip(
+            "COGES_TEST_DATABASE_URL_RELAY et COGES_TEST_DATABASE_URL_ANALYTICS sont "
+            "requis pour les tests du chemin asynchrone."
+        )
+    return relay_url, analytics_url
+
+
+@pytest.fixture(scope="session")
+def analytics_session_factory(
+    migrated_database: str, worker_urls: tuple[str, str]
+) -> Iterator[sessionmaker[Any]]:
+    """Sessions en `coges_analytics` : SELECT partout, écriture sur les projections."""
+    _, analytics_url = worker_urls
+    engine: Engine = create_app_engine(analytics_url, pool_size=2, max_overflow=0)
+    try:
+        yield sessionmaker(bind=engine, expire_on_commit=False, future=True)
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def relay_session_factory(
+    migrated_database: str, worker_urls: tuple[str, str]
+) -> Iterator[sessionmaker[Any]]:
+    """Sessions en `coges_relay` : aucune table, trois fonctions."""
+    relay_url, _ = worker_urls
+    engine: Engine = create_app_engine(relay_url, pool_size=2, max_overflow=0)
+    try:
+        yield sessionmaker(bind=engine, expire_on_commit=False, future=True)
+    finally:
+        engine.dispose()
+
+
 #: Mot de passe des comptes de test. Valeur factice, sans usage hors de la suite.
 TEST_PASSWORD = "mot-de-passe-de-test-01"  # noqa: S105
 
@@ -147,6 +194,36 @@ def app_bound_to_test_database(session_factory: sessionmaker[Any]) -> Iterator[N
     patcher = MonkeyPatch()
     patcher.setattr("app.core.tenancy.get_session_factory", lambda: session_factory)
     patcher.setattr("app.modules.auth.repository.get_session_factory", lambda: session_factory)
+    try:
+        yield
+    finally:
+        patcher.undo()
+
+
+@pytest.fixture
+def workers_bound_to_test_database(
+    app_bound_to_test_database: None,
+    session_factory: sessionmaker[Any],
+    analytics_session_factory: sessionmaker[Any],
+) -> Iterator[None]:
+    """Fait pointer les **tâches** sur `coges_test`, comme `api_client` le fait pour l'API.
+
+    Une tâche n'a pas de client HTTP pour la brancher : elle ouvre sa session
+    elle-même, par la fabrique de son rôle. Trois points d'entrée sont donc
+    redirigés — le gestionnaire transactionnel commun (déjà fait par
+    `app_bound_to_test_database`), la fabrique analytique, et l'énumération des
+    entreprises des batchs.
+
+    Sans cette fixture, une tâche appelée depuis un test écrirait dans la base de
+    **développement** : elle n'y trouverait pas le tenant du test, et la clé étrangère
+    vers `companies` le dirait — tardivement, et de façon déroutante.
+    """
+    patcher = MonkeyPatch()
+    patcher.setattr(
+        "app.workers.tasks.analytics.get_analytics_session_factory",
+        lambda: analytics_session_factory,
+    )
+    patcher.setattr("app.workers.tenants.get_session_factory", lambda: session_factory)
     try:
         yield
     finally:
@@ -245,6 +322,48 @@ def beta_token(api_client: TestClient, company_beta: DemoCompany) -> str:
 
 def auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def role_id(client: TestClient, token: str, name: str) -> str:
+    """Identifiant d'un rôle système de l'entreprise du jeton."""
+    response = client.get("/api/v1/roles?page_size=50", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    return next(role["id"] for role in response.json()["items"] if role["name"] == name)
+
+
+def create_user_with_role(
+    client: TestClient,
+    token: str,
+    company: DemoCompany,
+    *,
+    role: str,
+    email: str,
+) -> str:
+    """Crée un compte porteur d'un rôle système et renvoie son jeton d'accès.
+
+    Passe par les routes réelles : `users:create` du gérant, puis une connexion.
+    Aucun raccourci d'insertion — un compte fabriqué à la main n'aurait ni sel
+    Argon2, ni rôle attribué par le service qui vérifie l'appartenance au tenant.
+    """
+    created = client.post(
+        "/api/v1/users",
+        headers=auth_headers(token),
+        json={
+            "email": email,
+            "full_name": f"Compte {role}",
+            "password": TEST_PASSWORD,
+            "role_ids": [role_id(client, token, role)],
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"company_slug": company.slug, "email": email, "password": TEST_PASSWORD},
+    )
+    assert login.status_code == 200, login.text
+    access_token: str = login.json()["access_token"]
+    return access_token
 
 
 def write_headers(token: str, key: str | None = None) -> dict[str, str]:

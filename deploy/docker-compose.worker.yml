@@ -1,28 +1,50 @@
-# Workers CoGes en production (zone B). Squelette de phase 00 : complété en phase 08
-# (tâches Celery, beat) puis durci en phase 10 (déploiement).
+# Workers CoGes en production (zone B du Diagramme 2). Trois processus, trois rôles
+# PostgreSQL distincts, et aucun appel entrant vers Vercel : ils écrivent en base.
 #
 # Usage : docker compose -f deploy/docker-compose.worker.yml up -d
 # Les variables viennent de l'environnement de l'hôte, jamais d'un fichier versionné.
 
+x-common: &common
+  build:
+    context: ../backend
+    dockerfile: Dockerfile.worker
+  image: coges/worker:dev
+  restart: unless-stopped
+  environment: &common-env
+    COGES_ENV: ${COGES_ENV:?}
+    COGES_REDIS_URL: ${COGES_REDIS_URL:?}
+    COGES_JWT_SECRET: ${COGES_JWT_SECRET:?}
+
 services:
+  # Consommateurs : agrégats, alertes, audit secondaire, batchs. Deux DSN, parce que
+  # la reconstruction des faits est la seule opération du projet qui supprime, et
+  # qu'elle le fait sous un rôle qui ne peut supprimer que cela.
   worker:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile.worker
-    image: coges/worker:dev
-    restart: unless-stopped
+    <<: *common
     environment:
-      COGES_ENV: ${COGES_ENV:?}
+      <<: *common-env
       COGES_DATABASE_URL_APP: ${COGES_DATABASE_URL_APP:?}
-      COGES_REDIS_URL: ${COGES_REDIS_URL:?}
+      COGES_DATABASE_URL_ANALYTICS: ${COGES_DATABASE_URL_ANALYTICS:?}
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info"]
 
+  # Planificateur : il n'exécute rien, il enfile. Un seul exemplaire — deux `beat`
+  # déclencheraient chaque batch deux fois.
   beat:
-    image: coges/worker:dev
-    restart: unless-stopped
+    <<: *common
     depends_on: [worker]
     environment:
-      COGES_ENV: ${COGES_ENV:?}
+      <<: *common-env
       COGES_DATABASE_URL_APP: ${COGES_DATABASE_URL_APP:?}
-      COGES_REDIS_URL: ${COGES_REDIS_URL:?}
     command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=info"]
+
+  # Relais de l'outbox : le seul composant multi-tenant du projet. Il tourne sous
+  # `coges_relay`, qui n'a **aucun privilège de table** et ne peut qu'exécuter trois
+  # fonctions SECURITY DEFINER (ADR 0032). Plusieurs exemplaires sont possibles :
+  # `FOR UPDATE SKIP LOCKED` les empêche de se marcher dessus.
+  relay:
+    <<: *common
+    depends_on: [worker]
+    environment:
+      <<: *common-env
+      COGES_DATABASE_URL_RELAY: ${COGES_DATABASE_URL_RELAY:?}
+    command: ["python", "-m", "app.workers.relay"]

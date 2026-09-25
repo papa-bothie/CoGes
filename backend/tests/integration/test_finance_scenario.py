@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
 from tests.conftest import DemoCompany, auth_headers, read_scalar_in_tenant, write_headers
+from tests.integration import facts_harness as facts
 
 pytestmark = pytest.mark.integration
 
@@ -57,6 +58,7 @@ def test_the_acceptance_scenario_end_to_end(
     alpha_token: str,
     company_alpha: DemoCompany,
     session_factory: sessionmaker[Any],
+    analytics_session_factory: sessionmaker[Any],
 ) -> None:
     """Deux crédits, un règlement réparti, un rejeu, une charge, un état."""
     headers = auth_headers(alpha_token)
@@ -187,6 +189,9 @@ def test_the_acceptance_scenario_end_to_end(
     assert supplier_debt.status_code == 201, supplier_debt.text
 
     # --- 5. l'état de l'argent sur la période --------------------------------
+    # Le revenu de l'overview vient de `daily_sales_facts` (ADR 0034). En production
+    # la tâche analytique le reconstruit après COMMIT ; ici, personne ne le fait.
+    facts.rebuild_around(analytics_session_factory, session_factory, company_alpha.company_id)
     overview = api_client.get(
         f"/api/v1/analytics/overview?from={today}&to={today}", headers=headers
     )

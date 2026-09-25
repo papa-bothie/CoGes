@@ -1,9 +1,13 @@
 """Configuration de l'application, lue exclusivement depuis l'environnement.
 
-Deux DSN distincts, jamais interchangeables :
+Quatre DSN distincts, jamais interchangeables :
 
-* ``database_url_owner`` — rôle propriétaire du schéma, **migrations Alembic uniquement** ;
-* ``database_url_app``   — rôle ``coges_app``, ni superuser ni ``BYPASSRLS``, pas de DELETE.
+* ``database_url_owner``     — rôle propriétaire du schéma, **migrations Alembic uniquement** ;
+* ``database_url_app``       — rôle ``coges_app``, ni superuser ni ``BYPASSRLS``, pas de DELETE ;
+* ``database_url_relay``     — rôle ``coges_relay``, aucun privilège de table : il n'appelle que
+  trois fonctions ``SECURITY DEFINER`` (ADR 0032) ;
+* ``database_url_analytics`` — rôle ``coges_analytics``, seul autorisé à ``DELETE``, et seulement
+  sur des projections reconstruisibles.
 
 Aucun secret n'est journalisé : les valeurs sensibles sont des ``SecretStr``.
 """
@@ -39,11 +43,37 @@ class Settings(BaseSettings):
     database_url_app: str
     # DSN propriétaire : requis seulement pour migrer, absent en production applicative.
     database_url_owner: str | None = None
+    # DSN des workers : absents d'un déploiement API-seule, requis dans l'image worker.
+    database_url_relay: str | None = None
+    database_url_analytics: str | None = None
     # Bases de test, alimentées par la suite pytest.
     test_database_url_owner: str | None = None
     test_database_url_app: str | None = None
+    test_database_url_relay: str | None = None
+    test_database_url_analytics: str | None = None
 
     redis_url: str = "redis://localhost:6379/0"
+
+    # --- Relais de l'outbox (ADR 0032) ---
+    # Lot réclamé par passage. Trop grand, une panne de Redis consomme une tentative
+    # sur trop d'événements à la fois ; trop petit, la latence monte.
+    outbox_batch_size: int = Field(default=100, ge=1, le=1000)
+    # Pause quand la file est vide. Le relais n'est pas réveillé par NOTIFY : il
+    # sonde, et c'est ce qui le rend insensible à une déconnexion (ADR 0032).
+    outbox_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
+    # Plafond de tentatives. `business_events` porte un CHECK `attempts <= 10` : ce
+    # réglage ne peut pas le dépasser, il peut seulement être plus prudent.
+    outbox_max_attempts: int = Field(default=10, ge=1, le=10)
+    # Plafond du back-off exponentiel après un échec de publication.
+    outbox_backoff_max_seconds: float = Field(default=60.0, gt=0, le=600)
+
+    # --- Restitution ---
+    # Cache court par tenant, invalidé par événement (décision 14). Jamais sur le
+    # chemin critique : une panne de Redis fait recalculer, pas échouer.
+    dashboard_cache_ttl_seconds: int = Field(default=60, ge=0, le=3600)
+    # Fenêtre de déduplication des alertes : un même fait ne réveille pas deux fois
+    # la même personne dans la journée.
+    notification_dedupe_hours: int = Field(default=24, ge=1, le=168)
 
     # 32 octets minimum : en deçà, PyJWT avertit que la clé est trop courte pour
     # HMAC-SHA256 (RFC 7518 § 3.2).
@@ -80,6 +110,31 @@ class Settings(BaseSettings):
                 "COGES_DATABASE_URL_OWNER est absent : ce processus ne peut pas migrer la base."
             )
         return self.database_url_owner
+
+    def require_relay_url(self) -> str:
+        """DSN du relais, ou une erreur explicite : jamais de repli sur `coges_app`.
+
+        Se rabattre silencieusement sur le rôle applicatif ferait échouer le relais
+        sur la RLS, un lot à la fois, sans que la cause soit lisible.
+        """
+        if not self.database_url_relay:
+            raise RuntimeError(
+                "COGES_DATABASE_URL_RELAY est absent : ce processus ne peut pas relayer l'outbox."
+            )
+        return self.database_url_relay
+
+    def require_analytics_url(self) -> str:
+        """DSN du rôle analytique, ou une erreur explicite.
+
+        `coges_app` n'a pas le droit DELETE : sans ce DSN, la purge des faits devenus
+        vides échouerait au lieu de laisser un agrégat faussement complet.
+        """
+        if not self.database_url_analytics:
+            raise RuntimeError(
+                "COGES_DATABASE_URL_ANALYTICS est absent : ce processus ne peut pas "
+                "reconstruire les agrégats."
+            )
+        return self.database_url_analytics
 
 
 @lru_cache

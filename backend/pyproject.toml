@@ -56,10 +56,21 @@ strict = false
 module = "celery.*"
 ignore_missing_imports = true
 
+# `@celery_app.task` vient d'une bibliothèque non typée : sous --strict, il rend
+# « non typée » toute fonction qu'il décore. Seule cette vérification-là est levée,
+# et seulement sur les modules de tâches — le corps des tâches reste intégralement
+# vérifié, comme le reste de `app/`.
+[[tool.mypy.overrides]]
+module = "app.workers.tasks.*"
+disallow_untyped_decorators = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --strict-markers"
+# `-m "not perf"` : la mesure de latence sème une entreprise entière et coûte une
+# dizaine de secondes. Elle a sa cible, `make test-perf`, et son étape de CI.
+addopts = "-q --strict-markers -m 'not perf'"
 markers = [
     "tenancy: tests de fuite inter-tenant (bloquants en CI)",
     "integration: tests nécessitant PostgreSQL et Redis",
+    "perf: mesure de latence sur un jeu de démonstration (hors suite par défaut)",
 ]
