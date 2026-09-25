@@ -23,6 +23,9 @@ import app.workers.tasks.analytics  # noqa: F401  isort:skip
 import app.workers.tasks.audit  # noqa: F401  isort:skip
 import app.workers.tasks.notifications  # noqa: F401  isort:skip
 import app.workers.tasks.reconcile  # noqa: F401  isort:skip
+import app.workers.tasks.ml_features  # noqa: F401  isort:skip
+import app.workers.tasks.ml_train  # noqa: F401  isort:skip
+import app.workers.tasks.ml_infer  # noqa: F401  isort:skip
 
 
 def test_every_event_type_has_at_least_one_subscriber() -> None:
@@ -45,6 +48,15 @@ def test_every_subscribed_name_is_a_registered_task() -> None:
     declared = {name for names in subscriptions.SUBSCRIPTIONS.values() for name in names}
     missing = sorted(name for name in declared if name not in celery_app.tasks)
     assert missing == [], f"Abonnements fantômes : {missing}"
+
+
+def test_every_included_task_module_is_imported_here() -> None:
+    """Un module de tâches ajouté à `include` doit l'être ici, sinon le test d'après
+    conclurait « tâche introuvable » pour une tâche qui existe bel et bien."""
+    import sys
+
+    included = set(celery_app.conf.include)
+    assert included <= set(sys.modules), sorted(included - set(sys.modules))
 
 
 def test_every_scheduled_name_is_a_registered_task() -> None:

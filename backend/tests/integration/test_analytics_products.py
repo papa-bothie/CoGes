@@ -252,10 +252,13 @@ def test_every_ranking_names_its_own_metric(
     assert body["unit"] == unit
 
 
-def test_the_future_potential_says_it_is_not_computed_yet(
+def test_the_future_potential_says_when_no_forecast_exists_yet(
     api_client: TestClient, alpha_token: str
 ) -> None:
-    """Huitième métrique : elle annonce la phase 09 au lieu d'inventer un nombre."""
+    """Huitième métrique sans prévision : « données insuffisantes », pas un nombre inventé.
+
+    Le cas où des prévisions existent est couvert par `test_intelligence_api.py`.
+    """
     today = date.today().isoformat()
     response = api_client.get(
         f"{PRODUCTS}?metric=future_potential&from={today}&to={today}",
@@ -266,7 +269,7 @@ def test_the_future_potential_says_it_is_not_computed_yet(
     body = response.json()
     assert body["items"] == []
     assert body["unavailable_reason"] is not None
-    assert "phase 09" in body["unavailable_reason"]
+    assert "insuffisantes" in body["unavailable_reason"]
 
 
 def test_the_ranking_length_is_bounded(api_client: TestClient, alpha_token: str) -> None:

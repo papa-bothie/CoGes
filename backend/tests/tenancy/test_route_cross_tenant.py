@@ -21,6 +21,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import text
 
 from app.core.idempotency import IDEMPOTENCY_HEADER
 from app.core.tenancy import TenantContext, tenant_transaction
@@ -113,6 +114,9 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
         parameters={"category_id": "expense_category"}
     ),
     "/api/v1/expenses/{expense_id}": CrossTenantCase(parameters={"expense_id": "expense"}),
+    "/api/v1/insights/{insight_id}": CrossTenantCase(
+        parameters={"insight_id": "insight"}, body={"status": "read"}
+    ),
     "/api/v1/notifications/{notification_id}": CrossTenantCase(
         parameters={"notification_id": "notification"}, body={"read": True}
     ),
@@ -252,6 +256,25 @@ def _beta_notification(session_factory: sessionmaker[Any], company: DemoCompany)
         return str(notification.id)
 
 
+def _beta_insight(analytics_factory: sessionmaker[Any], company: DemoCompany) -> str:
+    """Un insight **chez Beta**, écrit comme le pipeline l'écrit : sous `coges_analytics`.
+
+    `coges_app` n'a pas le droit d'insérer un insight (révision 0011) ; aucune route
+    n'en crée. Sans cette ligne réelle, le 404 croisé ne prouverait rien.
+    """
+    ctx = TenantContext.bootstrap(company.company_id)
+    with tenant_transaction(ctx, session_factory=analytics_factory) as session:
+        return str(
+            session.execute(
+                text(
+                    "INSERT INTO insights (company_id, insight_type, severity, title, dedupe_key) "
+                    "VALUES (:c, 'slow_mover', 'info', 'Écoulement lent — Beta', :k) RETURNING id"
+                ),
+                {"c": company.company_id, "k": f"cross-tenant:{uuid4()}"},
+            ).scalar_one()
+        )
+
+
 def _beta_sources(client: TestClient, beta_token: str) -> dict[str, str]:
     """Une ressource de Beta par type d'identifiant manipulé par les routes."""
     marker = uuid4().hex[:8]
@@ -314,6 +337,7 @@ def test_cross_tenant_access_is_not_found(
     beta_token: str,
     company_beta: DemoCompany,
     session_factory: sessionmaker[Any],
+    analytics_session_factory: sessionmaker[Any],
     path: str,
 ) -> None:
     """Alpha appelle les ressources de Beta : chaque méthode doit répondre 404."""
@@ -322,6 +346,7 @@ def test_cross_tenant_access_is_not_found(
         "manager": str(company_beta.manager_id),
         "role": _beta_role_id(api_client, beta_token),
         "notification": _beta_notification(session_factory, company_beta),
+        "insight": _beta_insight(analytics_session_factory, company_beta),
         **_beta_sources(api_client, beta_token),
     }
 
