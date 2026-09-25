@@ -89,8 +89,8 @@ Si le code contredit l'architecture, c'est le code qui a tort, sauf si une déci
 **Événements et audit**
 - Événements en **notation pointée** `namespace.action`, **uniquement** : `sale.confirmed`,
   `sale.cancelled`, `sale.returned`, `sale_return.refunded`, `stock.updated`,
-  `payment.received`, `debt.created`, `debt.settled`, `expense.created`. Un nouveau type
-  d'événement = une décision à faire valider.
+  `payment.received`, `payment.cancelled` (ADR 0038), `debt.created`, `debt.settled`,
+  `expense.created`. Un nouveau type d'événement = une décision à faire valider.
 - Outbox écrite **dans la transaction** métier, publiée **après COMMIT** uniquement. Consommateurs
   idempotents.
 - **Audit critique** (dans la transaction) pour : données financières, suppressions logiques
@@ -187,7 +187,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 07 Finance de gestion | `07-finance.md` | 06 | T25–T28 | ✅ |
 | 08 Async, analytics, dashboard, notifications | `08-async-analytics.md` | 07 | T29–T32, T40 | ✅ |
 | 09 CoGes Intelligence | `09-intelligence.md` | 08 | T33–T35 | ✅ |
-| 10 Import/export, durcissement, déploiement | `10-durcissement-deploiement.md` | 09 | T1–T40 en CI | ⬜ |
+| 10 Import/export, durcissement, déploiement | `10-durcissement-deploiement.md` | 09 | T1–T40 en CI | 🟨 temps A ✅ (annulation de paiement), temps B ⬜ |
 | 11 Front : fondations et design system | `11-front-fondations.md` | 10 (ou 07 + OpenAPI stable) | e2e login | ⬜ |
 | 12 Front : opérations | `12-front-operations.md` | 11 | e2e vente | ⬜ |
 | 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ⬜ |
@@ -234,6 +234,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0035 | 2026-09-25 | **Intelligence** : numpy + pandas + statsmodels (groupe `ml`, worker seul, test d'architecture), seuil 28 j + 5 jours vendus/60, artefacts JSON sur le volume du worker, **point-in-time strict** sur les horodatages métier | `docs/decisions/0035-intelligence-bibliotheques-seuils-artefacts.md` |
 | 0036 | 2026-09-25 | `settings.intelligence_enabled` par entreprise (absent = activée), aucun palier ; **privilèges en GRANT** : `coges_app` sans accès aux snapshots, SELECT seul sur `forecasts`, UPDATE (`status`, dates) sur `insights` ; aucun DELETE | `docs/decisions/0036-desactivation-et-privileges-intelligence.md` |
 | 0037 | 2026-09-25 | Écarts de la phase 09 : ENUM `insufficient_history`, dossier `estimators/`, révision 0011, horizons J+14 / rupture sous 28 j, champs additifs de la métrique 8 | `docs/decisions/0037-ecarts-assumes-de-la-phase-09.md` |
+| 0038 | 2026-09-25 | **Annulation d'un paiement par contre-écriture** (révision 0012) : `reversal_of_payment_id` unique, rollups sur les lettrages vivants, paiement annulé et annulation hors trésorerie, `offset` par paire, 10ᵉ événement `payment.cancelled`, gérant + comptable, refus sur dette abandonnée ; correction = annuler puis ressaisir | `docs/decisions/0038-annulation-d-un-paiement-par-contre-ecriture.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019) ; restent **P7** (signalé, hors V1

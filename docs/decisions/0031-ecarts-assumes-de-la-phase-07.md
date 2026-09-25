@@ -52,6 +52,9 @@ semaine les règlements du lundi est le quotidien d'une PME.
 
 ## Décision 4 — La correction et l'annulation d'un paiement sont repoussées
 
+> **Tranchée par l'ADR 0038** (phase 10) : annulation par contre-écriture, correction = annuler
+> puis ressaisir.
+
 Le prompt de la phase demandait que « toute correction importante d'un paiement (réallocation,
 annulation) passe par un audit critique avec la valeur avant et après, et ne supprime jamais
 physiquement ». La règle est juste ; ce qu'elle suppose n'existe pas.
