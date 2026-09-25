@@ -33,12 +33,18 @@ def fcfa(value: Decimal) -> str:
     return f"{rounded:,}".replace(",", THIN_NBSP) + f"{THIN_NBSP}FCFA"
 
 
+def number(value: Decimal | float, decimals: int = 0) -> str:
+    """Nombre à la française : espace fine insécable pour les milliers, virgule décimale."""
+    text = f"{value:,.{decimals}f}"
+    return text.replace(",", THIN_NBSP).replace(".", ",")
+
+
 def dmy(day: date) -> str:
     return day.strftime("%d/%m/%Y")
 
 
 def qty(value: Decimal) -> str:
-    return f"{value.normalize():f}" if value == value.to_integral() else f"{value:.1f}"
+    return number(value, 0 if value == value.to_integral() else 1)
 
 
 def stockout_risk(name: str, days: int, on_hand: Decimal, when: date) -> tuple[str, str]:
@@ -61,12 +67,13 @@ def slow_mover(
 ) -> tuple[str, str]:
     title = f"Écoulement lent — {_name(name)}"
     cover_text = (
-        f"soit {int(cover)} jours de couverture"
+        f"soit {number(int(cover))} jours de couverture"
         if cover is not None
         else "sans aucune vente sur 28 jours"
     )
     body = (
-        f"{METRIC_VELOCITY} : {velocity} unité/jour sur 28 jours pour {qty(on_hand)} en stock, "
+        f"{METRIC_VELOCITY} : {number(velocity, 3)} unité/jour sur 28 jours "
+        f"pour {qty(on_hand)} en stock, "
         f"{cover_text}. Surveiller le réassort ou revoir le prix."
     )
     return title, body
@@ -75,8 +82,9 @@ def slow_mover(
 def demand_spike(name: str, day: date, observed: Decimal, mean: str, z: float) -> tuple[str, str]:
     title = f"Demande inhabituelle — {_name(name)}"
     body = (
-        f"{METRIC_QUANTITY} le {dmy(day)} : {qty(observed)}, contre {mean} par jour en "
-        f"moyenne sur les 28 jours précédents (écart de {z:.1f} écarts-types)."
+        f"{METRIC_QUANTITY} le {dmy(day)} : {qty(observed)}, "
+        f"contre {number(Decimal(mean), 1)} par jour en "
+        f"moyenne sur les 28 jours précédents (écart de {number(z, 1)} écarts-types)."
     )
     return title, body
 
@@ -84,8 +92,8 @@ def demand_spike(name: str, day: date, observed: Decimal, mean: str, z: float) -
 def margin_drop(name: str, rate_7d: Decimal, rate_28d: Decimal) -> tuple[str, str]:
     title = f"Marge en baisse — {_name(name)}"
     body = (
-        f"{METRIC_MARGIN_RATE} : {rate_7d * 100:.1f} % sur 7 jours, contre "
-        f"{rate_28d * 100:.1f} % sur 28 jours. Revoir le prix ou le coût d'achat."
+        f"{METRIC_MARGIN_RATE} : {number(rate_7d * 100, 1)} % sur 7 jours, contre "
+        f"{number(rate_28d * 100, 1)} % sur 28 jours. Revoir le prix ou le coût d'achat."
     )
     return title, body
 
