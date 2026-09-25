@@ -6,7 +6,8 @@ test vérifie que chaque valeur d'`EventType` figure ici et que chaque nom décl
 correspond à une tâche réellement enregistrée — un abonnement fantôme perdrait
 silencieusement des événements.
 
-Aucune notation d'événement nouvelle : la liste des neuf types reste fermée.
+La liste des dix types reste fermée ; le dixième, `payment.cancelled`, a été validé
+en phase 10 (ADR 0038).
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ SUBSCRIPTIONS: dict[EventType, tuple[str, ...]] = {
     EventType.SALE_RETURN_REFUNDED: (INVALIDATE_DASHBOARD,),
     EventType.STOCK_UPDATED: (ON_STOCK_UPDATED, INVALIDATE_DASHBOARD),
     EventType.PAYMENT_RECEIVED: (INVALIDATE_DASHBOARD,),
+    EventType.PAYMENT_CANCELLED: (INVALIDATE_DASHBOARD,),
     EventType.DEBT_CREATED: (INVALIDATE_DASHBOARD,),
     EventType.DEBT_SETTLED: (INVALIDATE_DASHBOARD,),
     EventType.EXPENSE_CREATED: (INVALIDATE_DASHBOARD,),

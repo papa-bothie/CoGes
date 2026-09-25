@@ -1,7 +1,7 @@
 """Corps des événements émis par Finance.
 
-Trois des neuf types de la V1 : `payment.received`, `debt.created` et
-`debt.settled`. La liste est **fermée** (ADR 0008) — et elle ne contient pas de
+Quatre des dix types de la V1 : `payment.received`, `payment.cancelled`,
+`debt.created` et `debt.settled`. La liste est **fermée** (ADR 0008) — et elle ne contient pas de
 `payment.sent` : un décaissement n'émet donc rien, plutôt que d'emprunter le nom
 d'un encaissement pour dire le contraire de ce qui s'est passé (ADR 0026).
 
@@ -34,6 +34,35 @@ def payment_received_payload(
         "amount": serialize(amount),
         "method": method,
         "sale_id": None if sale_id is None else str(sale_id),
+    }
+
+
+def payment_cancelled_payload(
+    *,
+    payment_id: UUID,
+    cancellation_id: UUID,
+    direction: str,
+    method: str,
+    amount: Decimal,
+    sale_id: UUID | None,
+    debt_ids: list[UUID],
+    sale_return_ids: list[UUID],
+) -> dict[str, str | list[str] | None]:
+    """Corps de `payment.cancelled` (ADR 0038).
+
+    `direction` est celle du paiement **annulé**, pas de sa contre-écriture : c'est le
+    fait que l'abonné cherche. Les dettes et retours dont le solde est revenu en
+    arrière sont nommés, pour qu'aucun abonné n'ait à relire les lettrages.
+    """
+    return {
+        "payment_id": str(payment_id),
+        "cancellation_id": str(cancellation_id),
+        "direction": direction,
+        "method": method,
+        "amount": serialize(amount),
+        "sale_id": None if sale_id is None else str(sale_id),
+        "debt_ids": [str(value) for value in debt_ids],
+        "sale_return_ids": [str(value) for value in sale_return_ids],
     }
 
 

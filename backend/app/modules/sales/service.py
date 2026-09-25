@@ -42,7 +42,6 @@ from app.modules.finance import service as finance_service
 from app.modules.finance.schemas import (
     OFFSET_METHOD,
     DebtRead,
-    PaymentRead,
     RefundLinkRead,
 )
 from app.modules.inventory import service as inventory_service
@@ -733,10 +732,7 @@ def build_detail(session: Session, ctx: TenantContext, sale: Sale) -> SaleDetail
     return SaleDetail(
         **header.model_dump(),
         items=[SaleItemRead.model_validate(item) for item in get_items(session, ctx, sale.id)],
-        payments=[
-            PaymentRead.model_validate(payment)
-            for payment in finance_service.payments_for_sale(session, ctx, sale.id)
-        ],
+        payments=finance_service.payment_reads_for_sale(session, ctx, sale.id),
         debt=None if debt is None else DebtRead.model_validate(debt),
     )
 
@@ -798,10 +794,7 @@ def build_receipt(session: Session, ctx: TenantContext, sale_id: UUID) -> Receip
         total=sale.total,
         paid_total=sale.paid_total,
         balance=sale.total - sale.paid_total,
-        payments=[
-            PaymentRead.model_validate(payment)
-            for payment in finance_service.payments_for_sale(session, ctx, sale.id)
-        ],
+        payments=finance_service.payment_reads_for_sale(session, ctx, sale.id),
     )
 
 
@@ -1151,10 +1144,7 @@ def build_return_detail(
             RefundLinkRead.model_validate(refund)
             for refund in finance_service.refunds_for_return(session, ctx, sale_return.id)
         ],
-        payments=[
-            PaymentRead.model_validate(payment)
-            for payment in finance_service.payments_for_return(session, ctx, sale_return.id)
-        ],
+        payments=finance_service.payment_reads_for_return(session, ctx, sale_return.id),
     )
 
 

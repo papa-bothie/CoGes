@@ -36,6 +36,7 @@ from app.modules.finance.schemas import (
     DebtStatus,
     DebtWriteOff,
     PartyType,
+    PaymentCancel,
     PaymentCreate,
     PaymentDetail,
     PaymentPage,
@@ -52,6 +53,10 @@ debts_router = APIRouter(prefix="/debts", tags=["debts"])
 #: différents est un abus visible, pas un rejeu.
 CREATE_PAYMENT_ENDPOINT = "POST /api/v1/payments"
 CREATE_DEBT_ENDPOINT = "POST /api/v1/debts"
+#: Gabarit : l'identifiant du paiement fait partie de l'endpoint enregistré, pour
+#: qu'une même clé présentée pour annuler un **autre** paiement soit refusée au lieu
+#: de rejouer la réponse du premier.
+CANCEL_PAYMENT_ENDPOINT = "POST /api/v1/payments/{payment_id}/cancel"
 
 
 @router.get("/{payment_id}/refunded-returns", response_model=list[RefundLinkRead])
@@ -134,12 +139,14 @@ def list_payments(
         period_from=period_from,
         period_to=period_to,
     )
-    allocations = service.allocations_of_payments(
-        tenant.session, tenant.ctx, [payment.id for payment in payments]
-    )
+    payment_ids = [payment.id for payment in payments]
+    allocations = service.allocations_of_payments(tenant.session, tenant.ctx, payment_ids)
+    reversals = service.reversals_of_payments(tenant.session, tenant.ctx, payment_ids)
     return PaymentPage(
         items=[
-            service.build_payment_detail(payment, allocations.get(payment.id, []))
+            service.build_payment_detail(
+                payment, allocations.get(payment.id, []), reversals.get(payment.id)
+            )
             for payment in payments
         ],
         page=page,
@@ -153,10 +160,56 @@ def get_payment(
     payment_id: UUID,
     tenant: Annotated[TenantSession, Depends(require_permission("payments:read"))],
 ) -> PaymentDetail:
-    """Détail d'un versement, ses affectations comprises."""
+    """Détail d'un versement, ses affectations et son éventuelle annulation comprises."""
     payment = service.get_payment(tenant.session, tenant.ctx, payment_id)
     allocations = service.allocations_of_payments(tenant.session, tenant.ctx, [payment.id])
-    return service.build_payment_detail(payment, allocations.get(payment.id, []))
+    reversals = service.reversals_of_payments(tenant.session, tenant.ctx, [payment.id])
+    return service.build_payment_detail(
+        payment, allocations.get(payment.id, []), reversals.get(payment.id)
+    )
+
+
+@router.post(
+    "/{payment_id}/cancel", response_model=PaymentDetail, status_code=status.HTTP_201_CREATED
+)
+def cancel_payment(
+    payment_id: UUID,
+    payload: PaymentCancel,
+    request: Request,
+    tenant: Annotated[TenantSession, Depends(require_permission("payments:cancel"))],
+    idempotency_key: IdempotencyKey,
+) -> Response:
+    """Annule un paiement erroné par contre-écriture (ADR 0038).
+
+    201 : une écriture est **créée** — l'annulation —, l'origine n'est pas modifiée.
+    La réponse est le paiement d'origine, désormais `cancelled: true`. Corriger une
+    saisie, c'est annuler puis ressaisir : il n'y a pas de « modifier un paiement ».
+    """
+    replay = idempotency.reserve(
+        tenant.session,
+        tenant.ctx,
+        key=idempotency_key,
+        endpoint=CANCEL_PAYMENT_ENDPOINT.format(payment_id=payment_id),
+        payload=payload,
+    )
+    if replay is not None:
+        return idempotency.replay_response(replay)
+
+    payment, reversal = service.cancel_payment(
+        tenant.session,
+        tenant.ctx,
+        payment_id,
+        reason=payload.reason,
+        ip_address=client_ip(request),
+    )
+    allocations = service.allocations_of_payments(tenant.session, tenant.ctx, [payment.id])
+    return idempotency.completed(
+        tenant.session,
+        tenant.ctx,
+        key=idempotency_key,
+        status_code=status.HTTP_201_CREATED,
+        model=service.build_payment_detail(payment, allocations.get(payment.id, []), reversal),
+    )
 
 
 # --------------------------------------------------------------------- dettes
