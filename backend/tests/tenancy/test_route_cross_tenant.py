@@ -105,6 +105,10 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
         parameters={"payment_id": "payment"}
     ),
     "/api/v1/payments/{payment_id}": CrossTenantCase(parameters={"payment_id": "payment"}),
+    "/api/v1/payments/{payment_id}/cancel": CrossTenantCase(
+        parameters={"payment_id": "payment"},
+        body={"reason": "Test de fuite inter-tenant, motif assez long"},
+    ),
     "/api/v1/debts/{debt_id}": CrossTenantCase(parameters={"debt_id": "debt"}),
     "/api/v1/debts/{debt_id}/write-off": CrossTenantCase(
         parameters={"debt_id": "debt"},
