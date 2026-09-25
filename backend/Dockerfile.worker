@@ -14,13 +14,15 @@ COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
 WORKDIR /srv/coges
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+# Le groupe `ml` (numpy, pandas, statsmodels) n'existe que dans cette image (ADR 0035).
+RUN uv sync --frozen --no-dev --group ml --no-install-project
 
 COPY app ./app
 COPY migrations ./migrations
 COPY alembic.ini ./
 
-RUN useradd --system --create-home coges
+RUN useradd --system --create-home coges \
+    && mkdir -p /var/lib/coges/ml && chown coges /var/lib/coges/ml
 USER coges
 
 # Les migrations ne sont jamais lancées ici : elles sont une étape de déploiement.

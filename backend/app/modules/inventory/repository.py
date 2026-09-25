@@ -189,8 +189,7 @@ class ProductStockRepository:
 #: biaisée : un article immobile pendant vingt jours puis écoulé en un jour aurait
 #: sinon le même stock moyen qu'un article en rotation constante. D'où le
 #: `generate_series` et le `CROSS JOIN`.
-_AVERAGE_ON_HAND = text(
-    """
+_EVENINGS_CTE = """
     WITH jours AS (
          SELECT generate_series(CAST(:period_from AS date),
                                 CAST(:period_to   AS date),
@@ -219,7 +218,7 @@ _AVERAGE_ON_HAND = text(
           GROUP BY m.product_id, 2
     ),
     soirs AS (
-         SELECT pr.product_id,
+         SELECT pr.product_id, j.day,
                 COALESCE(b.qty, 0)
                   + COALESCE(SUM(mv.delta) OVER (PARTITION BY pr.product_id ORDER BY j.day), 0)
                   AS on_hand
@@ -228,9 +227,36 @@ _AVERAGE_ON_HAND = text(
            LEFT JOIN base b       ON b.product_id = pr.product_id
            LEFT JOIN mouvements mv ON mv.product_id = pr.product_id AND mv.day = j.day
     )
+"""
+
+_AVERAGE_ON_HAND = text(
+    _EVENINGS_CTE
+    + """
     SELECT product_id, AVG(on_hand) AS avg_on_hand
       FROM soirs
      GROUP BY product_id
+    """
+)
+
+#: Stock de fin de journée, jour par jour, pour CoGes Intelligence (phase 09).
+#:
+#: Même reconstitution que la moyenne, rendue jour par jour, plus le premier jour
+#: où le journal connaît le produit : avant lui, un stock nul n'est pas une rupture,
+#: c'est une absence de suivi (historique importé, produit pas encore réceptionné).
+_DAILY_ON_HAND = text(
+    _EVENINGS_CTE
+    + """
+    , premiers AS (
+         SELECT m.product_id, MIN((m.occurred_at AT TIME ZONE :timezone)::date) AS first_day
+           FROM inventory_movements m
+          WHERE m.company_id = :company_id
+            AND m.product_id = ANY(CAST(:product_ids AS uuid[]))
+          GROUP BY m.product_id
+    )
+    SELECT s.product_id, s.day, s.on_hand, p.first_day
+      FROM soirs s
+      LEFT JOIN premiers p ON p.product_id = s.product_id
+     ORDER BY s.product_id, s.day
     """
 )
 
@@ -264,3 +290,26 @@ class StockHistoryRepository:
             },
         ).all()
         return {row.product_id: Decimal(row.avg_on_hand) for row in rows}
+
+    def daily_on_hand(
+        self,
+        *,
+        product_ids: Sequence[UUID],
+        period_from: date,
+        period_to: date,
+        timezone: str,
+    ) -> list[tuple[UUID, date, Decimal, date | None]]:
+        """`(produit, jour, stock du soir, premier jour connu du journal)`, jours creux compris."""
+        if not product_ids:
+            return []
+        rows = self.session.execute(
+            _DAILY_ON_HAND,
+            {
+                "company_id": self.ctx.company_id,
+                "product_ids": list(dict.fromkeys(product_ids)),
+                "period_from": period_from,
+                "period_to": period_to,
+                "timezone": timezone,
+            },
+        ).all()
+        return [(row.product_id, row.day, Decimal(row.on_hand), row.first_day) for row in rows]

@@ -21,9 +21,9 @@ Inventory et Finance par leurs **façades**, et aucun d'eux ne le connaît.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, NamedTuple
 from uuid import UUID
 
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -60,6 +60,7 @@ from app.modules.sales.events import (
 )
 from app.modules.sales.models import Sale, SaleItem, SaleReturn, SaleReturnItem
 from app.modules.sales.repository import (
+    SaleHistoryRepository,
     SaleItemRepository,
     SaleRepository,
     SaleReturnItemRepository,
@@ -1216,3 +1217,46 @@ def confirmed_sale_count(
     return SaleRevenueRepository(session, ctx).confirmed_sale_count(
         period_from=period_from, period_to=period_to
     )
+
+
+# ------------------------------------------------------- historique au point D
+
+
+class DailyProductSales(NamedTuple):
+    """Une journée de vente d'un produit, telle qu'elle était connue au soir de D."""
+
+    day: date
+    product_id: UUID
+    qty: Decimal
+    revenue: Decimal
+    cogs: Decimal
+    sale_count: int
+
+
+def daily_product_sales_as_of(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    day_from: date,
+    as_of: date,
+    timezone: str,
+) -> list[DailyProductSales]:
+    """Ventes nettes jour × produit **connues au soir de `as_of`** (§ 6.2).
+
+    Façade lecture seule pour CoGes Intelligence. Point-in-time strict (ADR 0035) :
+    une vente annulée après D compte à D, un retour enregistré après D n'est pas
+    encore déduit. Les horodatages sont ceux du métier (`sold_at`, `cancelled_at`,
+    `returned_at`). Seuls les jours où le produit s'est vendu figurent : la série
+    dense est l'affaire de l'appelant.
+    """
+    rows = SaleHistoryRepository(session, ctx).daily_product_sales(
+        day_from=day_from, as_of=as_of, timezone=timezone
+    )
+    return [DailyProductSales(*row) for row in rows]
+
+
+def first_sale_days_as_of(
+    session: Session, ctx: TenantContext, *, as_of: date, timezone: str
+) -> dict[UUID, date]:
+    """Premier jour de vente connu à `as_of`, par produit."""
+    return SaleHistoryRepository(session, ctx).first_sale_days(as_of=as_of, timezone=timezone)

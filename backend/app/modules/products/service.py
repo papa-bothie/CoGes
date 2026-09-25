@@ -194,6 +194,15 @@ def get_summaries(
     }
 
 
+def active_summaries(session: Session, ctx: TenantContext) -> dict[UUID, ProductSummary]:
+    """Fiches résumées de tous les produits actifs, pour le pipeline d'Intelligence.
+
+    Un produit archivé ou désactivé ne reçoit plus de prévision : on ne réapprovisionne
+    pas ce qu'on ne vend plus.
+    """
+    return get_summaries(session, ctx, ProductRepository(session, ctx).active_ids())
+
+
 def reorder_points(session: Session, ctx: TenantContext) -> dict[UUID, Decimal]:
     """Seuils d'alerte de l'entreprise, par produit.
 

@@ -34,6 +34,9 @@ celery_app = Celery(
         "app.workers.tasks.notifications",
         "app.workers.tasks.audit",
         "app.workers.tasks.reconcile",
+        "app.workers.tasks.ml_features",
+        "app.workers.tasks.ml_train",
+        "app.workers.tasks.ml_infer",
     ],
 )
 celery_app.conf.update(

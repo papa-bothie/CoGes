@@ -567,6 +567,32 @@ def average_on_hand(
     )
 
 
+def daily_on_hand(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    product_ids: Sequence[UUID],
+    period_from: date,
+    period_to: date,
+    timezone: str,
+) -> list[tuple[UUID, date, Decimal, date | None]]:
+    """Stock de fin de journée, jour par jour, reconstitué depuis le journal.
+
+    Façade pour CoGes Intelligence : le signal de rupture est le stock **à la date**,
+    pas celui d'aujourd'hui (§ 6.2). Sans lui, un article à succès en rupture
+    ressemble à un article sans demande, et sa prévision s'effondre durablement.
+
+    Chaque ligne porte aussi le premier jour où le journal connaît le produit, pour
+    qu'un stock nul **avant** tout mouvement ne soit pas lu comme une rupture.
+    """
+    return StockHistoryRepository(session, ctx).daily_on_hand(
+        product_ids=product_ids,
+        period_from=period_from,
+        period_to=period_to,
+        timezone=timezone,
+    )
+
+
 def rebuild_stock(session: Session, ctx: TenantContext) -> list[StockRebuildLine]:
     """Rejoue le journal et réaligne la projection (§ 5.7).
 

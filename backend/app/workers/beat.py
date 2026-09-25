@@ -24,6 +24,9 @@ CHECK_REVENUE = "reconcile.check_revenue_all"
 ENSURE_PARTITIONS = "reconcile.ensure_audit_partitions"
 PURGE_IDEMPOTENCY = "reconcile.purge_idempotency_keys"
 SCAN_DUE_DEBTS = "notifications.scan_due_debts_all"
+ML_FEATURES = "ml_features.compute_all"
+ML_TRAIN = "ml_train.train_all"
+ML_INFER = "ml_infer.infer_all"
 
 #: Nombre de jours de faits réécrits chaque nuit. C'est le filet du § 12.1 point 3 :
 #: un événement perdu ne laisse pas un agrégat faux plus d'une nuit.
@@ -55,6 +58,22 @@ BEAT_SCHEDULE: dict[str, dict[str, Any]] = {
     "rebuild-recent-facts": {
         "task": REBUILD_RECENT_FACTS,
         "schedule": crontab(hour="3", minute="0"),
+    },
+    # 03 h 30 — CoGes Intelligence, étapes 02-04 : photographie de la veille, après
+    # le filet analytique de 03 h 00 (ADR 0035).
+    "ml-features": {
+        "task": ML_FEATURES,
+        "schedule": crontab(hour="3", minute="30"),
+    },
+    # Lundi 03 h 45 — étape 05 : un modèle par entreprise et par semaine ISO.
+    "ml-train": {
+        "task": ML_TRAIN,
+        "schedule": crontab(day_of_week="1", hour="3", minute="45"),
+    },
+    # 04 h 30 — étapes 06-07 : prévisions et insights, lus par l'API au réveil.
+    "ml-infer": {
+        "task": ML_INFER,
+        "schedule": crontab(hour="4", minute="30"),
     },
     # 06 h 00 — dettes arrivées à échéance. Une dette échoit précisément quand rien
     # ne bouge : aucun événement ne peut déclencher cette alerte, seul un calendrier.

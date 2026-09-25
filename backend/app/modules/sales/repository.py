@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, func, select, text
+from sqlalchemy.orm import Session
 
 from app.core.repository import MAX_PAGE_SIZE, TenantRepository
+from app.core.tenancy import TenantContext
 from app.modules.sales.models import Sale, SaleItem, SaleReturn, SaleReturnItem
 
 #: Les ventes n'ont pas de suppression logique : une vente ne s'efface pas, elle
@@ -349,3 +351,120 @@ class SaleRevenueRepository(TenantRepository[Sale]):
             )
         )
         return int(self.session.execute(stmt).scalar_one())
+
+
+#: Borne de connaissance d'une date D : minuit du lendemain, dans le fuseau de
+#: l'entreprise. Tout ce qui est horodaté **avant** a pu être connu à D.
+_CUTOFF_CTE = """
+    borne AS (
+         SELECT (CAST(:as_of AS date) + 1)::timestamp AT TIME ZONE :timezone AS t
+    ),
+    valides AS (
+         -- Point-in-time strict (ADR 0035) : une vente annulée **après** D était
+         -- confirmée à D. Les brouillons n'ont jamais rien vendu.
+         SELECT s.id, s.sold_at
+           FROM sales s, borne
+          WHERE s.company_id = :company_id
+            AND s.sold_at < borne.t
+            AND (s.status = 'confirmed'
+                 OR (s.status = 'cancelled' AND s.cancelled_at >= borne.t))
+    )
+"""
+
+#: Ventes jour × produit **telles qu'on les connaissait au soir de D** (§ 6.2).
+#:
+#: C'est la raison d'être de cette requête, et ce qui la distingue du § 6.1 :
+#: `daily_sales_facts` est réécrite quand un retour arrive plus tard, et la relire
+#: pour une date passée utiliserait un chiffre qui n'était pas connu ce jour-là.
+#: Les retours sont donc pré-agrégés par ligne (pas de duplication, § 6.1) **et**
+#: bornés à `returned_at < borne`. Produits arrondis à la ligne (ADR 0034).
+_SALES_AS_OF = text(
+    "WITH"
+    + _CUTOFF_CTE
+    + """
+    , lignes AS (
+         SELECT si.id, si.product_id, v.id AS sale_id,
+                (v.sold_at AT TIME ZONE :timezone)::date AS day,
+                si.qty,
+                round(si.qty * si.unit_price, 2) - si.discount AS revenue,
+                round(si.qty * si.unit_cost, 2)                AS cogs
+           FROM valides v
+           JOIN sale_items si ON si.company_id = :company_id AND si.sale_id = v.id
+          WHERE (v.sold_at AT TIME ZONE :timezone)::date
+                BETWEEN CAST(:day_from AS date) AND CAST(:as_of AS date)
+    ),
+    retours AS (
+         SELECT ri.sale_item_id,
+                SUM(ri.qty)                          AS qty,
+                SUM(ri.refund_amount - ri.tax_refund) AS revenue,
+                SUM(round(ri.qty * ri.unit_cost, 2))  AS cogs
+           FROM sale_return_items ri
+           JOIN sale_returns r ON r.company_id = ri.company_id AND r.id = ri.return_id
+           CROSS JOIN borne
+          WHERE ri.company_id = :company_id
+            AND r.returned_at < borne.t
+            AND ri.sale_item_id IN (SELECT id FROM lignes)
+          GROUP BY ri.sale_item_id
+    )
+    SELECT l.day, l.product_id,
+           SUM(l.qty - COALESCE(rt.qty, 0))         AS qty,
+           SUM(l.revenue - COALESCE(rt.revenue, 0)) AS revenue,
+           SUM(l.cogs - COALESCE(rt.cogs, 0))       AS cogs,
+           COUNT(DISTINCT l.sale_id)                AS sale_count
+      FROM lignes l
+      LEFT JOIN retours rt ON rt.sale_item_id = l.id
+     GROUP BY l.day, l.product_id
+     ORDER BY l.product_id, l.day
+    """
+)
+
+#: Premier jour de vente connu à D, par produit : le seuil d'historique en dépend.
+_FIRST_SALE_AS_OF = text(
+    "WITH"
+    + _CUTOFF_CTE
+    + """
+    SELECT si.product_id, MIN((v.sold_at AT TIME ZONE :timezone)::date) AS first_day
+      FROM valides v
+      JOIN sale_items si ON si.company_id = :company_id AND si.sale_id = v.id
+     GROUP BY si.product_id
+    """
+)
+
+
+class SaleHistoryRepository:
+    """Historique des ventes à une date de connaissance, pour CoGes Intelligence."""
+
+    def __init__(self, session: Session, ctx: TenantContext) -> None:
+        self.session = session
+        self.ctx = ctx
+
+    def daily_product_sales(
+        self, *, day_from: date, as_of: date, timezone: str
+    ) -> list[tuple[date, UUID, Decimal, Decimal, Decimal, int]]:
+        rows = self.session.execute(
+            _SALES_AS_OF,
+            {
+                "company_id": self.ctx.company_id,
+                "day_from": day_from,
+                "as_of": as_of,
+                "timezone": timezone,
+            },
+        ).all()
+        return [
+            (
+                row.day,
+                row.product_id,
+                Decimal(row.qty),
+                Decimal(row.revenue),
+                Decimal(row.cogs),
+                int(row.sale_count),
+            )
+            for row in rows
+        ]
+
+    def first_sale_days(self, *, as_of: date, timezone: str) -> dict[UUID, date]:
+        rows = self.session.execute(
+            _FIRST_SALE_AS_OF,
+            {"company_id": self.ctx.company_id, "as_of": as_of, "timezone": timezone},
+        ).all()
+        return {row.product_id: row.first_day for row in rows}

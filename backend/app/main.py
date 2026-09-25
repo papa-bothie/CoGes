@@ -25,6 +25,7 @@ from app.modules.expenses.router import categories_router as expense_categories_
 from app.modules.expenses.router import router as expenses_router
 from app.modules.finance.router import debts_router
 from app.modules.finance.router import router as payments_router
+from app.modules.intelligence.router import router as intelligence_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.products.router import router as products_router
@@ -73,6 +74,9 @@ api_router.include_router(expenses_router)
 # seule table de la bande, `daily_sales_facts`, qui est une projection reconstruisible.
 api_router.include_router(analytics_router)
 api_router.include_router(notifications_router)
+# CoGes Intelligence : lecture seule de résultats déjà calculés par le worker
+# (décision 11). Aucune route n'infère ; seule `PATCH /insights/{id}` écrit un statut.
+api_router.include_router(intelligence_router)
 api_router.include_router(dashboard_router)
 # Hors commerce : santé du chemin asynchrone, gérant seul.
 api_router.include_router(system_router)

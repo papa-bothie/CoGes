@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     # la même personne dans la journée.
     notification_dedupe_hours: int = Field(default=24, ge=1, le=168)
 
+    # --- CoGes Intelligence (ADR 0035) ---
+    # Artefacts de modèle, hors base (§ 6) : volume du conteneur worker. L'API ne le
+    # lit jamais — elle ne sert que `forecasts` et `insights`.
+    ml_artifacts_dir: Path = Path("/var/lib/coges/ml")
+
     # 32 octets minimum : en deçà, PyJWT avertit que la clé est trop courte pour
     # HMAC-SHA256 (RFC 7518 § 3.2).
     jwt_secret: SecretStr = SecretStr("change-me-" + "0" * 32)

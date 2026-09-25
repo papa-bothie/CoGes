@@ -29,3 +29,6 @@ celerybeat.pid
 .DS_Store
 .idea/
 .vscode/
+
+# Artefacts de modèle CoGes Intelligence (ADR 0035)
+.ml-artifacts/

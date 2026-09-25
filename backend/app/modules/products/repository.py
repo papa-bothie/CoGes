@@ -60,6 +60,11 @@ class ProductRepository(TenantRepository[Product]):
         stmt = self._live().where(Product.id.in_(product_ids))
         return {product.id: product for product in self.session.execute(stmt).scalars()}
 
+    def active_ids(self) -> list[UUID]:
+        """Identifiants des produits vivants et actifs, dans un ordre stable."""
+        stmt = self._live().where(Product.is_active.is_(True)).order_by(Product.id)
+        return list(self.session.execute(stmt.with_only_columns(Product.id)).scalars())
+
     def reorder_points(self) -> dict[UUID, Decimal]:
         """Seuils d'alerte des produits suivis en stock qui en ont un.
 

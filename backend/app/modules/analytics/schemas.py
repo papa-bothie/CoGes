@@ -7,7 +7,7 @@ un flottant. `tax_total` reste isolé — une taxe collectée n'a jamais été u
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from enum import StrEnum
 from uuid import UUID
 
@@ -131,6 +131,12 @@ class ProductRankRow(BaseModel):
     #: Chaîne, comme tout nombre décimal du projet. La précision dépend de la
     #: métrique : deux décimales pour un montant, trois pour une quantité.
     value: str
+    #: Métrique 8 seulement : intervalle et modèle qui ont produit la valeur
+    #: (décision 13). Absents des sept métriques observées, qui n'estiment rien.
+    lower: str | None = None
+    upper: str | None = None
+    model_name: str | None = None
+    model_version: str | None = None
 
 
 class ProductRanking(BaseModel):
@@ -146,6 +152,11 @@ class ProductRanking(BaseModel):
     #: Renseigné quand la métrique n'est pas encore calculable ; `items` est alors
     #: vide. « Données insuffisantes » plutôt qu'une valeur inventée (décision 13).
     unavailable_reason: str | None = None
+    #: Métrique 8 seulement : date de production de la prévision — jamais « en
+    #: direct » — et horizon couvert à partir de `forecast_as_of`.
+    computed_at: datetime | None = None
+    forecast_as_of: date | None = None
+    horizon_days: int | None = None
     items: list[ProductRankRow]
 
 

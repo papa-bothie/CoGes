@@ -39,6 +39,8 @@ RECIPIENT_PERMISSION: dict[NotificationType, str] = {
     NotificationType.STOCK_OUT: "inventory:update",
     NotificationType.DEBT_DUE: "debts:update",
     NotificationType.SALE_CANCELLED: "sales:cancel",
+    # Un insight critique vise qui peut le lire : la permission de l'écran Insights.
+    NotificationType.INSIGHT_CRITICAL: "insights:read",
 }
 
 

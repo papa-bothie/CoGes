@@ -44,6 +44,7 @@ from app.modules.analytics.schemas import (
 from app.modules.companies import service as companies_service
 from app.modules.expenses import service as expenses_service
 from app.modules.finance import service as finance_service
+from app.modules.intelligence import serving as intelligence_serving
 from app.modules.inventory import service as inventory_service
 from app.modules.sales import service as sales_service
 
@@ -269,18 +270,8 @@ def product_ranking(
     label, unit = METRIC_LABELS[metric]
 
     if metric is ProductMetric.FUTURE_POTENTIAL:
-        # « Données insuffisantes » plutôt qu'une valeur inventée (décision 13). Le
-        # classement existe, il est simplement vide et dit pourquoi.
-        return ProductRanking(
-            metric=metric,
-            metric_label=label,
-            unit=unit,
-            period_from=period_from,
-            period_to=period_to,
-            unavailable_reason=(
-                "Le potentiel futur estimé vient d'un modèle de prévision, disponible en phase 09."
-            ),
-            items=[],
+        return _future_potential_ranking(
+            session, ctx, period_from=period_from, period_to=period_to, limit=limit
         )
 
     repository = DailySalesFactRepository(session, ctx)
@@ -308,6 +299,63 @@ def product_ranking(
         items=[
             ProductRankRow(product_id=product_id, product_name=name, value=rendered)
             for product_id, _, name, rendered in ranked
+        ],
+    )
+
+
+def _future_potential_ranking(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    period_from: date,
+    period_to: date,
+    limit: int,
+) -> ProductRanking:
+    """Métrique 8, lue sur les `forecasts` déjà produits par CoGes Intelligence.
+
+    La période demandée ne s'applique pas : un potentiel futur porte sur les jours qui
+    viennent, à partir de la dernière prévision produite, et la réponse le dit
+    (`forecast_as_of`, `horizon_days`, `computed_at`). Aucune prévision ⇒ « données
+    insuffisantes » plutôt qu'une valeur inventée (décision 13).
+    """
+    label, unit = METRIC_LABELS[ProductMetric.FUTURE_POTENTIAL]
+    potential = intelligence_serving.future_potential(session, ctx)
+    if potential is None:
+        reason = (
+            "CoGes Intelligence est désactivée pour cette entreprise."
+            if not intelligence_serving.is_enabled(session, ctx)
+            else "Données insuffisantes : aucune prévision n'a encore été produite."
+        )
+        return ProductRanking(
+            metric=ProductMetric.FUTURE_POTENTIAL,
+            metric_label=label,
+            unit=unit,
+            period_from=period_from,
+            period_to=period_to,
+            unavailable_reason=reason,
+            items=[],
+        )
+    ranked = sorted(potential.rows, key=lambda row: Decimal(row.value), reverse=True)[:limit]
+    return ProductRanking(
+        metric=ProductMetric.FUTURE_POTENTIAL,
+        metric_label=label,
+        unit=unit,
+        period_from=period_from,
+        period_to=period_to,
+        computed_at=potential.computed_at,
+        forecast_as_of=potential.as_of,
+        horizon_days=potential.horizon_days,
+        items=[
+            ProductRankRow(
+                product_id=row.product_id,
+                product_name=row.product_name,
+                value=row.value,
+                lower=row.lower,
+                upper=row.upper,
+                model_name=row.model_name,
+                model_version=row.model_version,
+            )
+            for row in ranked
         ],
     )
 

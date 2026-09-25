@@ -16,6 +16,12 @@ La reconstruction du stock s'appelle de la même façon, une entreprise à la fo
     python -m app.cli rebuild-stock --company-id <uuid>
 
 Elle sera planifiée en phase 08 ; en attendant, elle s'exécute à la demande.
+
+Le pipeline CoGes Intelligence (phase 09) se lance aussi à la main, pour une
+vérification ou un rattrapage — les mêmes étapes que les tâches nocturnes, sous
+`coges_analytics`, dans le processus de la commande (jamais dans l'API) :
+
+    python -m app.cli run-intelligence --company-id <uuid> [--as-of 2026-09-24] [--train]
 """
 
 from __future__ import annotations
@@ -23,10 +29,12 @@ from __future__ import annotations
 import argparse
 import getpass
 import sys
+from datetime import date
 from uuid import UUID, uuid4
 
 from pydantic import TypeAdapter, ValidationError
 from pydantic.networks import EmailStr
+from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
 from app.core.tenancy import TenantContext, tenant_transaction
@@ -109,6 +117,50 @@ def rebuild_stock(company_id: UUID) -> list[StockRebuildLine]:
         return inventory_service.rebuild_stock(session, ctx)
 
 
+def run_intelligence(company_id: UUID, *, as_of: str | None, retrain: bool) -> list[str]:
+    """Étapes 04 à 07 pour une entreprise ; renvoie un compte rendu lisible.
+
+    Importée ici et non en tête : le pipeline tire numpy et statsmodels, dont les
+    autres commandes n'ont pas besoin.
+    """
+    from app.modules.intelligence.pipelines import run_features, run_inference, run_training
+    from app.workers.tasks.intelligence_common import artifact_store, run_for_company
+
+    report: list[str] = []
+
+    def _step(session: Session, ctx: TenantContext, day: date) -> None:
+        features = run_features(session, ctx, as_of=day)
+        if features is None:
+            report.append("CoGes Intelligence est désactivée pour cette entreprise.")
+            return
+        report.append(
+            f"as_of {day.isoformat()} : {features.written} photographie(s) écrite(s), "
+            f"{features.already_present} déjà présente(s), {features.labelled} label(s)"
+        )
+        if retrain:
+            trained = run_training(session, ctx, as_of=day, store=artifact_store())
+            if trained is not None:
+                report.append(
+                    f"Modèle {trained.model_name} {trained.model_version} : "
+                    f"{trained.fitted} produit(s) ajusté(s) → {trained.path}"
+                )
+        result = run_inference(session, ctx, as_of=day, store=artifact_store())
+        if result is not None:
+            inferred = result.inferred
+            report.append(
+                f"{inferred.forecast_rows} prévision(s) pour {inferred.products} produit(s) "
+                f"({inferred.seasonal_products} saisonnier, {inferred.baseline_products} "
+                f"moyenne mobile), {inferred.insufficient} sous le seuil d'historique"
+            )
+            report.append(
+                f"Insights : {result.insights.emitted}, résolus {result.insights.resolved}, "
+                f"notifications {result.insights.notified}"
+            )
+
+    run_for_company(str(company_id), as_of, _step)
+    return report
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="app.cli", description="Administration de CoGes")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -130,6 +182,15 @@ def build_parser() -> argparse.ArgumentParser:
         "rebuild-stock", help="Recalculer stock et CMP d'une entreprise depuis le journal"
     )
     rebuild.add_argument("--company-id", required=True, type=UUID)
+
+    intelligence = subparsers.add_parser(
+        "run-intelligence", help="Features, prévisions et insights d'une entreprise"
+    )
+    intelligence.add_argument("--company-id", required=True, type=UUID)
+    intelligence.add_argument("--as-of", default=None, help="AAAA-MM-JJ ; la veille par défaut")
+    intelligence.add_argument(
+        "--train", action="store_true", help="Réentraîner le modèle de la semaine d'abord"
+    )
     return parser
 
 
@@ -160,6 +221,10 @@ def main(argv: list[str] | None = None) -> int:
                 f"Écart produit {gap.product_id} : "
                 f"quantité {gap.qty_ecart:+}, CMP {gap.avg_ecart:+}"
             )
+
+    if args.command == "run-intelligence":
+        for line in run_intelligence(args.company_id, as_of=args.as_of, retrain=args.train):
+            print(line)
     return 0
 
 

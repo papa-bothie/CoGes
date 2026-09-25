@@ -62,6 +62,18 @@ def is_tax_enabled(session: Session, ctx: TenantContext) -> bool:
     return bool(setting)
 
 
+def is_intelligence_enabled(session: Session, ctx: TenantContext) -> bool:
+    """CoGes Intelligence est-elle active pour cette entreprise ? (ADR 0036)
+
+    **Absent vaut « activée »**, comme `tax_enabled` : les entreprises existantes
+    reçoivent leurs prévisions sans rien paramétrer. `false` coupe le pipeline (aucun
+    calcul) et masque les blocs prédictifs de l'API, sans rien casser d'autre. Le
+    changement passe par `PATCH /companies/current`, déjà sous audit critique.
+    """
+    setting = get_current_company(session, ctx).settings.get("intelligence_enabled", True)
+    return bool(setting)
+
+
 def get_current_company(session: Session, ctx: TenantContext) -> Company:
     """Entreprise du contexte, ou 404."""
     company = CompanyRepository(session, ctx).get_current()
