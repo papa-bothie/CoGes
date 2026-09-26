@@ -48,8 +48,8 @@ jobs:
     name: Lint (ruff + mypy --strict)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
         with: { enable-cache: true }
       - run: uv sync --directory backend --frozen
       - run: make lint
@@ -58,8 +58,8 @@ jobs:
     name: Fichiers générés à jour (OpenAPI, requirements Vercel)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
         with: { enable-cache: true }
       - run: uv sync --directory backend --frozen
       # Le contrat OpenAPI versionné est la source des types du frontend.
@@ -104,14 +104,14 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Amorcer les rôles et les bases
         # Même script qu'en local et que sur Neon (README-infra).
         run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d postgres
              -f deploy/postgres/init/01-roles.sql
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
         with: { enable-cache: true }
       - run: uv sync --directory backend --frozen
 

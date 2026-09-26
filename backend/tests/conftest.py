@@ -34,6 +34,12 @@ from tests.tenancy.harness import Tenant, create_tenant
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
+#: Les clients de test parlent en HTTPS, comme le navigateur en préproduction et en
+#: production. Hors `local`, le cookie de rafraîchissement est `Secure` (ADR 0006) :
+#: un client en `http://` le recevrait sans jamais le renvoyer, et `/auth/refresh`
+#: répondrait 401 en CI alors qu'il fonctionne en vrai.
+TEST_BASE_URL = "https://testserver"
+
 
 @pytest.fixture(autouse=True)
 def _no_task_broker(monkeypatch: MonkeyPatch) -> None:
@@ -51,7 +57,7 @@ def _no_task_broker(monkeypatch: MonkeyPatch) -> None:
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     """Client HTTP sur l'application FastAPI, sans base de données."""
-    with TestClient(app) as test_client:
+    with TestClient(app, base_url=TEST_BASE_URL) as test_client:
         yield test_client
 
 
@@ -267,7 +273,7 @@ class _IdempotentClient(TestClient):
 @pytest.fixture
 def api_client(app_bound_to_test_database: None) -> Iterator[TestClient]:
     """Client HTTP branché sur la base de test."""
-    with _IdempotentClient(app) as test_client:
+    with _IdempotentClient(app, base_url=TEST_BASE_URL) as test_client:
         yield test_client
 
 
