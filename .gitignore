@@ -33,3 +33,6 @@ celerybeat.pid
 
 # Artefacts de modèle CoGes Intelligence (ADR 0035)
 .ml-artifacts/
+
+# Secrets transitoires (DSN propriétaire à déposer dans GitHub puis détruire)
+*.secret

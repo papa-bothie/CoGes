@@ -74,11 +74,25 @@ du secret).
   (`NullPool`) et requêtes préparées côté serveur coupées (`prepare_threshold=None`),
   sans quoi psycopg 3 réutiliserait une requête préparée sur une autre connexion
   physique. L'hôte **direct** (sans `-pooler`) sert seulement aux migrations.
-- **Amorçage** (une fois par projet Neon) : jouer `deploy/postgres/init/01-roles.sql` avec
-  `psql` connecté en `neondb_owner` sur la base `neondb`, avec les quatre mots de passe en
-  variables d'environnement. Il crée les rôles et les bases `coges` / `coges_test`.
-  **À vérifier au premier essai** : Neon doit accepter `CREATE ROLE … BYPASSRLS` pour
-  `coges_auth` et `coges_bus`. En cas de refus, s'arrêter et trancher (ADR à écrire).
+- **Projet de préproduction** : `CoGes-preprod` (`divine-forest-38221389`), PostgreSQL 16,
+  `aws-eu-central-1`, branche par défaut `production`. Lien local et politique `neon.ts`
+  dans `deploy/neon/` : les commandes `neon` se lancent depuis ce dossier, **toujours avec
+  `--no-env-pull`** (sinon la CLI écrit le DSN de `neondb_owner`, BYPASSRLS, dans un `.env`).
+- **Amorçage** (fait le 2026-09-26, une fois par projet) : `01-roles.sql` joué en
+  `neondb_owner` crée les six rôles ; Neon accepte `NOLOGIN BYPASSRLS`. En PostgreSQL 16,
+  `neondb_owner` ne peut pas créer une base appartenant à `coges_owner` sans en être
+  membre : la base `coges` se crée donc sous une appartenance **temporaire**
+  (`GRANT coges_owner TO neondb_owner WITH INHERIT FALSE, SET TRUE`, `CREATE DATABASE coges
+  OWNER coges_owner`, droits du schéma `public` sous `SET ROLE coges_owner`, puis
+  `REVOKE coges_owner FROM neondb_owner`). Il ne reste que la délégation d'administration
+  automatique, sans `SET` ni `INHERIT`. Pas de `coges_test` sur Neon : les tests tournent
+  en local et en CI.
+- **Mots de passe** : générés par `openssl rand -hex 24`, jamais affichés. Les trois DSN
+  d'exécution sont dans `deploy/.env.preprod` (mode 600, ignoré), **entre guillemets** —
+  ils contiennent `&`, et un fichier non protégé chargé par `source` lance chaque ligne en
+  tâche de fond et affiche le DSN. Le DSN propriétaire (hôte direct) attend dans
+  `deploy/neon/owner-dsn.secret` d'être déposé dans le secret GitHub `NEON_OWNER_DSN`,
+  puis détruit (`shred -u`).
 - **Préproduction, offre gratuite** : la base s'endort après 5 min d'inactivité ; le
   quota est de 100 CU-heures par mois. Pour laisser la base dormir, le relais espace ses
   passages quand l'outbox est vide, jusqu'à **10 min**
