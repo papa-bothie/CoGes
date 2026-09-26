@@ -41,6 +41,11 @@ démarrage. Le Diagramme 8 (étape 4) impose un pooler en **mode transaction**.
   250 Mo) et vérifié en CI. Les déploiements automatiques depuis Git sont désactivés : seul
   le workflow `Déploiement`, derrière la CI complète, déploie.
 
+- **Redis sans TLS en préproduction** (ajout du 2026-09-26) : l'offre gratuite de Redis
+  Cloud n'accepte que `redis://`. Écart accepté pour la préproduction, qui ne porte que des
+  données de démonstration ; **TLS exigé en production** (`rediss://`), donc une offre qui
+  le propose, à valider avec les autres ouvertures payantes.
+
 ## Conséquences
 - En préproduction, après une période calme, le premier événement peut attendre jusqu'à
   10 min avant d'atteindre agrégats et alertes. Le cache du tableau de bord (60 s) et les

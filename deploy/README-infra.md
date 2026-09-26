@@ -107,7 +107,12 @@ du secret).
 
 ## Redis Cloud
 
-Une base, TLS obligatoire : `COGES_REDIS_URL=rediss://default:<mot-de-passe>@<hôte>:<port>/0`.
+Une base par environnement, à Francfort comme Neon. **Production : TLS obligatoire**
+(`rediss://default:<mot-de-passe>@<hôte>:<port>/0`), donc une offre qui le propose.
+**Préproduction : sans TLS**, écart accepté le 2026-09-26 (ADR 0040) — l'offre gratuite ne le
+propose pas ; mot de passe, messages Celery et cache y passent en clair, ce qui n'est
+tolérable qu'avec des données de démonstration. Valeur à coller **seule** et entre
+guillemets (`COGES_REDIS_URL="redis://…/0"`), pas la commande `redis-cli -u …` de la console.
 Elle porte la file Celery, le cache court du tableau de bord et les compteurs de
 limitation de débit. Une panne de Redis ne bloque ni une vente ni un paiement : l'outbox
 retient les événements, le cache recalcule, la limitation de débit se désactive.
