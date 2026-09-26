@@ -22,8 +22,11 @@ COPY migrations ./migrations
 COPY alembic.ini ./
 
 RUN useradd --system --create-home coges \
-    && mkdir -p /var/lib/coges/ml && chown coges /var/lib/coges/ml
+    && mkdir -p /var/lib/coges/ml /var/lib/coges/beat \
+    && chown coges /var/lib/coges/ml /var/lib/coges/beat
 USER coges
 
-# Les migrations ne sont jamais lancées ici : elles sont une étape de déploiement.
+# Les migrations ne sont jamais lancées au démarrage : elles sont une étape de
+# déploiement (job `migrate` de la CI, ADR 0040). `migrations/` est copié pour qu'une
+# restauration ou une reprise manuelle puisse les jouer depuis la même image.
 CMD ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info"]

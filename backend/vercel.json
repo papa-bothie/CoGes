@@ -1,5 +1,21 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "builds": [{ "src": "app/main.py", "use": "@vercel/python" }],
-  "rewrites": [{ "source": "/(.*)", "destination": "app/main.py" }]
+  "regions": [
+    "cdg1"
+  ],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 300,
+      "excludeFiles": "{tests/**,migrations/**,.venv/**,.ml-artifacts/**,openapi.json}"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api/index"
+    }
+  ],
+  "git": {
+    "deploymentEnabled": false
+  }
 }

@@ -1,24 +1,35 @@
-# Workers CoGes en production (zone B du Diagramme 2). Trois processus, trois rôles
-# PostgreSQL distincts, et aucun appel entrant vers Vercel : ils écrivent en base.
+# Workers CoGes — zone B du Diagramme 2. Trois processus, trois rôles PostgreSQL
+# distincts, et aucun appel entrant vers Vercel : ils écrivent en base.
 #
-# Usage : docker compose -f deploy/docker-compose.worker.yml up -d
-# Les variables viennent de l'environnement de l'hôte, jamais d'un fichier versionné.
+# Préproduction : ce fichier tourne sur le poste du gérant technique (ADR 0040).
+#   docker compose --env-file deploy/.env.preprod -f deploy/docker-compose.worker.yml up -d --build
+# Les variables viennent d'un fichier d'environnement **non versionné**.
+#
+# Garde-fou 2 (ADR 0042) : aucun service ne reçoit le DSN propriétaire. Le script
+# `deploy/scripts/check_runtime_env.py` le vérifie en CI ; et le garde-fou 1 refuse de
+# toute façon de démarrer sous coges_owner ou sous un rôle BYPASSRLS.
 
 x-common: &common
   build:
     context: ../backend
     dockerfile: Dockerfile.worker
-  image: coges/worker:dev
+  image: coges/worker:${COGES_IMAGE_TAG:-local}
   restart: unless-stopped
   environment: &common-env
     COGES_ENV: ${COGES_ENV:?}
     COGES_REDIS_URL: ${COGES_REDIS_URL:?}
     COGES_JWT_SECRET: ${COGES_JWT_SECRET:?}
+    COGES_SENTRY_DSN: ${COGES_SENTRY_DSN:-}
+    # Connexions par le pooler Neon en mode transaction (ADR 0040).
+    COGES_DB_POOLER: ${COGES_DB_POOLER:-transaction}
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
 
 services:
-  # Consommateurs : agrégats, alertes, audit secondaire, batchs. Deux DSN, parce que
-  # la reconstruction des faits est la seule opération du projet qui supprime, et
-  # qu'elle le fait sous un rôle qui ne peut supprimer que cela.
+  # Consommateurs : agrégats, alertes, audit secondaire, exports, ML. Deux DSN : la
+  # reconstruction des faits est la seule opération qui supprime, sous un rôle qui
+  # ne peut supprimer que cela.
   worker:
     <<: *common
     environment:
@@ -26,33 +37,41 @@ services:
       COGES_DATABASE_URL_APP: ${COGES_DATABASE_URL_APP:?}
       COGES_DATABASE_URL_ANALYTICS: ${COGES_DATABASE_URL_ANALYTICS:?}
       COGES_ML_ARTIFACTS_DIR: /var/lib/coges/ml
-    # Artefacts de modèle de CoGes Intelligence, hors base (ADR 0035) : ils survivent
-    # à un redéploiement de l'image. Perdus, ils se réentraînent à la volée.
     volumes:
       - ml-artifacts:/var/lib/coges/ml
-    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info"]
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
 
   # Planificateur : il n'exécute rien, il enfile. Un seul exemplaire — deux `beat`
-  # déclencheraient chaque batch deux fois.
+  # déclencheraient chaque batch deux fois. Son état vit dans un volume : l'image
+  # tourne sous un utilisateur sans droit d'écriture sur le code.
   beat:
     <<: *common
     depends_on: [worker]
     environment:
       <<: *common-env
       COGES_DATABASE_URL_APP: ${COGES_DATABASE_URL_APP:?}
-    command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=info"]
+    volumes:
+      - beat-state:/var/lib/coges/beat
+    command:
+      - celery
+      - -A
+      - app.workers.celery_app
+      - beat
+      - --loglevel=info
+      - --schedule=/var/lib/coges/beat/celerybeat-schedule
 
-  # Relais de l'outbox : le seul composant multi-tenant du projet. Il tourne sous
-  # `coges_relay`, qui n'a **aucun privilège de table** et ne peut qu'exécuter trois
-  # fonctions SECURITY DEFINER (ADR 0032). Plusieurs exemplaires sont possibles :
-  # `FOR UPDATE SKIP LOCKED` les empêche de se marcher dessus.
+  # Relais de l'outbox, sous `coges_relay` (aucun privilège de table, ADR 0032). En
+  # préproduction sur l'offre gratuite de Neon, il espace ses passages jusqu'à 10 min
+  # quand la file est vide, pour laisser la base s'endormir (ADR 0040).
   relay:
     <<: *common
     depends_on: [worker]
     environment:
       <<: *common-env
       COGES_DATABASE_URL_RELAY: ${COGES_DATABASE_URL_RELAY:?}
+      COGES_OUTBOX_IDLE_MAX_SECONDS: ${COGES_OUTBOX_IDLE_MAX_SECONDS:-1}
     command: ["python", "-m", "app.workers.relay"]
 
 volumes:
   ml-artifacts:
+  beat-state:

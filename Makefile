@@ -10,7 +10,7 @@ endif
 
 UV := uv run --directory backend
 
-.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format api worker relay seed-demo
+.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format api worker relay seed-demo openapi requirements check-generated
 
 help: ## Liste les cibles disponibles
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -63,3 +63,13 @@ relay: ## Lance le relais de l'outbox (rôle coges_relay, processus séparé)
 
 seed-demo: ## Remplit une entreprise de démonstration (20 produits, 50 ventes sur 60 jours)
 	$(UV) python -m app.seed
+
+openapi: ## Régénère backend/openapi.json (source des types du frontend)
+	$(UV) python -m app.cli export-openapi
+
+requirements: ## Régénère backend/requirements.txt pour Vercel (sans dev ni ml)
+	cd backend && uv export --no-dev --no-group ml --no-hashes --no-emit-project --no-header --format requirements-txt -o requirements.txt --quiet
+
+check-generated: ## Échoue si openapi.json ou requirements.txt ne sont pas à jour
+	cd backend && uv export --no-dev --no-group ml --no-hashes --no-emit-project --no-header --format requirements-txt --quiet | diff -u requirements.txt -
+	$(UV) pytest -q tests/architecture/test_openapi_is_current.py

@@ -1,0 +1,94 @@
+name: Déploiement
+
+# Diagramme 2 et ADR 0040. Trois étapes, dans cet ordre, et rien ne part si la CI
+# n'est pas entièrement verte (décision 07 : une fuite inter-tenant bloque tout) :
+#
+#   1. contrôle des environnements d'exécution (garde-fou 2, ADR 0042) ;
+#   2. migrations Alembic sous `coges_owner` — seul job qui connaît ce DSN ;
+#   3. déploiement Vercel, puis test de fumée.
+#
+# Environnements GitHub, aux secrets distincts :
+#   • `preprod`    — Neon offre gratuite, Vercel Hobby. Déployé à chaque push sur `main`.
+#   • `production` — Neon Launch, Vercel Pro. Manuel, derrière une approbation.
+#   • `preview`    — une branche, à la demande, sur la base de préprod **sans migration** :
+#                    une branche qui ajoute une migration attend son merge (décision 17).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Environnement cible
+        type: choice
+        options: [preview, preprod, production]
+        default: preview
+
+concurrency:
+  group: deploy-${{ inputs.target || 'preprod' }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI complète
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Déployer (${{ inputs.target || 'preprod' }})
+    needs: ci
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target || 'preprod' }}
+    env:
+      TARGET: ${{ inputs.target || 'preprod' }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Garde-fou 2 — aucun DSN propriétaire à l'exécution
+        run: python3 deploy/scripts/check_runtime_env.py --require-vercel
+
+      - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
+
+      - name: Migrations (coges_owner, connexion directe Neon — jamais le pooler)
+        if: env.TARGET != 'preview'
+        env:
+          COGES_ENV: ${{ env.TARGET == 'production' && 'production' || 'staging' }}
+          # Le seul endroit où ce DSN existe (ADR 0042).
+          COGES_DATABASE_URL_OWNER: ${{ secrets.NEON_OWNER_DSN }}
+          # Requis par la configuration, jamais utilisé par Alembic.
+          COGES_DATABASE_URL_APP: postgresql+psycopg://unused@localhost/unused
+        run: |
+          uv sync --directory backend --frozen --no-dev --no-group ml
+          uv run --directory backend --no-sync alembic upgrade head
+
+      - name: Déploiement Vercel
+        id: vercel
+        working-directory: backend
+        run: |
+          npm install --global vercel@latest
+          if [ "$TARGET" = "preview" ]; then
+            vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+            vercel build --token="$VERCEL_TOKEN"
+            url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+          else
+            vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+            vercel build --prod --token="$VERCEL_TOKEN"
+            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Déployé : $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Test de fumée (santé, connexion, tableau de bord)
+        env:
+          COGES_SMOKE_URL: ${{ steps.vercel.outputs.url }}
+          COGES_SMOKE_SLUG: ${{ secrets.SMOKE_SLUG }}
+          COGES_SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          COGES_SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          # Les déploiements de préversion sont protégés par Vercel ; ce jeton
+          # (« Protection Bypass for Automation ») laisse passer le seul test de fumée.
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: python3 deploy/scripts/smoke.py

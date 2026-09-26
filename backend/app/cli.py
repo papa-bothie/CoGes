@@ -28,14 +28,17 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import json
 import sys
 from datetime import date
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from pydantic import TypeAdapter, ValidationError
 from pydantic.networks import EmailStr
 from sqlalchemy.orm import Session
 
+from app.core.config import REPO_ROOT
 from app.core.security import hash_password
 from app.core.tenancy import TenantContext, tenant_transaction
 from app.modules.companies import service as companies_service
@@ -161,6 +164,10 @@ def run_intelligence(company_id: UUID, *, as_of: str | None, retrain: bool) -> l
     return report
 
 
+#: Contrat versionné : `frontend/types/` en est généré, jamais écrit à la main.
+OPENAPI_PATH = REPO_ROOT / "backend" / "openapi.json"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="app.cli", description="Administration de CoGes")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -191,7 +198,18 @@ def build_parser() -> argparse.ArgumentParser:
     intelligence.add_argument(
         "--train", action="store_true", help="Réentraîner le modèle de la semaine d'abord"
     )
+    openapi = subparsers.add_parser(
+        "export-openapi", help="Écrire le contrat OpenAPI versionné (source des types du front)"
+    )
+    openapi.add_argument("--output", default=str(OPENAPI_PATH), help="Fichier de sortie")
     return parser
+
+
+def openapi_document() -> str:
+    """Contrat OpenAPI de l'API, sérialisé de façon stable (diff lisible en revue)."""
+    from app.main import app  # noqa: PLC0415 - n'importe l'API que pour cette commande
+
+    return json.dumps(app.openapi(), ensure_ascii=False, indent=2) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -221,6 +239,10 @@ def main(argv: list[str] | None = None) -> int:
                 f"Écart produit {gap.product_id} : "
                 f"quantité {gap.qty_ecart:+}, CMP {gap.avg_ecart:+}"
             )
+
+    if args.command == "export-openapi":
+        Path(args.output).write_text(openapi_document(), encoding="utf-8")
+        print(f"Contrat OpenAPI écrit : {args.output}")
 
     if args.command == "run-intelligence":
         for line in run_intelligence(args.company_id, as_of=args.as_of, retrain=args.train):

@@ -1,8 +1,15 @@
 name: CI
 
+# Bloquante (décision 07) : le workflow « Déploiement » ne part que si **tous** ces
+# jobs sont verts sur `main`. Une fuite inter-tenant arrête donc le déploiement.
+
 on:
+  # Sur `main`, la CI est jouée par le workflow « Déploiement », qui l'appelle avant
+  # de déployer : la lancer aussi ici la ferait tourner deux fois.
   push:
+    branches-ignore: [main]
   pull_request:
+  workflow_call:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -27,11 +34,56 @@ env:
   COGES_TEST_DATABASE_URL_ANALYTICS: postgresql+psycopg://coges_analytics:ci-analytics@localhost:5432/coges_test
   COGES_JWT_SECRET: ci-jwt-secret-0000000000000000000000
   COGES_REDIS_URL: redis://localhost:6379/0
+  # Les quarante tests d'intégrité du § 10, sélectionnés par leur numéro.
+  INTEGRITY_TESTS: >-
+    test_t01 or test_t02 or test_t03 or test_t04 or test_t05 or test_t06 or test_t07 or
+    test_t08 or test_t09 or test_t10 or test_t11 or test_t12 or test_t13 or test_t14 or
+    test_t15 or test_t16 or test_t17 or test_t18 or test_t19 or test_t20 or test_t21 or
+    test_t22 or test_t23 or test_t24 or test_t25 or test_t26 or test_t27 or test_t28 or
+    test_t29 or test_t30 or test_t31 or test_t32 or test_t33 or test_t34 or test_t35 or
+    test_t36 or test_t37 or test_t38 or test_t39 or test_t40
 
 jobs:
-  backend:
-    name: Lint et tests backend
+  lint:
+    name: Lint (ruff + mypy --strict)
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
+      - run: uv sync --directory backend --frozen
+      - run: make lint
+
+  generated:
+    name: Fichiers générés à jour (OpenAPI, requirements Vercel)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
+      - run: uv sync --directory backend --frozen
+      # Le contrat OpenAPI versionné est la source des types du frontend.
+      - run: make check-generated
+      # Garde-fou 2 (ADR 0042) : aucun DSN propriétaire dans le compose des workers.
+      - run: python3 deploy/scripts/check_runtime_env.py
+
+  database:
+    name: ${{ matrix.suite.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - name: Tests d'intégrité T1–T40
+            id: integrity
+          - name: Tests de fuite inter-tenant
+            id: tenancy
+          - name: Tests unitaires, intégration et architecture
+            id: suite
+          - name: Migrations réversibles
+            id: migrations
+          - name: Latence du tableau de bord
+            id: perf
 
     services:
       postgres:
@@ -40,58 +92,54 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: ci-postgres
           POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
+        ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
+          --health-interval 5s --health-timeout 5s --health-retries 10
       redis:
         image: redis:7
-        ports:
-          - 6379:6379
+        ports: ["6379:6379"]
         options: >-
           --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+          --health-interval 5s --health-timeout 5s --health-retries 10
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Amorcer les rôles et les bases
-        # Même script qu'en local : coges_owner (propriétaire, non superuser) et
-        # coges_app (ni superuser, ni BYPASSRLS). Les privilèges viennent de la migration.
+        # Même script qu'en local et que sur Neon (README-infra).
         run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d postgres
              -f deploy/postgres/init/01-roles.sql
 
-      - name: Installer uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
+      - uses: astral-sh/setup-uv@v5
+        with: { enable-cache: true }
+      - run: uv sync --directory backend --frozen
 
-      - name: Installer les dépendances
-        run: uv sync --directory backend --frozen
-
-      - name: Lint (ruff + mypy --strict)
-        run: make lint
-
-      - name: Migrations réversibles (upgrade / downgrade / upgrade)
+      - name: T1–T40 (§ 10 du Modèle), avec le tableau récapitulatif
+        if: matrix.suite.id == 'integrity'
         run: |
+          uv run --directory backend pytest -k "$INTEGRITY_TESTS" --junitxml=integrity.xml
+          python3 deploy/scripts/integrity_summary.py backend/integrity.xml
+
+      # Bloquant : une fuite inter-tenant arrête le déploiement (décision 07).
+      - name: Tests de fuite inter-tenant
+        if: matrix.suite.id == 'tenancy'
+        run: make test-tenancy
+
+      - name: Le reste de la suite (unitaires, intégration, architecture)
+        if: matrix.suite.id == 'suite'
+        run: uv run --directory backend pytest --ignore=tests/tenancy -k "not ($INTEGRITY_TESTS)"
+
+      - name: upgrade head → downgrade -1 → upgrade head, puis downgrade base → upgrade head
+        if: matrix.suite.id == 'migrations'
+        run: |
+          make migrate
+          uv run --directory backend alembic downgrade -1
           make migrate
           uv run --directory backend alembic downgrade base
           make migrate
 
-      - name: Tests
-        run: make test
-
-      # Bloquant : une fuite inter-tenant arrête le déploiement (décision 07).
-      - name: Tests de fuite inter-tenant
-        run: make test-tenancy
-
-      # La cible « moins de 200 ms » du § 1 de la phase 08, mesurée sur le jeu de
-      # `make seed-demo`. Hors de `make test` : elle sème une entreprise entière.
+      # La cible « moins de 200 ms » de la phase 08, sur le jeu de `make seed-demo`.
       - name: Latence du tableau de bord
+        if: matrix.suite.id == 'perf'
         run: make test-perf

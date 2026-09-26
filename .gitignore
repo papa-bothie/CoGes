@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.preprod.example
 
 # Python
 __pycache__/

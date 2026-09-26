@@ -1,0 +1,11 @@
+# Rien de ce qui suit n'est lu par l'API sur Vercel.
+.venv/
+.ml-artifacts/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+tests/
+migrations/
+alembic.ini
+Dockerfile.worker
+celerybeat-schedule*

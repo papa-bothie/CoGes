@@ -1,15 +1,20 @@
 # Infrastructure — CoGes
 
-Répartition des composants : voir le Diagramme 2 de
+Répartition des composants : Diagramme 2 de
 `docs/architecture/pdf/architecture-technique-v1.1.pdf`. Règle unique : un composant
-persistant, long, planifié ou gourmand en mémoire vit **hors Vercel**.
+persistant, long, planifié ou gourmand en mémoire vit **hors Vercel**. Choix des
+hébergeurs : ADR 0040. Sécurité et observabilité : ADR 0042.
 
-| Composant | Où | Fichier |
-|---|---|---|
-| Next.js, API FastAPI | Vercel | `backend/vercel.json` |
-| PostgreSQL 16, Redis 7 | Managé (dev : docker compose) | `docker-compose.yml` (racine) |
-| Workers Celery, ML, batchs | Docker | `backend/Dockerfile.worker`, `deploy/docker-compose.worker.yml` |
-| Migrations Alembic | Étape de déploiement, image worker | `make migrate` |
+| Composant | Préproduction | Production (à ouvrir) | Fichier |
+|---|---|---|---|
+| API FastAPI | Vercel **Hobby** (fonction Python) | Vercel **Pro** | `backend/vercel.json`, `backend/api/index.py` |
+| PostgreSQL 16 | **Neon**, offre gratuite (mise en veille) | Neon **Launch**, veille désactivée | `deploy/postgres/init/01-roles.sql` |
+| Redis 7 | **Redis Cloud**, offre gratuite (30 Mo) | Redis Cloud | — |
+| Worker, beat, relais, ML | **Poste local**, docker compose | hôte à choisir (ADR 0040) | `backend/Dockerfile.worker`, `deploy/docker-compose.worker.yml` |
+| Migrations Alembic | job `Déploiement` de GitHub Actions | idem | `.github/workflows/deploy.yml` |
+| Erreurs | Sentry (offre Developer) | idem | `app/core/observability.py` |
+
+Aucun service payant n'est ouvert sans accord explicite.
 
 ## Développement local
 
@@ -22,45 +27,178 @@ make api                 # http://localhost:8000/api/v1/health
 
 Si un PostgreSQL ou un Redis tourne déjà sur la machine, `make up` échoue sur
 `address already in use` : changer `POSTGRES_PORT` / `REDIS_PORT` dans `.env` et
-reporter le nouveau port dans les trois DSN.
+reporter le nouveau port dans les DSN.
 
 `deploy/postgres/init/01-roles.sql` ne s'exécute qu'à la **création du volume**. Après un
 changement de ce fichier : `docker compose down -v && make up`.
 
 ## Rôles PostgreSQL
 
-| Rôle | Usage | Privilèges |
-|---|---|---|
-| `postgres` | superutilisateur du conteneur, amorçage uniquement | tous |
-| `coges_owner` | propriétaire du schéma, **migrations Alembic uniquement** | ni superuser, ni BYPASSRLS, mais membre de `coges_auth` |
-| `coges_app` | API et workers | SELECT/INSERT/UPDATE, DELETE sur trois tables seulement, ni superuser, ni BYPASSRLS |
-| `coges_auth` | propriétaire de la seule fonction `auth_lookup` | **NOLOGIN**, BYPASSRLS |
+| Rôle | Connexion | Usage | Privilèges |
+|---|---|---|---|
+| `coges_owner` | oui | **migrations uniquement** (job de déploiement) | propriétaire du schéma ; membre `WITH INHERIT FALSE` de `coges_auth` et `coges_bus` |
+| `coges_app` | oui | API et workers | SELECT/INSERT/UPDATE ; DELETE sur quatre tables seulement ; ni superuser ni BYPASSRLS |
+| `coges_relay` | oui | relais de l'outbox | aucun privilège de table ; EXECUTE sur les fonctions du bus |
+| `coges_analytics` | oui | agrégats et ML (worker) | seul DELETE : projections reconstruisibles |
+| `coges_auth` | **non** | propriétaire d'`auth_lookup` | BYPASSRLS |
+| `coges_bus` | **non** | propriétaire des fonctions du relais | BYPASSRLS |
 
-### `coges_owner` ne doit jamais servir à l'exécution
+### `coges_owner` et son risque résiduel
 
-`COGES_DATABASE_URL_OWNER` est réservé à `alembic upgrade`. Ni l'API, ni les workers, ni un
-script d'exploitation ne doivent s'en servir, pour trois raisons cumulatives :
+`coges_owner` est membre de `coges_auth` et de `coges_bus`, deux rôles `BYPASSRLS`, pour
+que les migrations 0002 et 0010 puissent leur transférer la propriété de fonctions. Un
+changement de rôle explicite (`SET ROLE`) lui ouvrirait donc toutes les entreprises.
+L'appartenance est **conservée** (décision de la phase 10) ; trois garde-fous la bornent :
 
-1. il est **propriétaire des tables**, donc il peut modifier les politiques RLS et les
-   contraintes qui constituent la barrière 3 ;
-2. il est **membre de `coges_auth`** (`WITH INHERIT FALSE`, uniquement pour transférer la
-   propriété de `auth_lookup` lors de la migration). Un `SET ROLE coges_auth` explicite lui
-   donnerait donc **BYPASSRLS**, c'est-à-dire l'accès à toutes les entreprises ;
-3. il échappe aux garde-fous de `coges_app` : les `REVOKE DELETE`, l'interdiction d'écrire dans
-   `permissions` et le caractère append-only d'`audit_logs` ne s'appliquent pas à lui.
+1. **Refus au démarrage** (`app/core/role_guard.py`) : tout engine applicatif vérifie à sa
+   première connexion que l'utilisateur n'est ni `coges_owner` ni `BYPASSRLS`. Le worker,
+   beat et le relais le vérifient avant de consommer quoi que ce soit ; l'API refuse sa
+   première requête. Testé par `tests/integration/test_runtime_role_guard.py`.
+2. **DSN confiné** : `NEON_OWNER_DSN` n'existe que dans l'environnement GitHub du job de
+   migration. `deploy/scripts/check_runtime_env.py` échoue s'il trouve une variable
+   `COGES_DATABASE_URL_OWNER`, ou un DSN `coges_owner`, dans les variables Vercel ou dans
+   `docker-compose.worker.yml` ; il tourne en CI et avant chaque déploiement.
+3. **Surface nommée** : T36 vérifie qu'aucun rôle **connectable** n'a `BYPASSRLS`, que
+   `coges_app` n'est pas membre de `coges_auth`, et quelles tables `coges_bus` atteint.
 
-En production, le DSN propriétaire n'est donc exposé qu'à l'étape de déploiement qui joue les
-migrations, jamais à l'environnement d'exécution de l'API ni à celui des workers. Le test
-**T36** vérifie de son côté qu'aucun rôle **connectable** n'a `BYPASSRLS` et que `coges_app`
-n'est pas membre de `coges_auth`.
+Risque résiduel accepté : quiconque détient le mot de passe de `coges_owner` peut lire
+toutes les entreprises. Ce mot de passe se traite donc comme celui d'un administrateur :
+secret GitHub d'environnement, jamais sur un poste, rotation à chaque départ d'une personne
+qui y a eu accès (`ALTER ROLE coges_owner PASSWORD …` en `neondb_owner`, puis mise à jour
+du secret).
 
-Les `GRANT`/`REVOKE` et les politiques RLS sont posés par les migrations `0001` et `0002`,
-pas par le script d'amorçage. Attention : `FORCE ROW LEVEL SECURITY` s'applique **aussi** aux
-migrations — une migration qui touche des données tenant-scoped doit en tenir compte
-explicitement (voir ADR 0008).
+## Neon (PostgreSQL)
 
-## État
+- **Deux DSN par rôle** : l'hôte `…-pooler…` (PgBouncer en **mode transaction**) pour
+  l'API et les workers, avec `COGES_DB_POOLER=transaction` : pool local désactivé
+  (`NullPool`) et requêtes préparées côté serveur coupées (`prepare_threshold=None`),
+  sans quoi psycopg 3 réutiliserait une requête préparée sur une autre connexion
+  physique. L'hôte **direct** (sans `-pooler`) sert seulement aux migrations.
+- **Amorçage** (une fois par projet Neon) : jouer `deploy/postgres/init/01-roles.sql` avec
+  `psql` connecté en `neondb_owner` sur la base `neondb`, avec les quatre mots de passe en
+  variables d'environnement. Il crée les rôles et les bases `coges` / `coges_test`.
+  **À vérifier au premier essai** : Neon doit accepter `CREATE ROLE … BYPASSRLS` pour
+  `coges_auth` et `coges_bus`. En cas de refus, s'arrêter et trancher (ADR à écrire).
+- **Préproduction, offre gratuite** : la base s'endort après 5 min d'inactivité ; le
+  quota est de 100 CU-heures par mois. Pour laisser la base dormir, le relais espace ses
+  passages quand l'outbox est vide, jusqu'à **10 min**
+  (`COGES_OUTBOX_IDLE_MAX_SECONDS=600`), puis revient à 1 s dès qu'un événement passe.
+  Beat ne planifie que des tâches nocturnes. Conséquence acceptée : après une période
+  calme, le premier événement peut attendre jusqu'à 10 min avant d'atteindre les
+  agrégats et les alertes.
+- **Production, offre Launch** : mise en veille **désactivée**, `COGES_OUTBOX_IDLE_MAX_SECONDS=1`.
+- **Sauvegardes** : Neon conserve l'historique pour le PITR, avec une fenêtre qui dépend
+  de l'offre (courte en gratuit, 7 jours en Launch). Pas de sauvegarde logique séparée en
+  préproduction.
 
-Phase 00 : seuls PostgreSQL et Redis sont réellement configurés.
-`docker-compose.worker.yml`, `Dockerfile.worker` et `vercel.json` sont des squelettes
-provisoires ; ils sont complétés et testés en phases 08 (async) et 10 (déploiement).
+## Redis Cloud
+
+Une base, TLS obligatoire : `COGES_REDIS_URL=rediss://default:<mot-de-passe>@<hôte>:<port>/0`.
+Elle porte la file Celery, le cache court du tableau de bord et les compteurs de
+limitation de débit. Une panne de Redis ne bloque ni une vente ni un paiement : l'outbox
+retient les événements, le cache recalcule, la limitation de débit se désactive.
+
+## Zone B en préproduction : le poste local
+
+```bash
+cp deploy/.env.preprod.example deploy/.env.preprod   # puis remplir (fichier ignoré par git)
+docker compose --env-file deploy/.env.preprod -f deploy/docker-compose.worker.yml up -d --build
+docker compose -f deploy/docker-compose.worker.yml logs -f relay
+```
+
+Machine éteinte : les événements s'accumulent dans `business_events` et partent au
+redémarrage (au moins une fois, T40) ; les exports restent `pending`, et le balayage
+nocturne les renfile. L'API sur Vercel continue de servir.
+
+## Secrets par environnement
+
+| Où | Variable | Préproduction | Production |
+|---|---|---|---|
+| Vercel (API) | `COGES_ENV` | `staging` | `production` |
+| | `COGES_DATABASE_URL_APP` | DSN `coges_app`, hôte **pooler** | idem, projet Launch |
+| | `COGES_DB_POOLER` | `transaction` | `transaction` |
+| | `COGES_REDIS_URL`, `COGES_JWT_SECRET`, `COGES_SENTRY_DSN` | propres à la préprod | propres à la prod |
+| | `COGES_CORS_ORIGINS` | domaine du frontend de préprod | domaine de prod |
+| | `COGES_TRUST_PROXY_HEADERS` | `true` | `true` |
+| Poste / hôte workers | `COGES_DATABASE_URL_APP`, `…_RELAY`, `…_ANALYTICS` | hôte pooler | idem |
+| | `COGES_OUTBOX_IDLE_MAX_SECONDS` | `600` | `1` |
+| GitHub, environnement `preprod` / `production` | `NEON_OWNER_DSN` | DSN `coges_owner`, hôte **direct** | idem |
+| | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` (`VERCEL_TEAM_ID`) | projet Hobby | projet Pro |
+| | `SMOKE_SLUG`, `SMOKE_EMAIL`, `SMOKE_PASSWORD` | entreprise de fumée | idem |
+| | `VERCEL_AUTOMATION_BYPASS_SECRET` | pour les préversions protégées | — |
+
+Jamais de `COGES_DATABASE_URL_OWNER` dans Vercel ni chez les workers (garde-fou 2).
+L'environnement GitHub `production` exige une approbation manuelle.
+
+### Rotation de la clé JWT
+
+`COGES_JWT_SECRET` signe les jetons d'accès (15 min) ; les jetons de rafraîchissement sont
+des valeurs aléatoires hachées en base (`auth_sessions`), indépendantes de la clé.
+
+1. Générer une clé : `openssl rand -hex 32`.
+2. La remplacer dans Vercel (et chez les workers, qui la lisent pour la configuration),
+   puis redéployer.
+3. Effet : chaque jeton d'accès en cours est refusé (401). Le frontend rafraîchit alors
+   sa session avec le cookie de rafraîchissement, que la rotation n'invalide pas : aucune
+   reconnexion n'est demandée. Pour **forcer** la reconnexion de tous (fuite supposée),
+   révoquer aussi les sessions : `UPDATE auth_sessions SET revoked_at = now() WHERE revoked_at IS NULL`,
+   entreprise par entreprise, sous le contexte tenant.
+
+## Déploiement
+
+`.github/workflows/deploy.yml`, à chaque push sur `main` (préprod) ou à la demande :
+
+1. **CI complète** (`ci.yml`, appelé) : lint, fichiers générés, T1–T40 avec leur tableau
+   récapitulatif, tests de fuite, reste de la suite, migrations réversibles, latence. Un
+   seul échec, dont une fuite inter-tenant, arrête tout ;
+2. contrôle des environnements d'exécution (garde-fou 2) ;
+3. `alembic upgrade head` sous `coges_owner`, hôte direct — jamais au démarrage de l'API ;
+4. `vercel build` puis `vercel deploy --prebuilt` : les déploiements automatiques depuis
+   Git sont **désactivés** (`git.deploymentEnabled: false`), pour qu'aucun code ne parte
+   sans la CI ;
+5. test de fumée : `deploy/scripts/smoke.py` (santé, connexion, tableau de bord).
+
+Une migration destructive se déploie en deux temps (décision 17) : d'abord la version
+compatible avec l'ancien et le nouveau code, puis le nettoyage.
+
+Les images workers se reconstruisent sur leur hôte (`up -d --build`) après chaque
+déploiement qui touche `backend/`.
+
+## Restauration
+
+**Testée en local** par `deploy/scripts/restore-check.sh` (après `make up`) : sauvegarde
+`pg_dump` de `coges`, restauration dans une base neuve, puis contrôles — révision Alembic,
+nombre de lignes des tables clés, RLS FORCE sur toutes les tables, propriétaire
+d'`auth_lookup`, et `coges_app` sans contexte qui ne voit rien.
+
+**Sur Neon (PITR)** :
+
+1. Console Neon → *Branches* → *Create branch* → *Point in time*, à l'instant voulu
+   (avant l'incident). La branche est une copie complète, rôles compris.
+2. Vérifier la branche : `SOURCE_DB` / connexion vers la branche, puis
+   `alembic current` et les contrôles de `restore-check.sh` à la main.
+3. Basculer : soit *Restore* de la branche principale sur ce point (Neon garde une
+   sauvegarde de l'état remplacé), soit pointer les DSN de Vercel et des workers vers
+   la branche, puis redéployer.
+4. Rejouer le test de fumée. Les événements de l'outbox postérieurs au point de
+   restauration sont perdus avec leurs données : relancer les batchs nocturnes
+   (`reconcile.*`) pour réaligner stock et agrégats.
+
+À rejouer une fois ensemble sur la préproduction, puis une fois par trimestre.
+
+## Provisionnement de la préproduction (à faire par le responsable)
+
+1. **Neon** : créer un projet (région Europe, PostgreSQL 16), jouer `01-roles.sql`,
+   noter les DSN direct (`coges_owner`) et pooler (les trois autres).
+2. **Redis Cloud** : créer une base gratuite, noter l'URL `rediss://`.
+3. **Sentry** : créer un projet Python, noter le DSN.
+4. **Vercel** : importer le dépôt, *Root Directory* = `backend`, renseigner les
+   variables du tableau ci-dessus, créer un jeton et, pour les préversions, le secret
+   *Protection Bypass for Automation*.
+5. **GitHub** : créer les environnements `preprod`, `production` (avec approbation) et
+   `preview`, y déposer les secrets.
+6. `make migrate` n'est pas lancé à la main : pousser sur `main` déclenche
+   migration, déploiement et test de fumée.
+7. Créer l'entreprise de fumée : `python -m app.cli create-company --slug fumee …` avec
+   le DSN `coges_app` de préproduction, puis renseigner `SMOKE_*`.
+8. Démarrer la zone B sur le poste (section ci-dessus).
