@@ -35,6 +35,9 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         frozen=True,
+        # Un secret collé dans GitHub ou Vercel garde souvent son retour à la ligne :
+        # un DSN terminé par « \n » ferait échouer la connexion de façon obscure.
+        str_strip_whitespace=True,
     )
 
     env: Literal["local", "ci", "staging", "production"] = "local"

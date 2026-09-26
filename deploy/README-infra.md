@@ -147,7 +147,11 @@ nocturne les renfile. L'API sur Vercel continue de servir.
 | | `VERCEL_AUTOMATION_BYPASS_SECRET` | pour les préversions protégées | — |
 
 Jamais de `COGES_DATABASE_URL_OWNER` dans Vercel ni chez les workers (garde-fou 2).
-L'environnement GitHub `production` exige une approbation manuelle.
+L'approbation obligatoire sur l'environnement GitHub `production` n'existe pas pour un dépôt
+privé en offre gratuite (refusée par GitHub le 2026-09-26). Garde-fou en attendant : un
+déploiement de production ne part que d'un lancement manuel du workflow (cible
+`production`), et cet environnement n'a aucun secret tant que la production n'est pas
+ouverte. À activer avec une offre GitHub qui le permet.
 
 ### Rotation de la clé JWT
 
