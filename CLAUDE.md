@@ -235,6 +235,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0036 | 2026-09-25 | `settings.intelligence_enabled` par entreprise (absent = activée), aucun palier ; **privilèges en GRANT** : `coges_app` sans accès aux snapshots, SELECT seul sur `forecasts`, UPDATE (`status`, dates) sur `insights` ; aucun DELETE | `docs/decisions/0036-desactivation-et-privileges-intelligence.md` |
 | 0037 | 2026-09-25 | Écarts de la phase 09 : ENUM `insufficient_history`, dossier `estimators/`, révision 0011, horizons J+14 / rupture sous 28 j, champs additifs de la métrique 8 | `docs/decisions/0037-ecarts-assumes-de-la-phase-09.md` |
 | 0038 | 2026-09-25 | **Annulation d'un paiement par contre-écriture** (révision 0012) : `reversal_of_payment_id` unique, rollups sur les lettrages vivants, paiement annulé et annulation hors trésorerie, `offset` par paire, 10ᵉ événement `payment.cancelled`, gérant + comptable, refus sur dette abandonnée ; correction = annuler puis ressaisir | `docs/decisions/0038-annulation-d-un-paiement-par-contre-ecriture.md` |
+| 0039 | 2026-09-26 | Annulation : paiements **puis** dettes verrouillés (ordre des ids) avant l'audit « before » ; **idempotence par ressource** : `confirm` et `refunds` enregistrent l'id dans l'endpoint de la clé | `docs/decisions/0039-verrous-de-l-annulation-et-idempotence-par-ressource.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019) ; restent **P7** (signalé, hors V1

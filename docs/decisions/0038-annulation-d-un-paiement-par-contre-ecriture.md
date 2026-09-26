@@ -2,7 +2,7 @@
 
 - **Date** : 2026-09-25
 - **Phase** : 10 (temps A)
-- **Statut** : acceptée — tranche la décision 4 de l'ADR 0031
+- **Statut** : acceptée — tranche la décision 4 de l'ADR 0031 ; verrous précisés par l'ADR 0039
 - **Décideur** : utilisateur (via `AskUserQuestion`)
 
 ## Contexte
@@ -71,7 +71,7 @@ SQLSTATE applicatifs :
 - **Idempotence** : l'endpoint enregistré dans `idempotency_keys` inclut l'identifiant du paiement.
   La même clé présentée pour annuler un autre paiement est `idempotency_key_reused`, pas un rejeu.
   `confirm` et `refunds` utilisent encore un gabarit sans identifiant : même clé sur deux ventes
-  différentes ⇒ rejeu de la première réponse. Signalé, non corrigé ici (hors temps A).
+  différentes ⇒ rejeu de la première réponse. **Corrigé par l'ADR 0039.**
 - **Downgrade.** Les cinq fonctions de la 0006 et de la 0008 sont restituées ; le `CHECK` des
   événements est recréé `NOT VALID`, car l'outbox peut porter des `payment.cancelled` qu'une
   migration ne voit pas (FORCE RLS). Les lignes d'annulation déjà écrites redeviennent des
