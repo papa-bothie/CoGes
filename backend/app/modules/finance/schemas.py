@@ -49,6 +49,13 @@ class PaymentRead(BaseModel):
     amount: Amount
     paid_at: datetime
     reference: str | None
+    # Révision 0012 : un paiement annulé reste lisible, et dit par quoi il l'a été.
+    cancelled: bool = False
+    cancelled_at: datetime | None = None
+    cancel_reason: str | None = None
+    cancellation_id: UUID | None = None
+    #: Renseigné sur la ligne d'annulation elle-même : le paiement qu'elle neutralise.
+    reversal_of_payment_id: UUID | None = None
 
 
 class DebtRead(BaseModel):
@@ -178,6 +185,24 @@ class PaymentDetail(BaseModel):
     note: str | None
     created_at: datetime
     allocations: list[AllocationRead]
+    # Révision 0012 : un paiement annulé reste lisible, et dit par quoi il l'a été.
+    cancelled: bool = False
+    cancelled_at: datetime | None = None
+    cancel_reason: str | None = None
+    cancellation_id: UUID | None = None
+    #: Renseigné sur la ligne d'annulation elle-même : le paiement qu'elle neutralise.
+    reversal_of_payment_id: UUID | None = None
+
+
+class PaymentCancel(BaseModel):
+    """Annulation d'un paiement erroné : le motif n'est pas facultatif (ADR 0038)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: Annotated[
+        str,
+        Field(min_length=REASON_MIN_LENGTH, max_length=REASON_MAX_LENGTH),
+    ]
 
 
 class PaymentPage(BaseModel):

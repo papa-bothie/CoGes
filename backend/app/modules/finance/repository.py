@@ -7,7 +7,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Row, func, select
+from sqlalchemy import ColumnElement, Row, exists, func, select
+from sqlalchemy.orm import aliased
 
 from app.core.repository import TenantRepository
 from app.modules.finance.models import Debt, Payment, PaymentAllocation, SaleReturnRefund
@@ -15,6 +16,31 @@ from app.modules.finance.schemas import OFFSET_METHOD
 
 #: Statuts d'une dette encore vivante, au sens du plafond de crédit (§ 8.7).
 OPEN_STATUSES = ("open", "partially_paid")
+
+_Reversal = aliased(Payment, name="reversal")
+
+
+def _is_cancelled() -> ColumnElement[bool]:
+    """Le paiement courant a une contre-écriture (révision 0012)."""
+    return exists().where(
+        _Reversal.company_id == Payment.company_id,
+        _Reversal.reversal_of_payment_id == Payment.id,
+    )
+
+
+def _counts_as_cash() -> list[ColumnElement[bool]]:
+    """Ce qui est un vrai mouvement de caisse — la règle écrite une seule fois.
+
+    Trois exclusions : les compensations (`offset`, ADR 0024), les paiements
+    annulés et leurs annulations (ADR 0038). Une saisie erronée puis annulée n'a
+    jamais eu lieu : elle sort des totaux des deux côtés, y compris sur son jour
+    d'origine, et la trésorerie revient exactement à ce qu'elle était.
+    """
+    return [
+        Payment.method != OFFSET_METHOD,
+        Payment.reversal_of_payment_id.is_(None),
+        ~_is_cancelled(),
+    ]
 
 
 class PaymentRepository(TenantRepository[Payment]):
@@ -39,7 +65,7 @@ class PaymentRepository(TenantRepository[Payment]):
         return self.session.execute(stmt).scalars().all()
 
     def inflow_count_for_sale(self, sale_id: UUID) -> int:
-        """Nombre d'encaissements rattachés à la vente."""
+        """Nombre d'encaissements **non annulés** rattachés à la vente."""
         stmt = (
             select(func.count())
             .select_from(Payment)
@@ -47,9 +73,52 @@ class PaymentRepository(TenantRepository[Payment]):
                 Payment.company_id == self.ctx.company_id,
                 Payment.sale_id == sale_id,
                 Payment.direction == "inflow",
+                ~_is_cancelled(),
             )
         )
         return int(self.session.execute(stmt).scalar_one())
+
+    def reversal_of(self, payment_id: UUID) -> Payment | None:
+        """La contre-écriture de ce paiement, s'il a été annulé."""
+        stmt = self._select().where(Payment.reversal_of_payment_id == payment_id)
+        return self.session.execute(stmt).scalar_one_or_none()
+
+    def lock_for_update(self, payment_ids: Sequence[UUID]) -> Sequence[Payment]:
+        """Paiements du tenant, verrouillés dans l'ordre des ids.
+
+        L'ordre fixe évite que deux annulations d'une même paire `offset` ne
+        s'interbloquent. Le trigger `payment_reversal_check` prend le même verrou :
+        l'avancer ici ne change pas l'autorité.
+        """
+        stmt = (
+            self._select().where(Payment.id.in_(payment_ids)).order_by(Payment.id).with_for_update()
+        )
+        return self.session.execute(stmt).scalars().all()
+
+    def reversals_for(self, payment_ids: Sequence[UUID]) -> Sequence[Payment]:
+        """Contre-écritures d'un lot de paiements — une requête, pas N."""
+        if not payment_ids:
+            return []
+        stmt = self._select().where(Payment.reversal_of_payment_id.in_(payment_ids))
+        return self.session.execute(stmt).scalars().all()
+
+    def offset_partners(self, payment: Payment) -> Sequence[Payment]:
+        """L'autre moitié d'une compensation (ADR 0024).
+
+        Les deux paiements d'une compensation naissent dans la même transaction :
+        même `created_at` (l'horodatage de transaction de PostgreSQL), même auteur,
+        même montant, sens opposé. Le service exige qu'il y en ait exactement un.
+        """
+        stmt = self._select().where(
+            Payment.id != payment.id,
+            Payment.method == OFFSET_METHOD,
+            Payment.direction != payment.direction,
+            Payment.amount == payment.amount,
+            Payment.created_at == payment.created_at,
+            Payment.created_by == payment.created_by,
+            Payment.reversal_of_payment_id.is_(None),
+        )
+        return self.session.execute(stmt).scalars().all()
 
     def _period(
         self, *, period_from: datetime | None, period_to: datetime | None
@@ -99,17 +168,16 @@ class PaymentRepository(TenantRepository[Payment]):
         return self.session.execute(stmt).scalars().all()
 
     def cash_totals(self, *, period_from: datetime, period_to: datetime) -> dict[str, Decimal]:
-        """Encaissé et décaissé de la période, **hors compensations**.
+        """Encaissé et décaissé de la période, hors compensations et annulations.
 
-        `method <> 'offset'` est la seule règle qui distingue un mouvement de caisse
-        d'une écriture de lettrage sans flux (ADR 0024). Elle est écrite ici, une
-        fois, et `OFFSET_METHOD` évite d'en recopier la chaîne.
+        La règle est `_counts_as_cash()` : écrite une fois, pour cette somme et pour
+        la série quotidienne.
         """
         stmt = (
             select(Payment.direction, func.coalesce(func.sum(Payment.amount), 0))
             .where(
                 Payment.company_id == self.ctx.company_id,
-                Payment.method != OFFSET_METHOD,
+                *_counts_as_cash(),
                 Payment.paid_at >= period_from,
                 Payment.paid_at <= period_to,
             )
@@ -123,7 +191,7 @@ class PaymentRepository(TenantRepository[Payment]):
     def daily_cash(
         self, *, period_from: datetime, period_to: datetime, timezone: str
     ) -> Sequence[Row[tuple[date, str, Decimal]]]:
-        """Série jour × sens, dans le fuseau de l'entreprise, hors compensations.
+        """Série jour × sens, dans le fuseau de l'entreprise, hors compensations et annulations.
 
         Le jour est celui que le gérant a vécu : `paid_at` est en UTC, la caisse
         ferme à l'heure locale. Sans conversion, une vente de 23 h tomberait le
@@ -134,7 +202,7 @@ class PaymentRepository(TenantRepository[Payment]):
             select(day, Payment.direction, func.coalesce(func.sum(Payment.amount), 0))
             .where(
                 Payment.company_id == self.ctx.company_id,
-                Payment.method != OFFSET_METHOD,
+                *_counts_as_cash(),
                 Payment.paid_at >= period_from,
                 Payment.paid_at <= period_to,
             )

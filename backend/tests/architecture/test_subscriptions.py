@@ -29,7 +29,7 @@ import app.workers.tasks.ml_infer  # noqa: F401  isort:skip
 
 
 def test_every_event_type_has_at_least_one_subscriber() -> None:
-    """Les neuf types de la notation fermée sont tous écoutés."""
+    """Les dix types de la notation fermée sont tous écoutés."""
     unheard = [kind.value for kind in EventType if not subscriptions.SUBSCRIPTIONS.get(kind)]
     assert unheard == [], f"Types d'événement sans abonné : {unheard}"
 
@@ -37,8 +37,8 @@ def test_every_event_type_has_at_least_one_subscriber() -> None:
 def test_the_subscription_table_invents_no_event_type() -> None:
     """Et réciproquement : aucun abonnement ne vise un type qui n'existe pas.
 
-    La liste des neuf notations est fermée (`CLAUDE.md` § 4) ; un abonnement à un
-    dixième type serait le premier symptôme d'une notation ajoutée en douce.
+    La liste des dix notations est fermée (`CLAUDE.md` § 4) ; un abonnement à un
+    onzième type serait le premier symptôme d'une notation ajoutée en douce.
     """
     assert set(subscriptions.SUBSCRIPTIONS) == set(EventType)
 

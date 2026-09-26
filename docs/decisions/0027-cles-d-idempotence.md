@@ -70,3 +70,5 @@ l'en-tête `Idempotency-Key` devient **obligatoire sur toutes les écritures fin
 - **`expires_at` (24 h) est posé mais rien n'est purgé en V1.** La purge viendra d'un job de la
   phase 08. Une clé gardée trop longtemps n'a jamais rendu une mauvaise réponse ; c'est
   l'inverse qui serait dangereux.
+- **Voir l'ADR 0039** : un endpoint d'écriture sur une ressource enregistre l'identifiant de
+  cette ressource dans l'endpoint de la clé.

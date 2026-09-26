@@ -200,7 +200,7 @@ def test_outbox_event_disappears_with_a_rollback(
 def test_database_refuses_an_event_type_outside_the_closed_list(
     session_factory: sessionmaker[Any], company_alpha: DemoCompany
 ) -> None:
-    """La liste des 9 événements est fermée **en base**, pas seulement en Python."""
+    """La liste des 10 événements est fermée **en base**, pas seulement en Python."""
     ctx = TenantContext(user_id=company_alpha.manager_id, company_id=company_alpha.company_id)
 
     with (
@@ -222,7 +222,7 @@ def test_database_refuses_an_event_type_outside_the_closed_list(
 def test_python_and_database_share_the_same_event_list(
     session_factory: sessionmaker[Any], company_alpha: DemoCompany
 ) -> None:
-    """Les neuf types acceptés en base sont exactement ceux de `EventType`."""
+    """Les dix types acceptés en base sont exactement ceux de `EventType`."""
     ctx = TenantContext(user_id=company_alpha.manager_id, company_id=company_alpha.company_id)
 
     with tenant_transaction(ctx, session_factory=session_factory) as session:
@@ -236,4 +236,4 @@ def test_python_and_database_share_the_same_event_list(
 
     for event_type in EVENT_TYPES:
         assert f"'{event_type}'" in constraint, f"{event_type} absent du CHECK en base"
-    assert len(EVENT_TYPES) == 9
+    assert len(EVENT_TYPES) == 10

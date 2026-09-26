@@ -43,6 +43,7 @@ from app.modules.finance.events import (
     PAYMENT_AGGREGATE,
     debt_created_payload,
     debt_settled_payload,
+    payment_cancelled_payload,
     payment_received_payload,
 )
 from app.modules.finance.models import Debt, Payment, PaymentAllocation, SaleReturnRefund
@@ -61,6 +62,7 @@ from app.modules.finance.schemas import (
     PaymentCreate,
     PaymentDetail,
     PaymentMethod,
+    PaymentRead,
     RefundMethod,
 )
 from app.modules.suppliers import service as suppliers_service
@@ -137,6 +139,38 @@ class PaymentReferenceTakenError(BusinessRuleError):
     default_message = "Un paiement porte déjà cette référence."
 
 
+class PaymentAlreadyCancelledError(BusinessRuleError):
+    code = "payment_already_cancelled"
+    default_message = "Ce paiement a déjà été annulé."
+
+
+class CannotCancelAReversalError(BusinessRuleError):
+    code = "cannot_cancel_a_reversal"
+    default_message = (
+        "Ce paiement est lui-même une annulation : il ne s'annule pas. "
+        "Saisissez un nouveau paiement si nécessaire."
+    )
+
+
+class PaymentCancelledError(BusinessRuleError):
+    code = "payment_cancelled"
+    default_message = "Ce paiement est annulé, ou est une annulation : il ne s'impute plus."
+
+
+class PaymentDebtWrittenOffError(BusinessRuleError):
+    code = "payment_debt_written_off"
+    default_message = (
+        "Ce paiement est imputé sur une dette abandonnée : l'annuler rendrait la dette incohérente."
+    )
+
+
+class OffsetPairAmbiguousError(BusinessRuleError):
+    code = "offset_pair_ambiguous"
+    default_message = (
+        "Impossible d'identifier l'autre moitié de cette compensation : annulation refusée."
+    )
+
+
 class AllocationsExceedPaymentError(ValidationFailedError):
     """Somme des affectations supérieure au versement.
 
@@ -168,11 +202,14 @@ _FK_NOT_FOUND: dict[str, str] = {
     "debts_customer_fk": "Client introuvable.",
     "debts_supplier_fk": "Fournisseur introuvable.",
     "pa_debt_fk": "Dette introuvable.",
+    "payments_reversal_fk": "Paiement introuvable.",
 }
 
 #: Contraintes d'unicité traduites en refus nommés.
 _UNIQUE_ERRORS: dict[str, type[BusinessRuleError]] = {
     "payments_ref_uq": PaymentReferenceTakenError,
+    # L'autorité sous concurrence : deux annulations simultanées, une seule passe.
+    "payments_reversal_uq": PaymentAlreadyCancelledError,
 }
 
 
@@ -185,6 +222,9 @@ _TRIGGER_ERRORS: dict[str, type[BusinessRuleError]] = {
     "CG043": PaymentOverAllocatedError,
     "CG044": AllocationExceedsBalanceError,
     "CG045": PaymentOverAllocatedError,
+    "CG051": CannotCancelAReversalError,
+    "CG052": PaymentCancelledError,
+    "CG053": PaymentDebtWrittenOffError,
 }
 
 
@@ -236,9 +276,58 @@ def _flush(
 # ------------------------------------------------------------------- lectures
 
 
-def payments_for_sale(session: Session, ctx: TenantContext, sale_id: UUID) -> list[Payment]:
-    """Règlements d'une vente, pour son détail et son reçu."""
-    return list(PaymentRepository(session, ctx).for_sale(sale_id))
+def payment_reads_for_sale(
+    session: Session, ctx: TenantContext, sale_id: UUID
+) -> list[PaymentRead]:
+    """Règlements d'une vente, annulations signalées, pour son détail et son reçu."""
+    return _payment_reads(session, ctx, PaymentRepository(session, ctx).for_sale(sale_id))
+
+
+def payment_reads_for_return(
+    session: Session, ctx: TenantContext, sale_return_id: UUID
+) -> list[PaymentRead]:
+    """Décaissements d'un retour, annulations signalées."""
+    return _payment_reads(session, ctx, PaymentRepository(session, ctx).for_return(sale_return_id))
+
+
+def _payment_reads(
+    session: Session, ctx: TenantContext, payments: Sequence[Payment]
+) -> list[PaymentRead]:
+    reversals = reversals_of_payments(session, ctx, [payment.id for payment in payments])
+    return [
+        PaymentRead(
+            id=payment.id,
+            direction=payment.direction,
+            method=payment.method,
+            amount=payment.amount,
+            paid_at=payment.paid_at,
+            reference=payment.reference,
+            **_cancellation_fields(payment, reversals.get(payment.id)),
+        )
+        for payment in payments
+    ]
+
+
+def reversals_of_payments(
+    session: Session, ctx: TenantContext, payment_ids: Sequence[UUID]
+) -> dict[UUID, Payment]:
+    """Contre-écriture de chaque paiement annulé d'un lot, indexée par l'origine."""
+    return {
+        reversal.reversal_of_payment_id: reversal
+        for reversal in PaymentRepository(session, ctx).reversals_for(payment_ids)
+        if reversal.reversal_of_payment_id is not None
+    }
+
+
+def _cancellation_fields(payment: Payment, reversal: Payment | None) -> dict[str, Any]:
+    """Ce qu'un paiement dit de son annulation, ou de ce qu'il annule."""
+    return {
+        "cancelled": reversal is not None,
+        "cancelled_at": None if reversal is None else reversal.created_at,
+        "cancel_reason": None if reversal is None else reversal.cancel_reason,
+        "cancellation_id": None if reversal is None else reversal.id,
+        "reversal_of_payment_id": payment.reversal_of_payment_id,
+    }
 
 
 def debt_for_sale(session: Session, ctx: TenantContext, sale_id: UUID) -> Debt | None:
@@ -255,13 +344,6 @@ def has_settled_payment(session: Session, ctx: TenantContext, sale_id: UUID) -> 
     n'existent pas, tout encaissement compte.
     """
     return PaymentRepository(session, ctx).inflow_count_for_sale(sale_id) > 0
-
-
-def payments_for_return(
-    session: Session, ctx: TenantContext, sale_return_id: UUID
-) -> list[Payment]:
-    """Décaissements rattachés à un retour, pour son détail."""
-    return list(PaymentRepository(session, ctx).for_return(sale_return_id))
 
 
 def refunds_for_return(
@@ -950,6 +1032,158 @@ def write_off_debt(
     return debt
 
 
+# ------------------------------------------- annulation d'un paiement (phase 10)
+
+#: Sens de la contre-écriture. Le trigger `payment_reversal_check` le réécrit de
+#: toute façon depuis l'origine ; le poser ici évite d'envoyer un NULL.
+_OPPOSITE_DIRECTION: dict[str, str] = {"inflow": "outflow", "outflow": "inflow"}
+
+
+def cancel_payment(
+    session: Session,
+    ctx: TenantContext,
+    payment_id: UUID,
+    *,
+    reason: str,
+    ip_address: str | None = None,
+) -> tuple[Payment, Payment]:
+    """Annule un paiement erroné par contre-écriture (ADR 0038).
+
+    Rien n'est modifié ni supprimé : une ligne `payments` de sens opposé, même
+    montant et même moyen, pointe l'origine par `reversal_of_payment_id`. Les
+    rollups ne somment plus que les lettrages vivants ; le trigger
+    `payment_reversal_rollup` recalcule, sous verrou, les dettes (qui repassent
+    `open` ou `partially_paid`, `closed_at` remis à NULL), les retours
+    (`refunded_total`, `refund_status`) et la vente (`paid_total`).
+
+    Une compensation (`offset`) s'annule **par paire** : ses deux moitiés sont nées
+    ensemble, et n'en annuler qu'une laisserait un retour remboursé par une dette
+    qui ne baisse plus, ou l'inverse.
+
+    Les contrôles applicatifs ne font que nommer le refus : `payments_reversal_uq`
+    reste l'autorité quand deux annulations se croisent (même leçon que l'ADR 0017).
+
+    Verrous, toujours dans l'ordre des ids : les paiements d'origine, **puis** les
+    dettes, avant d'en photographier le « before » de l'audit. Les triggers prennent
+    les mêmes verrous ; les avancer ici garantit que l'audit décrit l'état que
+    l'annulation a réellement verrouillé, et non celui qu'un paiement concurrent
+    s'apprêtait à changer (ADR 0039).
+
+    Renvoie le paiement d'origine et sa contre-écriture.
+    """
+    repository = PaymentRepository(session, ctx)
+    payment = get_payment(session, ctx, payment_id)
+    details: dict[str, Any] = {"payment_id": str(payment.id)}
+
+    if payment.reversal_of_payment_id is not None:
+        raise CannotCancelAReversalError(details=details)
+
+    targets = [payment]
+    if payment.method == OFFSET_METHOD:
+        partners = repository.offset_partners(payment)
+        if len(partners) != 1:
+            raise OffsetPairAmbiguousError(details={**details, "candidates": len(partners)})
+        targets.append(partners[0])
+    # Même discipline de verrous que `_allocate` : toujours dans l'ordre des ids.
+    targets.sort(key=lambda entry: entry.id)
+    target_ids = [target.id for target in targets]
+
+    # Contrôlé **après** le verrou : une annulation concurrente, désormais commitée,
+    # est vue ici et nommée, au lieu de buter plus loin sur l'index unique.
+    repository.lock_for_update(target_ids)
+    for target in targets:
+        if repository.reversal_of(target.id) is not None:
+            raise PaymentAlreadyCancelledError(details={"payment_id": str(target.id)})
+
+    allocations = PaymentAllocationRepository(session, ctx).for_payments(target_ids)
+    refunds = [
+        refund
+        for target in targets
+        for refund in SaleReturnRefundRepository(session, ctx).for_payment(target.id)
+    ]
+    debt_repository = DebtRepository(session, ctx)
+    debt_ids = sorted({allocation.debt_id for allocation in allocations})
+    debts = [
+        debt for debt in (debt_repository.get_for_update(debt_id) for debt_id in debt_ids) if debt
+    ]
+    debts_before = [_audited_debt(debt) for debt in debts]
+
+    reversals: dict[UUID, Payment] = {}
+    for target in targets:
+        reversal = repository.add(
+            Payment(
+                company_id=ctx.company_id,
+                direction=_OPPOSITE_DIRECTION[target.direction],
+                method=target.method,
+                amount=target.amount,
+                reversal_of_payment_id=target.id,
+                cancel_reason=reason.strip(),
+                created_by=ctx.user_id,
+            )
+        )
+        _flush(session, reversal, details={"payment_id": str(target.id)})
+        reversals[target.id] = reversal
+
+    # `payment_reversal_rollup` vient de réécrire les soldes : relire.
+    for debt in debts:
+        session.refresh(debt)
+
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.CANCEL,
+        entity_table="payments",
+        entity_id=payment.id,
+        before={
+            "payments": [{**_audited_payment(target), "cancelled": False} for target in targets],
+            "debts": debts_before,
+        },
+        after={
+            "payments": [
+                {
+                    **_audited_payment(target),
+                    "cancelled": True,
+                    "cancellation_id": str(reversals[target.id].id),
+                }
+                for target in targets
+            ],
+            "debts": [_audited_debt(debt) for debt in debts],
+            # Soldes de Sales, que Finance ne lit pas (ordre des dépendances) : ce
+            # qui revient en arrière est dit par les lettrages neutralisés.
+            "refunds_reverted": [
+                {"sale_return_id": str(refund.sale_return_id), "amount": str(refund.amount)}
+                for refund in refunds
+            ],
+            "reason": reason.strip(),
+        },
+        ip_address=ip_address,
+    )
+
+    for target in targets:
+        emit(
+            session,
+            ctx,
+            event_type=EventType.PAYMENT_CANCELLED,
+            aggregate_type=PAYMENT_AGGREGATE,
+            aggregate_id=target.id,
+            payload=payment_cancelled_payload(
+                payment_id=target.id,
+                cancellation_id=reversals[target.id].id,
+                direction=target.direction,
+                method=target.method,
+                amount=target.amount,
+                sale_id=target.sale_id,
+                debt_ids=sorted(
+                    {item.debt_id for item in allocations if item.payment_id == target.id}
+                ),
+                sale_return_ids=sorted(
+                    {item.sale_return_id for item in refunds if item.payment_id == target.id}
+                ),
+            ),
+        )
+    return payment, reversals[payment.id]
+
+
 # ---------------------------------------------- lectures paginées (phase 07)
 
 
@@ -1030,9 +1264,11 @@ def allocations_of_debts(
 
 
 def build_payment_detail(
-    payment: Payment, allocations: Sequence[PaymentAllocation]
+    payment: Payment,
+    allocations: Sequence[PaymentAllocation],
+    reversal: Payment | None = None,
 ) -> PaymentDetail:
-    """Vue publique d'un paiement, ses affectations comprises."""
+    """Vue publique d'un paiement, ses affectations et son annulation comprises."""
     return PaymentDetail(
         id=payment.id,
         direction=payment.direction,
@@ -1046,6 +1282,7 @@ def build_payment_detail(
         note=payment.note,
         created_at=payment.created_at,
         allocations=[AllocationRead.model_validate(item) for item in allocations],
+        **_cancellation_fields(payment, reversal),
     )
 
 
