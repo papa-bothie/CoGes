@@ -1063,6 +1063,12 @@ def cancel_payment(
     Les contrôles applicatifs ne font que nommer le refus : `payments_reversal_uq`
     reste l'autorité quand deux annulations se croisent (même leçon que l'ADR 0017).
 
+    Verrous, toujours dans l'ordre des ids : les paiements d'origine, **puis** les
+    dettes, avant d'en photographier le « before » de l'audit. Les triggers prennent
+    les mêmes verrous ; les avancer ici garantit que l'audit décrit l'état que
+    l'annulation a réellement verrouillé, et non celui qu'un paiement concurrent
+    s'apprêtait à changer (ADR 0039).
+
     Renvoie le paiement d'origine et sa contre-écriture.
     """
     repository = PaymentRepository(session, ctx)
@@ -1071,21 +1077,23 @@ def cancel_payment(
 
     if payment.reversal_of_payment_id is not None:
         raise CannotCancelAReversalError(details=details)
-    if repository.reversal_of(payment.id) is not None:
-        raise PaymentAlreadyCancelledError(details=details)
 
     targets = [payment]
     if payment.method == OFFSET_METHOD:
         partners = repository.offset_partners(payment)
         if len(partners) != 1:
             raise OffsetPairAmbiguousError(details={**details, "candidates": len(partners)})
-        partner = partners[0]
-        if repository.reversal_of(partner.id) is not None:
-            raise PaymentAlreadyCancelledError(details={"payment_id": str(partner.id)})
-        targets.append(partner)
+        targets.append(partners[0])
     # Même discipline de verrous que `_allocate` : toujours dans l'ordre des ids.
     targets.sort(key=lambda entry: entry.id)
     target_ids = [target.id for target in targets]
+
+    # Contrôlé **après** le verrou : une annulation concurrente, désormais commitée,
+    # est vue ici et nommée, au lieu de buter plus loin sur l'index unique.
+    repository.lock_for_update(target_ids)
+    for target in targets:
+        if repository.reversal_of(target.id) is not None:
+            raise PaymentAlreadyCancelledError(details={"payment_id": str(target.id)})
 
     allocations = PaymentAllocationRepository(session, ctx).for_payments(target_ids)
     refunds = [
@@ -1095,7 +1103,9 @@ def cancel_payment(
     ]
     debt_repository = DebtRepository(session, ctx)
     debt_ids = sorted({allocation.debt_id for allocation in allocations})
-    debts = [debt for debt in (debt_repository.get(debt_id) for debt_id in debt_ids) if debt]
+    debts = [
+        debt for debt in (debt_repository.get_for_update(debt_id) for debt_id in debt_ids) if debt
+    ]
     debts_before = [_audited_debt(debt) for debt in debts]
 
     reversals: dict[UUID, Payment] = {}

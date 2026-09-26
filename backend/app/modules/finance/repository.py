@@ -83,6 +83,18 @@ class PaymentRepository(TenantRepository[Payment]):
         stmt = self._select().where(Payment.reversal_of_payment_id == payment_id)
         return self.session.execute(stmt).scalar_one_or_none()
 
+    def lock_for_update(self, payment_ids: Sequence[UUID]) -> Sequence[Payment]:
+        """Paiements du tenant, verrouillés dans l'ordre des ids.
+
+        L'ordre fixe évite que deux annulations d'une même paire `offset` ne
+        s'interbloquent. Le trigger `payment_reversal_check` prend le même verrou :
+        l'avancer ici ne change pas l'autorité.
+        """
+        stmt = (
+            self._select().where(Payment.id.in_(payment_ids)).order_by(Payment.id).with_for_update()
+        )
+        return self.session.execute(stmt).scalars().all()
+
     def reversals_for(self, payment_ids: Sequence[UUID]) -> Sequence[Payment]:
         """Contre-écritures d'un lot de paiements — une requête, pas N."""
         if not payment_ids:

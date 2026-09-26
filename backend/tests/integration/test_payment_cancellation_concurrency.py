@@ -6,7 +6,9 @@ Deux promesses que seule la base peut tenir :
   `payments_reversal_uq` arbitre, le verrou de `payment_reversal_check` sérialise ;
 * une annulation et un nouveau paiement simultanés sur la même dette : le solde final
   est **exact**, quel que soit l'ordre — `payment_reversal_rollup` verrouille la dette
-  avant de sommer, dans une instruction distincte, et voit donc ce que l'autre a commité.
+  avant de sommer, dans une instruction distincte, et voit donc ce que l'autre a commité ;
+* l'audit critique décrit l'état **verrouillé** : `cancel_payment` prend la dette
+  `FOR UPDATE` avant d'en photographier le « before » (ADR 0039).
 
 Comme T38, le test ne court pas après la fenêtre de concurrence : il la **provoque** en
 tenant lui-même le verrou que les deux acteurs vont se disputer.
@@ -14,6 +16,7 @@ tenant lui-même le verrou que les deux acteurs vont se disputer.
 
 from __future__ import annotations
 
+import time
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from typing import Any
@@ -27,7 +30,7 @@ from app.core.errors import CogesError
 from app.core.tenancy import TenantContext, tenant_transaction
 from app.modules.finance import service as finance_service
 from app.modules.finance.schemas import AllocationInput, PaymentCreate
-from tests.conftest import DemoCompany
+from tests.conftest import DemoCompany, read_scalar_in_tenant
 
 pytestmark = pytest.mark.integration
 
@@ -182,3 +185,66 @@ def test_a_cancellation_and_a_new_payment_on_the_same_debt_add_up(
             text("SELECT balance FROM debts WHERE id = :id"), {"id": debt_id}
         ).scalar_one()
     assert balance == Decimal("50000.00")
+
+
+def _wait_until_blocked_on_a_lock(
+    session_factory: sessionmaker[Any], company: DemoCompany, *, timeout: float = 5.0
+) -> None:
+    """Attend qu'une autre session de la base soit **arrêtée sur un verrou**.
+
+    Sans ce rendez-vous, le test pourrait commiter avant que l'annulation n'ait lu
+    quoi que ce soit, et passerait sans rien prouver.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        waiting = read_scalar_in_tenant(
+            session_factory,
+            company.company_id,
+            "SELECT count(*) FROM pg_stat_activity "
+            "WHERE datname = current_database() AND wait_event_type = 'Lock'",
+        )
+        if waiting:
+            return
+        time.sleep(0.02)
+    raise AssertionError("l'annulation n'a jamais attendu de verrou")
+
+
+def test_the_audited_before_includes_a_concurrent_payment(
+    concurrent_session_factory: sessionmaker[Any], company_alpha: DemoCompany
+) -> None:
+    """Dette de 60 000, 30 000 payés. Un paiement de 10 000 est **tenu ouvert** quand
+    l'annulation des 30 000 démarre : le « before » audité doit dire 40 000 — l'état
+    que l'annulation a réellement verrouillé — et non 30 000."""
+    debt_id = _open_debt(concurrent_session_factory, company_alpha, principal="60000")
+    erroneous = _pay(concurrent_session_factory, company_alpha, debt_id, "30000")
+    ctx = _ctx(company_alpha)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        with tenant_transaction(ctx, session_factory=concurrent_session_factory) as session:
+            finance_service.record_payment(
+                session,
+                ctx,
+                PaymentCreate(
+                    direction="inflow",
+                    method="cash",
+                    amount=Decimal("10000"),
+                    allocations=[AllocationInput(debt_id=debt_id, amount=Decimal("10000"))],
+                ),
+            )
+            future = pool.submit(_cancel, concurrent_session_factory, company_alpha, erroneous)
+            _wait_until_blocked_on_a_lock(concurrent_session_factory, company_alpha)
+        assert future.result() == "succès"
+
+    audited = read_scalar_in_tenant(
+        concurrent_session_factory,
+        company_alpha.company_id,
+        "SELECT diff FROM audit_logs WHERE entity_table = 'payments' "
+        " AND entity_id = :id AND action = 'cancel'",
+        {"id": erroneous},
+    )
+    assert audited["before"]["debts"][0]["amount_paid"] == "40000.00"
+    assert audited["after"]["debts"][0]["amount_paid"] == "10000.00"
+    assert _debt_state(concurrent_session_factory, company_alpha, debt_id) == (
+        Decimal("10000.00"),
+        "partially_paid",
+    )
