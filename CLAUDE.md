@@ -144,6 +144,9 @@ make migrate                 # alembic upgrade head (rôle propriétaire, jamais
 make test                    # pytest (toutes suites, sauf le marqueur perf)
 make test-tenancy            # tests de fuite inter-tenant (bloquants en CI)
 make test-perf               # latence de GET /dashboard sur le jeu de démo (< 200 ms)
+make openapi / make requirements   # régénère backend/openapi.json / requirements.txt (Vercel)
+make check-generated         # échoue si l'un des deux n'est pas à jour (CI)
+deploy/scripts/restore-check.sh    # sauvegarde → restauration → contrôles, en local
 make lint                    # ruff check + ruff format --check + mypy --strict
 make format                  # ruff format + ruff check --fix
 make api                     # uvicorn → http://localhost:8000/api/v1/health
@@ -165,6 +168,7 @@ coges/
 │   ├── architecture/          ← PDF sources + extraits texte + README (index par ligne)
 │   ├── design/                ← référence visuelle du prototype, puis DESIGN.md (Impeccable)
 │   ├── decisions/             ← ADR (une décision = un fichier)
+│   ├── guides/                ← guides d'usage (formats d'import…)
 │   └── prompts/               ← prompts de phase 00 → 14
 ├── backend/                   ← FastAPI, modules, workers, migrations, tests (dont tests/perf)
 ├── frontend/                  ← Next.js App Router
@@ -187,7 +191,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 07 Finance de gestion | `07-finance.md` | 06 | T25–T28 | ✅ |
 | 08 Async, analytics, dashboard, notifications | `08-async-analytics.md` | 07 | T29–T32, T40 | ✅ |
 | 09 CoGes Intelligence | `09-intelligence.md` | 08 | T33–T35 | ✅ |
-| 10 Import/export, durcissement, déploiement | `10-durcissement-deploiement.md` | 09 | T1–T40 en CI | 🟨 temps A ✅ (annulation de paiement), temps B ⬜ |
+| 10 Import/export, durcissement, déploiement | `10-durcissement-deploiement.md` | 09 | T1–T40 en CI | 🟨 temps A ✅ ; temps B livré (code, CI, docs, 620 tests verts) — **préprod en ligne en attente du provisionnement** (`deploy/README-infra.md`) |
 | 11 Front : fondations et design system | `11-front-fondations.md` | 10 (ou 07 + OpenAPI stable) | e2e login | ⬜ |
 | 12 Front : opérations | `12-front-operations.md` | 11 | e2e vente | ⬜ |
 | 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ⬜ |
@@ -236,10 +240,27 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0037 | 2026-09-25 | Écarts de la phase 09 : ENUM `insufficient_history`, dossier `estimators/`, révision 0011, horizons J+14 / rupture sous 28 j, champs additifs de la métrique 8 | `docs/decisions/0037-ecarts-assumes-de-la-phase-09.md` |
 | 0038 | 2026-09-25 | **Annulation d'un paiement par contre-écriture** (révision 0012) : `reversal_of_payment_id` unique, rollups sur les lettrages vivants, paiement annulé et annulation hors trésorerie, `offset` par paire, 10ᵉ événement `payment.cancelled`, gérant + comptable, refus sur dette abandonnée ; correction = annuler puis ressaisir | `docs/decisions/0038-annulation-d-un-paiement-par-contre-ecriture.md` |
 | 0039 | 2026-09-26 | Annulation : paiements **puis** dettes verrouillés (ordre des ids) avant l'audit « before » ; **idempotence par ressource** : `confirm` et `refunds` enregistrent l'id dans l'endpoint de la clé | `docs/decisions/0039-verrous-de-l-annulation-et-idempotence-par-ressource.md` |
+| 0040 | 2026-09-26 | **Hébergeurs** : Neon (gratuit en préprod, Launch sans veille en prod), Redis Cloud, API en fonction Vercel (Hobby puis Pro), zone B sur le poste en préprod ; relais espacé jusqu'à 10 min quand l'outbox est vide ; pooler en mode transaction ⇒ `NullPool` + `prepare_threshold=None`, migrations sur l'hôte direct | `docs/decisions/0040-hebergeurs-et-pooler.md` |
+| 0041 | 2026-09-26 | **Import/Export** : CSV + .xlsx, `dry_run` puis même fichier, tout ou rien avec un savepoint par ligne pour un rapport complet ; pas de ventes historiques ; exports de ventes par le worker dans `export_files` (révision 0013, 10 Mo, 24 h, purge sans DELETE) ; enfilement par nom depuis l'API (`core/queue.py`) | `docs/decisions/0041-import-et-export.md` |
+| 0042 | 2026-09-26 | **Sécurité** : débit par IP, connexion et entreprise (Redis, levé si panne), 413, en-têtes, CORS ; `Idempotency-Key` aussi sur la création d'un retour ; garde-fous `coges_owner` (refus au démarrage, DSN confiné vérifié en CI, appartenance conservée) ; Sentry sans PII ; `openapi.json` versionné | `docs/decisions/0042-securite-et-observabilite.md` |
+| 0043 | 2026-09-26 | **P8 tranché** : aucun palier commercial dans le code V1 | `docs/decisions/0043-pas-de-palier-commercial-en-v1.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
-P1 à P6 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019) ; restent **P7** (signalé, hors V1
-technique) et **P8** (facturation par palier, phase 10).
+P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**
+(signalé, hors V1 technique).
+
+> **Backend V1 terminé (code)** — 22 groupes, 97 opérations sous `/api/v1`. Contrat :
+> `backend/openapi.json` (versionné, vérifié en CI, `make openapi`) ; servi hors production sur
+> `/api/v1/openapi.json`, documentation interactive `/api/v1/docs`.
+> Plateforme `health` · `auth` (login, refresh, logout) · `companies/me` · `users` · `roles`,
+> `permissions` · Référentiel `categories` · `products` (+ `prices`) · `customers` · `suppliers` ·
+> Opérations `inventory` (stock, movements, reverse) · `sales` (brouillon, items, confirm, cancel,
+> receipt, returns) · `sale-returns` (refunds) · Finance `payments` (+ cancel) · `debts`
+> (+ write-off) · `expense-categories` · `expenses` · Restitution `analytics` (overview,
+> products, timeseries) · `dashboard` · `notifications` · `insights`, `forecasts`,
+> `intelligence/summary` · `imports/{kind}` (+ template) · `exports` (referentials, sales, file) ·
+> `system/outbox`. Reste : la mise en ligne de la préproduction (provisionnement,
+> `deploy/README-infra.md`).
 
 ## 10. Ce que tu ne fais jamais
 
