@@ -46,8 +46,12 @@ returns_router = APIRouter(prefix="/sale-returns", tags=["sale_returns"])
 #: l'argent — la confirmation encaisse et ouvre une dette, le remboursement
 #: décaisse — et relèvent donc de la même règle que `POST /payments` : un double
 #: clic ne doit pas produire deux écritures (décision 16, ADR 0027).
-CONFIRM_SALE_ENDPOINT = "POST /api/v1/sales/{id}/confirm"
-REFUND_RETURN_ENDPOINT = "POST /api/v1/sale-returns/{id}/refunds"
+#:
+#: Gabarits : l'identifiant de la ressource fait partie de l'endpoint enregistré.
+#: Deux ventes au même corps partageraient sinon l'empreinte, et la même clé
+#: présentée pour la seconde rejouerait la réponse de la première (ADR 0039).
+CONFIRM_SALE_ENDPOINT = "POST /api/v1/sales/{sale_id}/confirm"
+REFUND_RETURN_ENDPOINT = "POST /api/v1/sale-returns/{return_id}/refunds"
 
 
 @router.post("", response_model=SaleDetail, status_code=status.HTTP_201_CREATED)
@@ -181,7 +185,7 @@ def confirm_sale(
         tenant.session,
         tenant.ctx,
         key=idempotency_key,
-        endpoint=CONFIRM_SALE_ENDPOINT,
+        endpoint=CONFIRM_SALE_ENDPOINT.format(sale_id=sale_id),
         payload=payload,
     )
     if replay is not None:
@@ -279,7 +283,7 @@ def refund_return(
         tenant.session,
         tenant.ctx,
         key=idempotency_key,
-        endpoint=REFUND_RETURN_ENDPOINT,
+        endpoint=REFUND_RETURN_ENDPOINT.format(return_id=return_id),
         payload=payload,
     )
     if replay is not None:
