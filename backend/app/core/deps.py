@@ -30,7 +30,10 @@ from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 
+from app.core import rate_limit
+from app.core.config import get_settings
 from app.core.errors import AuthenticationRequiredError, PermissionDeniedError
+from app.core.observability import tag_tenant
 from app.core.security import AccessClaims, decode_access_token
 from app.core.tenancy import TenantContext, tenant_transaction
 
@@ -96,6 +99,9 @@ def get_tenant_session(
         # synchrone dans deux `Context` différents, et un `ContextVar.reset()` y
         # lèverait `ValueError`, ce qui ferait tomber la transaction du cas d'usage.
         request.state.tenant = ctx
+        # Compteur par entreprise (décision 16), sur le `company_id` relu en base.
+        rate_limit.hit_tenant(company_id)
+        tag_tenant(company_id)
         yield TenantSession(session=session, ctx=ctx)
 
 
@@ -128,9 +134,26 @@ def client_ip(request: Request) -> str | None:
     un client de test, un proxy mal configuré — ferait échouer l'INSERT, donc
     toute la transaction métier. Une adresse inexploitable vaut mieux absente.
     """
-    if request.client is None:
+    return parse_ip(raw_client_ip(request.headers.get("x-forwarded-for"), request.client))
+
+
+def raw_client_ip(forwarded_for: str | None, client: object | None) -> str | None:
+    """Adresse brute : `X-Forwarded-For` derrière Vercel, sinon le pair TCP.
+
+    L'en-tête n'est lu que si `trust_proxy_headers` est actif : en dehors d'un proxy
+    qui le réécrit, n'importe quel client pourrait choisir son adresse, donc son
+    compteur de limitation de débit.
+    """
+    if forwarded_for and get_settings().trust_proxy_headers:
+        return forwarded_for.split(",", 1)[0].strip()
+    return getattr(client, "host", None)
+
+
+def parse_ip(value: str | None) -> str | None:
+    """Adresse validée, ou `None` si elle est inexploitable."""
+    if value is None:
         return None
     try:
-        return str(ip_address(request.client.host))
+        return str(ip_address(value))
     except ValueError:
         return None

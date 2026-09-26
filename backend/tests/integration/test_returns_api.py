@@ -15,7 +15,13 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
-from tests.conftest import TEST_PASSWORD, DemoCompany, auth_headers, read_scalar_in_tenant
+from tests.conftest import (
+    TEST_PASSWORD,
+    DemoCompany,
+    auth_headers,
+    read_scalar_in_tenant,
+    write_headers,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -138,7 +144,7 @@ def _create_return(
     payload: dict[str, Any] = {"lines": [{"sale_item_id": sale_item_id, "qty": qty}]}
     payload.update(overrides)
     return client.post(
-        f"/api/v1/sales/{sale_id}/returns", headers=auth_headers(token), json=payload
+        f"/api/v1/sales/{sale_id}/returns", headers=write_headers(token), json=payload
     )
 
 
@@ -444,7 +450,7 @@ def test_the_same_line_cannot_appear_twice_in_one_return(
 
     refused = api_client.post(
         f"/api/v1/sales/{sale_id}/returns",
-        headers=auth_headers(alpha_token),
+        headers=write_headers(alpha_token),
         json={
             "lines": [
                 {"sale_item_id": item_id, "qty": "1"},
@@ -503,7 +509,7 @@ def test_a_sale_cannot_be_returned_with_no_line(api_client: TestClient, alpha_to
     sale_id, _, _ = _confirmed_sale(api_client, alpha_token, product_id, qty="2")
 
     refused = api_client.post(
-        f"/api/v1/sales/{sale_id}/returns", headers=auth_headers(alpha_token), json={"lines": []}
+        f"/api/v1/sales/{sale_id}/returns", headers=write_headers(alpha_token), json={"lines": []}
     )
 
     assert refused.status_code == 422

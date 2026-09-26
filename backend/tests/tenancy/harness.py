@@ -63,6 +63,8 @@ TENANT_TABLES: tuple[str, ...] = (
     "daily_sales_facts",
     "notifications",
     "processed_events",
+    # Phase 10 — fichiers d'export produits par le worker (ADR 0041).
+    "export_files",
 )
 
 # Valeur factice : aucun mot de passe réel ne figure dans les tests.
@@ -109,6 +111,8 @@ class Tenant:
     # une ligne dans chaque table pour que T1 et T2 aient quelque chose à ne pas voir.
     fact_day: date
     notification_id: UUID
+    # Phase 10 — un export en attente.
+    export_file_id: UUID
 
     @property
     def ctx(self) -> TenantContext:
@@ -211,6 +215,7 @@ def create_tenant(
         idempotency_key=uuid4().hex,
         fact_day=date(2026, 9, 1),
         notification_id=uuid4(),
+        export_file_id=uuid4(),
     )
 
     with tenant_transaction(tenant.ctx, session_factory=session_factory) as session:
@@ -607,6 +612,17 @@ def _seed_restitution(session_factory: sessionmaker[Any], tenant: Tenant) -> Non
             ),
             {"company_id": tenant.company_id, "event_id": event_id},
         )
+        session.execute(
+            text(
+                "INSERT INTO export_files (id, company_id, kind, format, requested_by) "
+                "VALUES (:id, :company_id, 'sales', 'csv', :user_id)"
+            ),
+            {
+                "id": tenant.export_file_id,
+                "company_id": tenant.company_id,
+                "user_id": tenant.user_id,
+            },
+        )
 
 
 def own_row_ids(tenant: Tenant, table: str) -> dict[str, Any]:
@@ -646,5 +662,6 @@ def own_row_ids(tenant: Tenant, table: str) -> dict[str, Any]:
         "daily_sales_facts": {"clause": "product_id = :value", "value": tenant.product_id},
         "notifications": {"clause": "id = :value", "value": tenant.notification_id},
         "processed_events": {"clause": "company_id = :value", "value": tenant.company_id},
+        "export_files": {"clause": "id = :value", "value": tenant.export_file_id},
     }
     return criteria[table]

@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     outbox_max_attempts: int = Field(default=10, ge=1, le=10)
     # Plafond du back-off exponentiel après un échec de publication.
     outbox_backoff_max_seconds: float = Field(default=60.0, gt=0, le=600)
+    # Plafond de l'espacement des passages quand la file est vide (ADR 0040). Égal à
+    # l'intervalle de sondage par défaut : aucun espacement. 600 en préproduction sur
+    # l'offre gratuite de Neon, pour que la base s'endorme entre deux passages.
+    outbox_idle_max_seconds: float = Field(default=1.0, gt=0, le=3600)
 
     # --- Restitution ---
     # Cache court par tenant, invalidé par événement (décision 14). Jamais sur le
@@ -97,6 +101,32 @@ class Settings(BaseSettings):
     db_pool_timeout_seconds: int = Field(default=10, ge=1)
     db_pool_recycle_seconds: int = Field(default=1800, ge=60)
     db_echo: bool = False
+    # Pooler externe en mode transaction (Neon, Diagramme 8 étape 4). Le pool local
+    # disparaît (`NullPool`) et psycopg ne prépare plus de requêtes côté serveur :
+    # une requête préparée ne survit pas au changement de connexion physique.
+    db_pooler: Literal["none", "transaction"] = "none"
+
+    # --- Sécurité HTTP (ADR 0042) ---
+    # Origines autorisées à appeler l'API depuis un navigateur, séparées par des
+    # virgules. Vide : aucune (CORS fermé).
+    cors_origins: str = ""
+    # Corps de requête maximal, en octets. Les imports ont leur propre plafond, sous
+    # la limite de 4,5 Mo des fonctions Vercel.
+    max_body_bytes: int = Field(default=1_048_576, ge=1024)
+    max_import_bytes: int = Field(default=4_194_304, ge=1024, le=4_500_000)
+    # Limitation de débit par minute (décision 16). 0 désactive le compteur.
+    rate_limit_ip_per_minute: int = Field(default=300, ge=0)
+    rate_limit_tenant_per_minute: int = Field(default=1200, ge=0)
+    rate_limit_login_per_minute: int = Field(default=10, ge=0)
+
+    # Derrière Vercel, l'adresse du client arrive dans `X-Forwarded-For`, que la
+    # plate-forme réécrit. En local, l'en-tête viendrait du client : on l'ignore.
+    trust_proxy_headers: bool = False
+
+    # --- Observabilité ---
+    # DSN Sentry : absent, Sentry reste inactif (développement, CI).
+    sentry_dsn: SecretStr | None = None
+    sentry_traces_sample_rate: float = Field(default=0.0, ge=0, le=1)
 
     @field_validator("jwt_secret")
     @classmethod
@@ -107,6 +137,11 @@ class Settings(BaseSettings):
                 f"COGES_JWT_SECRET doit faire au moins {MIN_JWT_SECRET_LENGTH} caractères."
             )
         return value
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """Origines CORS, sans espaces ni entrées vides."""
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
     def require_owner_url(self) -> str:
         """DSN propriétaire, ou une erreur explicite si le processus n'a pas le droit de migrer."""

@@ -104,6 +104,18 @@ def get_names(
     return CategoryRepository(session, ctx).live_names_by_ids(category_ids)
 
 
+def ids_by_name(session: Session, ctx: TenantContext) -> dict[str, list[UUID]]:
+    """Catégories vivantes regroupées par nom, pour Import/Export.
+
+    Un nom n'est unique que **sous un même parent** : la liste permet à l'appelant de
+    distinguer « introuvable » (aucune) de « ambiguë » (plusieurs).
+    """
+    index: dict[str, list[UUID]] = {}
+    for category_id, name, _parent in CategoryRepository(session, ctx).live_name_index():
+        index.setdefault(name.casefold(), []).append(category_id)
+    return index
+
+
 # ------------------------------------------------------------------- écritures
 
 

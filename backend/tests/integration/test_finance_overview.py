@@ -204,7 +204,7 @@ def test_a_return_reduces_the_revenue_and_the_cost_of_its_sale(
 
     returned = api_client.post(
         f"/api/v1/sales/{sale['id']}/returns",
-        headers=auth_headers(alpha_token),
+        headers=write_headers(alpha_token),
         json={"lines": [{"sale_item_id": sale["sale_item_id"], "qty": "2"}]},
     )
     assert returned.status_code == 201, returned.text
@@ -263,7 +263,7 @@ def test_a_compensation_never_appears_in_the_treasury(
 
     returned = api_client.post(
         f"/api/v1/sales/{sale_id}/returns",
-        headers=auth_headers(alpha_token),
+        headers=write_headers(alpha_token),
         json={"lines": [{"sale_item_id": str(line.json()["id"]), "qty": "1"}]},
     )
     assert returned.status_code == 201, returned.text

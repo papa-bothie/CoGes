@@ -79,7 +79,7 @@ def _return_of_one_unit(client: TestClient, token: str, sale_id: str) -> str:
     sale = _sale(client, token, sale_id)
     created = client.post(
         f"/api/v1/sales/{sale_id}/returns",
-        headers=auth_headers(token),
+        headers=write_headers(token),
         json={"lines": [{"sale_item_id": sale["items"][0]["id"], "qty": "1"}]},
     )
     assert created.status_code == 201, created.text

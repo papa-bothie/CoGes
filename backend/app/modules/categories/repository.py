@@ -56,6 +56,13 @@ class CategoryRepository(TenantRepository[Category]):
         )
         return {row.id: row.name for row in self.session.execute(stmt)}
 
+    def live_name_index(self) -> list[tuple[UUID, str, UUID | None]]:
+        """(id, nom, parent) de toutes les catégories vivantes, pour résoudre des noms."""
+        stmt = select(Category.id, Category.name, Category.parent_id).where(
+            Category.company_id == self.ctx.company_id, Category.deleted_at.is_(None)
+        )
+        return [(row.id, row.name, row.parent_id) for row in self.session.execute(stmt)]
+
     def get_by_name(self, name: str, parent_id: UUID | None) -> Category | None:
         """Homonyme vivant sous le même parent (index `categories_name_uq`)."""
         stmt = self._live().where(Category.name == name)

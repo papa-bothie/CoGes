@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import logging
 import signal
-import time
+import threading
 from dataclasses import dataclass
 from types import FrameType
 from typing import Any
@@ -94,6 +94,7 @@ class OutboxRelay:
         poll_interval: float | None = None,
         max_attempts: int | None = None,
         backoff_max: float | None = None,
+        idle_max: float | None = None,
     ) -> None:
         settings = get_settings()
         self._bus = bus
@@ -104,8 +105,18 @@ class OutboxRelay:
         )
         self._max_attempts = max_attempts or settings.outbox_max_attempts
         self._backoff_max = backoff_max or settings.outbox_backoff_max_seconds
+        # Plafond de l'espacement quand la file reste vide (ADR 0040). Égal à
+        # `poll_interval` par défaut : aucun espacement, le comportement historique.
+        # En préproduction sur l'offre gratuite de Neon, il monte à 600 s pour que la
+        # base puisse s'endormir entre deux passages.
+        idle_ceiling = settings.outbox_idle_max_seconds if idle_max is None else idle_max
+        self._idle_max = max(idle_ceiling, self._poll_interval)
         self._backoff = 0.0
+        self._idle_wait = 0.0
         self._stopping = False
+        # Réveillé par `stop()` : une attente de dix minutes ne retarde pas l'arrêt
+        # du conteneur.
+        self._wake = threading.Event()
 
     # ------------------------------------------------------------------ un passage
 
@@ -198,23 +209,40 @@ class OutboxRelay:
 
     # -------------------------------------------------------------------- la boucle
 
+    def _pause(self, seconds: float) -> None:
+        """Attend, sauf si l'arrêt est demandé entre-temps."""
+        self._wake.wait(seconds)
+
+    def _next_idle_wait(self) -> float:
+        """Attente après un passage vide : double à chaque passage vide, jusqu'au plafond.
+
+        La première attente vaut `poll_interval` ; la file qui reste vide espace ses
+        sondages, ce qui laisse une base serverless s'endormir (ADR 0040).
+        """
+        self._idle_wait = min(max(self._idle_wait * 2, self._poll_interval), self._idle_max)
+        return self._idle_wait
+
     def _sleep_after(self, result: RelayPass) -> None:
         """Pause quand la file est vide, back-off exponentiel quand la publication échoue.
 
         Le back-off protège Redis d'une tempête de reprises ; il ne retarde jamais un
-        lot qui passe, puisqu'un passage réussi le remet à zéro.
+        lot qui passe, puisqu'un passage réussi le remet à zéro. De même, un passage
+        qui trouve un événement ramène l'attente à vide à `poll_interval`.
         """
         if result.failed:
             self._backoff = min(max(self._backoff * 2, self._poll_interval), self._backoff_max)
-            time.sleep(self._backoff)
+            self._pause(self._backoff)
             return
         self._backoff = 0.0
         if result.idle:
-            time.sleep(self._poll_interval)
+            self._pause(self._next_idle_wait())
+        else:
+            self._idle_wait = 0.0
 
     def stop(self, *_: object) -> None:
         """Demande l'arrêt à la fin du lot en cours, sans couper une publication."""
         self._stopping = True
+        self._wake.set()
         logger.info("Arrêt du relais demandé")
 
     def run_forever(self) -> None:
@@ -226,7 +254,7 @@ class OutboxRelay:
                 # on réessaie. Un relais qui s'arrête est une file qui ne part plus.
                 logger.error("Passage du relais en échec", exc_info=True)
                 self._backoff = min(max(self._backoff * 2, self._poll_interval), self._backoff_max)
-                time.sleep(self._backoff)
+                self._pause(self._backoff)
                 continue
             self._sleep_after(result)
 
@@ -234,10 +262,17 @@ class OutboxRelay:
 def main() -> None:
     """Point d'entrée du conteneur `relay`."""
     configure_logging()
+    from app.core.observability import init_sentry  # noqa: PLC0415
+
+    init_sentry("relay")
+    from app.core.role_guard import assert_runtime_role  # noqa: PLC0415
     from app.workers.bus import CeleryEventBus  # noqa: PLC0415
     from app.workers.celery_app import celery_app  # noqa: PLC0415
 
-    relay = OutboxRelay(CeleryEventBus(celery_app))
+    relay_factory = get_relay_session_factory()
+    # Garde-fou 1 de l'ADR 0042 : refuse de démarrer sous coges_owner ou BYPASSRLS.
+    assert_runtime_role(relay_factory.kw["bind"])
+    relay = OutboxRelay(CeleryEventBus(celery_app), session_factory=relay_factory)
     for received in (signal.SIGINT, signal.SIGTERM):
         signal.signal(received, _handler(relay))
     logger.info("Relais de l'outbox démarré")

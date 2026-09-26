@@ -23,6 +23,8 @@ class CogesError(Exception):
     def __init__(self, message: str | None = None, *, details: dict[str, Any] | None = None):
         self.message = message or self.default_message
         self.details = details or {}
+        # En-têtes HTTP à joindre à la réponse (`Retry-After` d'un 429, par exemple).
+        self.headers: dict[str, str] = {}
         super().__init__(self.message)
 
     def to_payload(self) -> dict[str, Any]:
@@ -117,3 +119,23 @@ class TenantIsolationError(CogesError):
     code = "tenant_isolation_error"
     status_code = 500
     default_message = "Écriture refusée : la ligne appartient à une autre entreprise."
+
+
+class RateLimitedError(CogesError):
+    """Trop de requêtes dans la fenêtre courante (décision 16)."""
+
+    code = "rate_limited"
+    status_code = 429
+    default_message = "Trop de requêtes. Réessayez dans quelques instants."
+
+    def __init__(self, retry_after: int, *, scope: str) -> None:
+        super().__init__(details={"scope": scope, "retry_after": retry_after})
+        self.headers = {"Retry-After": str(retry_after)}
+
+
+class PayloadTooLargeError(CogesError):
+    """Corps de requête au-delà du plafond autorisé."""
+
+    code = "payload_too_large"
+    status_code = 413
+    default_message = "La requête dépasse la taille maximale autorisée."

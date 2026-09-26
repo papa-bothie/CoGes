@@ -216,7 +216,7 @@ def _confirmed_sale(
 def _return(client: TestClient, token: str, sale: dict[str, Any], qty: str) -> str:
     created = client.post(
         f"/api/v1/sales/{sale['id']}/returns",
-        headers=auth_headers(token),
+        headers=write_headers(token),
         json={"lines": [{"sale_item_id": sale["items"][0]["id"], "qty": qty}]},
     )
     assert created.status_code == 201, created.text

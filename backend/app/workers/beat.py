@@ -27,6 +27,7 @@ SCAN_DUE_DEBTS = "notifications.scan_due_debts_all"
 ML_FEATURES = "ml_features.compute_all"
 ML_TRAIN = "ml_train.train_all"
 ML_INFER = "ml_infer.infer_all"
+SWEEP_EXPORTS = "exports.sweep_all"
 
 #: Nombre de jours de faits réécrits chaque nuit. C'est le filet du § 12.1 point 3 :
 #: un événement perdu ne laisse pas un agrégat faux plus d'une nuit.
@@ -47,6 +48,14 @@ BEAT_SCHEDULE: dict[str, dict[str, Any]] = {
     "purge-idempotency-keys": {
         "task": PURGE_IDEMPOTENCY,
         "schedule": crontab(hour="1", minute="30"),
+    },
+    # 01 h 45 — exports : les fichiers de plus de 24 h sont vidés, et une demande
+    # restée `pending` (Redis indisponible au moment de la demande) est renfilée
+    # (ADR 0041). Nocturne seulement : un balayage fréquent réveillerait la base
+    # Neon de préproduction (ADR 0040).
+    "sweep-exports": {
+        "task": SWEEP_EXPORTS,
+        "schedule": crontab(hour="1", minute="45"),
     },
     # 02 h 00 — réalignement de la projection de stock sur le journal (§ 5.7).
     "rebuild-product-stock": {

@@ -35,6 +35,19 @@ from tests.tenancy.harness import Tenant, create_tenant
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def _no_task_broker(monkeypatch: MonkeyPatch) -> None:
+    """Aucun test ne dépose de tâche dans le Redis de développement.
+
+    Une demande d'export enfile une tâche worker (ADR 0041) : sans cette barrière,
+    un worker local la ramasserait ensuite, avec l'identifiant d'une base de test.
+    Les tests qui veulent voir l'enfilement installent leur propre substitut.
+    """
+    from app.core import queue
+
+    monkeypatch.setattr(queue, "enqueue", lambda *args, **kwargs: True)
+
+
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     """Client HTTP sur l'application FastAPI, sans base de données."""

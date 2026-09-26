@@ -22,6 +22,7 @@ from app.workers.celery_app import celery_app
 import app.workers.tasks.analytics  # noqa: F401  isort:skip
 import app.workers.tasks.audit  # noqa: F401  isort:skip
 import app.workers.tasks.notifications  # noqa: F401  isort:skip
+import app.workers.tasks.exports  # noqa: F401  isort:skip
 import app.workers.tasks.reconcile  # noqa: F401  isort:skip
 import app.workers.tasks.ml_features  # noqa: F401  isort:skip
 import app.workers.tasks.ml_train  # noqa: F401  isort:skip

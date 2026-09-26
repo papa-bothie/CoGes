@@ -17,9 +17,11 @@ from sqlalchemy import event as sa_event
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy.pool import NullPool
 from sqlalchemy.sql import text
 
 from app.core.config import get_settings
+from app.core.role_guard import install_role_guard
 
 logger = logging.getLogger(__name__)
 
@@ -114,17 +116,32 @@ def create_app_engine(
     d'une seule connexion pour prouver qu'aucun contexte ne survit à une transaction.
     """
     settings = get_settings()
-    engine = create_engine(
-        url,
-        echo=settings.db_echo if echo is None else echo,
-        pool_size=settings.db_pool_size if pool_size is None else pool_size,
-        max_overflow=settings.db_max_overflow if max_overflow is None else max_overflow,
-        pool_timeout=settings.db_pool_timeout_seconds,
-        pool_recycle=settings.db_pool_recycle_seconds,
-        pool_pre_ping=True,
-        future=True,
-    )
+    if settings.db_pooler == "transaction":
+        # Derrière un pooler en mode transaction (Neon), le pool est le sien : en
+        # garder un second par instance Vercel épuiserait les connexions (risque
+        # « épuisement des connexions », Architecture). `prepare_threshold=None` :
+        # une requête préparée côté serveur vit sur une connexion physique que la
+        # transaction suivante n'aura plus (ADR 0040).
+        engine = create_engine(
+            url,
+            echo=settings.db_echo if echo is None else echo,
+            poolclass=NullPool,
+            connect_args={"prepare_threshold": None},
+            future=True,
+        )
+    else:
+        engine = create_engine(
+            url,
+            echo=settings.db_echo if echo is None else echo,
+            pool_size=settings.db_pool_size if pool_size is None else pool_size,
+            max_overflow=settings.db_max_overflow if max_overflow is None else max_overflow,
+            pool_timeout=settings.db_pool_timeout_seconds,
+            pool_recycle=settings.db_pool_recycle_seconds,
+            pool_pre_ping=True,
+            future=True,
+        )
     _install_pool_reset(engine)
+    install_role_guard(engine)
     return engine
 
 

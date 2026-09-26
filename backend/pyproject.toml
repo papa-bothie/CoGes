@@ -15,6 +15,10 @@ dependencies = [
     "pyjwt>=2.10",
     "celery[redis]>=5.4",
     "redis>=5.2",
+    "sentry-sdk[celery,fastapi]>=2.19",
+    "openpyxl>=3.1",
+    "python-multipart>=0.0.20",
+    "defusedxml>=0.7",
 ]
 
 [dependency-groups]
@@ -25,6 +29,7 @@ dev = [
     "ruff>=0.16.8",
     "mypy>=1.13",
     "pre-commit>=4.0",
+    "types-openpyxl>=3.1.5.20260827",
 ]
 # CoGes Intelligence (phase 09, ADR 0035) : réservé à l'image worker. L'API ne lit
 # que `forecasts` et `insights` et n'importe jamais ces bibliothèques.
@@ -74,7 +79,7 @@ ignore_missing_imports = true
 # et seulement sur les modules de tâches — le corps des tâches reste intégralement
 # vérifié, comme le reste de `app/`.
 [[tool.mypy.overrides]]
-module = "app.workers.tasks.*"
+module = ["app.workers.tasks.*", "app.workers.celery_app"]
 disallow_untyped_decorators = false
 
 [tool.pytest.ini_options]

@@ -9,12 +9,20 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.core.config import get_settings
 from app.core.errors import CogesError, ValidationFailedError
+from app.core.http_security import (
+    BodySizeLimitMiddleware,
+    IpRateLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
+from app.core.observability import init_sentry
 from app.modules.analytics.router import router as analytics_router
 from app.modules.auth.router import router as auth_router
 from app.modules.categories.router import router as categories_router
@@ -25,6 +33,7 @@ from app.modules.expenses.router import categories_router as expense_categories_
 from app.modules.expenses.router import router as expenses_router
 from app.modules.finance.router import debts_router
 from app.modules.finance.router import router as payments_router
+from app.modules.importexport.router import exports_router, imports_router
 from app.modules.intelligence.router import router as intelligence_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.notifications.router import router as notifications_router
@@ -37,9 +46,39 @@ from app.modules.system.router import router as system_router
 from app.modules.users.router import router as users_router
 
 configure_logging()
+init_sentry("api")
 
-app = FastAPI(title="CoGes API", version="0.1.0", docs_url="/api/v1/docs")
+settings = get_settings()
+
+# La documentation interactive charge Swagger UI depuis un CDN : elle n'est pas servie
+# en production. Le contrat reste lisible dans `backend/openapi.json`, versionné.
+_docs_enabled = settings.env != "production"
+app = FastAPI(
+    title="CoGes API",
+    version="1.0.0",
+    docs_url="/api/v1/docs" if _docs_enabled else None,
+    redoc_url=None,
+    openapi_url="/api/v1/openapi.json" if _docs_enabled else None,
+)
+# Starlette enveloppe dans l'ordre inverse d'ajout : le dernier ajouté est le plus
+# extérieur. De l'extérieur vers l'intérieur : en-têtes de sécurité (sur toute
+# réponse, y compris un 413 ou un 429), CORS (un refus doit rester lisible par le
+# navigateur), taille du corps, débit par IP, puis journalisation.
 app.add_middleware(RequestContextMiddleware)
+app.add_middleware(IpRateLimitMiddleware)
+app.add_middleware(BodySizeLimitMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origin_list,
+    # Le cookie de rafraîchissement est `httpOnly` (ADR 0006) : le navigateur ne
+    # l'envoie qu'avec `credentials: 'include'`, donc sur une origine nommée.
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-Id"],
+    expose_headers=["X-Request-Id", "Retry-After", "Content-Disposition"],
+    max_age=600,
+)
+app.add_middleware(SecurityHeadersMiddleware)
 
 api_router = APIRouter(prefix="/api/v1")
 
@@ -78,6 +117,10 @@ api_router.include_router(notifications_router)
 # (décision 11). Aucune route n'infère ; seule `PATCH /insights/{id}` écrit un statut.
 api_router.include_router(intelligence_router)
 api_router.include_router(dashboard_router)
+# Bande E : Import/Export écrit les référentiels par leurs façades et lit les ventes ;
+# rien ne le lit. Les exports volumineux sont produits par le worker (ADR 0041).
+api_router.include_router(imports_router)
+api_router.include_router(exports_router)
 # Hors commerce : santé du chemin asynchrone, gérant seul.
 api_router.include_router(system_router)
 
@@ -93,7 +136,7 @@ def handle_coges_error(request: Request, exc: Exception) -> JSONResponse:
     """
     assert isinstance(exc, CogesError)  # noqa: S101 - garanti par le dispatch FastAPI
     payload: dict[str, Any] = exc.to_payload()
-    return JSONResponse(status_code=exc.status_code, content=payload)
+    return JSONResponse(status_code=exc.status_code, content=payload, headers=exc.headers)
 
 
 @app.exception_handler(RequestValidationError)

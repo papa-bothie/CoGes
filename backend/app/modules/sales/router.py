@@ -52,6 +52,9 @@ returns_router = APIRouter(prefix="/sale-returns", tags=["sale_returns"])
 #: présentée pour la seconde rejouerait la réponse de la première (ADR 0039).
 CONFIRM_SALE_ENDPOINT = "POST /api/v1/sales/{sale_id}/confirm"
 REFUND_RETURN_ENDPOINT = "POST /api/v1/sale-returns/{return_id}/refunds"
+#: Un retour crée un reste dû au client et remet du stock : rejoué après une coupure
+#: réseau, il en créerait un second. Même règle, depuis la phase 10 (ADR 0042).
+CREATE_RETURN_ENDPOINT = "POST /api/v1/sales/{sale_id}/returns"
 
 
 @router.post("", response_model=SaleDetail, status_code=status.HTTP_201_CREATED)
@@ -231,16 +234,36 @@ def create_return(
     payload: SaleReturnCreate,
     request: Request,
     tenant: Annotated[TenantSession, Depends(require_permission("sale_returns:create"))],
-) -> SaleReturnDetail:
+    idempotency_key: IdempotencyKey,
+) -> Response:
     """Enregistre un retour sur une vente confirmée : stock, montants, audit, événement.
 
     Le retour naît **non réglé**. Le remboursement, qui touche à l'argent, passe par
     `POST /sale-returns/{id}/refunds` et n'est pas ouvert au vendeur (ADR 0025).
+
+    Clé d'idempotence obligatoire (ADR 0042) : un retour envoyé deux fois n'ouvre
+    qu'un seul reste dû et ne remet le stock qu'une fois.
     """
+    replay = idempotency.reserve(
+        tenant.session,
+        tenant.ctx,
+        key=idempotency_key,
+        endpoint=CREATE_RETURN_ENDPOINT.format(sale_id=sale_id),
+        payload=payload,
+    )
+    if replay is not None:
+        return idempotency.replay_response(replay)
+
     sale_return = service.create_return(
         tenant.session, tenant.ctx, sale_id, payload, ip_address=client_ip(request)
     )
-    return service.build_return_detail(tenant.session, tenant.ctx, sale_return)
+    return idempotency.completed(
+        tenant.session,
+        tenant.ctx,
+        key=idempotency_key,
+        status_code=status.HTTP_201_CREATED,
+        model=service.build_return_detail(tenant.session, tenant.ctx, sale_return),
+    )
 
 
 @router.get("/{sale_id}/returns", response_model=SaleReturnList)

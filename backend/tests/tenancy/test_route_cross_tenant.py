@@ -48,6 +48,19 @@ PUBLIC_PATHS = frozenset(
 )
 
 
+#: Routes dont le paramètre de chemin n'est **pas** une ressource d'entreprise : un
+#: type d'import ou d'export (`products`, `customers`…). Il n'y a rien à « croiser » ;
+#: leur isolation — un import de A invisible de B, un export de A sans donnée de B —
+#: est prouvée par `tests/tenancy/test_importexport_isolation.py`.
+NON_RESOURCE_PATHS = frozenset(
+    {
+        "/api/v1/imports/{kind}",
+        "/api/v1/imports/{kind}/template",
+        "/api/v1/exports/referentials/{kind}",
+    }
+)
+
+
 @dataclass(frozen=True, slots=True)
 class CrossTenantCase:
     """Comment fabriquer un appel croisé pour une route paramétrée."""
@@ -124,6 +137,8 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
     "/api/v1/notifications/{notification_id}": CrossTenantCase(
         parameters={"notification_id": "notification"}, body={"read": True}
     ),
+    "/api/v1/exports/{export_id}": CrossTenantCase(parameters={"export_id": "export"}),
+    "/api/v1/exports/{export_id}/file": CrossTenantCase(parameters={"export_id": "export"}),
 }
 
 
@@ -147,7 +162,10 @@ def _parameterised_paths() -> list[str]:
     return sorted(
         path
         for path in app.openapi()["paths"]
-        if path.startswith("/api/v1/") and "{" in path and path not in PUBLIC_PATHS
+        if path.startswith("/api/v1/")
+        and "{" in path
+        and path not in PUBLIC_PATHS
+        and path not in NON_RESOURCE_PATHS
     )
 
 
@@ -228,7 +246,8 @@ def _beta_returned_sale(client: TestClient, beta_token: str, product_id: str) ->
 
     sale_return = client.post(
         f"/api/v1/sales/{sale_id}/returns",
-        headers=headers,
+        # Clé neuve : celle de `headers` a déjà servi à la confirmation.
+        headers=_write_headers(beta_token),
         json={"lines": [{"sale_item_id": sale_item_id, "qty": "1"}]},
     )
     assert sale_return.status_code == 201, sale_return.text
@@ -277,6 +296,17 @@ def _beta_insight(analytics_factory: sessionmaker[Any], company: DemoCompany) ->
                 {"c": company.company_id, "k": f"cross-tenant:{uuid4()}"},
             ).scalar_one()
         )
+
+
+def _beta_export(client: TestClient, beta_token: str) -> str:
+    """Un export de ventes demandé par Beta (resté en attente : aucun worker ici)."""
+    response = client.post(
+        "/api/v1/exports/sales",
+        headers=auth_headers(beta_token),
+        json={"date_from": date.today().isoformat(), "date_to": date.today().isoformat()},
+    )
+    assert response.status_code == 202, response.text
+    return str(response.json()["id"])
 
 
 def _beta_sources(client: TestClient, beta_token: str) -> dict[str, str]:
@@ -329,6 +359,7 @@ def _beta_sources(client: TestClient, beta_token: str) -> dict[str, str]:
         "expense_category": expense_category_id,
         "expense": expense_id,
         "debt": debt_id,
+        "export": _beta_export(client, beta_token),
         # Le stock existe désormais : une vente peut être confirmée puis retournée.
         **_beta_returned_sale(client, beta_token, product_id),
     }
