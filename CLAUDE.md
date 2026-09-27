@@ -191,7 +191,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 07 Finance de gestion | `07-finance.md` | 06 | T25–T28 | ✅ |
 | 08 Async, analytics, dashboard, notifications | `08-async-analytics.md` | 07 | T29–T32, T40 | ✅ |
 | 09 CoGes Intelligence | `09-intelligence.md` | 08 | T33–T35 | ✅ |
-| 10 Import/export, durcissement, déploiement | `10-durcissement-deploiement.md` | 09 | T1–T40 en CI | 🟨 temps A ✅ ; temps B livré (code, CI, docs, 620 tests verts) — **préprod en ligne en attente du provisionnement** (`deploy/README-infra.md`) |
+| 10 Import/export, durcissement, déploiement | `10-durcissement-deploiement.md` | 09 | T1–T40 en CI | ✅ préprod en ligne (`https://coges-api.vercel.app`, zone B sur le poste) ; prod à ouvrir |
 | 11 Front : fondations et design system | `11-front-fondations.md` | 10 (ou 07 + OpenAPI stable) | e2e login | ⬜ |
 | 12 Front : opérations | `12-front-operations.md` | 11 | e2e vente | ⬜ |
 | 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ⬜ |
@@ -244,6 +244,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0041 | 2026-09-26 | **Import/Export** : CSV + .xlsx, `dry_run` puis même fichier, tout ou rien avec un savepoint par ligne pour un rapport complet ; pas de ventes historiques ; exports de ventes par le worker dans `export_files` (révision 0013, 10 Mo, 24 h, purge sans DELETE) ; enfilement par nom depuis l'API (`core/queue.py`) | `docs/decisions/0041-import-et-export.md` |
 | 0042 | 2026-09-26 | **Sécurité** : débit par IP, connexion et entreprise (Redis, levé si panne), 413, en-têtes, CORS ; `Idempotency-Key` aussi sur la création d'un retour ; garde-fous `coges_owner` (refus au démarrage, DSN confiné vérifié en CI, appartenance conservée) ; Sentry sans PII ; `openapi.json` versionné | `docs/decisions/0042-securite-et-observabilite.md` |
 | 0043 | 2026-09-26 | **P8 tranché** : aucun palier commercial dans le code V1 | `docs/decisions/0043-pas-de-palier-commercial-en-v1.md` |
+| 0044 | 2026-09-27 | Mise en ligne : variables Vercel **chiffrées relisibles** (pas *sensitive*, pour le garde-fou 2), fumée sur le domaine public `COGES_PUBLIC_URL`, `database_url_app` facultatif pour le relais | `docs/decisions/0044-mise-en-ligne-de-la-preproduction.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**
@@ -259,8 +260,8 @@ P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; r
 > (+ write-off) · `expense-categories` · `expenses` · Restitution `analytics` (overview,
 > products, timeseries) · `dashboard` · `notifications` · `insights`, `forecasts`,
 > `intelligence/summary` · `imports/{kind}` (+ template) · `exports` (referentials, sales, file) ·
-> `system/outbox`. Reste : la mise en ligne de la préproduction (provisionnement,
-> `deploy/README-infra.md`).
+> `system/outbox`. Préproduction en ligne depuis le 2026-09-27 : `https://coges-api.vercel.app`
+> (`deploy/README-infra.md`). Prochaine étape : phase 11 (front).
 
 ## 10. Ce que tu ne fais jamais
 

@@ -122,7 +122,7 @@ retient les événements, le cache recalcule, la limitation de débit se désact
 ```bash
 cp deploy/.env.preprod.example deploy/.env.preprod   # puis remplir (fichier ignoré par git)
 docker compose --env-file deploy/.env.preprod -f deploy/docker-compose.worker.yml up -d --build
-docker compose -f deploy/docker-compose.worker.yml logs -f relay
+docker compose --env-file deploy/.env.preprod -f deploy/docker-compose.worker.yml logs -f relay
 ```
 
 Machine éteinte : les événements s'accumulent dans `business_events` et partent au
@@ -212,19 +212,27 @@ d'`auth_lookup`, et `coges_app` sans contexte qui ne voit rien.
 
 À rejouer une fois ensemble sur la préproduction, puis une fois par trimestre.
 
-## Provisionnement de la préproduction (à faire par le responsable)
+## Provisionnement de la préproduction (fait le 2026-09-27)
 
-1. **Neon** : créer un projet (région Europe, PostgreSQL 16), jouer `01-roles.sql`,
-   noter les DSN direct (`coges_owner`) et pooler (les trois autres).
-2. **Redis Cloud** : créer une base gratuite, noter l'URL `rediss://`.
-3. **Sentry** : créer un projet Python, noter le DSN.
-4. **Vercel** : importer le dépôt, *Root Directory* = `backend`, renseigner les
-   variables du tableau ci-dessus, créer un jeton et, pour les préversions, le secret
-   *Protection Bypass for Automation*.
-5. **GitHub** : créer les environnements `preprod`, `production` (avec approbation) et
-   `preview`, y déposer les secrets.
-6. `make migrate` n'est pas lancé à la main : pousser sur `main` déclenche
-   migration, déploiement et test de fumée.
-7. Créer l'entreprise de fumée : `python -m app.cli create-company --slug fumee …` avec
-   le DSN `coges_app` de préproduction, puis renseigner `SMOKE_*`.
-8. Démarrer la zone B sur le poste (section ci-dessus).
+En ligne : **`https://coges-api.vercel.app`** (Vercel, équipe CipherOne, projet `coges-api`,
+Hobby). Premier déploiement vert par le workflow, test de fumée compris, et chaîne
+asynchrone vérifiée (outbox → relais → Redis → worker en ~10 s). Écarts rencontrés : ADR 0044.
+
+1. **Neon** : projet `CoGes-preprod`, rôles et base amorcés (section Neon) ; migrations
+   jouées par le workflow.
+2. **Redis Cloud** : base gratuite, sans TLS (écart préprod, ADR 0040).
+3. **Sentry** : DSN dans Vercel et `deploy/.env.preprod`.
+4. **Vercel** : `vercel link` depuis `backend/` (lien `.vercel/` ignoré). Variables posées
+   **par l'API avec `type: "encrypted"`**, pas par `vercel env add`, qui les rend
+   *sensitive* et aveugle le garde-fou 2 (ADR 0044).
+5. **GitHub, environnement `preprod`** : secrets `NEON_OWNER_DSN`, `VERCEL_TOKEN`,
+   `VERCEL_ORG_ID`, `VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID`, `SMOKE_*` ; variable
+   `COGES_PUBLIC_URL`.
+6. **Entreprise de fumée** : slug `fumee`, gérant `fumee@example.com`, mot de passe
+   aléatoire connu du seul secret `SMOKE_PASSWORD` (le réinitialiser par
+   `users.service.change_password` en cas de perte).
+7. **Zone B** : `up -d --build` sur le poste (section ci-dessus).
+
+Reste ouvert : la production (Neon Launch, Vercel Pro, hôte de la zone B), l'environnement
+`preview` (`VERCEL_AUTOMATION_BYPASS_SECRET`), et l'exercice de restauration PITR à rejouer
+ensemble.
