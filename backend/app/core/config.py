@@ -42,8 +42,9 @@ class Settings(BaseSettings):
 
     env: Literal["local", "ci", "staging", "production"] = "local"
 
-    # DSN applicatif : requis, c'est le seul que l'API utilise.
-    database_url_app: str
+    # DSN applicatif : le seul que l'API utilise. Absent du seul relais, qui ne tourne
+    # que sous `coges_relay` (ADR 0032) : `require_app_url` échoue alors à l'usage.
+    database_url_app: str | None = None
     # DSN propriétaire : requis seulement pour migrer, absent en production applicative.
     database_url_owner: str | None = None
     # DSN des workers : absents d'un déploiement API-seule, requis dans l'image worker.
@@ -145,6 +146,15 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         """Origines CORS, sans espaces ni entrées vides."""
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    def require_app_url(self) -> str:
+        """DSN de `coges_app`, ou une erreur explicite si le processus ne l'a pas reçu."""
+        if not self.database_url_app:
+            raise RuntimeError(
+                "COGES_DATABASE_URL_APP est absent : ce processus ne peut pas ouvrir de "
+                "transaction applicative."
+            )
+        return self.database_url_app
 
     def require_owner_url(self) -> str:
         """DSN propriétaire, ou une erreur explicite si le processus n'a pas le droit de migrer."""

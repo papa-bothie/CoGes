@@ -148,7 +148,7 @@ def create_app_engine(
 @lru_cache
 def get_engine() -> Engine:
     """Engine unique du processus, sur le DSN du rôle `coges_app`."""
-    return create_app_engine(get_settings().database_url_app)
+    return create_app_engine(get_settings().require_app_url())
 
 
 @lru_cache
