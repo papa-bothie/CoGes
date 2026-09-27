@@ -36,3 +36,6 @@ celerybeat.pid
 
 # Secrets transitoires (DSN propriétaire à déposer dans GitHub puis détruire)
 *.secret
+
+# Lien local de la CLI Vercel (ids du projet, jamais de secret à versionner)
+.vercel/
