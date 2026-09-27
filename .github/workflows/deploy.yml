@@ -84,7 +84,11 @@ jobs:
 
       - name: Test de fumée (santé, connexion, tableau de bord)
         env:
-          COGES_SMOKE_URL: ${{ steps.vercel.outputs.url }}
+          # preprod / production : le domaine public de l'environnement (variable
+          # d'environnement GitHub), celui que les utilisateurs atteignent — les URL propres
+          # à chaque déploiement restent derrière la protection Vercel. preview : pas de
+          # variable, l'URL du déploiement et le jeton de contournement ci-dessous.
+          COGES_SMOKE_URL: ${{ vars.COGES_PUBLIC_URL || steps.vercel.outputs.url }}
           COGES_SMOKE_SLUG: ${{ secrets.SMOKE_SLUG }}
           COGES_SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
           COGES_SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}

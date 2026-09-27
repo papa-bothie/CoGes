@@ -145,6 +145,7 @@ nocturne les renfile. L'API sur Vercel continue de servir.
 | | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` (`VERCEL_TEAM_ID`) | projet Hobby | projet Pro |
 | | `SMOKE_SLUG`, `SMOKE_EMAIL`, `SMOKE_PASSWORD` | entreprise de fumée | idem |
 | | `VERCEL_AUTOMATION_BYPASS_SECRET` | pour les préversions protégées | — |
+| GitHub, variable d'environnement | `COGES_PUBLIC_URL` | `https://coges-api.vercel.app` (cible du test de fumée) | domaine de prod |
 
 Jamais de `COGES_DATABASE_URL_OWNER` dans Vercel ni chez les workers (garde-fou 2).
 L'approbation obligatoire sur l'environnement GitHub `production` n'existe pas pour un dépôt
@@ -179,7 +180,9 @@ des valeurs aléatoires hachées en base (`auth_sessions`), indépendantes de la
 4. `vercel build` puis `vercel deploy --prebuilt` : les déploiements automatiques depuis
    Git sont **désactivés** (`git.deploymentEnabled: false`), pour qu'aucun code ne parte
    sans la CI ;
-5. test de fumée : `deploy/scripts/smoke.py` (santé, connexion, tableau de bord).
+5. test de fumée : `deploy/scripts/smoke.py` (santé, connexion, tableau de bord), sur le
+   domaine public `COGES_PUBLIC_URL` ; les URL propres à chaque déploiement restent derrière
+   la protection Vercel (seule la préversion passe par le jeton de contournement).
 
 Une migration destructive se déploie en deux temps (décision 17) : d'abord la version
 compatible avec l'ancien et le nouveau code, puis le nettoyage.
