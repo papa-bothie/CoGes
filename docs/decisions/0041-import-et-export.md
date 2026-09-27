@@ -63,3 +63,5 @@ le worker n'appelle jamais l'API (`B⇸A`) : où déposer un export produit par 
 - Les routes `/imports/{kind}` et `/exports/referentials/{kind}` n'ont pas de ressource à
   croiser : leur isolation est prouvée par `tests/tenancy/test_importexport_isolation.py`,
   et `/exports/{export_id}` entre dans le test générique de fuite.
+- **Aucune formule dans un export** : neutralisation dans l'écrivain commun, ajoutée par
+  l'ADR 0045.

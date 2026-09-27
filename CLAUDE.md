@@ -245,6 +245,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0042 | 2026-09-26 | **Sécurité** : débit par IP, connexion et entreprise (Redis, levé si panne), 413, en-têtes, CORS ; `Idempotency-Key` aussi sur la création d'un retour ; garde-fous `coges_owner` (refus au démarrage, DSN confiné vérifié en CI, appartenance conservée) ; Sentry sans PII ; `openapi.json` versionné | `docs/decisions/0042-securite-et-observabilite.md` |
 | 0043 | 2026-09-26 | **P8 tranché** : aucun palier commercial dans le code V1 | `docs/decisions/0043-pas-de-palier-commercial-en-v1.md` |
 | 0044 | 2026-09-27 | Mise en ligne : variables Vercel **chiffrées relisibles** (pas *sensitive*, pour le garde-fou 2), fumée sur le domaine public `COGES_PUBLIC_URL`, `database_url_app` facultatif pour le relais | `docs/decisions/0044-mise-en-ligne-de-la-preproduction.md` |
+| 0045 | 2026-09-27 | **Aucune formule dans un export** : `'` devant `= + - @ \t \r` en CSV, tout texte en type chaîne (+ *quotePrefix*) en .xlsx, nombres intacts ; `'` retiré à l'import (aller-retour fidèle) | `docs/decisions/0045-aucune-formule-dans-un-export.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**

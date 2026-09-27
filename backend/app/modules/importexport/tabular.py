@@ -7,6 +7,13 @@ faite ensuite par les schémas Pydantic des modules, cellule par cellule.
 
 À l'écriture, le CSV suit la même convention (UTF-8 avec BOM, `;`, virgule
 décimale) : il s'ouvre tel quel dans un Excel réglé en français, et il se réimporte.
+
+Aucune cellule exportée n'est une formule (ADR 0045) : un nom de client
+`=HYPERLINK(…)` saisi par un tiers ne doit pas s'exécuter chez le gérant qui ouvre
+l'export. En CSV, un texte qui commence par `=`, `+`, `-`, `@`, une tabulation ou un
+retour chariot est préfixé d'une apostrophe ; en .xlsx, tout texte est écrit en type
+chaîne. Les nombres restent des nombres. La lecture retire l'apostrophe ajoutée :
+l'aller-retour export → import rend la valeur d'origine.
 """
 
 from __future__ import annotations
@@ -29,6 +36,31 @@ _STOP_WORDS = frozenset({"de", "d", "du", "des", "la", "le", "l", "en"})
 
 #: Séparateurs acceptés en CSV, dans l'ordre de préférence en cas d'égalité.
 _DELIMITERS = (";", ",", "\t")
+
+
+#: Premiers caractères qui font d'une cellule une formule (ou un début de formule) dans
+#: un tableur (ADR 0045).
+_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
+
+#: Préfixe qui neutralise ces caractères en CSV.
+_TEXT_PREFIX = "'"
+
+
+def is_formula_like(text: str) -> bool:
+    """Vrai si un tableur lirait ce texte comme une formule."""
+    return text.startswith(_FORMULA_TRIGGERS)
+
+
+def neutralise_formula(text: str) -> str:
+    """`=1+1` → `'=1+1` ; un texte inoffensif est rendu tel quel."""
+    return _TEXT_PREFIX + text if is_formula_like(text) else text
+
+
+def restore_formula_text(text: str) -> str:
+    """Inverse de `neutralise_formula` : `'=1+1` → `=1+1`, et rien d'autre ne change."""
+    if text.startswith(_TEXT_PREFIX) and is_formula_like(text[len(_TEXT_PREFIX) :]):
+        return text[len(_TEXT_PREFIX) :]
+    return text
 
 
 class UnreadableFileError(ValueError):
@@ -150,7 +182,7 @@ def read_table(content: bytes, *, max_rows: int) -> Table:
         if not any(values):
             continue
         cells = {
-            header: (values[position] if position < len(values) else "")
+            header: (restore_formula_text(values[position]) if position < len(values) else "")
             for position, header in enumerate(headers)
             if header
         }
@@ -169,6 +201,8 @@ def _csv_value(value: Any) -> str:
     if isinstance(value, Decimal):
         # Virgule décimale : le séparateur de champ est le point-virgule.
         return format(value, "f").replace(".", ",")
+    if isinstance(value, str):
+        return neutralise_formula(value)
     return str(value)
 
 
@@ -176,23 +210,39 @@ def write_csv(headers: Sequence[str], rows: Iterable[Sequence[Any]]) -> bytes:
     """CSV UTF-8 avec BOM, séparé par `;` : s'ouvre directement dans Excel en français."""
     buffer = io.StringIO()
     writer = csv.writer(buffer, delimiter=";", lineterminator="\r\n")
-    writer.writerow(headers)
+    writer.writerow([_csv_value(header) for header in headers])
     for row in rows:
         writer.writerow([_csv_value(value) for value in row])
     return ("﻿" + buffer.getvalue()).encode("utf-8")
 
 
 def write_xlsx(headers: Sequence[str], rows: Iterable[Sequence[Any]], *, title: str) -> bytes:
-    """Classeur à une feuille ; les montants restent des nombres (Decimal), pas du texte."""
+    """Classeur à une feuille ; les montants restent des nombres (Decimal), pas du texte.
+
+    Tout texte est une cellule de type chaîne : openpyxl ferait sinon d'un `=…` une
+    formule. Le style « quotePrefix » garde en texte une cellule `=…`, `+…`, `-…`
+    même après une modification dans Excel, sans apostrophe visible.
+    """
     from openpyxl import Workbook  # noqa: PLC0415
+    from openpyxl.cell import WriteOnlyCell  # noqa: PLC0415
 
     workbook = Workbook(write_only=True)
     sheet = workbook.create_sheet(title=title[:31])
-    sheet.append(list(headers))
+
+    def cell(value: Any) -> Any:
+        if isinstance(value, bool):
+            value = "oui" if value else "non"
+        if not isinstance(value, str):
+            return value
+        text_cell = WriteOnlyCell(sheet, value)
+        text_cell.data_type = "s"
+        if is_formula_like(value):
+            text_cell.quotePrefix = True
+        return text_cell
+
+    sheet.append([cell(header) for header in headers])
     for row in rows:
-        sheet.append(
-            [("oui" if value else "non") if isinstance(value, bool) else value for value in row]
-        )
+        sheet.append([cell(value) for value in row])
     buffer = io.BytesIO()
     workbook.save(buffer)
     return buffer.getvalue()

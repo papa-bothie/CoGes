@@ -16,6 +16,12 @@ booléens : `oui` / `non` (ou `vrai`/`faux`, `1`/`0`). Un export du même réfé
 (`GET /api/v1/exports/referentials/{type}`) produit exactement ces colonnes : il se réimporte
 tel quel.
 
+**Formules neutralisées (ADR 0045).** Un export ne contient jamais de formule. En CSV, un
+texte qui commence par `=`, `+`, `-`, `@`, une tabulation ou un retour chariot est précédé
+d'une apostrophe (`'=SOMME(A1)`, `'+221 77 …`). En .xlsx, tout texte est une cellule de type
+texte, sans apostrophe visible. À l'import, une apostrophe suivie de l'un de ces caractères
+est retirée : l'aller-retour export → import rend la valeur d'origine.
+
 ## categories
 
 | Colonne | Obligatoire | Contenu |
