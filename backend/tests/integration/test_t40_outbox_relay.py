@@ -24,13 +24,22 @@ from tests.tenancy.harness import Tenant
 
 pytestmark = pytest.mark.integration
 
-#: Assez large pour que le lot emporte les événements du test, quels que soient ceux
-#: que les autres suites ont laissés derrière elles.
+#: Assez large pour que le lot emporte les événements du test : l'outbox est vidée
+#: avant chaque test (`_empty_outbox`), quels que soient les événements que les autres
+#: suites ont laissés derrière elles.
 BATCH = 500
 
 
 def _relay(factory: sessionmaker[Any], bus: RecordingBus) -> OutboxRelay:
     return OutboxRelay(bus, session_factory=factory, batch_size=BATCH, poll_interval=0.0)
+
+
+@pytest.fixture(autouse=True)
+def _empty_outbox(relay_session_factory: sessionmaker[Any]) -> None:
+    """Publie ce que les suites précédentes ont laissé en attente : sans cela, un arriéré
+    plus grand que `BATCH` repousserait l'événement du test hors du lot réclamé."""
+    while not _relay(relay_session_factory, RecordingBus()).run_once().idle:
+        pass
 
 
 def test_t40_an_event_survives_a_crash_before_publication(
