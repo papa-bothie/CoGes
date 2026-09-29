@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from sqlalchemy.orm import Session
+
 from app.core.audit import AuditAction, audit_critical
 from app.core.errors import AuthenticationRequiredError
 from app.core.security import (
@@ -35,7 +37,9 @@ from app.modules.auth.repository import (
     auth_lookup_transaction,
     lookup_identity,
 )
-from app.modules.auth.schemas import LoginRequest
+from app.modules.auth.schemas import LoginRequest, MeCompany, MeResponse, MeRole, MeUser
+from app.modules.companies import service as companies_service
+from app.modules.rbac import service as rbac_service
 from app.modules.users import service as users_service
 
 #: Haché une fois au chargement : sert de leurre quand aucune identité n'est trouvée,
@@ -234,3 +238,34 @@ def logout(raw_token: str) -> None:
         current = repository.get_by_token_hash(hash_refresh_token(token_value))
         if current is not None:
             repository.revoke_family(current.family_id)
+
+
+def current_identity(session: Session, ctx: TenantContext) -> MeResponse:
+    """Qui est connecté, avec quels rôles, dans quelle entreprise.
+
+    Les permissions sont celles du contexte, relues en base par la dépendance de
+    session : exactement celles que les routes vérifieront.
+    """
+    user = users_service.get_user(session, ctx, ctx.user_id)
+    company = companies_service.get_current_company(session, ctx)
+    return MeResponse(
+        user=MeUser(id=user.id, email=user.email, full_name=user.full_name),
+        roles=[
+            MeRole(
+                id=role.id,
+                name=role.name,
+                description=role.description,
+                is_system=role.is_system,
+            )
+            for role in rbac_service.roles_for_user(session, ctx, ctx.user_id)
+        ],
+        permissions=sorted(ctx.permissions),
+        company=MeCompany(
+            id=company.id,
+            name=company.name,
+            slug=company.slug,
+            currency=company.currency,
+            timezone=company.timezone,
+            tax_enabled=companies_service.is_tax_enabled(session, ctx),
+        ),
+    )

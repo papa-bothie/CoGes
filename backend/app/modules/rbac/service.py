@@ -30,6 +30,11 @@ def permission_codes_for_user(session: Session, ctx: TenantContext, user_id: UUI
     return UserRoleRepository(session, ctx).permission_codes_for_user(user_id)
 
 
+def roles_for_user(session: Session, ctx: TenantContext, user_id: UUID) -> Sequence[Role]:
+    """Rôles d'un utilisateur du tenant courant."""
+    return RoleRepository(session, ctx).for_user(user_id)
+
+
 def list_roles(
     session: Session, ctx: TenantContext, *, page: int, page_size: int
 ) -> tuple[Sequence[Role], int]:
