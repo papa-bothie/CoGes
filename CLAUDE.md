@@ -197,7 +197,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 08 Async, analytics, dashboard, notifications | `08-async-analytics.md` | 07 | T29–T32, T40 | ✅ |
 | 09 CoGes Intelligence | `09-intelligence.md` | 08 | T33–T35 | ✅ |
 | 10 Import/export, durcissement, déploiement | `10-durcissement-deploiement.md` | 09 | T1–T40 en CI | ✅ préprod en ligne (`https://coges-api.vercel.app`, zone B sur le poste) ; prod à ouvrir |
-| 11 Front : fondations et design system | `11-front-fondations.md` | 10 (ou 07 + OpenAPI stable) | e2e login | ✅ 43 Vitest, 5 e2e locaux ; préversion `coges-web` en ligne, connexion vérifiée contre la préprod |
+| 11 Front : fondations et design system | `11-front-fondations.md` | 10 (ou 07 + OpenAPI stable) | e2e login | ✅ 61 Vitest, 6 e2e locaux ; préversion `coges-web` en ligne, connexion vérifiée contre la préprod |
 | 12 Front : opérations | `12-front-operations.md` | 11 | e2e vente | ⬜ |
 | 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ⬜ |
 | 14 Finition visuelle (Impeccable) | `14-polish-impeccable.md` | 13 | audit Impeccable | ⬜ |
@@ -254,6 +254,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0046 | 2026-09-29 | **Pile front** : Next 16 (`proxy.ts`), TS strict, Tailwind 4, shadcn/ui (Radix), TanStack Query, react-hook-form + zod, Recharts, Inter, Vitest + Playwright (e2e en local), mode sombre ; tokens du prototype à l'identique | `docs/decisions/0046-pile-frontend.md` |
 | 0047 | 2026-09-29 | **Même origine** : Next réécrit `/api/v1/*` vers `COGES_API_URL` (deux `*.vercel.app` = deux sites, le cookie `Lax` ne passerait pas) ; `openapi-typescript` + `openapi-fetch`, `pnpm check:api` en CI ; `ApiError` | `docs/decisions/0047-client-api-type-et-reecriture.md` |
 | 0048 | 2026-09-29 | **`GET /auth/me`** sans permission ; jeton en mémoire rafraîchi à la demande, mutualisé et verrouillé entre onglets ; indicateur `coges_session=1` pour `proxy.ts` ; déconnexion propagée (`BroadcastChannel`, une instance par onglet) | `docs/decisions/0048-jetons-cote-front.md` |
+| 0049 | 2026-09-29 | **Redirection ouverte corrigée** : `safeNext(next, origine)` refuse `\` et les caractères de contrôle, résout par `new URL`, exige la même origine et un chemin qui ne commence pas par `//`, refuse `/login` ; appliquée au formulaire, à `loginUrl` et à `proxy.ts` | `docs/decisions/0049-destination-apres-connexion-sans-redirection-ouverte.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**

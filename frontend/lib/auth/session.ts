@@ -12,6 +12,7 @@
 import { networkError, toApiError } from "@/lib/api/errors";
 import type { LoginRequest, TokenResponse } from "@/lib/api/schema";
 
+import { DEFAULT_NEXT, safeNext } from "./safe-next";
 import { tokenStore } from "./token-store";
 
 export const SESSION_MARKER = "coges_session";
@@ -132,7 +133,8 @@ export function loginUrl(reason?: "expired" | "logout"): string {
   const params = new URLSearchParams();
   if (reason) params.set("reason", reason);
   if (reason === "expired" && typeof location !== "undefined") {
-    params.set("next", location.pathname + location.search);
+    const next = safeNext(location.pathname + location.search, location.origin);
+    if (next !== DEFAULT_NEXT) params.set("next", next);
   }
   const query = params.toString();
   return query ? `/login?${query}` : "/login";

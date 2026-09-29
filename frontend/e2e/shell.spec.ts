@@ -111,3 +111,15 @@ test("vendeur : Paramètres masqué, rôle affiché", async ({ page, request }) 
   await expect(nav.getByRole("link", { name: "Paramètres" })).toHaveCount(0);
   await expect(nav.getByRole("link", { name: "Analytics" })).toHaveCount(0);
 });
+
+test("redirection ouverte : next=/\\evil.example garde l'utilisateur sur le site", async ({
+  page,
+  baseURL,
+}) => {
+  const origin = new URL(baseURL ?? "http://localhost:3000").origin;
+  // `%5C` : l'antislash tel qu'un lien piégé l'enverrait, décodé par `searchParams.get`.
+  await page.goto("/login?next=/%5Cevil.example");
+  await loginThroughUi(page, DEMO);
+  await expect(page).toHaveURL(`${origin}/dashboard`);
+  await expect(page.getByRole("heading", { level: 1, name: "Tableau de bord" })).toBeVisible();
+});

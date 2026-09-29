@@ -41,7 +41,8 @@ rejeu révoque toute la famille, ADR 0005). Deux trous côté front :
 - Déconnexion propagée aux autres onglets par `BroadcastChannel`, avec **une seule instance
   par onglet** : sinon l'onglet émetteur s'entend lui-même (bogue trouvé par le parcours e2e).
 - Refresh refusé (401) ⇒ `/login?reason=expired&next=…` ; serveur injoignable ⇒ pas de
-  déconnexion. `next` n'accepte qu'un chemin interne.
+  déconnexion. `next` n'accepte qu'un chemin interne (contrôle renforcé par l'ADR 0049 :
+  le premier ne refusait pas `/\evil.example`).
 - `lib/permissions.ts` (`can`, `filterByPermission`), `usePermission` et `<Can>` masquent ou
   désactivent : **le serveur reste l'unique juge**.
 
