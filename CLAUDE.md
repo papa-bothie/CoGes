@@ -197,7 +197,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 08 Async, analytics, dashboard, notifications | `08-async-analytics.md` | 07 | T29–T32, T40 | ✅ |
 | 09 CoGes Intelligence | `09-intelligence.md` | 08 | T33–T35 | ✅ |
 | 10 Import/export, durcissement, déploiement | `10-durcissement-deploiement.md` | 09 | T1–T40 en CI | ✅ préprod en ligne (`https://coges-api.vercel.app`, zone B sur le poste) ; prod à ouvrir |
-| 11 Front : fondations et design system | `11-front-fondations.md` | 10 (ou 07 + OpenAPI stable) | e2e login | 🟨 code et tests verts (43 Vitest, 5 e2e locaux) ; préversion Vercel à déployer |
+| 11 Front : fondations et design system | `11-front-fondations.md` | 10 (ou 07 + OpenAPI stable) | e2e login | ✅ 43 Vitest, 5 e2e locaux ; préversion `coges-web` en ligne, connexion vérifiée contre la préprod |
 | 12 Front : opérations | `12-front-operations.md` | 11 | e2e vente | ⬜ |
 | 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ⬜ |
 | 14 Finition visuelle (Impeccable) | `14-polish-impeccable.md` | 13 | audit Impeccable | ⬜ |
@@ -270,7 +270,8 @@ P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; r
 > products, timeseries) · `dashboard` · `notifications` · `insights`, `forecasts`,
 > `intelligence/summary` · `imports/{kind}` (+ template) · `exports` (referentials, sales, file) ·
 > `system/outbox`. Préproduction en ligne depuis le 2026-09-27 : `https://coges-api.vercel.app`
-> (`deploy/README-infra.md`). Front : phase 11 en cours de clôture (`frontend/README.md`).
+> (`deploy/README-infra.md`). Front : projet Vercel `coges-web`, déployé en préversion (`frontend/README.md`,
+> `deploy/README-infra.md`). Prochaine étape : phase 12 (opérations).
 
 ## 10. Ce que tu ne fais jamais
 
