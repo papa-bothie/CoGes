@@ -72,3 +72,18 @@ export function formatMoney(
     (digits > 0 ? `,${parts.fraction}` : "");
   return options.withCurrency === false ? amount : `${amount}${NBSP}${currencyLabel(currency)}`;
 }
+
+/**
+ * Graduation d'axe de graphique : « 40 k FCFA », « 1,2 M FCFA ». Reçoit la **position**
+ * que le graphique a tracée (un `number`, jamais relu comme montant) : c'est un repère
+ * visuel, les valeurs exactes sont dans l'info-bulle.
+ */
+export function formatAxisAmount(value: number, currency = "XOF"): string {
+  const unit = currencyLabel(currency);
+  const abs = Math.abs(value);
+  const compact = (divisor: number, suffix: string) =>
+    `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(value / divisor)}${NBSP}${suffix}${NBSP}${unit}`;
+  if (abs >= 1_000_000) return compact(1_000_000, "M");
+  if (abs >= 1_000) return compact(1_000, "k");
+  return `${integerFormatter.format(Math.round(value))}${NBSP}${unit}`;
+}

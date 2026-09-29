@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatMoney } from "./money";
+import { formatAxisAmount, formatMoney } from "./money";
 
 const NNBSP = " "; // séparateur de milliers fr-FR (espace fine insécable)
 const NBSP = " ";
@@ -38,5 +38,13 @@ describe("formatMoney", () => {
     expect(formatMoney("")).toBe("—");
     expect(formatMoney("12,5")).toBe("—");
     expect(formatMoney("1e3")).toBe("—");
+  });
+});
+
+describe("formatAxisAmount", () => {
+  it("abrège en milliers et en millions", () => {
+    expect(formatAxisAmount(40000)).toBe(`40${NBSP}k${NBSP}FCFA`);
+    expect(formatAxisAmount(1_250_000)).toBe(`1,3${NBSP}M${NBSP}FCFA`);
+    expect(formatAxisAmount(0)).toBe(`0${NBSP}FCFA`);
   });
 });

@@ -62,6 +62,7 @@ export const labels = {
     backToDashboard: "Retour au tableau de bord",
     forbidden: "Vous n'avez pas la permission d'effectuer cette action.",
     retry: "Réessayer",
+    loadFailed: "Impossible de charger ces données",
   },
   table: {
     search: "Rechercher",
@@ -80,6 +81,43 @@ export const labels = {
     model: "Modèle",
     uncertainty: "Incertitude",
     insufficientData: "Données insuffisantes",
+  },
+  dashboard: {
+    revenueToday: "CA du jour",
+    revenueMonth: "CA du mois",
+    marginMonth: "Marge estimée du mois",
+    salesToday: "Ventes du jour",
+    receivables: "Créances clients en cours",
+    stockAlerts: "Alertes de stock",
+    stockAlertsHint: (count: number) =>
+      count === 0 ? "Aucun article sous le seuil" : "Articles sous le seuil ou en rupture",
+    monthHint: (from: string, to: string) => `Du ${from} au ${to}`,
+    marginHint: "Prix de vente − coût moyen pondéré",
+    revenueTrend: "Chiffre d'affaires des 30 derniers jours",
+    revenueTrendLabel: "Chiffre d'affaires net par jour sur 30 jours",
+    recentSales: "Dernières ventes",
+    noRecentSales: "Aucune vente confirmée pour l'instant.",
+    anonymousCustomer: "Client anonyme",
+    computedAt: (at: string) => `Chiffres calculés le ${at}`,
+    seeAllSales: "Toutes les ventes",
+    alerts: "Alertes",
+    stockAlertBanner: (count: number) =>
+      count > 1
+        ? `${count} articles sous le seuil d'alerte ou en rupture`
+        : "1 article sous le seuil d'alerte ou en rupture",
+    seeStock: "Voir le stock",
+    alertGroup: (title: string, count: number) => `${title} (${count})`,
+  },
+  sales: {
+    status: {
+      draft: "Brouillon",
+      confirmed: "Confirmée",
+      cancelled: "Annulée",
+      returned: "Retournée",
+    },
+  },
+  stock: {
+    status: { ok: "Disponible", low: "Seuil bas", out: "Rupture" },
   },
   emptyPage: {
     title: "Bientôt disponible",
