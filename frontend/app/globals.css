@@ -1,0 +1,139 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Tokens du prototype Bolt, repris à l'identique (docs/design/prototype-reference.md § 1).
+ * Format shadcn « triplet HSL » : les utilitaires Tailwind les enveloppent dans hsl().
+ */
+:root {
+  --background: 210 20% 98%;
+  --foreground: 215 28% 17%;
+  --card: 0 0% 100%;
+  --card-foreground: 215 28% 17%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 215 28% 17%;
+  --primary: 199 89% 28%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 16% 95%;
+  --secondary-foreground: 215 28% 17%;
+  --muted: 210 16% 93%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 152 63% 40%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --warning: 32 95% 50%;
+  --warning-foreground: 0 0% 100%;
+  --success: 142 71% 45%;
+  --success-foreground: 0 0% 100%;
+  --border: 214 20% 88%;
+  --input: 214 20% 88%;
+  --ring: 199 89% 28%;
+  --chart-1: 199 89% 28%;
+  --chart-2: 152 63% 40%;
+  --chart-3: 32 95% 50%;
+  --chart-4: 0 72% 51%;
+  --chart-5: 259 84% 56%;
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: 215 28% 10%;
+  --foreground: 210 20% 92%;
+  --card: 215 28% 13%;
+  --card-foreground: 210 20% 92%;
+  --popover: 215 28% 13%;
+  --popover-foreground: 210 20% 92%;
+  --primary: 199 89% 48%;
+  --primary-foreground: 215 28% 10%;
+  --secondary: 215 28% 18%;
+  --secondary-foreground: 210 20% 92%;
+  --muted: 215 28% 18%;
+  --muted-foreground: 215 16% 60%;
+  --accent: 152 63% 50%;
+  --accent-foreground: 215 28% 10%;
+  --destructive: 0 72% 55%;
+  --warning: 32 95% 55%;
+  --success: 142 71% 50%;
+  --border: 215 28% 22%;
+  --input: 215 28% 22%;
+  --ring: 199 89% 48%;
+  --chart-1: 199 89% 48%;
+  --chart-2: 152 63% 50%;
+  --chart-3: 32 95% 55%;
+  --chart-4: 0 72% 55%;
+  --chart-5: 259 84% 66%;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-sans);
+
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  /* La barre latérale reprend la carte (fond blanc, bordure droite, actif primary). */
+  --color-sidebar: hsl(var(--card));
+  --color-sidebar-foreground: hsl(var(--card-foreground));
+  --color-sidebar-primary: hsl(var(--primary));
+  --color-sidebar-primary-foreground: hsl(var(--primary-foreground));
+  --color-sidebar-accent: hsl(var(--secondary));
+  --color-sidebar-accent-foreground: hsl(var(--secondary-foreground));
+  --color-sidebar-border: hsl(var(--border));
+  --color-sidebar-ring: hsl(var(--ring));
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* Montants et quantités : chiffres tabulaires, jamais coupés sur deux lignes. */
+@utility numeric {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

@@ -67,6 +67,31 @@ jobs:
       # Garde-fou 2 (ADR 0042) : aucun DSN propriétaire dans le compose des workers.
       - run: python3 deploy/scripts/check_runtime_env.py
 
+  frontend:
+    name: Frontend (types, lint, typecheck, Vitest, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with: { package_json_file: frontend/package.json }
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # Les types du client sont générés depuis backend/openapi.json : jamais à la main.
+      - run: pnpm check:api
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+        env:
+          COGES_API_URL: http://localhost:8000
+
   database:
     name: ${{ matrix.suite.name }}
     runs-on: ubuntu-latest

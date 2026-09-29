@@ -9,8 +9,13 @@ export
 endif
 
 UV := uv run --directory backend
+PNPM := pnpm --dir frontend
 
-.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format api worker relay seed-demo openapi requirements check-generated
+# Port de l'API locale ; le front réécrit /api/v1 vers cette origine (ADR 0047).
+API_PORT ?= 8000
+COGES_API_URL ?= http://localhost:$(API_PORT)
+
+.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format api worker relay seed-demo openapi requirements check-generated front-install front-dev front-api front-check front-e2e
 
 help: ## Liste les cibles disponibles
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -52,8 +57,8 @@ format: ## Applique ruff format et les corrections automatiques
 	$(UV) ruff format .
 	$(UV) ruff check --fix .
 
-api: ## Lance l'API en local sur http://localhost:8000
-	$(UV) uvicorn app.main:app --reload --port 8000
+api: ## Lance l'API en local sur http://localhost:8000 (API_PORT=… pour changer)
+	$(UV) uvicorn app.main:app --reload --port $(API_PORT)
 
 worker: ## Lance un worker Celery avec le scheduler beat
 	$(UV) celery -A app.workers.celery_app worker --beat --loglevel=info
@@ -73,3 +78,24 @@ requirements: ## Régénère backend/requirements.txt pour Vercel (sans dev ni m
 check-generated: ## Échoue si openapi.json ou requirements.txt ne sont pas à jour
 	cd backend && uv export --no-dev --no-group ml --no-hashes --no-emit-project --no-header --format requirements-txt --quiet | diff -u requirements.txt -
 	$(UV) pytest -q tests/architecture/test_openapi_is_current.py
+
+front-install: ## Installe les dépendances du frontend (pnpm via corepack) et Chromium
+	corepack enable pnpm
+	$(PNPM) install --frozen-lockfile
+	$(PNPM) exec playwright install chromium
+
+front-dev: ## Lance le frontend sur http://localhost:3000, branché sur l'API locale
+	COGES_API_URL=$(COGES_API_URL) $(PNPM) dev
+
+front-api: ## Régénère frontend/types/api.ts depuis backend/openapi.json
+	$(PNPM) gen:api
+
+front-check: ## Types à jour, lint, typecheck, tests unitaires, build
+	$(PNPM) check:api
+	$(PNPM) lint
+	$(PNPM) typecheck
+	$(PNPM) test
+	COGES_API_URL=$(COGES_API_URL) $(PNPM) build
+
+front-e2e: ## Parcours Playwright (API et front locaux démarrés, entreprise de démo)
+	$(PNPM) e2e
