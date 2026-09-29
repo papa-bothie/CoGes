@@ -14,6 +14,8 @@ repos:
       - id: trailing-whitespace
         exclude: ^docs/architecture/
       - id: check-yaml
+        # pnpm 12 écrit un pnpm-lock.yaml à plusieurs documents YAML.
+        args: [--allow-multiple-documents]
       - id: check-toml
       - id: check-json
       - id: check-merge-conflict

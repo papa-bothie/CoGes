@@ -12,10 +12,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, Response, status
 
 from app.core.config import get_settings
-from app.core.deps import client_ip
+from app.core.deps import CurrentTenant, client_ip
 from app.core.errors import AuthenticationRequiredError
 from app.modules.auth import service
-from app.modules.auth.schemas import LoginRequest, TokenResponse
+from app.modules.auth.schemas import LoginRequest, MeResponse, TokenResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -75,3 +75,13 @@ def logout(request: Request, response: Response) -> None:
     if raw_token:
         service.logout(raw_token)
     response.delete_cookie(REFRESH_COOKIE_NAME, path=REFRESH_COOKIE_PATH)
+
+
+@router.get("/me", response_model=MeResponse)
+def me(tenant: CurrentTenant) -> MeResponse:
+    """Utilisateur connecté, rôles, permissions et entreprise.
+
+    Authentifié, sans permission requise : le front en tire l'en-tête et masque les
+    actions interdites. Le serveur reste seul juge à chaque appel.
+    """
+    return service.current_identity(tenant.session, tenant.ctx)

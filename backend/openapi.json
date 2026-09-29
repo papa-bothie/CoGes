@@ -110,6 +110,28 @@
         }
       }
     },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Me",
+        "description": "Utilisateur connecté, rôles, permissions et entreprise.\n\nAuthentifié, sans permission requise : le front en tire l'en-tête et masque les\nactions interdites. Le serveur reste seul juge à chaque appel.",
+        "operationId": "me_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/companies/me": {
       "get": {
         "tags": [
@@ -7367,6 +7389,143 @@
           "adjustment",
           "loss"
         ]
+      },
+      "MeCompany": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "tax_enabled": {
+            "type": "boolean",
+            "title": "Tax Enabled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "currency",
+          "timezone",
+          "tax_enabled"
+        ],
+        "title": "MeCompany"
+      },
+      "MeResponse": {
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/MeUser"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/MeRole"
+            },
+            "type": "array",
+            "title": "Roles"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Permissions"
+          },
+          "company": {
+            "$ref": "#/components/schemas/MeCompany"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user",
+          "roles",
+          "permissions",
+          "company"
+        ],
+        "title": "MeResponse",
+        "description": "Identité de la session : ce dont l'interface a besoin pour s'afficher.\n\nLes permissions ne servent au front qu'à **masquer** : chaque route les vérifie\nà nouveau côté serveur. Aucune permission n'est exigée pour lire sa propre\nidentité, sans quoi un vendeur (ni `users:read`, ni `company:read`) ne saurait\npas qui il est."
+      },
+      "MeRole": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_system": {
+            "type": "boolean",
+            "title": "Is System"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "is_system"
+        ],
+        "title": "MeRole",
+        "description": "`name` est le nom technique stable, `description` le libellé affiché."
+      },
+      "MeUser": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "full_name"
+        ],
+        "title": "MeUser"
       },
       "MovementCreate": {
         "properties": {

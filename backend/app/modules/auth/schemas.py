@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
@@ -27,3 +29,50 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+
+
+class MeUser(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    email: str
+    full_name: str
+
+
+class MeRole(BaseModel):
+    """`name` est le nom technique stable, `description` le libellé affiché."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    name: str
+    description: str | None
+    is_system: bool
+
+
+class MeCompany(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    name: str
+    slug: str
+    currency: str
+    timezone: str
+    tax_enabled: bool
+
+
+class MeResponse(BaseModel):
+    """Identité de la session : ce dont l'interface a besoin pour s'afficher.
+
+    Les permissions ne servent au front qu'à **masquer** : chaque route les vérifie
+    à nouveau côté serveur. Aucune permission n'est exigée pour lire sa propre
+    identité, sans quoi un vendeur (ni `users:read`, ni `company:read`) ne saurait
+    pas qui il est.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    user: MeUser
+    roles: list[MeRole]
+    permissions: list[str]
+    company: MeCompany

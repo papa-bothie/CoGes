@@ -1,0 +1,23 @@
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+
+import "./globals.css";
+import { Providers } from "./providers";
+
+// Chiffres tabulaires disponibles (`tnum`) : indispensables pour aligner les montants.
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+
+export const metadata: Metadata = {
+  title: { default: "CoGes", template: "%s · CoGes" },
+  description: "Gestion commerciale pour PME : ventes, stock, argent, décisions.",
+};
+
+export default function RootLayout({ children }: LayoutProps<"/">) {
+  return (
+    <html lang="fr" className={inter.variable} suppressHydrationWarning>
+      <body className="min-h-dvh">
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  );
+}

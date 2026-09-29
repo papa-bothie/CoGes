@@ -24,6 +24,19 @@ class RoleRepository(TenantRepository[Role]):
     def get_by_name(self, name: str) -> Role | None:
         return self.session.execute(self._select().where(Role.name == name)).scalar_one_or_none()
 
+    def for_user(self, user_id: UUID) -> Sequence[Role]:
+        """Rôles portés par un utilisateur, par nom."""
+        stmt = (
+            self._select()
+            .join(
+                UserRole,
+                (UserRole.role_id == Role.id) & (UserRole.company_id == Role.company_id),
+            )
+            .where(UserRole.user_id == user_id)
+            .order_by(Role.name)
+        )
+        return self.session.execute(stmt).scalars().all()
+
     def count(self) -> int:
         stmt = select(func.count()).select_from(Role).where(Role.company_id == self.ctx.company_id)
         return int(self.session.execute(stmt).scalar_one())

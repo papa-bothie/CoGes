@@ -1,0 +1,162 @@
+/**
+ * Cycle de vie de la session côté navigateur (ADR 0006 et 0048).
+ *
+ * - Le **refresh token** vit dans un cookie `httpOnly` (chemin `/api/v1/auth`) : ce
+ *   module ne le voit jamais, il appelle seulement `/auth/refresh`.
+ * - Un seul rafraîchissement à la fois, **tous onglets confondus** (Web Locks) : deux
+ *   rotations simultanées du même jeton seraient prises pour un rejeu, et le serveur
+ *   révoquerait toute la famille de sessions.
+ * - Le cookie `coges_session=1` n'est qu'un **indicateur** pour `proxy.ts` (qui ne voit
+ *   pas le cookie de rafraîchissement) : il ne donne aucun droit.
+ */
+import { networkError, toApiError } from "@/lib/api/errors";
+import type { LoginRequest, TokenResponse } from "@/lib/api/schema";
+
+import { tokenStore } from "./token-store";
+
+export const SESSION_MARKER = "coges_session";
+const MARKER_MAX_AGE_SECONDS = 7 * 24 * 3600; // durée du refresh token
+const LOCK_NAME = "coges-auth-refresh";
+const CHANNEL_NAME = "coges-auth";
+
+export type RefreshOutcome = "ok" | "unauthenticated" | "unavailable";
+
+function secureSuffix(): string {
+  return typeof location !== "undefined" && location.protocol === "https:" ? "; Secure" : "";
+}
+
+export function setSessionMarker(): void {
+  document.cookie = `${SESSION_MARKER}=1; Path=/; Max-Age=${MARKER_MAX_AGE_SECONDS}; SameSite=Lax${secureSuffix()}`;
+}
+
+export function clearSessionMarker(): void {
+  document.cookie = `${SESSION_MARKER}=; Path=/; Max-Age=0; SameSite=Lax${secureSuffix()}`;
+}
+
+function acceptTokens(body: TokenResponse): void {
+  tokenStore.set(body.access_token, body.expires_in);
+  setSessionMarker();
+}
+
+async function readJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+async function requestRefresh(): Promise<RefreshOutcome> {
+  let response: Response;
+  try {
+    response = await fetch("/api/v1/auth/refresh", { method: "POST", credentials: "same-origin" });
+  } catch {
+    return "unavailable";
+  }
+  if (response.ok) {
+    acceptTokens((await response.json()) as TokenResponse);
+    return "ok";
+  }
+  return response.status === 401 ? "unauthenticated" : "unavailable";
+}
+
+async function withCrossTabLock<T>(task: () => Promise<T>): Promise<T> {
+  if (typeof navigator !== "undefined" && navigator.locks) {
+    return (await navigator.locks.request(LOCK_NAME, task)) as T;
+  }
+  return task();
+}
+
+let inFlight: Promise<RefreshOutcome> | null = null;
+
+/** Rafraîchit le jeton d'accès. Les appels concurrents partagent la même requête. */
+export function refreshSession(): Promise<RefreshOutcome> {
+  inFlight ??= withCrossTabLock(requestRefresh).finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
+export async function login(payload: LoginRequest): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch("/api/v1/auth/login", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    throw networkError();
+  }
+  const body = await readJson(response);
+  if (!response.ok) throw toApiError(response.status, body);
+  acceptTokens(body as TokenResponse);
+}
+
+let bus: BroadcastChannel | null = null;
+
+/**
+ * **Une seule** instance par onglet, pour émettre comme pour écouter : un canal ne
+ * reçoit jamais ses propres messages, alors qu'une seconde instance dans le même onglet
+ * les recevrait — et l'onglet qui expire se redirigerait deux fois.
+ */
+function channel(): BroadcastChannel | null {
+  if (typeof BroadcastChannel === "undefined") return null;
+  bus ??= new BroadcastChannel(CHANNEL_NAME);
+  return bus;
+}
+
+function forgetLocally(): void {
+  tokenStore.clear();
+  clearSessionMarker();
+}
+
+function announceLogout(): void {
+  channel()?.postMessage({ type: "logout" });
+}
+
+/** Déconnexion volontaire : révoque la famille de sessions côté serveur. */
+export async function logout(): Promise<void> {
+  try {
+    await fetch("/api/v1/auth/logout", { method: "POST", credentials: "same-origin" });
+  } catch {
+    // Le serveur injoignable n'empêche pas d'oublier la session localement.
+  } finally {
+    forgetLocally();
+    announceLogout();
+  }
+}
+
+export function loginUrl(reason?: "expired" | "logout"): string {
+  const params = new URLSearchParams();
+  if (reason) params.set("reason", reason);
+  if (reason === "expired" && typeof location !== "undefined") {
+    params.set("next", location.pathname + location.search);
+  }
+  const query = params.toString();
+  return query ? `/login?${query}` : "/login";
+}
+
+/** Session perdue (refresh refusé) : on oublie tout et on retourne à la connexion. */
+export function expireSession(): void {
+  forgetLocally();
+  announceLogout();
+  if (typeof location !== "undefined" && !location.pathname.startsWith("/login")) {
+    location.assign(loginUrl("expired"));
+  }
+}
+
+/** Un autre onglet s'est déconnecté : celui-ci suit. Renvoie la fonction d'arrêt. */
+export function onLogoutElsewhere(handler: () => void): () => void {
+  const target = channel();
+  if (!target) return () => undefined;
+  const listener = (event: MessageEvent<{ type?: string }>) => {
+    if (event.data?.type === "logout") {
+      forgetLocally();
+      handler();
+    }
+  };
+  target.addEventListener("message", listener);
+  return () => target.removeEventListener("message", listener);
+}
