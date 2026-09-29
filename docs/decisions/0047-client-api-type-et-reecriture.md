@@ -41,8 +41,11 @@ génèrent beaucoup de code et contrôlent moins le rafraîchissement.
 ## Conséquences
 
 - `COGES_CORS_ORIGINS` n'est plus nécessaire pour le front (il reste configurable).
-- **À vérifier en préversion** : l'API doit recevoir l'IP du client dans `X-Forwarded-For`
-  à travers la réécriture ; sinon la limitation par IP (ADR 0042) compterait tous les
-  utilisateurs sous l'IP de Vercel, et il faudra une décision.
+- **Vérifié en préversion le 2026-09-29** : à travers la réécriture de Vercel, l'API reçoit
+  l'IP du client dans `X-Forwarded-For` (`auth_sessions.ip_address` = IP publique du poste
+  de test, pour le navigateur comme pour `curl`). La limitation par IP (ADR 0042) voit donc
+  le vrai client.
+- Le projet Vercel du front doit déclarer le framework (`frontend/vercel.json`) : créé par la
+  CLI sans préréglage, il cherchait un dossier statique `public/`.
 - Aucune liste de l'API n'accepte de paramètre de tri : le `DataTable` n'offre le tri que sur
   les colonnes déclarées `sortable`, et ne trie jamais lui-même.

@@ -233,6 +233,27 @@ asynchrone vérifiée (outbox → relais → Redis → worker en ~10 s). Écarts
    `users.service.change_password` en cas de perte).
 7. **Zone B** : `up -d --build` sur le poste (section ci-dessus).
 
+## Frontend de préproduction (fait le 2026-09-29)
+
+Projet Vercel **`coges-web`** (équipe CipherOne, Hobby), lié depuis `frontend/` (lien
+`.vercel/` ignoré), configuré par `frontend/vercel.json` (Next.js, `cdg1`, déploiements Git
+désactivés). Variable `COGES_API_URL=https://coges-api.vercel.app` (preview et production),
+lue **au build** par la réécriture `/api/v1/*` (ADR 0047). Déploiement manuel en préversion :
+
+```bash
+cd frontend && vercel deploy --scope cipher-one1
+```
+
+Les préversions sont derrière la protection Vercel : ouvrir l'URL dans un navigateur connecté
+à un compte de l'équipe, ou `vercel curl <url>/api/v1/health --scope cipher-one1`.
+Entreprise de test du front : slug `demo-front`, gérant `gerant@demo-front.example.com`
+(créée par `create-company` ; mot de passe transmis hors dépôt).
+
+Piège rencontré : le job de déploiement lit les secrets de l'**environnement** GitHub
+`preprod`, qui priment sur ceux du dépôt. Un `VERCEL_TOKEN` se remplace donc par
+`gh secret set VERCEL_TOKEN --env preprod`, avec un jeton Vercel de portée **CipherOne**
+(un jeton de portée « Personal Account » reçoit `403 invalidToken`).
+
 Reste ouvert : la production (Neon Launch, Vercel Pro, hôte de la zone B), l'environnement
 `preview` (`VERCEL_AUTOMATION_BYPASS_SECRET`), et l'exercice de restauration PITR à rejouer
 ensemble.
