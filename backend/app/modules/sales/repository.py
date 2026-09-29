@@ -244,6 +244,20 @@ class SaleReturnItemRepository(TenantRepository[SaleReturnItem]):
         )
         return self.session.execute(stmt).scalars().all()
 
+    def returned_qty_by_item(self, sale_item_ids: Sequence[UUID]) -> dict[UUID, Decimal]:
+        """Quantité déjà retournée, par ligne de vente (celles sans retour sont absentes)."""
+        if not sale_item_ids:
+            return {}
+        stmt = (
+            select(SaleReturnItem.sale_item_id, func.sum(SaleReturnItem.qty))
+            .where(
+                SaleReturnItem.company_id == self.ctx.company_id,
+                SaleReturnItem.sale_item_id.in_(sale_item_ids),
+            )
+            .group_by(SaleReturnItem.sale_item_id)
+        )
+        return {item_id: Decimal(qty) for item_id, qty in self.session.execute(stmt).all()}
+
 
 class SaleRevenueRepository(TenantRepository[Sale]):
     """Agrégats de revenu et de coût des ventes, pour la bande E (lecture seule).

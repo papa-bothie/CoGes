@@ -134,6 +134,10 @@ class SaleItemRead(BaseModel):
 
     id: UUID
     product_id: UUID
+    #: Libellés relus au référentiel pour l'affichage (ADR 0050) : ni montant ni
+    #: règle. `None` quand le produit a été supprimé logiquement depuis.
+    product_name: str | None
+    sku: str | None
     price_id: UUID | None
     qty: Quantity
     unit_price: Amount
@@ -144,6 +148,9 @@ class SaleItemRead(BaseModel):
     net_amount: Amount
     tax_amount: Amount
     line_total: Amount
+    #: Quantité déjà revenue par des retours : le reste retournable est `qty - returned_qty`,
+    #: borne que `sri_check` impose de toute façon en base (ADR 0050).
+    returned_qty: Quantity
 
 
 class SaleRead(BaseModel):
@@ -154,6 +161,8 @@ class SaleRead(BaseModel):
     id: UUID
     sale_no: str
     customer_id: UUID | None
+    #: Nom du client pour la liste (ADR 0050). `None` : vente anonyme ou client supprimé.
+    customer_name: str | None
     status: SaleStatus
     sold_at: datetime
     subtotal: Amount

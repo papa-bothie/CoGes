@@ -192,17 +192,24 @@ def _status(qty_on_hand: Decimal, reorder_point: Decimal | None) -> str:
 
 
 def get_stock(
-    session: Session, ctx: TenantContext, *, page: int, page_size: int
+    session: Session,
+    ctx: TenantContext,
+    *,
+    page: int,
+    page_size: int,
+    product_ids: Sequence[UUID] | None = None,
 ) -> tuple[list[StockLine], int]:
     """Stock valorisé d'une page d'articles, joint aux fiches produit.
 
     Deux requêtes plutôt qu'une jointure : Inventory (bande C) lit Products
     (bande B) **par sa façade**, jamais par son modèle ni son repository (ADR 0012).
     Les articles en rupture remontent en premier — c'est ce que le gérant cherche.
+    `product_ids` restreint la page à un lot d'articles : c'est ainsi que la liste des
+    produits et la saisie d'une vente lisent le stock de ce qu'elles affichent (ADR 0050).
     """
     stock_repository = ProductStockRepository(session, ctx)
-    rows = stock_repository.page(page=page, page_size=page_size)
-    total = stock_repository.count()
+    rows = stock_repository.page(page=page, page_size=page_size, product_ids=product_ids)
+    total = stock_repository.count(product_ids=product_ids)
 
     summaries = products_service.get_summaries(session, ctx, [row.product_id for row in rows])
     category_ids = [

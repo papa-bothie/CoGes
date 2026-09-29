@@ -95,9 +95,7 @@ def list_sales(
         sale_no=sale_no,
     )
     return SalePage(
-        items=[
-            service.build_read(sale, returned_total=returned_totals.get(sale.id)) for sale in sales
-        ],
+        items=service.build_page(tenant.session, tenant.ctx, sales, returned_totals),
         page=page,
         page_size=page_size,
         total=total,
@@ -142,7 +140,7 @@ def add_item(
 ) -> SaleItemRead:
     """Ajoute une ligne à un brouillon, au prix et au taux du moment."""
     item = service.add_item(tenant.session, tenant.ctx, sale_id, payload)
-    return SaleItemRead.model_validate(item)
+    return service.build_item_reads(tenant.session, tenant.ctx, [item])[0]
 
 
 @router.patch("/{sale_id}/items/{item_id}", response_model=SaleItemRead)
@@ -154,7 +152,7 @@ def update_item(
 ) -> SaleItemRead:
     """Corrige la quantité ou la remise d'une ligne de brouillon."""
     item = service.update_item(tenant.session, tenant.ctx, sale_id, item_id, payload)
-    return SaleItemRead.model_validate(item)
+    return service.build_item_reads(tenant.session, tenant.ctx, [item])[0]
 
 
 @router.delete("/{sale_id}/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)

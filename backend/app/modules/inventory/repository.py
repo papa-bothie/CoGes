@@ -159,22 +159,32 @@ class ProductStockRepository:
         stmt = self._select().where(ProductStock.product_id.in_(product_ids))
         return {row.product_id: row for row in self.session.execute(stmt).scalars().all()}
 
-    def page(self, *, page: int = 1, page_size: int = 20) -> Sequence[ProductStock]:
+    def page(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        product_ids: Sequence[UUID] | None = None,
+    ) -> Sequence[ProductStock]:
         _check_page(page, page_size)
+        stmt = self._select()
+        if product_ids:
+            stmt = stmt.where(ProductStock.product_id.in_(product_ids))
         stmt = (
-            self._select()
-            .order_by(ProductStock.qty_on_hand.asc(), ProductStock.product_id.asc())
+            stmt.order_by(ProductStock.qty_on_hand.asc(), ProductStock.product_id.asc())
             .limit(page_size)
             .offset((page - 1) * page_size)
         )
         return self.session.execute(stmt).scalars().all()
 
-    def count(self) -> int:
+    def count(self, *, product_ids: Sequence[UUID] | None = None) -> int:
         stmt = (
             select(func.count())
             .select_from(ProductStock)
             .where(ProductStock.company_id == self.ctx.company_id)
         )
+        if product_ids:
+            stmt = stmt.where(ProductStock.product_id.in_(product_ids))
         return int(self.session.execute(stmt).scalar_one())
 
 

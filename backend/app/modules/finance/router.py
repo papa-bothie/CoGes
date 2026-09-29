@@ -223,8 +223,10 @@ def list_debts(
     party_type: Annotated[PartyType | None, Query()] = None,
     debt_status: Annotated[DebtStatus | None, Query(alias="status")] = None,
     overdue: Annotated[bool, Query()] = False,
+    customer_id: Annotated[UUID | None, Query()] = None,
+    supplier_id: Annotated[UUID | None, Query()] = None,
 ) -> DebtPage:
-    """Créances et dettes, échéance la plus proche en tête."""
+    """Créances et dettes, échéance la plus proche en tête, filtrables par tiers."""
     debts, total = service.list_debts(
         tenant.session,
         tenant.ctx,
@@ -233,6 +235,8 @@ def list_debts(
         party_type=party_type,
         status=debt_status,
         overdue=overdue,
+        customer_id=customer_id,
+        supplier_id=supplier_id,
     )
     allocations = service.allocations_of_debts(
         tenant.session, tenant.ctx, [debt.id for debt in debts]
