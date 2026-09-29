@@ -14,11 +14,29 @@ test.describe("captures", () => {
     await page.goto("/login");
     await loginThroughUi(page, DEMO);
     await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
+    await expect(page.getByRole("heading", { level: 1, name: "Tableau de bord" })).toBeVisible({
+      timeout: 30_000,
+    });
   });
 
   test("tableau de bord", async ({ page }) => {
     await expect(page.getByText(/Chiffres calculés le/)).toBeVisible({ timeout: 30_000 });
     await expect(page.locator(".recharts-surface")).toBeVisible();
-    await page.screenshot({ path: `${CAPTURES}/tableau-de-bord.png`, fullPage: true });
+    await page.screenshot({
+      path: `${CAPTURES}/tableau-de-bord.png`,
+      fullPage: true,
+      animations: "disabled",
+    });
+  });
+
+  test("liste des ventes", async ({ page }) => {
+    await page.getByRole("link", { name: "Ventes" }).first().click();
+    await expect(page.getByText(/\d+ ventes?$/)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("row").nth(1)).toBeVisible();
+    await page.screenshot({
+      path: `${CAPTURES}/ventes.png`,
+      fullPage: true,
+      animations: "disabled",
+    });
   });
 });

@@ -44,7 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         {labels.app.skipToContent}
       </a>
-      <aside className="sticky top-0 hidden h-dvh w-52 shrink-0 border-r bg-sidebar md:block">
+      <aside className="sticky top-0 hidden h-dvh w-52 shrink-0 border-r bg-sidebar md:block print:hidden">
         <SidebarContent
           companyName={me.data.company.name}
           permissions={me.data.permissions}
@@ -52,8 +52,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <Header me={me.data} />
-        <main id="contenu" tabIndex={-1} className="flex-1 space-y-6 p-4 outline-none md:p-6">
+        <div className="contents print:hidden">
+          <Header me={me.data} />
+        </div>
+        <main
+          id="contenu"
+          tabIndex={-1}
+          className="flex-1 space-y-6 p-4 outline-none md:p-6 print:p-0"
+        >
           {children}
         </main>
       </div>
