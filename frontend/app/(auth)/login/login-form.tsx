@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { isApiError, errorMessage } from "@/lib/api/errors";
 import type { LoginRequest } from "@/lib/api/schema";
+import { safeNext } from "@/lib/auth/safe-next";
 import { login } from "@/lib/auth/session";
 import { labels } from "@/lib/labels";
 
@@ -28,14 +29,6 @@ const loginSchema = z.object({
 type LoginInput = z.input<typeof loginSchema>;
 
 const LAST_SLUG_KEY = "coges:last-company-slug";
-
-/** Destination après connexion : un chemin interne seulement (pas de redirection ouverte). */
-export function safeNext(next: string | null): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/login")) {
-    return "/dashboard";
-  }
-  return next;
-}
 
 function rememberedSlug(): string {
   try {
@@ -93,7 +86,7 @@ export function LoginForm() {
       // Stockage indisponible (navigation privée) : simple confort perdu.
     }
     // Rechargement complet vers l'application : `proxy.ts` voit l'indicateur de session.
-    window.location.assign(safeNext(params.get("next")));
+    window.location.assign(safeNext(params.get("next"), window.location.origin));
   };
 
   const notice =

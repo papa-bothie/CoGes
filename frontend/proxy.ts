@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { DEFAULT_NEXT, safeNext } from "@/lib/auth/safe-next";
+
 /**
  * Redirection **de confort** entre la connexion et l'application. Le vrai contrôle est
  * fait par l'API à chaque appel (401 → rafraîchissement → retour à la connexion) : ce
@@ -15,7 +17,9 @@ export function proxy(request: NextRequest) {
 
   if (!hasSession && !onLogin) {
     const url = new URL("/login", request.url);
-    if (pathname !== "/") url.searchParams.set("next", pathname + search);
+    // Même contrôle qu'au retour de la connexion : on ne propage jamais un `next` douteux.
+    const next = safeNext(pathname + search, request.nextUrl.origin);
+    if (next !== DEFAULT_NEXT) url.searchParams.set("next", next);
     return NextResponse.redirect(url);
   }
   if (hasSession && onLogin) {
