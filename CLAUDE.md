@@ -156,7 +156,12 @@ make seed-demo               # entreprise de démo : 20 produits, 50 ventes sur 
 uv run --directory backend python -m app.cli create-company --help   # créer une entreprise
 uv run --directory backend python -m app.cli rebuild-stock --company-id <uuid>   # recalcul stock/CMP
 uv run --directory backend python -m app.cli run-intelligence --company-id <uuid> [--as-of AAAA-MM-JJ] [--train]
-cd frontend && pnpm dev      # à partir de la phase 11 (corepack enable pnpm)
+make front-install           # pnpm (corepack) + dépendances + Chromium pour Playwright
+make front-dev               # Next sur :3000, /api/v1 réécrit vers COGES_API_URL (défaut http://localhost:8000)
+make front-api               # régénère frontend/types/api.ts après `make openapi`
+make front-check             # types à jour, lint, typecheck, Vitest, build (ce que joue la CI)
+make front-e2e               # Playwright contre l'API locale (make api + make seed-demo + front-dev)
+make api API_PORT=8001       # si le port 8000 est déjà pris ; front : COGES_API_URL=http://localhost:8001
 ```
 
 ## 7. Carte du dépôt
@@ -192,7 +197,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 08 Async, analytics, dashboard, notifications | `08-async-analytics.md` | 07 | T29–T32, T40 | ✅ |
 | 09 CoGes Intelligence | `09-intelligence.md` | 08 | T33–T35 | ✅ |
 | 10 Import/export, durcissement, déploiement | `10-durcissement-deploiement.md` | 09 | T1–T40 en CI | ✅ préprod en ligne (`https://coges-api.vercel.app`, zone B sur le poste) ; prod à ouvrir |
-| 11 Front : fondations et design system | `11-front-fondations.md` | 10 (ou 07 + OpenAPI stable) | e2e login | ⬜ |
+| 11 Front : fondations et design system | `11-front-fondations.md` | 10 (ou 07 + OpenAPI stable) | e2e login | 🟨 code et tests verts (43 Vitest, 5 e2e locaux) ; préversion Vercel à déployer |
 | 12 Front : opérations | `12-front-operations.md` | 11 | e2e vente | ⬜ |
 | 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ⬜ |
 | 14 Finition visuelle (Impeccable) | `14-polish-impeccable.md` | 13 | audit Impeccable | ⬜ |
@@ -246,15 +251,18 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0043 | 2026-09-26 | **P8 tranché** : aucun palier commercial dans le code V1 | `docs/decisions/0043-pas-de-palier-commercial-en-v1.md` |
 | 0044 | 2026-09-27 | Mise en ligne : variables Vercel **chiffrées relisibles** (pas *sensitive*, pour le garde-fou 2), fumée sur le domaine public `COGES_PUBLIC_URL`, `database_url_app` facultatif pour le relais | `docs/decisions/0044-mise-en-ligne-de-la-preproduction.md` |
 | 0045 | 2026-09-27 | **Aucune formule dans un export** : `'` devant `= + - @ \t \r` en CSV, tout texte en type chaîne (+ *quotePrefix*) en .xlsx, nombres intacts ; `'` retiré à l'import (aller-retour fidèle) | `docs/decisions/0045-aucune-formule-dans-un-export.md` |
+| 0046 | 2026-09-29 | **Pile front** : Next 16 (`proxy.ts`), TS strict, Tailwind 4, shadcn/ui (Radix), TanStack Query, react-hook-form + zod, Recharts, Inter, Vitest + Playwright (e2e en local), mode sombre ; tokens du prototype à l'identique | `docs/decisions/0046-pile-frontend.md` |
+| 0047 | 2026-09-29 | **Même origine** : Next réécrit `/api/v1/*` vers `COGES_API_URL` (deux `*.vercel.app` = deux sites, le cookie `Lax` ne passerait pas) ; `openapi-typescript` + `openapi-fetch`, `pnpm check:api` en CI ; `ApiError` | `docs/decisions/0047-client-api-type-et-reecriture.md` |
+| 0048 | 2026-09-29 | **`GET /auth/me`** sans permission ; jeton en mémoire rafraîchi à la demande, mutualisé et verrouillé entre onglets ; indicateur `coges_session=1` pour `proxy.ts` ; déconnexion propagée (`BroadcastChannel`, une instance par onglet) | `docs/decisions/0048-jetons-cote-front.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**
 (signalé, hors V1 technique).
 
-> **Backend V1 terminé (code)** — 22 groupes, 97 opérations sous `/api/v1`. Contrat :
+> **Backend V1 terminé (code)** — 22 groupes, 98 opérations sous `/api/v1` (`auth/me` en phase 11). Contrat :
 > `backend/openapi.json` (versionné, vérifié en CI, `make openapi`) ; servi hors production sur
 > `/api/v1/openapi.json`, documentation interactive `/api/v1/docs`.
-> Plateforme `health` · `auth` (login, refresh, logout) · `companies/me` · `users` · `roles`,
+> Plateforme `health` · `auth` (login, refresh, logout, me) · `companies/me` · `users` · `roles`,
 > `permissions` · Référentiel `categories` · `products` (+ `prices`) · `customers` · `suppliers` ·
 > Opérations `inventory` (stock, movements, reverse) · `sales` (brouillon, items, confirm, cancel,
 > receipt, returns) · `sale-returns` (refunds) · Finance `payments` (+ cancel) · `debts`
@@ -262,7 +270,7 @@ P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; r
 > products, timeseries) · `dashboard` · `notifications` · `insights`, `forecasts`,
 > `intelligence/summary` · `imports/{kind}` (+ template) · `exports` (referentials, sales, file) ·
 > `system/outbox`. Préproduction en ligne depuis le 2026-09-27 : `https://coges-api.vercel.app`
-> (`deploy/README-infra.md`). Prochaine étape : phase 11 (front).
+> (`deploy/README-infra.md`). Front : phase 11 en cours de clôture (`frontend/README.md`).
 
 ## 10. Ce que tu ne fais jamais
 
