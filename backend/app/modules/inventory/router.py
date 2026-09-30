@@ -31,13 +31,18 @@ def list_stock(
     tenant: Annotated[TenantSession, Depends(require_permission("inventory:read"))],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = 20,
+    product_id: Annotated[list[UUID] | None, Query(max_length=MAX_PAGE_SIZE)] = None,
 ) -> StockPage:
     """Stock valorisé, article par article, ruptures en tête.
 
     C'est la vue « produits + stock » de l'ADR 0012 : elle appartient à Inventory,
-    parce que Products n'a pas le droit de lire le stock.
+    parce que Products n'a pas le droit de lire le stock. `product_id` se répète
+    (au plus 100) pour lire le stock d'un lot d'articles ; un article sans aucun
+    mouvement n'a pas de ligne.
     """
-    items, total = service.get_stock(tenant.session, tenant.ctx, page=page, page_size=page_size)
+    items, total = service.get_stock(
+        tenant.session, tenant.ctx, page=page, page_size=page_size, product_ids=product_id
+    )
     return StockPage(items=items, page=page, page_size=page_size, total=total)
 
 

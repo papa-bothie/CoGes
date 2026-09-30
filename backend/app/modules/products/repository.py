@@ -13,7 +13,7 @@ from uuid import UUID
 from sqlalchemy import ColumnElement, Select, func, or_, select, update
 
 from app.core.repository import TenantRepository
-from app.core.search import code_matches, name_matches
+from app.core.search import code_matches, name_matches, relevance_order
 from app.modules.products.models import Product, ProductPrice
 
 
@@ -121,7 +121,7 @@ class ProductRepository(TenantRepository[Product]):
         stmt = (
             self._live()
             .where(*self._filters(search=search, category_id=category_id, is_active=is_active))
-            .order_by(Product.name)
+            .order_by(*relevance_order(Product.name, (Product.sku, Product.barcode), search))
             .limit(page_size)
             .offset((page - 1) * page_size)
         )

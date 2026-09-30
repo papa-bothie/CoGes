@@ -265,8 +265,14 @@ class DebtRepository(TenantRepository[Debt]):
         party_type: str | None,
         status: str | None,
         overdue_on: date | None,
+        customer_id: UUID | None = None,
+        supplier_id: UUID | None = None,
     ) -> list[ColumnElement[bool]]:
         conditions: list[ColumnElement[bool]] = []
+        if customer_id is not None:
+            conditions.append(Debt.customer_id == customer_id)
+        if supplier_id is not None:
+            conditions.append(Debt.supplier_id == supplier_id)
         if party_type is not None:
             conditions.append(Debt.party_type == party_type)
         if status is not None:
@@ -283,12 +289,22 @@ class DebtRepository(TenantRepository[Debt]):
         party_type: str | None = None,
         status: str | None = None,
         overdue_on: date | None = None,
+        customer_id: UUID | None = None,
+        supplier_id: UUID | None = None,
     ) -> int:
         stmt = (
             select(func.count())
             .select_from(Debt)
             .where(Debt.company_id == self.ctx.company_id)
-            .where(*self._filters(party_type=party_type, status=status, overdue_on=overdue_on))
+            .where(
+                *self._filters(
+                    party_type=party_type,
+                    status=status,
+                    overdue_on=overdue_on,
+                    customer_id=customer_id,
+                    supplier_id=supplier_id,
+                )
+            )
         )
         return int(self.session.execute(stmt).scalar_one())
 
@@ -300,10 +316,20 @@ class DebtRepository(TenantRepository[Debt]):
         party_type: str | None = None,
         status: str | None = None,
         overdue_on: date | None = None,
+        customer_id: UUID | None = None,
+        supplier_id: UUID | None = None,
     ) -> Sequence[Debt]:
         stmt = (
             self._select()
-            .where(*self._filters(party_type=party_type, status=status, overdue_on=overdue_on))
+            .where(
+                *self._filters(
+                    party_type=party_type,
+                    status=status,
+                    overdue_on=overdue_on,
+                    customer_id=customer_id,
+                    supplier_id=supplier_id,
+                )
+            )
             .order_by(Debt.due_date.asc().nullslast(), Debt.created_at.desc())
             .limit(page_size)
             .offset((page - 1) * page_size)

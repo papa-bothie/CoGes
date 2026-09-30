@@ -1,11 +1,16 @@
-import { ShoppingCart } from "lucide-react";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
-import { PlaceholderPage } from "@/components/placeholder-page";
 import { labels } from "@/lib/labels";
+
+import { SalesListView } from "./sales-list-view";
 
 export const metadata: Metadata = { title: labels.nav.sales };
 
 export default function SalesPage() {
-  return <PlaceholderPage title={labels.nav.sales} icon={ShoppingCart} />;
+  return (
+    <Suspense>
+      <SalesListView />
+    </Suspense>
+  );
 }

@@ -15,7 +15,7 @@ Trois règles de non-divulgation :
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
@@ -144,6 +144,31 @@ def login(
     )
 
 
+#: Fenêtre pendant laquelle un jeton déjà tourné peut être représenté sans être pris
+#: pour un vol (ADR 0051) : la réponse de rotation s'est perdue (navigation, coupure).
+ROTATION_GRACE = timedelta(seconds=30)
+
+
+def _unreceived_successor(
+    repository: AuthSessionRepository, current: AuthSession, now: datetime
+) -> AuthSession | None:
+    """Successeur d'un jeton tourné **il y a moins de 30 s** et qui n'a jamais servi.
+
+    C'est la signature d'une réponse perdue : le client représente l'ancien jeton parce
+    qu'il n'a jamais reçu le nouveau. Rien n'est rendu — donc réutilisation — si le
+    jeton a été révoqué autrement que par une rotation (déconnexion, famille révoquée),
+    si la fenêtre est passée, ou si le successeur a déjà servi ou expiré.
+    """
+    if current.revoked_at is None or current.replaced_by is None:
+        return None
+    if now - current.revoked_at > ROTATION_GRACE:
+        return None
+    successor = repository.lock_by_id(current.replaced_by)
+    if successor is None or successor.revoked_at is not None or successor.expires_at <= now:
+        return None
+    return successor
+
+
 def refresh(
     raw_token: str, *, user_agent: str | None = None, ip_address: str | None = None
 ) -> IssuedTokens:
@@ -174,7 +199,8 @@ def refresh(
             raise AuthenticationRequiredError("Jeton de rafraîchissement invalide.")
 
         now = datetime.now(UTC)
-        if current.revoked_at is not None:
+        successor = _unreceived_successor(repository, current, now)
+        if current.revoked_at is not None and successor is None:
             revoked = repository.revoke_family(current.family_id)
             audit_critical(
                 session,
@@ -201,8 +227,29 @@ def refresh(
             )
             session.flush()
 
-            current.revoked_at = now
-            current.replaced_by = rotated.id
+            if successor is not None:
+                # Réponse de rotation perdue (ADR 0051) : le successeur n'a jamais été
+                # reçu, il est écarté ; la famille reste vivante et c'est tracé. Il
+                # n'a pas de `replaced_by` : présenté à son tour, il ne bénéficie
+                # d'aucune grâce — une seule reprise par rotation.
+                successor.revoked_at = now
+                audit_critical(
+                    session,
+                    user_ctx,
+                    action=AuditAction.UPDATE,
+                    entity_table="auth_sessions",
+                    entity_id=current.id,
+                    before={
+                        "family_id": str(current.family_id),
+                        "reason": "rotation_retried_within_grace",
+                        "unreceived_session_id": str(successor.id),
+                    },
+                    after={"session_id": str(rotated.id)},
+                    ip_address=ip_address,
+                )
+            else:
+                current.revoked_at = now
+                current.replaced_by = rotated.id
             access_token, expires_in = create_access_token(current.user_id, company_id)
             issued = IssuedTokens(
                 access_token=access_token,

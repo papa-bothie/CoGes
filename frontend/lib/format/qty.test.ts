@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatQty } from "./qty";
+import { formatQty, formatQtyWithUnit } from "./qty";
 
 describe("formatQty", () => {
   it("retire les zéros inutiles", () => {
@@ -16,5 +16,14 @@ describe("formatQty", () => {
   it("n'invente rien pour une valeur absente", () => {
     expect(formatQty(null)).toBe("—");
     expect(formatQty("abc")).toBe("—");
+  });
+});
+
+describe("formatQtyWithUnit", () => {
+  it("accorde l'unité à partir de 2", () => {
+    expect(formatQtyWithUnit("1.000", "pièce", "pièces")).toBe("1 pièce");
+    expect(formatQtyWithUnit("1.500", "litre", "litres")).toBe("1,5 litre");
+    expect(formatQtyWithUnit("7.000", "pièce", "pièces")).toBe("7 pièces");
+    expect(formatQtyWithUnit(null, "pièce", "pièces")).toBe("—");
   });
 });

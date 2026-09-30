@@ -19,8 +19,9 @@ caisse.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
-from sqlalchemy import ColumnElement, or_
+from sqlalchemy import ColumnElement, case, func, or_
 from sqlalchemy.orm import InstrumentedAttribute
 
 #: Un terme plus court ne discrimine rien et ne franchit pas le seuil de
@@ -59,3 +60,28 @@ def code_matches(
 ) -> ColumnElement[bool]:
     """Égalité stricte sur un ou plusieurs codes. Aucune approximation."""
     return or_(*(column == term for column in columns))
+
+
+def relevance_order(
+    name: InstrumentedAttribute[str],
+    codes: Sequence[InstrumentedAttribute[str] | InstrumentedAttribute[str | None]],
+    term: str | None,
+) -> list[ColumnElement[Any]]:
+    """Ordre d'une liste filtrée : le plus pertinent d'abord, le nom ensuite.
+
+    Sans recherche, l'ordre alphabétique. Avec une recherche, un code exact, puis le
+    nom identique, puis le nom qui commence par le terme, puis la sous-chaîne, puis
+    la seule similarité trigramme — sinon « Article 12 » peut disparaître derrière
+    vingt « Article 1x » approchants, triés par nom, au-delà de la page affichée.
+    """
+    if term is None:
+        return [name.asc()]
+    escaped = _escape_like(term)
+    rank = case(
+        (or_(*(column == term for column in codes)), 0),
+        (func.lower(name) == term.lower(), 1),
+        (name.ilike(f"{escaped}%", escape=_LIKE_ESCAPE), 2),
+        (name.ilike(f"%{escaped}%", escape=_LIKE_ESCAPE), 3),
+        else_=4,
+    )
+    return [rank.asc(), func.similarity(name, term).desc(), name.asc()]

@@ -2038,7 +2038,7 @@
           "inventory"
         ],
         "summary": "List Stock",
-        "description": "Stock valorisé, article par article, ruptures en tête.\n\nC'est la vue « produits + stock » de l'ADR 0012 : elle appartient à Inventory,\nparce que Products n'a pas le droit de lire le stock.",
+        "description": "Stock valorisé, article par article, ruptures en tête.\n\nC'est la vue « produits + stock » de l'ADR 0012 : elle appartient à Inventory,\nparce que Products n'a pas le droit de lire le stock. `product_id` se répète\n(au plus 100) pour lire le stock d'un lot d'articles ; un article sans aucun\nmouvement n'a pas de ligne.",
         "operationId": "list_stock_api_v1_inventory_stock_get",
         "parameters": [
           {
@@ -2062,6 +2062,27 @@
               "minimum": 1,
               "default": 20,
               "title": "Page Size"
+            }
+          },
+          {
+            "name": "product_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "maxItems": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Product Id"
             }
           }
         ],
@@ -3400,7 +3421,7 @@
           "debts"
         ],
         "summary": "List Debts",
-        "description": "Créances et dettes, échéance la plus proche en tête.",
+        "description": "Créances et dettes, échéance la plus proche en tête, filtrables par tiers.",
         "operationId": "list_debts_api_v1_debts_get",
         "parameters": [
           {
@@ -3466,6 +3487,40 @@
               "type": "boolean",
               "default": false,
               "title": "Overdue"
+            }
+          },
+          {
+            "name": "customer_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Customer Id"
+            }
+          },
+          {
+            "name": "supplier_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Supplier Id"
             }
           }
         ],
@@ -9757,6 +9812,17 @@
             ],
             "title": "Customer Id"
           },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
           "status": {
             "$ref": "#/components/schemas/SaleStatus"
           },
@@ -9856,6 +9922,7 @@
           "id",
           "sale_no",
           "customer_id",
+          "customer_name",
           "status",
           "sold_at",
           "subtotal",
@@ -9912,6 +9979,28 @@
             "format": "uuid",
             "title": "Product Id"
           },
+          "product_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Name"
+          },
+          "sku": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sku"
+          },
           "price_id": {
             "anyOf": [
               {
@@ -9947,6 +10036,9 @@
           },
           "line_total": {
             "$ref": "#/components/schemas/Amount-Output"
+          },
+          "returned_qty": {
+            "$ref": "#/components/schemas/Quantity-Output"
           }
         },
         "additionalProperties": false,
@@ -9954,6 +10046,8 @@
         "required": [
           "id",
           "product_id",
+          "product_name",
+          "sku",
           "price_id",
           "qty",
           "unit_price",
@@ -9962,7 +10056,8 @@
           "tax_rate",
           "net_amount",
           "tax_amount",
-          "line_total"
+          "line_total",
+          "returned_qty"
         ],
         "title": "SaleItemRead",
         "description": "Ligne de vente, avec ses montants calculés par la base."
@@ -10054,6 +10149,17 @@
             ],
             "title": "Customer Id"
           },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
           "status": {
             "$ref": "#/components/schemas/SaleStatus"
           },
@@ -10129,6 +10235,7 @@
           "id",
           "sale_no",
           "customer_id",
+          "customer_name",
           "status",
           "sold_at",
           "subtotal",

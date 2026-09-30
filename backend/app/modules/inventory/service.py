@@ -45,6 +45,7 @@ from app.modules.inventory.repository import (
     StockHistoryRepository,
 )
 from app.modules.inventory.schemas import (
+    MANUAL_MOVEMENT_TYPES,
     TYPES_REQUIRING_NOTE,
     MovementCreate,
     StockLine,
@@ -87,6 +88,16 @@ class AlreadyReversedError(BusinessRuleError):
 class NotReversibleError(BusinessRuleError):
     code = "movement_not_reversible"
     default_message = "Une annulation ne s'annule pas : corriger par un ajustement."
+
+
+class FlowMovementNotReversibleError(BusinessRuleError):
+    """Un mouvement né d'une vente ou d'un retour ne se corrige pas depuis le stock."""
+
+    code = "movement_not_reversible"
+    default_message = (
+        "Ce mouvement vient d'une vente ou d'un retour client : "
+        "corrigez-le en annulant la vente ou en enregistrant un retour."
+    )
 
 
 class DuplicateMovementError(BusinessRuleError):
@@ -192,17 +203,24 @@ def _status(qty_on_hand: Decimal, reorder_point: Decimal | None) -> str:
 
 
 def get_stock(
-    session: Session, ctx: TenantContext, *, page: int, page_size: int
+    session: Session,
+    ctx: TenantContext,
+    *,
+    page: int,
+    page_size: int,
+    product_ids: Sequence[UUID] | None = None,
 ) -> tuple[list[StockLine], int]:
     """Stock valorisé d'une page d'articles, joint aux fiches produit.
 
     Deux requêtes plutôt qu'une jointure : Inventory (bande C) lit Products
     (bande B) **par sa façade**, jamais par son modèle ni son repository (ADR 0012).
     Les articles en rupture remontent en premier — c'est ce que le gérant cherche.
+    `product_ids` restreint la page à un lot d'articles : c'est ainsi que la liste des
+    produits et la saisie d'une vente lisent le stock de ce qu'elles affichent (ADR 0050).
     """
     stock_repository = ProductStockRepository(session, ctx)
-    rows = stock_repository.page(page=page, page_size=page_size)
-    total = stock_repository.count()
+    rows = stock_repository.page(page=page, page_size=page_size, product_ids=product_ids)
+    total = stock_repository.count(product_ids=product_ids)
 
     summaries = products_service.get_summaries(session, ctx, [row.product_id for row in rows])
     category_ids = [
@@ -363,6 +381,13 @@ def reverse_movement(
     porte bien le même produit et la quantité opposée.
     """
     origin = get_movement(session, ctx, movement_id)
+    if origin.type not in MANUAL_MOVEMENT_TYPES:
+        # Inverser une sortie de vente remettrait l'article en stock sous une vente
+        # toujours confirmée : les flux se corrigent par leur propre cas d'usage
+        # (annulation, retour), qui passe par `reverse_sale_out` (ADR 0017, complément).
+        raise FlowMovementNotReversibleError(
+            details={"movement_id": str(origin.id), "type": origin.type}
+        )
     reversal = _write_reversal(session, ctx, origin)
 
     audit_critical(

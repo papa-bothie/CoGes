@@ -85,6 +85,11 @@ class AuthSessionRepository(TenantRepository[AuthSession]):
         stmt = self._select().where(AuthSession.token_hash == token_hash).with_for_update()
         return self.session.execute(stmt).scalar_one_or_none()
 
+    def lock_by_id(self, session_id: UUID) -> AuthSession | None:
+        """Lit une session par son identifiant, verrouillée jusqu'au COMMIT."""
+        stmt = self._select().where(AuthSession.id == session_id).with_for_update()
+        return self.session.execute(stmt).scalar_one_or_none()
+
     def revoke_family(self, family_id: UUID) -> int:
         """Révoque toutes les sessions d'une famille : réutilisation détectée."""
         statement = (

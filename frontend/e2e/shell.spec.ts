@@ -31,7 +31,9 @@ test("connexion → coquille → navigation → rechargement → déconnexion", 
   await expect(header.getByText("Gérant")).toBeVisible();
   const nav = page.getByRole("navigation", { name: "Navigation principale" });
   await expect(nav.getByRole("link")).toHaveText(NAVIGATION.map(([label]) => label));
-  await expect(page.getByRole("combobox")).toHaveCount(0);
+  // Aucun sélecteur d'entreprise dans la coquille (les écrans ont leurs propres filtres).
+  await expect(page.getByRole("complementary").getByRole("combobox")).toHaveCount(0);
+  await expect(header.getByRole("combobox")).toHaveCount(0);
   await expect(page.getByText(/mode démonstration/i)).toHaveCount(0);
 
   for (const [label, href] of NAVIGATION) {

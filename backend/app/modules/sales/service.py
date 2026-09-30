@@ -695,7 +695,9 @@ def _audited(sale: Sale) -> dict[str, Any]:
 # façades. Le router, lui, ne fait que les appeler (ADR 0010).
 
 
-def build_read(sale: Sale, *, returned_total: Decimal | None) -> SaleRead:
+def build_read(
+    sale: Sale, *, returned_total: Decimal | None, customer_name: str | None
+) -> SaleRead:
     """En-tête d'une vente, tel que la liste l'affiche.
 
     Tout ce qui touche aux retours est dérivé, jamais stocké : le solde est une
@@ -707,6 +709,7 @@ def build_read(sale: Sale, *, returned_total: Decimal | None) -> SaleRead:
         id=sale.id,
         sale_no=sale.sale_no,
         customer_id=sale.customer_id,
+        customer_name=customer_name,
         status=sale.status,
         sold_at=sale.sold_at,
         subtotal=sale.subtotal,
@@ -723,15 +726,71 @@ def build_read(sale: Sale, *, returned_total: Decimal | None) -> SaleRead:
     )
 
 
+def build_page(
+    session: Session,
+    ctx: TenantContext,
+    sales: Sequence[Sale],
+    returned_totals: dict[UUID, Decimal],
+) -> list[SaleRead]:
+    """En-têtes d'une page de ventes, avec le nom des clients lus en un seul appel."""
+    names = customers_service.names_by_ids(
+        session, ctx, [sale.customer_id for sale in sales if sale.customer_id is not None]
+    )
+    return [
+        build_read(
+            sale,
+            returned_total=returned_totals.get(sale.id),
+            customer_name=None if sale.customer_id is None else names.get(sale.customer_id),
+        )
+        for sale in sales
+    ]
+
+
+def build_item_reads(
+    session: Session, ctx: TenantContext, items: Sequence[SaleItem]
+) -> list[SaleItemRead]:
+    """Lignes de vente, avec les libellés du produit et la quantité déjà retournée.
+
+    Les libellés sont relus au référentiel comme sur le reçu : ce sont des noms, pas
+    des montants (ADR 0050). Deux requêtes par lot, jamais une par ligne.
+    """
+    summaries = products_service.get_summaries(session, ctx, [item.product_id for item in items])
+    returned = SaleReturnItemRepository(session, ctx).returned_qty_by_item(
+        [item.id for item in items]
+    )
+    reads: list[SaleItemRead] = []
+    for item in items:
+        summary = summaries.get(item.product_id)
+        reads.append(
+            SaleItemRead(
+                id=item.id,
+                product_id=item.product_id,
+                product_name=None if summary is None else summary.name,
+                sku=None if summary is None else summary.sku,
+                price_id=item.price_id,
+                qty=item.qty,
+                unit_price=item.unit_price,
+                unit_cost=item.unit_cost,
+                discount=item.discount,
+                tax_rate=item.tax_rate,
+                net_amount=item.net_amount,
+                tax_amount=item.tax_amount,
+                line_total=item.line_total,
+                returned_qty=returned.get(item.id, Decimal("0")),
+            )
+        )
+    return reads
+
+
 def build_detail(session: Session, ctx: TenantContext, sale: Sale) -> SaleDetail:
     """Vente complète : en-tête, lignes, règlements et dette éventuelle."""
-    header = build_read(
-        sale, returned_total=SaleRepository(session, ctx).returned_totals([sale.id]).get(sale.id)
-    )
+    header = build_page(
+        session, ctx, [sale], SaleRepository(session, ctx).returned_totals([sale.id])
+    )[0]
     debt = finance_service.debt_for_sale(session, ctx, sale.id)
     return SaleDetail(
         **header.model_dump(),
-        items=[SaleItemRead.model_validate(item) for item in get_items(session, ctx, sale.id)],
+        items=build_item_reads(session, ctx, get_items(session, ctx, sale.id)),
         payments=finance_service.payment_reads_for_sale(session, ctx, sale.id),
         debt=None if debt is None else DebtRead.model_validate(debt),
     )

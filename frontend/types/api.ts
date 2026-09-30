@@ -562,7 +562,9 @@ export interface paths {
      * @description Stock valorisé, article par article, ruptures en tête.
      *
      *     C'est la vue « produits + stock » de l'ADR 0012 : elle appartient à Inventory,
-     *     parce que Products n'a pas le droit de lire le stock.
+     *     parce que Products n'a pas le droit de lire le stock. `product_id` se répète
+     *     (au plus 100) pour lire le stock d'un lot d'articles ; un article sans aucun
+     *     mouvement n'a pas de ligne.
      */
     get: operations["list_stock_api_v1_inventory_stock_get"];
     put?: never;
@@ -973,7 +975,7 @@ export interface paths {
     };
     /**
      * List Debts
-     * @description Créances et dettes, échéance la plus proche en tête.
+     * @description Créances et dettes, échéance la plus proche en tête, filtrables par tiers.
      */
     get: operations["list_debts_api_v1_debts_get"];
     put?: never;
@@ -3286,6 +3288,8 @@ export interface components {
       sale_no: string;
       /** Customer Id */
       customer_id: string | null;
+      /** Customer Name */
+      customer_name: string | null;
       status: components["schemas"]["SaleStatus"];
       /**
        * Sold At
@@ -3342,6 +3346,10 @@ export interface components {
        * Format: uuid
        */
       product_id: string;
+      /** Product Name */
+      product_name: string | null;
+      /** Sku */
+      sku: string | null;
       /** Price Id */
       price_id: string | null;
       qty: components["schemas"]["Quantity-Output"];
@@ -3352,6 +3360,7 @@ export interface components {
       net_amount: components["schemas"]["Amount-Output"];
       tax_amount: components["schemas"]["Amount-Output"];
       line_total: components["schemas"]["Amount-Output"];
+      returned_qty: components["schemas"]["Quantity-Output"];
     };
     /**
      * SaleItemUpdate
@@ -3387,6 +3396,8 @@ export interface components {
       sale_no: string;
       /** Customer Id */
       customer_id: string | null;
+      /** Customer Name */
+      customer_name: string | null;
       status: components["schemas"]["SaleStatus"];
       /**
        * Sold At
@@ -5167,6 +5178,7 @@ export interface operations {
       query?: {
         page?: number;
         page_size?: number;
+        product_id?: string[] | null;
       };
       header?: never;
       path?: never;
@@ -5939,6 +5951,8 @@ export interface operations {
         party_type?: components["schemas"]["PartyType"] | null;
         status?: components["schemas"]["DebtStatus"] | null;
         overdue?: boolean;
+        customer_id?: string | null;
+        supplier_id?: string | null;
       };
       header?: never;
       path?: never;

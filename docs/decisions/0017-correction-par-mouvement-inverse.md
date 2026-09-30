@@ -46,3 +46,12 @@ sortie de vente annulée, `adjustment` pour toute correction d'inventaire.
   un oubli.
 - `t10_inv_check_reversal` réécrit `unit_cost`, `ref_type` et `ref_id` depuis le mouvement
   d'origine. Le service doit donc relire la ligne après le `flush` — voir l'ADR 0018.
+
+## Complément (phase 12, 2026-09-30)
+
+L'endpoint public n'inverse que les **mouvements manuels** (`initial`, `purchase_in`,
+`supplier_return_out`, `adjustment`, `loss`). Une `sale_out` ou un `customer_return_in` naît d'un
+flux métier : l'inverser depuis le stock remettrait l'article en rayon sous une vente toujours
+confirmée. Ces mouvements se corrigent par leur cas d'usage — annulation de la vente (qui passe
+par `reverse_sale_out`, interne) ou retour — et l'endpoint répond `409 movement_not_reversible`.
+Décidé avec l'utilisateur (AskUserQuestion) ; test `test_a_sale_movement_is_not_reversed_from_the_stock`.

@@ -13,3 +13,18 @@ export function formatQty(value: string | null | undefined, unit?: string): stri
     (parts.negative ? "-" : "") + groupDigits(parts.integer) + (fraction ? `,${fraction}` : "");
   return unit ? `${qty} ${unit}` : qty;
 }
+
+/**
+ * Quantité suivie de son unité accordée : « 1 pièce », « 7 pièces », « 1,5 litre »
+ * (le pluriel commence à 2, règle du français), « 2,5 kg ».
+ */
+export function formatQtyWithUnit(
+  value: string | null | undefined,
+  singular: string,
+  plural: string,
+): string {
+  const qty = formatQty(value);
+  if (qty === "—") return qty;
+  const integer = (value ?? "").replace(/^-/, "").split(".")[0] ?? "0";
+  return `${qty} ${BigInt(integer || "0") >= 2n ? plural : singular}`;
+}

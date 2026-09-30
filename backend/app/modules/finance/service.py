@@ -1228,18 +1228,24 @@ def list_debts(
     party_type: str | None = None,
     status: str | None = None,
     overdue: bool = False,
+    customer_id: UUID | None = None,
+    supplier_id: UUID | None = None,
 ) -> tuple[Sequence[Debt], int]:
-    """Page de dettes. `overdue` borne sur aujourd'hui, pas sur une date saisie."""
+    """Page de dettes. `overdue` borne sur aujourd'hui, pas sur une date saisie.
+
+    `customer_id` / `supplier_id` servent les fiches client et fournisseur (ADR 0050).
+    """
     repository = DebtRepository(session, ctx)
     overdue_on = datetime.now(UTC).date() if overdue else None
-    items = repository.page_filtered(
-        page=page,
-        page_size=page_size,
-        party_type=party_type,
-        status=status,
-        overdue_on=overdue_on,
-    )
-    total = repository.count_filtered(party_type=party_type, status=status, overdue_on=overdue_on)
+    filters: dict[str, Any] = {
+        "party_type": party_type,
+        "status": status,
+        "overdue_on": overdue_on,
+        "customer_id": customer_id,
+        "supplier_id": supplier_id,
+    }
+    items = repository.page_filtered(page=page, page_size=page_size, **filters)
+    total = repository.count_filtered(**filters)
     return items, total
 
 
