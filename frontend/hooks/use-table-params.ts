@@ -46,6 +46,8 @@ export function useTableParams(defaultPageSize = 20) {
     setSearch: (value: string) => update({ search: value, page: null }),
     setFilter: (key: string, value: string | null) => update({ [key]: value, page: null }),
     get: (key: string) => params.get(key),
+    /** Plusieurs paramètres d'un coup (`null` retire la clé). */
+    update,
     /** Remplace tous les paramètres (changement d'onglet, par exemple). */
     replaceAll,
   };

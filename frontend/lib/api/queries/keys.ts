@@ -48,4 +48,49 @@ export const queryKeys = {
     all: ["debts"] as const,
     list: (params: Record<string, unknown>) => ["debts", "list", params] as const,
   },
+  payments: {
+    all: ["payments"] as const,
+    list: (params: Record<string, unknown>) => ["payments", "list", params] as const,
+  },
+  expenses: {
+    all: ["expenses"] as const,
+    list: (params: Record<string, unknown>) => ["expenses", "list", params] as const,
+  },
+  expenseCategories: { all: ["expense-categories"] as const },
+  /** Tout ce que calcule Restitution : invalidé après chaque écriture d'argent. */
+  analytics: {
+    all: ["analytics"] as const,
+    overview: (params: Record<string, unknown>) => ["analytics", "overview", params] as const,
+    products: (params: Record<string, unknown>) => ["analytics", "products", params] as const,
+    series: (params: Record<string, unknown>) => ["analytics", "series", params] as const,
+  },
+  intelligence: {
+    all: ["intelligence"] as const,
+    summary: ["intelligence", "summary"] as const,
+    insights: (params: Record<string, unknown>) => ["intelligence", "insights", params] as const,
+    forecasts: (params: Record<string, unknown>) => ["intelligence", "forecasts", params] as const,
+  },
+  company: ["company"] as const,
+  users: { all: ["users"] as const },
+  roles: { all: ["roles"] as const, detail: (id: string) => ["roles", "detail", id] as const },
+  permissions: ["permissions"] as const,
+  audit: {
+    all: ["audit"] as const,
+    list: (params: Record<string, unknown>) => ["audit", "list", params] as const,
+  },
+  notifications: {
+    all: ["notifications"] as const,
+    list: (params: Record<string, unknown>) => ["notifications", "list", params] as const,
+    unread: ["notifications", "unread"] as const,
+  },
 } as const;
+
+/** Racines à invalider après une écriture d'argent (paiement, dette, dépense). */
+export const MONEY_KEYS = [
+  queryKeys.payments.all,
+  queryKeys.debts.all,
+  queryKeys.expenses.all,
+  queryKeys.analytics.all,
+  queryKeys.sales.all,
+  queryKeys.dashboard,
+] as const;
