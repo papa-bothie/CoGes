@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dayEndIso, dayStartIso } from "./zoned";
+import { dayEndIso, dayStartIso, zonedDateTimeIso } from "./zoned";
 
 describe("bornes de journée", () => {
   it("Dakar est en UTC", () => {
@@ -15,5 +15,13 @@ describe("bornes de journée", () => {
 
   it("refuse une date illisible", () => {
     expect(dayStartIso("01/09/2026", "UTC")).toBeNull();
+  });
+});
+
+describe("zonedDateTimeIso", () => {
+  it("lit l'heure saisie dans le fuseau de l'entreprise", () => {
+    expect(zonedDateTimeIso("2026-09-30T10:15", "Africa/Dakar")).toBe("2026-09-30T10:15:00.000Z");
+    expect(zonedDateTimeIso("2026-07-01T10:15", "Europe/Paris")).toBe("2026-07-01T08:15:00.000Z");
+    expect(zonedDateTimeIso("30/09/2026", "UTC")).toBeNull();
   });
 });

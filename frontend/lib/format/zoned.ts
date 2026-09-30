@@ -49,3 +49,13 @@ export function dayEndIso(day: string, timeZone: string): string | null {
   const nextStart = startOfDay(next, timeZone);
   return nextStart === null ? null : new Date(nextStart - 1).toISOString();
 }
+
+/** « 2026-09-30T10:15 » (champ `datetime-local`) lu dans `timeZone` → instant ISO. */
+export function zonedDateTimeIso(value: string, timeZone: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [, y, m, d, h, mi] = match.map(Number);
+  const guess = Date.UTC(y!, m! - 1, d!, h!, mi!);
+  const first = guess - offsetMs(guess, timeZone);
+  return new Date(guess - offsetMs(first, timeZone)).toISOString();
+}

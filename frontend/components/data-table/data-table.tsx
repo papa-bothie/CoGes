@@ -49,6 +49,8 @@ export type DataTableProps<T> = {
   filters?: ReactNode;
   loading?: boolean;
   onRowClick?: (row: T) => void;
+  /** Classe d'une ligne (surlignage d'un seuil, par exemple). */
+  rowClassName?: (row: T) => string | undefined;
   empty?: ReactNode;
 };
 
@@ -102,6 +104,7 @@ export function DataTable<T>({
   filters,
   loading = false,
   onRowClick,
+  rowClassName,
   empty,
 }: DataTableProps<T>) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
@@ -201,6 +204,7 @@ export function DataTable<T>({
                 onKeyDown={onRowClick ? (event) => handleRowKey(event, row) : undefined}
                 tabIndex={onRowClick ? 0 : undefined}
                 className={cn(
+                  rowClassName?.(row),
                   onRowClick &&
                     "cursor-pointer outline-none focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
                 )}

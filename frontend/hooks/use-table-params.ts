@@ -29,6 +29,14 @@ export function useTableParams(defaultPageSize = 20) {
     [params, pathname, router],
   );
 
+  const replaceAll = useCallback(
+    (values: Record<string, string>) => {
+      const query = new URLSearchParams(values).toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    },
+    [pathname, router],
+  );
+
   return {
     page,
     pageSize,
@@ -38,5 +46,7 @@ export function useTableParams(defaultPageSize = 20) {
     setSearch: (value: string) => update({ search: value, page: null }),
     setFilter: (key: string, value: string | null) => update({ [key]: value, page: null }),
     get: (key: string) => params.get(key),
+    /** Remplace tous les paramètres (changement d'onglet, par exemple). */
+    replaceAll,
   };
 }
