@@ -7,8 +7,10 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import text
 
-from app.core.security import decode_access_token
+from app.core.security import decode_access_token, hash_refresh_token
+from app.core.tenancy import TenantContext, tenant_transaction
 from app.modules.auth.router import REFRESH_COOKIE_NAME
 from tests.conftest import (
     TEST_PASSWORD,
@@ -164,22 +166,49 @@ def test_refresh_rotates_the_token(api_client: TestClient, company_alpha: DemoCo
     assert refreshed.json()["access_token"]
 
 
-def test_replaying_a_consumed_token_revokes_the_whole_family(
+def _incidents(session_factory: sessionmaker[Any], company: DemoCompany) -> int:
+    return read_scalar_in_tenant(
+        session_factory,
+        company.company_id,
+        "SELECT count(*) FROM audit_logs "
+        "WHERE entity_table = 'auth_sessions' AND action = 'cancel'",
+    )
+
+
+def _backdate_rotation(
+    session_factory: sessionmaker[Any], company: DemoCompany, raw_token: str, seconds: int
+) -> None:
+    """Fait comme si la rotation de `raw_token` datait de `seconds` secondes."""
+    ctx = TenantContext.bootstrap(company.company_id)
+    with tenant_transaction(ctx, session_factory=session_factory) as session:
+        session.execute(
+            text(
+                "UPDATE auth_sessions SET revoked_at = now() - make_interval(secs => :s) "
+                "WHERE token_hash = :h"
+            ),
+            {"s": seconds, "h": hash_refresh_token(raw_token)},
+        )
+
+
+def test_replaying_a_token_whose_successor_was_used_revokes_the_whole_family(
     api_client: TestClient, company_alpha: DemoCompany, session_factory: sessionmaker[Any]
 ) -> None:
-    """Rejouer un jeton déjà consommé est le signe d'un vol : la famille tombe.
+    """Rejouer un jeton déjà consommé, alors que son successeur a servi : vol, la famille tombe.
 
     La révocation doit **survivre** à l'échec de la requête : elle est commitée
     avant que l'erreur ne soit levée.
     """
+    before = _incidents(session_factory, company_alpha)
     login = _login(api_client, company_alpha.slug, company_alpha.email, TEST_PASSWORD)
     stolen = login.cookies[REFRESH_COOKIE_NAME]
 
-    rotated = api_client.post("/api/v1/auth/refresh")
-    assert rotated.status_code == 200
-    legitimate = rotated.cookies[REFRESH_COOKIE_NAME]
+    assert api_client.post("/api/v1/auth/refresh").status_code == 200
+    # La victime continue de travailler : le successeur a servi.
+    again = api_client.post("/api/v1/auth/refresh")
+    assert again.status_code == 200
+    legitimate = again.cookies[REFRESH_COOKIE_NAME]
 
-    # Le voleur rejoue l'ancien jeton.
+    # Le voleur rejoue l'ancien jeton, pourtant dans les 30 s.
     api_client.cookies.set(REFRESH_COOKIE_NAME, stolen)
     replayed = api_client.post("/api/v1/auth/refresh")
     assert replayed.status_code == 401
@@ -187,16 +216,76 @@ def test_replaying_a_consumed_token_revokes_the_whole_family(
 
     # La victime perd aussi sa session : toute la famille est révoquée.
     api_client.cookies.set(REFRESH_COOKIE_NAME, legitimate)
-    victim = api_client.post("/api/v1/auth/refresh")
-    assert victim.status_code == 401, "le jeton légitime aurait dû être révoqué"
+    assert api_client.post("/api/v1/auth/refresh").status_code == 401, (
+        "le jeton légitime aurait dû être révoqué"
+    )
+    assert _incidents(session_factory, company_alpha) > before, "incident non audité"
 
-    incidents = read_scalar_in_tenant(
+
+def test_replaying_a_rotated_token_after_the_grace_window_revokes_the_family(
+    api_client: TestClient, company_alpha: DemoCompany, session_factory: sessionmaker[Any]
+) -> None:
+    login = _login(api_client, company_alpha.slug, company_alpha.email, TEST_PASSWORD)
+    old = login.cookies[REFRESH_COOKIE_NAME]
+    rotated = api_client.post("/api/v1/auth/refresh")
+    unreceived = rotated.cookies[REFRESH_COOKIE_NAME]
+    _backdate_rotation(session_factory, company_alpha, old, seconds=31)
+
+    api_client.cookies.set(REFRESH_COOKIE_NAME, old)
+    assert api_client.post("/api/v1/auth/refresh").status_code == 401
+    api_client.cookies.set(REFRESH_COOKIE_NAME, unreceived)
+    assert api_client.post("/api/v1/auth/refresh").status_code == 401
+
+
+def test_a_lost_rotation_response_is_retried_within_the_grace_window(
+    api_client: TestClient, company_alpha: DemoCompany, session_factory: sessionmaker[Any]
+) -> None:
+    """ADR 0051 : la réponse de rotation s'est perdue (navigation, coupure réseau).
+
+    Le client représente l'ancien jeton : il obtient une nouvelle session, le
+    successeur jamais reçu est écarté, et la reprise est tracée sans révoquer la famille.
+    """
+    login = _login(api_client, company_alpha.slug, company_alpha.email, TEST_PASSWORD)
+    old = login.cookies[REFRESH_COOKIE_NAME]
+    lost = api_client.post("/api/v1/auth/refresh").cookies[REFRESH_COOKIE_NAME]
+    _backdate_rotation(session_factory, company_alpha, old, seconds=25)
+
+    api_client.cookies.set(REFRESH_COOKIE_NAME, old)
+    retried = api_client.post("/api/v1/auth/refresh")
+    assert retried.status_code == 200, retried.text
+    fresh = retried.cookies[REFRESH_COOKIE_NAME]
+    assert fresh not in (old, lost)
+
+    # La nouvelle session vit…
+    api_client.cookies.set(REFRESH_COOKIE_NAME, fresh)
+    follow_up = api_client.post("/api/v1/auth/refresh")
+    assert follow_up.status_code == 200
+
+    retries = read_scalar_in_tenant(
         session_factory,
         company_alpha.company_id,
-        "SELECT count(*) FROM audit_logs "
-        "WHERE entity_table = 'auth_sessions' AND action = 'cancel'",
+        "SELECT count(*) FROM audit_logs WHERE entity_table = 'auth_sessions' "
+        "AND diff->'before'->>'reason' = 'rotation_retried_within_grace'",
     )
-    assert incidents >= 1, "l'incident de réutilisation n'a pas été audité"
+    assert retries >= 1, "la reprise n'a pas été tracée"
+
+
+def test_a_grace_retry_is_granted_only_once(
+    api_client: TestClient, company_alpha: DemoCompany
+) -> None:
+    """Le successeur écarté ne profite d'aucune grâce, et l'ancien jeton non plus une 2e fois."""
+    login = _login(api_client, company_alpha.slug, company_alpha.email, TEST_PASSWORD)
+    old = login.cookies[REFRESH_COOKIE_NAME]
+    lost = api_client.post("/api/v1/auth/refresh").cookies[REFRESH_COOKIE_NAME]
+
+    api_client.cookies.set(REFRESH_COOKIE_NAME, old)
+    assert api_client.post("/api/v1/auth/refresh").status_code == 200
+
+    # Le jeton jamais reçu, présenté par un tiers : réutilisation, la famille tombe.
+    api_client.cookies.set(REFRESH_COOKIE_NAME, lost)
+    assert api_client.post("/api/v1/auth/refresh").status_code == 401
+    api_client.cookies.set(REFRESH_COOKIE_NAME, old)
+    assert api_client.post("/api/v1/auth/refresh").status_code == 401
 
 
 def test_logout_revokes_the_session(api_client: TestClient, company_alpha: DemoCompany) -> None:

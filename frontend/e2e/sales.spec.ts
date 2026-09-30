@@ -4,6 +4,9 @@ import { customerWithCredit, DEMO, loginThroughUi, managerApi, stockedProduct } 
 
 const CAPTURES = "../docs/design/captures/phase-12";
 
+// Parcours longs, et le serveur de développement compile chaque page à la première visite.
+test.describe.configure({ timeout: 60_000 });
+
 /** Montant tel que l'écran l'affiche (« 3 000 FCFA »), séparateurs compris. */
 const amount = (digits: string) => new RegExp(`${digits.replace(/ /g, "\\s")}\\sFCFA`);
 
@@ -11,11 +14,6 @@ async function login(page: Page) {
   await page.goto("/login");
   await loginThroughUi(page, DEMO);
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
-  // Attendre la coquille : naviguer pendant le rafraîchissement silencieux qui suit la
-  // connexion interromprait la rotation du cookie (voir le résumé de la phase 12).
-  await expect(page.getByRole("heading", { level: 1, name: "Tableau de bord" })).toBeVisible({
-    timeout: 30_000,
-  });
 }
 
 async function addArticle(page: Page, name: string) {

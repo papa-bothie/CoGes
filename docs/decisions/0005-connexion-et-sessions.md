@@ -2,7 +2,7 @@
 
 - **Date** : 2026-09-23
 - **Phase** : 02
-- **Statut** : acceptée
+- **Statut** : acceptée — complétée par 0051 (délai de grâce de la rotation)
 - **Décideur** : utilisateur (via `AskUserQuestion`), sur les points ouverts **P2** et **P3**
 
 ## Contexte
