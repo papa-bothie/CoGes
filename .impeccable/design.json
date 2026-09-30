@@ -71,17 +71,21 @@
       }
     },
     "typographyMeta": {
-      "headline": {
+      "page-title": {
         "displayName": "Titre de page",
-        "purpose": "h1 de chaque page."
+        "purpose": "h1 de chaque page (text-page-title)."
       },
       "figure": {
         "displayName": "Chiffre",
-        "purpose": "Valeur des cartes KPI, chiffres tabulaires."
+        "purpose": "Valeur des cartes KPI et chiffre clé du panneau d'Intelligence, tabulaire (text-figure)."
       },
-      "title": {
+      "figure-sm": {
+        "displayName": "Total",
+        "purpose": "Totaux de vente et de retour, prix courant, compteurs d'Intelligence (text-figure-sm)."
+      },
+      "heading": {
         "displayName": "Titre de carte",
-        "purpose": "Titres de cartes et de sections."
+        "purpose": "Cartes, dialogues, panneaux, états vides (text-heading)."
       },
       "body": {
         "displayName": "Courant",
@@ -89,7 +93,11 @@
       },
       "label": {
         "displayName": "Étiquette",
-        "purpose": "Badges, indications, version."
+        "purpose": "En-têtes de tableau, badges, indications."
+      },
+      "micro": {
+        "displayName": "Compteur",
+        "purpose": "Pastille de la cloche uniquement (text-2xs)."
       }
     },
     "shadows": [
@@ -208,7 +216,12 @@
       },
       {
         "name": "La règle du Chiffre aligné",
-        "body": "Tout montant ou quantité passe par numeric ou Money : 1 234 567 FCFA ne se coupe jamais.",
+        "body": "Tout montant ou quantité passe par numeric ou Money : 1 234 567 FCFA ne se coupe jamais ; toute cellule de tableau est tabulaire.",
+        "section": "typography"
+      },
+      {
+        "name": "La règle du Même chiffre, même taille",
+        "body": "figure pour un indicateur, figure-sm pour un total ; pas de taille isolée.",
         "section": "typography"
       },
       {

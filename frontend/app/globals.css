@@ -72,6 +72,27 @@
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-heading: var(--font-sans);
 
+  /*
+   * Échelle typographique par rôle (docs/design/DESIGN.md § Typography). Le texte courant
+   * reste `text-sm` (14 px) et les métadonnées `text-xs` (12 px) ; ces rôles s'y ajoutent.
+   */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-page-title: 1.5rem;
+  --text-page-title--line-height: 2rem;
+  --text-page-title--font-weight: 700;
+  --text-page-title--letter-spacing: -0.02em;
+  --text-heading: 1rem;
+  --text-heading--line-height: 1.5rem;
+  --text-heading--font-weight: 600;
+  --text-figure: 1.5rem;
+  --text-figure--line-height: 2rem;
+  --text-figure--font-weight: 700;
+  --text-figure--letter-spacing: -0.01em;
+  --text-figure-sm: 1.25rem;
+  --text-figure-sm--line-height: 1.75rem;
+  --text-figure-sm--font-weight: 700;
+
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
   --color-card: hsl(var(--card));

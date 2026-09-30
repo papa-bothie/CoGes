@@ -41,7 +41,7 @@ export function KpiCard({
         {loading ? (
           <Skeleton className="mt-1 h-7 w-32" />
         ) : (
-          <p className="mt-0.5 text-2xl font-bold numeric">{value}</p>
+          <p className="mt-0.5 text-figure numeric">{value}</p>
         )}
         {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
       </div>

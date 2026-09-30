@@ -23,23 +23,30 @@ colors:
   nuit-encre: "hsl(210 20% 92%)"
   nuit-annotation: "hsl(215 16% 60%)"
 typography:
-  headline:
+  page-title:
     fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.5rem"
     fontWeight: 700
     lineHeight: 1.33
-    letterSpacing: "-0.025em"
+    letterSpacing: "-0.02em"
   figure:
     fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1.5rem"
     fontWeight: 700
     lineHeight: 1.33
+    letterSpacing: "-0.01em"
     fontFeature: "tnum"
-  title:
+  figure-sm:
+    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "1.25rem"
+    fontWeight: 700
+    lineHeight: 1.4
+    fontFeature: "tnum"
+  heading:
     fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
     fontSize: "1rem"
-    fontWeight: 500
-    lineHeight: 1.375
+    fontWeight: 600
+    lineHeight: 1.5
   body:
     fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
     fontSize: "0.875rem"
@@ -50,6 +57,12 @@ typography:
     fontSize: "0.75rem"
     fontWeight: 500
     lineHeight: 1.33
+  micro:
+    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "0.6875rem"
+    fontWeight: 600
+    lineHeight: 1.45
+    fontFeature: "tnum"
 rounded:
   sm: "4px"
   md: "6px"
@@ -100,14 +113,15 @@ components:
     rounded: "{rounded.lg}"
     padding: "8px 12px"
   table-head:
-    textColor: "{colors.encre}"
-    typography: "{typography.body}"
+    textColor: "{colors.gris-annotation}"
+    typography: "{typography.label}"
     height: "40px"
     padding: "0 8px"
 ---
 
 <!--
-  État de référence relevé le 30/09/2026, AVANT la finition de la phase 14. Chaque passe
+  État de référence relevé le 30/09/2026 avant la phase 14 ; typographie mise à jour par la
+  passe 3 (typeset). Chaque passe
   Impeccable qui change un token met ce fichier à jour. Source normative des valeurs :
   frontend/app/globals.css (triplets HSL shadcn) ; ce fichier les décrit.
 -->
@@ -181,22 +195,38 @@ de la couleur d'état) ; seul un bouton est plein.
 ## Typography
 
 **Display Font:** aucune (pas de titre d'affichage)
-**Body Font:** Inter (chargée par `next/font`, repli `ui-sans-serif, system-ui`)
-**Label/Mono Font:** Inter, chiffres tabulaires (`tnum`) pour montants et quantités
+**Body Font:** Inter variable, avec son **axe optique** (`opsz`, chargé par `next/font`) : les titres
+et grands chiffres prennent automatiquement le dessin « display », plus serré ; repli
+`ui-sans-serif, system-ui`.
+**Label/Mono Font:** Inter, chiffres tabulaires (`tnum`) pour montants, quantités et dates
 
 **Character:** Une seule famille, neutre et très lisible aux petites tailles ; la hiérarchie tient
-au poids et à la taille, pas au contraste de familles.
+au poids, à la taille et au ton (encre / gris d'annotation), pas au contraste de familles.
 
 ### Hierarchy
-- **Headline** (700, 24 px, 1.33, interlettrage -0,025 em) : titre `h1` de chaque page.
-- **Figure** (700, 24 px, `tnum`) : valeur d'une carte KPI.
-- **Title** (500, 16 px, 1.375) : titre de carte et de section.
-- **Body** (400, 14 px, 1.43) : texte courant, cellules et en-têtes de tableau (500), boutons (500).
-- **Label** (500, 12 px) : badges, indications sous une valeur, version de l'application.
+Rôles déclarés en tokens `@theme` (`frontend/app/globals.css`) : une classe porte taille,
+interligne, graisse et interlettrage.
+- **Page title** (`text-page-title` : 700, 24 px, 1.33, -0,02 em) : titre `h1` de chaque page.
+- **Figure** (`text-figure` : 700, 24 px, -0,01 em, `tnum`) : valeur d'une carte KPI, chiffre clé
+  du panneau d'Intelligence.
+- **Figure small** (`text-figure-sm` : 700, 20 px, `tnum`) : total d'une vente, d'un retour,
+  prix courant d'un produit, compteurs du résumé d'Intelligence.
+- **Heading** (`text-heading` : 600, 16 px, 1.5) : titre de carte, de dialogue, de panneau,
+  d'état vide.
+- **Body** (400, 14 px, 1.43, `text-sm`) : texte courant, cellules de tableau, boutons (500), y
+  compris les petits boutons. 16 px en densité confortable (passe 4).
+- **Label** (500, 12 px, `text-xs`) : **en-têtes de tableau** (gris d'annotation), badges,
+  indications sous une valeur.
+- **Micro** (`text-2xs` : 11 px, 600, `tnum`) : seulement le compteur de la cloche. Le reçu
+  imprimé garde ses tailles propres (ticket 80 mm).
 
 ### Named Rules
 **La règle du Chiffre aligné.** Tout montant ou quantité passe par l'utilitaire `numeric`
-(`tabular-nums` + `nowrap`) ou le composant `Money` : `1 234 567 FCFA` ne se coupe jamais.
+(`tabular-nums` + `nowrap`) ou le composant `Money` : `1 234 567 FCFA` ne se coupe jamais. Toute
+cellule de tableau est en chiffres tabulaires par défaut (`TableCell`).
+
+**La règle du Même chiffre, même taille.** Un rôle de chiffre n'a qu'une taille : `figure` pour
+un indicateur, `figure-sm` pour un total. Pas de `text-xl font-bold` isolé.
 
 ## Layout
 
@@ -210,7 +240,7 @@ Le tableau de bord range ses KPI en grille (2 colonnes dès `sm`, 3 dès `xl`), 
 graphique en aire et liste des dernières ventes.
 
 Rythme d'espacement sur la base Tailwind de 4 px : 4 / 8 / 16 / 20 / 24 px. Cartes : 16 px de
-marge intérieure (20 px pour les KPI). Tableaux : en-têtes de 40 px, cellules à 8 px de marge.
+marge intérieure (20 px pour les KPI). Tableaux : en-têtes de 40 px en rôle *label* (12 px, gris d'annotation), cellules à 8 px de marge.
 
 ## Elevation & Depth
 

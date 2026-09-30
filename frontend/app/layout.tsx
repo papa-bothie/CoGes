@@ -5,7 +5,13 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 // Chiffres tabulaires disponibles (`tnum`) : indispensables pour aligner les montants.
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+// Axe optique : les titres et grands chiffres prennent le dessin « display », plus serré.
+const inter = Inter({
+  subsets: ["latin"],
+  axes: ["opsz"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: { default: "CoGes", template: "%s · CoGes" },

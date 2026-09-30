@@ -478,11 +478,7 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
               )}
               <div className="flex items-baseline justify-between border-t pt-3">
                 <span className="font-semibold">{labels.sales.total}</span>
-                <Money
-                  value={data?.total ?? "0"}
-                  currency={currency}
-                  className="text-xl font-bold"
-                />
+                <Money value={data?.total ?? "0"} currency={currency} className="text-figure-sm" />
               </div>
               <p
                 aria-live="polite"

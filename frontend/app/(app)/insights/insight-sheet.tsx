@@ -85,13 +85,13 @@ export function InsightSheet({
                 </Badge>
                 <Badge variant="outline">{t.status[insight.status]}</Badge>
               </div>
-              <SheetTitle className="text-base">{insight.title}</SheetTitle>
+              <SheetTitle>{insight.title}</SheetTitle>
               {insight.body && <SheetDescription>{insight.body}</SheetDescription>}
             </SheetHeader>
 
             <div className="space-y-6 p-4">
               <section className="space-y-2 rounded-lg border bg-muted/30 p-3">
-                <p className="text-2xl font-bold numeric">
+                <p className="text-figure numeric">
                   {value ?? (
                     <span className="text-base text-muted-foreground">
                       {labels.forecast.insufficientData}

@@ -141,11 +141,7 @@ export function DataTable<T>({
                     aria-sort={
                       active === "asc" ? "ascending" : active === "desc" ? "descending" : undefined
                     }
-                    className={cn(
-                      "h-10 px-4 font-medium",
-                      column.numeric && "text-right",
-                      column.className,
-                    )}
+                    className={cn("h-10 px-4", column.numeric && "text-right", column.className)}
                   >
                     {canSort ? (
                       <button

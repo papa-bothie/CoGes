@@ -55,7 +55,7 @@ export function IntelligenceSummaryCard() {
           {rows.map(([label, count]) => (
             <div key={label} className="rounded-lg border px-3 py-2">
               <dt className="text-xs text-muted-foreground">{label}</dt>
-              <dd className="text-xl font-semibold numeric">{count}</dd>
+              <dd className="text-figure-sm numeric">{count}</dd>
             </div>
           ))}
         </dl>

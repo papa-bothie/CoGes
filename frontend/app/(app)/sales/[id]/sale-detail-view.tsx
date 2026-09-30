@@ -298,7 +298,7 @@ export function SaleDetailView({ saleId }: { saleId: string }) {
               )}
               <div className="flex items-baseline justify-between border-t pt-3">
                 <span className="font-semibold">{labels.sales.total}</span>
-                <Money value={data.total} currency={currency} className="text-xl font-bold" />
+                <Money value={data.total} currency={currency} className="text-figure-sm" />
               </div>
               {data.status === "confirmed" && (
                 <>

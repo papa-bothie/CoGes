@@ -284,7 +284,7 @@ export function ProductDetailView({ productId }: { productId: string }) {
                 {line ? (
                   <>
                     <Row label={labels.products.qtyOnHand}>
-                      <span className="text-lg font-bold numeric">
+                      <span className="text-figure-sm numeric">
                         {formatQtyWithUnit(
                           line.qty_on_hand,
                           labels.units[data.unit],
