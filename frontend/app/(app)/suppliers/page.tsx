@@ -1,11 +1,16 @@
-import { Truck } from "lucide-react";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
-import { PlaceholderPage } from "@/components/placeholder-page";
 import { labels } from "@/lib/labels";
+
+import { SuppliersListView } from "./suppliers-list-view";
 
 export const metadata: Metadata = { title: labels.nav.suppliers };
 
 export default function SuppliersPage() {
-  return <PlaceholderPage title={labels.nav.suppliers} icon={Truck} />;
+  return (
+    <Suspense>
+      <SuppliersListView />
+    </Suspense>
+  );
 }
