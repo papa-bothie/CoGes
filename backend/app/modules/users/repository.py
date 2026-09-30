@@ -50,3 +50,9 @@ class UserRepository(TenantRepository[User]):
         stmt = self._live().where(User.id.in_(list(user_ids)), User.is_active.is_(True))
         found = {row for row in self.session.execute(stmt.with_only_columns(User.id)).scalars()}
         return [user_id for user_id in dict.fromkeys(user_ids) if user_id in found]
+
+    def names_by_id(self, user_ids: Sequence[UUID]) -> dict[UUID, str]:
+        """Noms des comptes, **supprimés compris** : un auteur d'audit reste nommé."""
+        stmt = self._select().where(User.id.in_(list(user_ids)))
+        rows = self.session.execute(stmt.with_only_columns(User.id, User.full_name)).all()
+        return {row[0]: row[1] for row in rows}

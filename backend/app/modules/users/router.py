@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.core.deps import TenantSession, client_ip, require_permission
 from app.modules.users import service
+from app.modules.users.models import User
 from app.modules.users.schemas import (
     PasswordChange,
     UserCreate,
@@ -18,6 +19,11 @@ from app.modules.users.schemas import (
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+def _read(tenant: TenantSession, user: User) -> UserRead:
+    return service.to_read(tenant.session, tenant.ctx, [user])[0]
+
 
 MAX_PAGE_SIZE = 100
 
@@ -31,7 +37,7 @@ def list_users(
     """Liste paginée des comptes de l'entreprise."""
     users, total = service.list_users(tenant.session, tenant.ctx, page=page, page_size=page_size)
     return UserPage(
-        items=[UserRead.model_validate(user) for user in users],
+        items=service.to_read(tenant.session, tenant.ctx, users),
         page=page,
         page_size=page_size,
         total=total,
@@ -46,7 +52,7 @@ def create_user(
 ) -> UserRead:
     """Crée un compte dans l'entreprise du contexte."""
     user = service.create_user(tenant.session, tenant.ctx, payload, ip_address=client_ip(request))
-    return UserRead.model_validate(user)
+    return _read(tenant, user)
 
 
 @router.get("/{user_id}", response_model=UserRead)
@@ -55,7 +61,7 @@ def read_user(
     tenant: Annotated[TenantSession, Depends(require_permission("users:read"))],
 ) -> UserRead:
     """Compte du tenant courant. Celui d'une autre entreprise renvoie 404."""
-    return UserRead.model_validate(service.get_user(tenant.session, tenant.ctx, user_id))
+    return _read(tenant, service.get_user(tenant.session, tenant.ctx, user_id))
 
 
 @router.patch("/{user_id}", response_model=UserRead)
@@ -69,7 +75,7 @@ def update_user(
     user = service.update_user(
         tenant.session, tenant.ctx, user_id, payload, ip_address=client_ip(request)
     )
-    return UserRead.model_validate(user)
+    return _read(tenant, user)
 
 
 @router.delete("/{user_id}", response_model=UserRead)
@@ -82,7 +88,7 @@ def deactivate_user(
     user = service.deactivate_user(
         tenant.session, tenant.ctx, user_id, ip_address=client_ip(request)
     )
-    return UserRead.model_validate(user)
+    return _read(tenant, user)
 
 
 @router.post("/{user_id}/password", response_model=UserRead)
@@ -96,4 +102,4 @@ def change_password(
     user = service.change_password(
         tenant.session, tenant.ctx, user_id, payload, ip_address=client_ip(request)
     )
-    return UserRead.model_validate(user)
+    return _read(tenant, user)

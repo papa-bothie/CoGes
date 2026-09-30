@@ -37,6 +37,21 @@ class RoleRepository(TenantRepository[Role]):
         )
         return self.session.execute(stmt).scalars().all()
 
+    def for_users(self, user_ids: Sequence[UUID]) -> list[tuple[UUID, Role]]:
+        """Couples (utilisateur, rôle) pour une page d'utilisateurs, en une requête."""
+        if not user_ids:
+            return []
+        stmt = (
+            select(UserRole.user_id, Role)
+            .join(
+                UserRole,
+                (UserRole.role_id == Role.id) & (UserRole.company_id == Role.company_id),
+            )
+            .where(Role.company_id == self.ctx.company_id, UserRole.user_id.in_(list(user_ids)))
+            .order_by(Role.name)
+        )
+        return [(row[0], row[1]) for row in self.session.execute(stmt).all()]
+
     def count(self) -> int:
         stmt = select(func.count()).select_from(Role).where(Role.company_id == self.ctx.company_id)
         return int(self.session.execute(stmt).scalar_one())

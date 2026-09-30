@@ -264,6 +264,8 @@ class DebtDetail(BaseModel):
     party_type: PartyType
     customer_id: UUID | None
     supplier_id: UUID | None
+    #: Nom du client ou du fournisseur (ADR 0053) ; `null` si le tiers a été supprimé.
+    party_name: str | None = None
     sale_id: UUID | None
     expense_id: UUID | None
     principal: Amount

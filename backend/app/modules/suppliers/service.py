@@ -63,6 +63,13 @@ def get_supplier(session: Session, ctx: TenantContext, supplier_id: UUID) -> Sup
     return supplier
 
 
+def names_by_ids(
+    session: Session, ctx: TenantContext, supplier_ids: Sequence[UUID]
+) -> dict[UUID, str]:
+    """Noms des fournisseurs d'un lot d'identifiants (listes de dettes, ADR 0053)."""
+    return SupplierRepository(session, ctx).names_by_ids(supplier_ids)
+
+
 def assert_exists(session: Session, ctx: TenantContext, supplier_id: UUID) -> None:
     """Façade pour les modules qui référencent un fournisseur (Inventory, Debts)."""
     get_supplier(session, ctx, supplier_id)

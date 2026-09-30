@@ -1097,6 +1097,9 @@ export interface paths {
     /**
      * Create Expense
      * @description Constate une charge. Écriture financière : clé d'idempotence obligatoire.
+     *
+     *     Avec `payment`, la charge et son décaissement (montant de la charge) s'écrivent
+     *     dans la même transaction ; `payments:create` est alors exigé en plus.
      */
     post: operations["create_expense_api_v1_expenses_post"];
     delete?: never;
@@ -1537,6 +1540,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/audit-logs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Audit Logs
+     * @description Journal d'activité : audit critique et secondaire, le plus récent d'abord.
+     *
+     *     `audit:read` : gérant et comptable (ADR 0007, ADR 0053). Lecture seule — il
+     *     n'existe aucune route pour corriger ou effacer une ligne du journal.
+     */
+    get: operations["list_audit_logs_api_v1_audit_logs_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1602,6 +1628,48 @@ export interface components {
     };
     "Amount-Input": number | string;
     "Amount-Output": string;
+    /** @enum {string} */
+    AuditActionName:
+      "insert" | "update" | "delete" | "login" | "export" | "confirm" | "cancel" | "rebuild";
+    /** AuditLogPage */
+    AuditLogPage: {
+      /** Items */
+      items: components["schemas"]["AuditLogRead"][];
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Total */
+      total: number;
+    };
+    /**
+     * AuditLogRead
+     * @description Une ligne du journal. `diff` est rendu tel qu'il a été écrit (avant / après).
+     */
+    AuditLogRead: {
+      /** Id */
+      id: number;
+      /** Actor User Id */
+      actor_user_id: string | null;
+      /** Actor Name */
+      actor_name: string | null;
+      action: components["schemas"]["AuditActionName"];
+      /** Entity Table */
+      entity_table: string;
+      /** Entity Id */
+      entity_id: string | null;
+      /** Diff */
+      diff: {
+        [key: string]: unknown;
+      } | null;
+      /** Ip Address */
+      ip_address: string | null;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at: string;
+    };
     Barcode: string;
     /** Body_import_file_api_v1_imports__kind__post */
     Body_import_file_api_v1_imports__kind__post: {
@@ -1873,6 +1941,8 @@ export interface components {
       customer_id: string | null;
       /** Supplier Id */
       supplier_id: string | null;
+      /** Party Name */
+      party_name?: string | null;
       /** Sale Id */
       sale_id: string | null;
       /** Expense Id */
@@ -1996,6 +2066,7 @@ export interface components {
       spent_at: string;
       /** Supplier Id */
       supplier_id?: string | null;
+      payment?: components["schemas"]["ExpensePaymentInput"] | null;
     };
     /** @enum {string} */
     ExpenseKind: "fixed" | "variable";
@@ -2010,6 +2081,17 @@ export interface components {
       page_size: number;
       /** Total */
       total: number;
+    };
+    /**
+     * ExpensePaymentInput
+     * @description Règlement immédiat d'une dépense : le montant est celui de la dépense.
+     */
+    ExpensePaymentInput: {
+      method: components["schemas"]["PaymentMethod"];
+      /** Paid At */
+      paid_at?: string | null;
+      /** Reference */
+      reference?: string | null;
     };
     /**
      * ExpenseRead
@@ -2049,6 +2131,8 @@ export interface components {
        * Format: date-time
        */
       created_at: string;
+      /** @default 0 */
+      amount_paid: components["schemas"]["Amount-Output"];
     };
     /**
      * ExpenseUpdate
@@ -3809,6 +3893,25 @@ export interface components {
        * Format: date-time
        */
       created_at: string;
+      /** Roles */
+      roles?: components["schemas"]["UserRoleRead"][];
+    };
+    /**
+     * UserRoleRead
+     * @description Rôle porté par un compte. `description` est le libellé affiché (ADR 0007).
+     */
+    UserRoleRead: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Name */
+      name: string;
+      /** Description */
+      description: string | null;
+      /** Is System */
+      is_system: boolean;
     };
     /** UserUpdate */
     UserUpdate: {
@@ -6951,6 +7054,44 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["OutboxHealth"];
+        };
+      };
+    };
+  };
+  list_audit_logs_api_v1_audit_logs_get: {
+    parameters: {
+      query?: {
+        page?: number;
+        page_size?: number;
+        actor_user_id?: string | null;
+        action?: components["schemas"]["AuditActionName"] | null;
+        entity_table?: string | null;
+        entity_id?: string | null;
+        from?: string | null;
+        to?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AuditLogPage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
         };
       };
     };

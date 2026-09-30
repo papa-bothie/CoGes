@@ -19,7 +19,13 @@ from app.core.tenancy import TenantContext
 from app.modules.rbac import service as rbac_service
 from app.modules.users.models import User
 from app.modules.users.repository import UserRepository
-from app.modules.users.schemas import PasswordChange, UserCreate, UserUpdate
+from app.modules.users.schemas import (
+    PasswordChange,
+    UserCreate,
+    UserRead,
+    UserRoleRead,
+    UserUpdate,
+)
 
 
 def list_users(
@@ -175,3 +181,21 @@ def active_among(session: Session, ctx: TenantContext, user_ids: Sequence[UUID])
     if not user_ids:
         return []
     return UserRepository(session, ctx).active_ids(user_ids)
+
+
+def to_read(session: Session, ctx: TenantContext, users: Sequence[User]) -> list[UserRead]:
+    """Vues publiques d'une page d'utilisateurs, avec leurs rôles (façade RBAC)."""
+    roles = rbac_service.roles_by_user(session, ctx, [user.id for user in users])
+    return [
+        UserRead.model_validate(user).model_copy(
+            update={"roles": [UserRoleRead.model_validate(r) for r in roles.get(user.id, [])]}
+        )
+        for user in users
+    ]
+
+
+def names_by_id(session: Session, ctx: TenantContext, user_ids: Sequence[UUID]) -> dict[UUID, str]:
+    """Noms complets d'utilisateurs du tenant, y compris supprimés (journal d'activité)."""
+    if not user_ids:
+        return {}
+    return UserRepository(session, ctx).names_by_id(user_ids)

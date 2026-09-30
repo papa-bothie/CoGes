@@ -35,6 +35,16 @@ def roles_for_user(session: Session, ctx: TenantContext, user_id: UUID) -> Seque
     return RoleRepository(session, ctx).for_user(user_id)
 
 
+def roles_by_user(
+    session: Session, ctx: TenantContext, user_ids: Sequence[UUID]
+) -> dict[UUID, list[Role]]:
+    """Rôles d'une page d'utilisateurs, groupés par utilisateur (une seule requête)."""
+    grouped: dict[UUID, list[Role]] = {user_id: [] for user_id in user_ids}
+    for user_id, role in RoleRepository(session, ctx).for_users(user_ids):
+        grouped.setdefault(user_id, []).append(role)
+    return grouped
+
+
 def list_roles(
     session: Session, ctx: TenantContext, *, page: int, page_size: int
 ) -> tuple[Sequence[Role], int]:

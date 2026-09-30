@@ -4,9 +4,10 @@ Invariants et transaction ici, jamais dans le router. La transaction n'est ni
 ouverte ni validée par ce module : c'est la dépendance `get_tenant_session` qui l'a
 ouverte et qui la validera.
 
-Ce que ce module ne fait pas : régler une dépense. Un décaissement s'écrit dans
+Ce que ce module n'écrit pas lui-même : un règlement. Un décaissement s'écrit dans
 `payments` avec `expense_id`, et une dette fournisseur s'ouvre à la main — les deux
-appartiennent à `finance`, dont Expenses dépend (Diagramme 3).
+appartiennent à `finance`, dont Expenses dépend (Diagramme 3). Une dépense « payée
+maintenant » passe donc par la façade Finance, dans la même transaction (ADR 0053).
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, audit_critical
 from app.core.codes import next_document_number
-from app.core.errors import BusinessRuleError, NotFoundError
+from app.core.errors import BusinessRuleError, NotFoundError, PermissionDeniedError
 from app.core.events.outbox import emit
 from app.core.events.types import EventType
 from app.core.tenancy import TenantContext
@@ -39,6 +40,8 @@ from app.modules.expenses.schemas import (
     ExpenseRead,
     ExpenseUpdate,
 )
+from app.modules.finance import service as finance_service
+from app.modules.finance.schemas import PaymentCreate
 from app.modules.suppliers import service as suppliers_service
 
 #: Type de document de la numérotation (`D-000001`, ADR 0021).
@@ -176,17 +179,36 @@ def build_read(session: Session, ctx: TenantContext, expense: Expense) -> Expens
     charge.
     """
     category = ExpenseRepository(session, ctx).category_of(expense)
-    return ExpenseRead(
-        id=expense.id,
-        expense_no=expense.expense_no,
-        category_id=expense.category_id,
-        category_name=category.name,
-        kind=category.kind,
-        supplier_id=expense.supplier_id,
-        label=expense.label,
-        amount=expense.amount,
-        spent_at=expense.spent_at,
-        created_at=expense.created_at,
+    paid = finance_service.paid_by_expenses(session, ctx, [expense.id])
+    return _to_read(expense, category.name, category.kind, paid.get(expense.id))
+
+
+def build_reads(
+    session: Session, ctx: TenantContext, rows: Sequence[Row[tuple[Expense, str, str]]]
+) -> list[ExpenseRead]:
+    """Vues publiques d'une page, le décaissé de chaque dépense lu en une requête."""
+    paid = finance_service.paid_by_expenses(session, ctx, [row[0].id for row in rows])
+    return [
+        _to_read(expense, category_name, kind, paid.get(expense.id))
+        for expense, category_name, kind in rows
+    ]
+
+
+def _to_read(expense: Expense, category_name: str, kind: str, paid: Decimal | None) -> ExpenseRead:
+    return ExpenseRead.model_validate(
+        {
+            "id": expense.id,
+            "expense_no": expense.expense_no,
+            "category_id": expense.category_id,
+            "category_name": category_name,
+            "kind": kind,
+            "supplier_id": expense.supplier_id,
+            "label": expense.label,
+            "amount": expense.amount,
+            "spent_at": expense.spent_at,
+            "created_at": expense.created_at,
+            "amount_paid": paid if paid is not None else Decimal("0"),
+        }
     )
 
 
@@ -261,6 +283,28 @@ def create_expense(
             spent_at=expense.spent_at,
         ),
     )
+
+    if payload.payment is not None:
+        # Même transaction, même clé d'idempotence : la charge n'existe jamais
+        # « payée à moitié ». Le décaissement garde son propre audit critique.
+        if not ctx.has_permission("payments:create"):
+            raise PermissionDeniedError(
+                "Vous n'avez pas la permission d'effectuer cette action.",
+                details={"required_permission": "payments:create"},
+            )
+        finance_service.record_payment(
+            session,
+            ctx,
+            PaymentCreate(
+                direction="outflow",
+                method=payload.payment.method,
+                amount=expense.amount,
+                paid_at=payload.payment.paid_at,
+                reference=payload.payment.reference,
+                expense_id=expense.id,
+            ),
+            ip_address=ip_address,
+        )
     return expense
 
 

@@ -8,6 +8,17 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
+class UserRoleRead(BaseModel):
+    """Rôle porté par un compte. `description` est le libellé affiché (ADR 0007)."""
+
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    id: UUID
+    name: str
+    description: str | None
+    is_system: bool
+
+
 class UserRead(BaseModel):
     """Vue publique d'un utilisateur. Le hachage du mot de passe n'en fait jamais partie."""
 
@@ -19,6 +30,8 @@ class UserRead(BaseModel):
     is_active: bool
     last_login_at: datetime | None
     created_at: datetime
+    #: Rôles du compte (ADR 0053) : l'écran Utilisateurs les affiche sans N+1.
+    roles: list[UserRoleRead] = Field(default_factory=list)
 
 
 class UserCreate(BaseModel):
