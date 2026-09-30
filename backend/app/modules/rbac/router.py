@@ -12,7 +12,6 @@ from app.modules.rbac import service
 from app.modules.rbac.repository import PermissionCatalogue
 from app.modules.rbac.schemas import (
     PermissionRead,
-    RoleAssignment,
     RoleCreate,
     RoleDetail,
     RolePage,
@@ -98,27 +97,5 @@ def delete_role(
     service.delete_role(tenant.session, tenant.ctx, role_id, ip_address=client_ip(request))
 
 
-@router.post("/users/{user_id}/roles", response_model=list[UUID])
-def assign_role(
-    user_id: UUID,
-    payload: RoleAssignment,
-    request: Request,
-    tenant: Annotated[TenantSession, Depends(require_permission("roles:update"))],
-) -> list[UUID]:
-    """Attribue un rôle. Élévation de privilège : audit critique."""
-    return service.assign_role(
-        tenant.session, tenant.ctx, user_id, payload.role_id, ip_address=client_ip(request)
-    )
-
-
-@router.delete("/users/{user_id}/roles/{role_id}", response_model=list[UUID])
-def revoke_role(
-    user_id: UUID,
-    role_id: UUID,
-    request: Request,
-    tenant: Annotated[TenantSession, Depends(require_permission("roles:update"))],
-) -> list[UUID]:
-    """Retire un rôle. La trace reste dans `audit_logs`."""
-    return service.revoke_role(
-        tenant.session, tenant.ctx, user_id, role_id, ip_address=client_ip(request)
-    )
+# Attribution et retrait d'un rôle : routes servies par Users (ADR 0054), qui garde
+# l'entreprise d'une situation sans gérant actif — RBAC ne lit pas `users`.

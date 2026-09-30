@@ -45,6 +45,17 @@ def roles_by_user(
     return grouped
 
 
+def system_role_id(session: Session, ctx: TenantContext, name: str) -> UUID | None:
+    """Identifiant d'un rôle système de l'entreprise (`gerant`…), ou `None`."""
+    role = RoleRepository(session, ctx).get_by_name(name)
+    return role.id if role is not None and role.is_system else None
+
+
+def holders_of_role(session: Session, ctx: TenantContext, role_id: UUID) -> list[UUID]:
+    """Utilisateurs portant ce rôle, actifs ou non (l'activité appartient à Users)."""
+    return UserRoleRepository(session, ctx).user_ids_with_role(role_id)
+
+
 def list_roles(
     session: Session, ctx: TenantContext, *, page: int, page_size: int
 ) -> tuple[Sequence[Role], int]:

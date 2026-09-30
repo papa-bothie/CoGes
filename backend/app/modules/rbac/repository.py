@@ -135,6 +135,14 @@ class UserRoleRepository:
         )
         return list(self.session.execute(stmt).scalars().all())
 
+    def user_ids_with_role(self, role_id: UUID) -> list[UUID]:
+        stmt = (
+            select(UserRole.user_id)
+            .where(UserRole.company_id == self.ctx.company_id, UserRole.role_id == role_id)
+            .order_by(UserRole.user_id)
+        )
+        return list(self.session.execute(stmt).scalars().all())
+
     def grant(self, user_id: UUID, role_id: UUID) -> None:
         self.session.add(UserRole(company_id=self.ctx.company_id, user_id=user_id, role_id=role_id))
 

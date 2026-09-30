@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.core.deps import TenantSession, client_ip, require_permission
+from app.modules.rbac.schemas import RoleAssignment
 from app.modules.users import service
 from app.modules.users.models import User
 from app.modules.users.schemas import (
@@ -103,3 +104,29 @@ def change_password(
         tenant.session, tenant.ctx, user_id, payload, ip_address=client_ip(request)
     )
     return _read(tenant, user)
+
+
+@router.post("/{user_id}/roles", response_model=list[UUID], tags=["rbac"])
+def assign_role(
+    user_id: UUID,
+    payload: RoleAssignment,
+    request: Request,
+    tenant: Annotated[TenantSession, Depends(require_permission("roles:update"))],
+) -> list[UUID]:
+    """Attribue un rôle. Élévation de privilège : audit critique."""
+    return service.assign_role(
+        tenant.session, tenant.ctx, user_id, payload.role_id, ip_address=client_ip(request)
+    )
+
+
+@router.delete("/{user_id}/roles/{role_id}", response_model=list[UUID], tags=["rbac"])
+def revoke_role(
+    user_id: UUID,
+    role_id: UUID,
+    request: Request,
+    tenant: Annotated[TenantSession, Depends(require_permission("roles:update"))],
+) -> list[UUID]:
+    """Retire un rôle. Refusé (409 `last_manager`) s'il s'agit du dernier gérant actif."""
+    return service.revoke_role(
+        tenant.session, tenant.ctx, user_id, role_id, ip_address=client_ip(request)
+    )

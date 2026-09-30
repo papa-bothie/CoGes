@@ -1,7 +1,7 @@
 import { compareDecimal, subtractDecimal } from "./decimal";
 
 /**
- * **Préremplissage** d'un règlement réparti sur plusieurs dettes (ADR 0054) : le montant
+ * **Préremplissage** d'un règlement réparti sur plusieurs dettes (ADR 0055) : le montant
  * saisi couvre les dettes dans l'ordre donné (la plus ancienne échéance d'abord), chacune
  * à hauteur de son solde. Ce n'est qu'une proposition modifiable : le serveur refuse une
  * affectation au-delà du solde (409) ou du versement (422), et c'est lui qui fait foi.
