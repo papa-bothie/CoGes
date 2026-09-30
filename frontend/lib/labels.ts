@@ -975,6 +975,21 @@ export const labels = {
       },
     },
   },
+  notifications: {
+    unread: "Non lue",
+    unreadCount: (count: number) =>
+      count === 0
+        ? "Aucune alerte non lue"
+        : `${count} alerte${count > 1 ? "s" : ""} non lue${count > 1 ? "s" : ""}`,
+    markRead: "Marquer lue",
+    markUnread: "Marquer non lue",
+    empty: "Aucune notification.",
+    seeAll: "Toutes les notifications",
+    filter: "Afficher",
+    all: "Toutes",
+    unreadOnly: "Non lues",
+    count: (count: number) => `${count} notification${count > 1 ? "s" : ""}`,
+  },
   emptyPage: {
     title: "Bientôt disponible",
     body: "Cet écran sera construit dans une prochaine phase.",

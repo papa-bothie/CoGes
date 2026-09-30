@@ -136,4 +136,15 @@ test.describe("captures du pilotage", () => {
     await expect(page.getByRole("dialog")).toBeVisible();
     await shoot(page, "parametres-journal-detail");
   });
+
+  test("notifications", async ({ page }) => {
+    await page.getByRole("button", { name: /^Notifications/ }).click();
+    await expect(page.getByRole("dialog", { name: "Notifications" })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await shoot(page, "notifications-panneau");
+    await page.getByRole("link", { name: "Toutes les notifications" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Notifications" })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await shoot(page, "notifications-page");
+  });
 });
