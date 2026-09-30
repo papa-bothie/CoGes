@@ -54,4 +54,17 @@ test.describe("captures du pilotage", () => {
       }
     }
   });
+
+  test("analytics", async ({ page }) => {
+    await page.goto("/analytics");
+    await expect(page.getByTestId("ranking-leader")).toBeVisible({ timeout: 30_000 });
+    await page.waitForLoadState("networkidle");
+    await shoot(page, "analytics-ca");
+    await page.goto("/analytics?metric=future_potential");
+    await expect(page.getByTestId("ranking-title")).toContainText("potentiel futur", {
+      timeout: 30_000,
+    });
+    await page.waitForLoadState("networkidle");
+    await shoot(page, "analytics-potentiel-futur");
+  });
 });

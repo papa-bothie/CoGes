@@ -83,6 +83,8 @@ export const labels = {
     model: "Modèle",
     uncertainty: "Incertitude",
     insufficientData: "Données insuffisantes",
+    intervalPerRow: "Intervalle de prévision indiqué pour chaque produit",
+    noInterval: "Non fourni par le modèle",
   },
   dashboard: {
     revenueToday: "CA du jour",
@@ -739,6 +741,33 @@ export const labels = {
       categoryCreated: "Catégorie créée.",
       noCategories: "Aucune catégorie : créez-en une avant de saisir une dépense.",
     },
+  },
+  analytics: {
+    metric: "Métrique",
+    metricHelp:
+      "Chaque classement repose sur une seule métrique, nommée. Aucune n'est combinée aux autres.",
+    ranking: (label: string) => `Classement par ${label.toLowerCase()}`,
+    rankingHint: (from: string, to: string) => `10 premiers produits, du ${from} au ${to}`,
+    forecastHint: (asOf: string, days: number) =>
+      `Prévision produite le ${asOf}, sur les ${days} jours suivants (la période choisie ne s'applique pas)`,
+    columns: {
+      rank: "Rang",
+      product: "Produit",
+      metric: "Métrique",
+      value: "Valeur",
+      interval: "Intervalle",
+      model: "Modèle",
+    },
+    empty: "Aucune vente sur cette période : aucun classement à établir.",
+    insufficient: "Données insuffisantes",
+    series: {
+      revenue: "Chiffre d'affaires net par jour",
+      margin: "Marge estimée par jour",
+      revenueLabel: "Chiffre d'affaires net quotidien sur la période",
+      marginLabel: "Marge estimée quotidienne sur la période",
+      empty: "Aucune donnée sur cette période.",
+    },
+    intervalRange: (lower: string, upper: string) => `${lower} – ${upper}`,
   },
   emptyPage: {
     title: "Bientôt disponible",
