@@ -198,7 +198,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 09 CoGes Intelligence | `09-intelligence.md` | 08 | T33–T35 | ✅ |
 | 10 Import/export, durcissement, déploiement | `10-durcissement-deploiement.md` | 09 | T1–T40 en CI | ✅ préprod en ligne (`https://coges-api.vercel.app`, zone B sur le poste) ; prod à ouvrir |
 | 11 Front : fondations et design system | `11-front-fondations.md` | 10 (ou 07 + OpenAPI stable) | e2e login | ✅ 61 Vitest, 6 e2e locaux ; préversion `coges-web` en ligne, connexion vérifiée contre la préprod |
-| 12 Front : opérations | `12-front-operations.md` | 11 | e2e vente | ⬜ |
+| 12 Front : opérations | `12-front-operations.md` | 11 | e2e vente | ✅ 81 Vitest, 16 e2e locaux (vente, survente, retour, ajustement, produits, clients, fournisseurs) ; captures `docs/design/captures/phase-12/` |
 | 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ⬜ |
 | 14 Finition visuelle (Impeccable) | `14-polish-impeccable.md` | 13 | audit Impeccable | ⬜ |
 
@@ -255,12 +255,15 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0047 | 2026-09-29 | **Même origine** : Next réécrit `/api/v1/*` vers `COGES_API_URL` (deux `*.vercel.app` = deux sites, le cookie `Lax` ne passerait pas) ; `openapi-typescript` + `openapi-fetch`, `pnpm check:api` en CI ; `ApiError` | `docs/decisions/0047-client-api-type-et-reecriture.md` |
 | 0048 | 2026-09-29 | **`GET /auth/me`** sans permission ; jeton en mémoire rafraîchi à la demande, mutualisé et verrouillé entre onglets ; indicateur `coges_session=1` pour `proxy.ts` ; déconnexion propagée (`BroadcastChannel`, une instance par onglet) | `docs/decisions/0048-jetons-cote-front.md` |
 | 0049 | 2026-09-29 | **Redirection ouverte corrigée** : `safeNext(next, origine)` refuse `\` et les caractères de contrôle, résout par `new URL`, exige la même origine et un chemin qui ne commence pas par `//`, refuse `/login` ; appliquée au formulaire, à `loginUrl` et à `proxy.ts` | `docs/decisions/0049-destination-apres-connexion-sans-redirection-ouverte.md` |
+| 0050 | 2026-09-29 | **Lectures pour le front** : `product_name`, `sku`, `returned_qty` sur les lignes de vente, `customer_name` sur les ventes, `product_id` répété sur `/inventory/stock` (≤ 100), `customer_id`/`supplier_id` sur `/debts` ; recherche des référentiels **triée par pertinence** | `docs/decisions/0050-enrichissements-de-lecture-pour-le-front.md` |
+| 0051 | 2026-09-30 | **Délai de grâce de 30 s** sur la rotation du refresh : jeton tourné < 30 s dont le successeur n'a jamais servi ⇒ nouvelle session, une seule fois, auditée ; sinon réutilisation ⇒ famille révoquée (complète 0005) | `docs/decisions/0051-delai-de-grace-de-la-rotation.md` |
+| 0052 | 2026-09-30 | **Écrans opérationnels** : brouillon serveur synchronisé, totaux du serveur, reçu 80 mm/A4, confirmation bloquée si stock affiché insuffisant + erreur serveur sur la ligne, retour en deux temps, clé d'idempotence gardée jusqu'au succès ; écarts au prototype listés. Complément à 0017 : **seuls les mouvements manuels** s'inversent depuis le stock | `docs/decisions/0052-ecrans-operationnels-cote-front.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**
 (signalé, hors V1 technique).
 
-> **Backend V1 terminé (code)** — 22 groupes, 98 opérations sous `/api/v1` (`auth/me` en phase 11). Contrat :
+> **Backend V1 terminé (code)** — 22 groupes, 98 opérations sous `/api/v1` (`auth/me` en phase 11 ; filtres et champs de lecture ajoutés en phase 12, ADR 0050). Contrat :
 > `backend/openapi.json` (versionné, vérifié en CI, `make openapi`) ; servi hors production sur
 > `/api/v1/openapi.json`, documentation interactive `/api/v1/docs`.
 > Plateforme `health` · `auth` (login, refresh, logout, me) · `companies/me` · `users` · `roles`,
@@ -272,7 +275,8 @@ P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; r
 > `intelligence/summary` · `imports/{kind}` (+ template) · `exports` (referentials, sales, file) ·
 > `system/outbox`. Préproduction en ligne depuis le 2026-09-27 : `https://coges-api.vercel.app`
 > (`deploy/README-infra.md`). Front : projet Vercel `coges-web`, déployé en préversion (`frontend/README.md`,
-> `deploy/README-infra.md`). Prochaine étape : phase 12 (opérations).
+> `deploy/README-infra.md`). Phase 12 terminée (écrans opérationnels, ADR 0052). Prochaine étape : phase 13
+> (finance, pilotage, paramètres).
 
 ## 10. Ce que tu ne fais jamais
 
