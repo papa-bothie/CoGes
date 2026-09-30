@@ -178,3 +178,38 @@ def test_debts_can_be_filtered_by_customer(api_client: TestClient, alpha_token: 
     ).json()
     assert listed["total"] == 1
     assert listed["items"][0]["customer_id"] == customer["id"]
+
+
+def test_search_puts_the_exact_match_first(api_client: TestClient, alpha_token: str) -> None:
+    """Vingt noms voisins triés par nom ne doivent pas repousser le bon hors de la page."""
+    family = f"Rang {uuid4().hex[:6]}"
+    for index in range(12):
+        created = api_client.post(
+            "/api/v1/products",
+            headers=auth_headers(alpha_token),
+            json={
+                "sku": f"RG-{uuid4().hex[:8]}",
+                "name": f"{family} A{index:02d}",
+                "unit_price": "10",
+            },
+        )
+        assert created.status_code == 201, created.text
+    target = api_client.post(
+        "/api/v1/products",
+        headers=auth_headers(alpha_token),
+        json={"sku": f"RG-{uuid4().hex[:8]}", "name": f"{family} Z", "unit_price": "10"},
+    ).json()
+
+    found = api_client.get(
+        "/api/v1/products",
+        headers=auth_headers(alpha_token),
+        params={"search": target["name"], "page_size": 5},
+    ).json()
+    assert found["items"][0]["id"] == target["id"]
+
+    by_sku = api_client.get(
+        "/api/v1/products",
+        headers=auth_headers(alpha_token),
+        params={"search": target["sku"], "page_size": 5},
+    ).json()
+    assert by_sku["items"][0]["id"] == target["id"]

@@ -41,6 +41,12 @@ Les écrans opérationnels de la phase 12 ont besoin d'informations que l'API ne
 
 Ce sont des libellés et des cumuls de lecture : aucun ne porte de montant nouveau ni de règle.
 
+**Complément (2026-09-30)** — avec une recherche, les listes de produits, clients et
+fournisseurs sont triées **par pertinence** (`core.search.relevance_order`) : code exact, nom
+identique, nom qui commence par le terme, sous-chaîne, puis similarité trigramme ; l'ordre
+alphabétique ne départage qu'ensuite. Trié par nom, l'article exact pouvait sortir de la page
+derrière des noms approchants (constaté dans le sélecteur d'articles de la vente).
+
 ## Conséquences
 
 - `openapi.json` et `frontend/types/api.ts` régénérés ; les champs sont **requis** en sortie.

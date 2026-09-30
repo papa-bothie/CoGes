@@ -9,7 +9,7 @@ from sqlalchemy import ColumnElement, Integer, Select, cast, func, or_, select
 
 from app.core.codes import number_pattern
 from app.core.repository import TenantRepository
-from app.core.search import code_matches, name_matches
+from app.core.search import code_matches, name_matches, relevance_order
 from app.modules.customers.models import Customer
 
 
@@ -58,7 +58,7 @@ class CustomerRepository(TenantRepository[Customer]):
         stmt = (
             self._live()
             .where(*self._filters(search=search))
-            .order_by(Customer.name)
+            .order_by(*relevance_order(Customer.name, (Customer.code,), search))
             .limit(page_size)
             .offset((page - 1) * page_size)
         )
