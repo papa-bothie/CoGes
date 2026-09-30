@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, select, text
 
 from app.core.repository import TenantRepository
 from app.modules.users.models import User
@@ -56,3 +56,18 @@ class UserRepository(TenantRepository[User]):
         stmt = self._select().where(User.id.in_(list(user_ids)))
         rows = self.session.execute(stmt.with_only_columns(User.id, User.full_name)).all()
         return {row[0]: row[1] for row in rows}
+
+    def lock_manager_guard(self) -> None:
+        """Verrou transactionnel propre à l'entreprise, pour la garde du dernier gérant.
+
+        Deux gérants qui se désactivent mutuellement comptent chacun l'autre comme
+        « encore actif » s'ils lisent en même temps : sans point de rendez-vous, les deux
+        passent (ADR 0054). Ce verrou consultatif sérialise **toutes** les voies qui
+        retirent un gérant, pour une entreprise et elle seule ; il est libéré au COMMIT ou
+        au ROLLBACK. La lecture qui suit, en READ COMMITTED, voit donc ce que l'autre
+        transaction vient de valider.
+        """
+        self.session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": f"coges:last_manager:{self.ctx.company_id}"},
+        )

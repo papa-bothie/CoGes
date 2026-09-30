@@ -47,7 +47,12 @@ _SELF_DEACTIVATION = "Vous ne pouvez pas désactiver votre propre compte."
 
 
 def _assert_a_manager_remains(session: Session, ctx: TenantContext, losing: UUID) -> None:
-    """Refuse que `losing` cesse d'être gérant actif s'il est le dernier."""
+    """Refuse que `losing` cesse d'être gérant actif s'il est le dernier.
+
+    Le verrou est pris **avant** de compter : deux retraits concurrents se succèdent, et
+    le second compte les gérants actifs après le COMMIT du premier (ADR 0054).
+    """
+    UserRepository(session, ctx).lock_manager_guard()
     role_id = rbac_service.system_role_id(session, ctx, MANAGER)
     if role_id is None:
         return
