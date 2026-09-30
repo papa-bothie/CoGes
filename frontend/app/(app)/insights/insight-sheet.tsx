@@ -131,7 +131,7 @@ export function InsightSheet({
                     {evidence.facts.map((fact) => (
                       <div key={fact.key} className="contents">
                         <dt className="text-muted-foreground">{fact.label}</dt>
-                        <dd className="numeric">{fact.value}</dd>
+                        <dd className="tabular-nums">{fact.value}</dd>
                       </div>
                     ))}
                   </dl>
@@ -144,7 +144,7 @@ export function InsightSheet({
                     {evidence.thresholds.map((fact) => (
                       <div key={fact.key} className="contents">
                         <dt className="text-muted-foreground">{fact.label}</dt>
-                        <dd className="numeric">{fact.value}</dd>
+                        <dd className="tabular-nums">{fact.value}</dd>
                       </div>
                     ))}
                   </dl>

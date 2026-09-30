@@ -3,6 +3,8 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
+/* Densité confortable des tableaux (réglage du navigateur, lib/density.ts). */
+@custom-variant comfortable (&:where([data-density="comfortable"] *));
 
 /*
  * Tokens du prototype Bolt, repris à l'identique (docs/design/prototype-reference.md § 1).

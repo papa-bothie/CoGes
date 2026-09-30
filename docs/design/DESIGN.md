@@ -121,7 +121,7 @@ components:
 
 <!--
   État de référence relevé le 30/09/2026 avant la phase 14 ; typographie mise à jour par la
-  passe 3 (typeset). Chaque passe
+  passe 3 (typeset), mise en page par la passe 4 (layout). Chaque passe
   Impeccable qui change un token met ce fichier à jour. Source normative des valeurs :
   frontend/app/globals.css (triplets HSL shadcn) ; ce fichier les décrit.
 -->
@@ -231,16 +231,37 @@ un indicateur, `figure-sm` pour un total. Pas de `text-xl font-bold` isolé.
 ## Layout
 
 Coquille à deux colonnes : barre latérale fixe (≈ 208 px, feuille, filet droit) et zone de
-contenu sur fond papier, en-tête en haut. Sous le seuil `md` (768 px), la barre latérale devient
-un panneau (`Sheet`) ouvert par un bouton menu.
+contenu sur fond papier, en-tête de 56 px en haut. Sous le seuil `lg` (1024 px : tablette en
+portrait, petit écran), la barre latérale devient un panneau (`Sheet`) ouvert par un bouton menu,
+et l'en-tête affiche alors le nom de l'entreprise.
+
+**En-tête = fil d'Ariane.** L'en-tête ne répète pas le titre de la page : il montre la section
+(« Ventes ») et, sur une sous-page, la section en lien suivie du titre déclaré par `PageHeader`
+(« Ventes › Nouvelle vente », `components/shell/page-title.tsx`). À droite : cloche, densité,
+thème, utilisateur, déconnexion.
 
 Chaque page suit le même registre : `PageHeader` (titre `h1` + compteur à gauche, action
 principale à droite), puis une barre de recherche et de filtres, puis un tableau dans une carte.
-Le tableau de bord range ses KPI en grille (2 colonnes dès `sm`, 3 dès `xl`), puis bandeaux d'alerte,
-graphique en aire et liste des dernières ventes.
+Le tableau de bord range ses KPI en grille (2 colonnes dès `sm`, 3 dès `xl`), puis la synthèse
+d'Intelligence, le graphique et les dernières ventes : à 1366 × 768, KPI et synthèse tiennent
+dans le premier écran.
+
+**Nouvelle vente.** Dès `xl` (1280 px), deux colonnes : saisie à gauche, Totaux / Règlement /
+actions collés à droite. En dessous, Totaux et Règlement passent côte à côte sous les articles,
+et les actions deviennent une **barre fixée en bas** (total + « Enregistrer en brouillon » +
+« Confirmer la vente ») : la confirmation reste toujours à portée sur tablette.
+
+**Colonnes d'appoint.** Une colonne de `DataTable` marquée `secondary` disparaît sous `lg`
+(Stock : Catégorie, Dernier mouvement) pour que les colonnes utiles tiennent en portrait.
+
+**Densité.** Réglage du navigateur (`lib/density.ts`, `localStorage`), **compacte** par défaut.
+*Confortable* (`data-density="comfortable"` sur `<html>`, variante Tailwind `comfortable:`) passe
+les tableaux à 16 px, lignes de 12 px de marge verticale, en-têtes de 48 px. Posé avant
+l'affichage par un script de `<head>`, sans clignotement.
 
 Rythme d'espacement sur la base Tailwind de 4 px : 4 / 8 / 16 / 20 / 24 px. Cartes : 16 px de
-marge intérieure (20 px pour les KPI). Tableaux : en-têtes de 40 px en rôle *label* (12 px, gris d'annotation), cellules à 8 px de marge.
+marge intérieure (KPI compris). Tableaux : en-têtes de 40 px en rôle *label* (12 px, gris
+d'annotation), cellules à 8 px de marge.
 
 ## Elevation & Depth
 
@@ -298,11 +319,13 @@ Précis et retenus.
 - **Style:** liste verticale, éléments de 36 px, icône 16 px + libellé 14 px / 500, coins 8 px.
 - **Default / hover / active:** gris annotation ; voile gris et encre au survol ; plein bleu
   pétrole et texte blanc quand actif (`aria-current="page"`).
-- **Mobile:** même contenu dans un `Sheet` à gauche.
+- **Tablette et mobile (< 1024 px):** même contenu dans un `Sheet` à gauche.
 
 ### Carte KPI (signature)
-Pastille d'icône 40 px (coins 8 px, fond teinté de la couleur du ton), libellé en gris
-annotation, valeur en Figure, indication en Label. La valeur arrive formatée par l'API.
+Libellé en gris annotation précédé d'une icône de 16 px (grise ; orange ou rouge seulement pour
+un état d'alerte ou de danger), valeur en Figure, indication en Label ; 16 px de marge, environ
+110 px de haut. Pas de pastille d'icône : elle prenait 50 px sans rien dire. La valeur arrive
+formatée par l'API.
 
 ### Carte de recommandation (signature)
 Carte d'Intelligence cliquable : badges type + confiance, titre, lignes **Métrique / Valeur /

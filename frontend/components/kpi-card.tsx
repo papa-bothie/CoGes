@@ -4,12 +4,14 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
+// L'icône accompagne le libellé ; seule une alerte ou un danger la colore (un état, pas une
+// décoration). La teinte exacte des états relève de la passe « colorize ».
 const TONES = {
-  primary: "bg-primary/10 text-primary",
-  success: "bg-success/10 text-success",
-  warning: "bg-warning/10 text-warning",
-  danger: "bg-destructive/10 text-destructive",
-  neutral: "bg-muted text-muted-foreground",
+  primary: "text-muted-foreground",
+  success: "text-muted-foreground",
+  warning: "text-warning",
+  danger: "text-destructive",
+  neutral: "text-muted-foreground",
 } as const;
 
 /**
@@ -32,19 +34,13 @@ export function KpiCard({
   loading?: boolean;
 }) {
   return (
-    <Card className="gap-3 px-5 py-5">
-      <div className={cn("grid size-10 place-items-center rounded-lg", TONES[tone])}>
-        <Icon className="size-5" aria-hidden />
-      </div>
-      <div>
-        <p className="text-sm text-muted-foreground">{label}</p>
-        {loading ? (
-          <Skeleton className="mt-1 h-7 w-32" />
-        ) : (
-          <p className="mt-0.5 text-figure numeric">{value}</p>
-        )}
-        {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
-      </div>
+    <Card className="gap-1 px-4 py-4">
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Icon className={cn("size-4 shrink-0", TONES[tone])} aria-hidden />
+        {label}
+      </p>
+      {loading ? <Skeleton className="h-8 w-32" /> : <p className="text-figure numeric">{value}</p>}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </Card>
   );
 }

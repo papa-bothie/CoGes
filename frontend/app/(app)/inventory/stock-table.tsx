@@ -54,6 +54,7 @@ export function StockTable({ onTotal }: { onTotal: (total: number) => void }) {
     },
     {
       id: "category",
+      secondary: true,
       header: labels.stock.columns.category,
       cell: (line) => line.category_name ?? <span className="text-muted-foreground">—</span>,
     },
@@ -85,6 +86,7 @@ export function StockTable({ onTotal }: { onTotal: (total: number) => void }) {
     },
     {
       id: "last",
+      secondary: true,
       header: labels.stock.columns.lastMovement,
       cell: (line) => (
         <span className="numeric whitespace-nowrap">
