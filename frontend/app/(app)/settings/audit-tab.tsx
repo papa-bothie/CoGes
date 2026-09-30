@@ -267,7 +267,7 @@ function DiffDialog({ log, onClose }: { log: Log | null; onClose: () => void }) 
                       return (
                         <tr key={key} className={changed ? "border-b bg-warning/5" : "border-b"}>
                           <td className="px-3 py-1.5 font-medium break-all">{key}</td>
-                          <td className="px-3 py-1.5 break-all tabular-nums text-muted-foreground">
+                          <td className="px-3 py-1.5 break-all text-muted-foreground tabular-nums">
                             {show(before[key])}
                           </td>
                           <td className="px-3 py-1.5 break-all tabular-nums">{show(after[key])}</td>
