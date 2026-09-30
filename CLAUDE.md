@@ -199,7 +199,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 10 Import/export, durcissement, déploiement | `10-durcissement-deploiement.md` | 09 | T1–T40 en CI | ✅ préprod en ligne (`https://coges-api.vercel.app`, zone B sur le poste) ; prod à ouvrir |
 | 11 Front : fondations et design system | `11-front-fondations.md` | 10 (ou 07 + OpenAPI stable) | e2e login | ✅ 61 Vitest, 6 e2e locaux ; préversion `coges-web` en ligne, connexion vérifiée contre la préprod |
 | 12 Front : opérations | `12-front-operations.md` | 11 | e2e vente | ✅ 81 Vitest, 16 e2e locaux (vente, survente, retour, ajustement, produits, clients, fournisseurs) ; captures `docs/design/captures/phase-12/` |
-| 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ⬜ |
+| 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ✅ 92 Vitest, 26 e2e locaux (dont paiement réparti, métrique, insight écarté, vendeur sans paramètres) ; 674 tests backend ; captures `docs/design/captures/phase-13/` |
 | 14 Finition visuelle (Impeccable) | `14-polish-impeccable.md` | 13 | audit Impeccable | ⬜ |
 
 ## 9. Journal des décisions
@@ -258,12 +258,15 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0050 | 2026-09-29 | **Lectures pour le front** : `product_name`, `sku`, `returned_qty` sur les lignes de vente, `customer_name` sur les ventes, `product_id` répété sur `/inventory/stock` (≤ 100), `customer_id`/`supplier_id` sur `/debts` ; recherche des référentiels **triée par pertinence** | `docs/decisions/0050-enrichissements-de-lecture-pour-le-front.md` |
 | 0051 | 2026-09-30 | **Délai de grâce de 30 s** sur la rotation du refresh : jeton tourné < 30 s dont le successeur n'a jamais servi ⇒ nouvelle session, une seule fois, auditée ; sinon réutilisation ⇒ famille révoquée (complète 0005) | `docs/decisions/0051-delai-de-grace-de-la-rotation.md` |
 | 0052 | 2026-09-30 | **Écrans opérationnels** : brouillon serveur synchronisé, totaux du serveur, reçu 80 mm/A4, confirmation bloquée si stock affiché insuffisant + erreur serveur sur la ligne, retour en deux temps, clé d'idempotence gardée jusqu'au succès ; écarts au prototype listés. Complément à 0017 : **seuls les mouvements manuels** s'inversent depuis le stock | `docs/decisions/0052-ecrans-operationnels-cote-front.md` |
+| 0053 | 2026-09-30 | **Journal d'activité** `GET /audit-logs` (gérant + comptable) ; `roles` sur les utilisateurs, `party_name` sur les dettes, `amount_paid` sur les dépenses ; **dépense payée atomique** (bloc `payment` sous la même `Idempotency-Key`) | `docs/decisions/0053-journal-d-activite-et-lectures-de-pilotage.md` |
+| 0054 | 2026-09-30 | `settings.default_reorder_point` appliqué **par le serveur** aux produits suivis sans seuil ; réglages connus vérifiés ; devise en lecture seule à l'écran ; **garde du dernier gérant actif** (409 `last_manager`), routes de rôles d'un utilisateur servies par Users | `docs/decisions/0054-parametres-seuil-par-defaut-et-dernier-gerant.md` |
+| 0055 | 2026-09-30 | **Écrans de pilotage** : cartes d'Intelligence compactes + panneau, métrique en liste déroulante nommée sur chaque ligne, période commune dans l'URL, règlement réparti prérempli, journal en lecture ; écarts au prototype listés | `docs/decisions/0055-ecrans-de-pilotage-cote-front.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**
 (signalé, hors V1 technique).
 
-> **Backend V1 terminé (code)** — 22 groupes, 98 opérations sous `/api/v1` (`auth/me` en phase 11 ; filtres et champs de lecture ajoutés en phase 12, ADR 0050). Contrat :
+> **Backend V1 terminé (code)** — 23 groupes, 99 opérations sous `/api/v1` (`auth/me` en phase 11 ; lectures ajoutées en phase 12, ADR 0050 ; `audit-logs` et lectures de pilotage en phase 13, ADR 0053). Contrat :
 > `backend/openapi.json` (versionné, vérifié en CI, `make openapi`) ; servi hors production sur
 > `/api/v1/openapi.json`, documentation interactive `/api/v1/docs`.
 > Plateforme `health` · `auth` (login, refresh, logout, me) · `companies/me` · `users` · `roles`,
@@ -273,10 +276,10 @@ P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; r
 > (+ write-off) · `expense-categories` · `expenses` · Restitution `analytics` (overview,
 > products, timeseries) · `dashboard` · `notifications` · `insights`, `forecasts`,
 > `intelligence/summary` · `imports/{kind}` (+ template) · `exports` (referentials, sales, file) ·
-> `system/outbox`. Préproduction en ligne depuis le 2026-09-27 : `https://coges-api.vercel.app`
+> `system/outbox` · `audit-logs`. Préproduction en ligne depuis le 2026-09-27 : `https://coges-api.vercel.app`
 > (`deploy/README-infra.md`). Front : projet Vercel `coges-web`, déployé en préversion (`frontend/README.md`,
-> `deploy/README-infra.md`). Phase 12 terminée (écrans opérationnels, ADR 0052). Prochaine étape : phase 13
-> (finance, pilotage, paramètres).
+> `deploy/README-infra.md`). Phases 12 et 13 terminées (ADR 0052, 0055) : **le produit V1 est
+> fonctionnellement complet**. Prochaine étape : phase 14 (finition visuelle, Impeccable).
 
 ## 10. Ce que tu ne fais jamais
 
