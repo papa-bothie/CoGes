@@ -56,3 +56,26 @@ export function subtractDecimal(a: string, b: string): string | null {
   const fraction = digits ? `.${text.slice(text.length - digits)}` : "";
   return `${negative ? "-" : ""}${integer}${fraction}`;
 }
+
+/**
+ * Taux saisi en pourcentage (« 18 », « 5,5 ») → fraction pour l'API (« 0.18 », « 0.055 »),
+ * par décalage de la virgule sur la chaîne, sans `float`. `null` si illisible.
+ */
+export function percentToRate(value: string): string | null {
+  const parsed = parseDecimalInput(value);
+  if (parsed === null) return null;
+  const [integer = "0", fraction = ""] = parsed.split(".");
+  const digits = integer.padStart(3, "0");
+  const head = digits.slice(0, -2).replace(/^0+(?=\d)/, "");
+  const rate = `${head}.${digits.slice(-2)}${fraction}`.replace(/0+$/, "").replace(/\.$/, "");
+  return rate === "" ? "0" : rate;
+}
+
+/** Fraction de l'API (« 0.1800 ») → pourcentage affichable (« 18 », « 5,5 »). */
+export function rateToPercent(value: string): string {
+  const [integer = "0", fraction = ""] = value.split(".");
+  const shifted = `${integer}${fraction.padEnd(2, "0")}`;
+  const whole = shifted.slice(0, integer.length + 2).replace(/^0+(?=\d)/, "");
+  const rest = shifted.slice(integer.length + 2).replace(/0+$/, "");
+  return rest ? `${whole},${rest}` : whole;
+}

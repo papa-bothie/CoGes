@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { compareDecimal, parseDecimalInput, subtractDecimal, toInputDecimal } from "./decimal";
+import {
+  compareDecimal,
+  parseDecimalInput,
+  percentToRate,
+  rateToPercent,
+  subtractDecimal,
+  toInputDecimal,
+} from "./decimal";
 
 describe("compareDecimal", () => {
   it("compare des échelles différentes sans float", () => {
@@ -40,5 +47,21 @@ describe("subtractDecimal", () => {
     expect(subtractDecimal("0.3", "0.1")).toBe("0.2");
     expect(subtractDecimal("1", "2.5")).toBe("-1.5");
     expect(subtractDecimal("x", "1")).toBeNull();
+  });
+});
+
+describe("taux en pourcentage", () => {
+  it("convertit la saisie en fraction sans float", () => {
+    expect(percentToRate("18")).toBe("0.18");
+    expect(percentToRate("5,5")).toBe("0.055");
+    expect(percentToRate("0")).toBe("0");
+    expect(percentToRate("100")).toBe("1");
+    expect(percentToRate("abc")).toBeNull();
+  });
+
+  it("affiche la fraction de l'API en pourcentage", () => {
+    expect(rateToPercent("0.1800")).toBe("18");
+    expect(rateToPercent("0.0550")).toBe("5,5");
+    expect(rateToPercent("0.0000")).toBe("0");
   });
 });

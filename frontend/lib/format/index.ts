@@ -1,3 +1,3 @@
 export { formatAxisAmount, formatMoney } from "./money";
-export { formatQty } from "./qty";
+export { formatQty, formatQtyWithUnit } from "./qty";
 export { formatDate, formatDateTime } from "./date";
