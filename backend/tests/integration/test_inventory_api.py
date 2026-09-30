@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
+from app.core.idempotency import IDEMPOTENCY_HEADER
 from tests.conftest import (
     TEST_PASSWORD,
     DemoCompany,
@@ -372,6 +373,42 @@ def test_reverse_restores_the_stock_and_refuses_the_second_call(
     )
     assert on_reversal.status_code == 409
     assert on_reversal.json()["error"]["code"] == "movement_not_reversible"
+
+
+def test_a_sale_movement_is_not_reversed_from_the_stock(
+    api_client: TestClient, alpha_token: str
+) -> None:
+    """Inverser une sortie de vente la remettrait en stock sous une vente confirmée.
+
+    Un flux se corrige par son propre cas d'usage — annulation ou retour —, jamais
+    depuis le journal (ADR 0017, complément de la phase 12).
+    """
+    product_id = _make_product(api_client, alpha_token)
+    assert _record(api_client, alpha_token, product_id, qty_delta="10").status_code == 201
+    headers = auth_headers(alpha_token)
+    sale = api_client.post("/api/v1/sales", headers=headers, json={}).json()
+    api_client.post(
+        f"/api/v1/sales/{sale['id']}/items",
+        headers=headers,
+        json={"product_id": product_id, "qty": "2", "discount": "0"},
+    )
+    total = api_client.get(f"/api/v1/sales/{sale['id']}", headers=headers).json()["total"]
+    confirmed = api_client.post(
+        f"/api/v1/sales/{sale['id']}/confirm",
+        headers={**headers, IDEMPOTENCY_HEADER: uuid4().hex},
+        json={"paid_amount": total, "method": "cash"},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+    journal = api_client.get(
+        f"/api/v1/inventory/movements?product_id={product_id}&type=sale_out", headers=headers
+    ).json()
+    sale_out = journal["items"][0]["id"]
+
+    refused = api_client.post(f"/api/v1/inventory/movements/{sale_out}/reverse", headers=headers)
+    assert refused.status_code == 409
+    assert refused.json()["error"]["code"] == "movement_not_reversible"
+    assert _stock_line(api_client, alpha_token, product_id)["qty_on_hand"] == "8.000"
 
 
 # --------------------------------------------------------------------- lecture

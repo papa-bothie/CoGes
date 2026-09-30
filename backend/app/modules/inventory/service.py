@@ -45,6 +45,7 @@ from app.modules.inventory.repository import (
     StockHistoryRepository,
 )
 from app.modules.inventory.schemas import (
+    MANUAL_MOVEMENT_TYPES,
     TYPES_REQUIRING_NOTE,
     MovementCreate,
     StockLine,
@@ -87,6 +88,16 @@ class AlreadyReversedError(BusinessRuleError):
 class NotReversibleError(BusinessRuleError):
     code = "movement_not_reversible"
     default_message = "Une annulation ne s'annule pas : corriger par un ajustement."
+
+
+class FlowMovementNotReversibleError(BusinessRuleError):
+    """Un mouvement né d'une vente ou d'un retour ne se corrige pas depuis le stock."""
+
+    code = "movement_not_reversible"
+    default_message = (
+        "Ce mouvement vient d'une vente ou d'un retour client : "
+        "corrigez-le en annulant la vente ou en enregistrant un retour."
+    )
 
 
 class DuplicateMovementError(BusinessRuleError):
@@ -370,6 +381,13 @@ def reverse_movement(
     porte bien le même produit et la quantité opposée.
     """
     origin = get_movement(session, ctx, movement_id)
+    if origin.type not in MANUAL_MOVEMENT_TYPES:
+        # Inverser une sortie de vente remettrait l'article en stock sous une vente
+        # toujours confirmée : les flux se corrigent par leur propre cas d'usage
+        # (annulation, retour), qui passe par `reverse_sale_out` (ADR 0017, complément).
+        raise FlowMovementNotReversibleError(
+            details={"movement_id": str(origin.id), "type": origin.type}
+        )
     reversal = _write_reversal(session, ctx, origin)
 
     audit_critical(

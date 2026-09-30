@@ -32,6 +32,11 @@ FUTURE_TOLERANCE = timedelta(minutes=5)
 type ManualMovementType = Literal[
     "initial", "purchase_in", "supplier_return_out", "adjustment", "loss"
 ]
+#: Les mêmes, pour un test d'appartenance : seuls ceux-là se corrigent par l'inverse
+#: depuis le stock (ADR 0017, complément).
+MANUAL_MOVEMENT_TYPES: frozenset[str] = frozenset(
+    {"initial", "purchase_in", "supplier_return_out", "adjustment", "loss"}
+)
 #: Les sept valeurs de l'ENUM `movement_type`, pour la lecture et les filtres.
 type MovementType = Literal[
     "initial",
