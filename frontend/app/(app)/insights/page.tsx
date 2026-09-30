@@ -1,11 +1,16 @@
-import { Sparkles } from "lucide-react";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
-import { PlaceholderPage } from "@/components/placeholder-page";
 import { labels } from "@/lib/labels";
+
+import { InsightsView } from "./insights-view";
 
 export const metadata: Metadata = { title: labels.nav.insights };
 
 export default function InsightsPage() {
-  return <PlaceholderPage title={labels.nav.insights} icon={Sparkles} />;
+  return (
+    <Suspense>
+      <InsightsView />
+    </Suspense>
+  );
 }

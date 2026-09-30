@@ -29,6 +29,7 @@ describe("métriques produit", () => {
     const texts = [
       ...allTexts(METRIC_TEXTS),
       ...allTexts(labels.analytics),
+      ...allTexts(labels.insights),
       ...allTexts(labels.forecast),
     ];
     for (const text of texts) {

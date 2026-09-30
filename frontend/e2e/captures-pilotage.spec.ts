@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { DEMO, loginThroughUi } from "./fixtures";
+import { DEMO, loginThroughUi, managerApi } from "./fixtures";
 
 /**
  * Captures de référence de la phase 13 (docs/design/captures/phase-13), sur le jeu de
@@ -66,5 +66,46 @@ test.describe("captures du pilotage", () => {
     });
     await page.waitForLoadState("networkidle");
     await shoot(page, "analytics-potentiel-futur");
+  });
+
+  test("intelligence", async ({ page }) => {
+    await page.goto("/insights?status=all");
+    await expect(page.getByText(/Données arrêtées au/).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("listitem").first()).toBeVisible({ timeout: 30_000 });
+    await shoot(page, "intelligence-recommandations");
+    await page
+      .getByRole("button", { name: /Écoulement lent/ })
+      .first()
+      .click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.waitForLoadState("networkidle");
+    await shoot(page, "intelligence-panneau");
+    await page.keyboard.press("Escape");
+    await page.getByRole("tab", { name: "Prévisions" }).click();
+    await expect(page.locator(".recharts-surface").first()).toBeVisible({ timeout: 30_000 });
+    await shoot(page, "intelligence-previsions");
+    await page.goto("/dashboard");
+    await expect(page.getByTestId("dashboard-intelligence")).toBeVisible({ timeout: 30_000 });
+    await shoot(page, "tableau-de-bord-intelligence");
+  });
+
+  test("intelligence désactivée", async ({ page, request }) => {
+    const api = await managerApi(request);
+    const company = await api.get("/companies/me");
+    await api.patch("/companies/me", {
+      settings: { ...company.settings, intelligence_enabled: false },
+    });
+    try {
+      await page.goto("/insights");
+      await expect(page.getByText("CoGes Intelligence est désactivée")).toBeVisible({
+        timeout: 30_000,
+      });
+      await shoot(page, "intelligence-desactivee");
+      await page.goto("/dashboard");
+      await expect(page.getByText(/Chiffres calculés le/)).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("dashboard-intelligence")).toHaveCount(0);
+    } finally {
+      await api.patch("/companies/me", { settings: company.settings });
+    }
   });
 });

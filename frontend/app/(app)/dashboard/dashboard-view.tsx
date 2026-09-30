@@ -18,6 +18,7 @@ import Link from "next/link";
 import { AlertBanner } from "@/components/alerts/alert-banner";
 import { AreaChart } from "@/components/charts/area-chart";
 import { ErrorState } from "@/components/error-state";
+import { IntelligenceSummaryCard } from "@/components/forecast/intelligence-summary-card";
 import { KpiCard } from "@/components/kpi-card";
 import { Money } from "@/components/money";
 import { PageHeader } from "@/components/page-header";
@@ -181,6 +182,8 @@ export function DashboardView() {
           loading={loading}
         />
       </div>
+
+      <IntelligenceSummaryCard />
 
       <div className="grid gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">

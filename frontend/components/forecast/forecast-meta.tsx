@@ -20,7 +20,8 @@ export function ForecastMeta({
     [labels.forecast.metric, metric],
     [labels.forecast.computedAt, computedAt],
     [labels.forecast.model, model],
-    [labels.forecast.uncertainty, uncertainty ?? labels.forecast.insufficientData],
+    // Sans intervalle ni qualificatif, on le dit : aucun niveau inventé.
+    [labels.forecast.uncertainty, uncertainty ?? labels.forecast.noInterval],
   ];
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
