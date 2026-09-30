@@ -1292,9 +1292,35 @@ def build_payment_detail(
     )
 
 
-def build_debt_detail(debt: Debt, allocations: Sequence[PaymentAllocation]) -> DebtDetail:
+def party_names_of_debts(
+    session: Session, ctx: TenantContext, debts: Sequence[Debt]
+) -> dict[UUID, str]:
+    """Nom du tiers de chaque dette, par les façades Customers et Suppliers (ADR 0053).
+
+    Deux requêtes pour une page entière, pas une par ligne. Un tiers supprimé est
+    absent du résultat : la dette reste listée, sans nom.
+    """
+    customers = customers_service.names_by_ids(
+        session, ctx, list({d.customer_id for d in debts if d.customer_id is not None})
+    )
+    suppliers = suppliers_service.names_by_ids(
+        session, ctx, list({d.supplier_id for d in debts if d.supplier_id is not None})
+    )
+    names: dict[UUID, str] = {}
+    for debt in debts:
+        party_id = debt.customer_id or debt.supplier_id
+        name = (customers if debt.customer_id else suppliers).get(party_id) if party_id else None
+        if name is not None:
+            names[debt.id] = name
+    return names
+
+
+def build_debt_detail(
+    debt: Debt, allocations: Sequence[PaymentAllocation], party_name: str | None = None
+) -> DebtDetail:
     """Vue publique d'une dette, ses règlements compris."""
     return DebtDetail(
+        party_name=party_name,
         id=debt.id,
         party_type=debt.party_type,
         customer_id=debt.customer_id,
@@ -1335,6 +1361,13 @@ def daily_cash(
         period_from=period_from, period_to=period_to, timezone=timezone
     )
     return [(row[0], row[1], Decimal(row[2])) for row in rows]
+
+
+def paid_by_expenses(
+    session: Session, ctx: TenantContext, expense_ids: Sequence[UUID]
+) -> dict[UUID, Decimal]:
+    """Montant réellement décaissé pour chaque dépense (paiements vivants seulement)."""
+    return PaymentRepository(session, ctx).paid_by_expenses(expense_ids)
 
 
 def open_debt_totals(session: Session, ctx: TenantContext) -> dict[str, Decimal]:

@@ -7,7 +7,7 @@ n'entre pas par l'API (ADR 0010).
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Literal, Self
 from uuid import UUID
@@ -15,6 +15,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.core.money import Amount
+from app.modules.finance.schemas import REFERENCE_MAX_LENGTH, PaymentMethod
 
 #: Longueurs maximales. La base n'impose que « non vide » ; la borne haute est une
 #: règle de saisie, elle appartient au schéma.
@@ -106,6 +107,25 @@ class ExpenseRead(BaseModel):
     amount: Amount
     spent_at: date
     created_at: datetime
+    #: Décaissé pour cette dépense, paiements annulés exclus (ADR 0053). Le reste à
+    #: régler n'est **pas** servi : l'écran compare, il ne soustrait pas.
+    amount_paid: Amount = Decimal("0")
+
+
+class ExpensePaymentInput(BaseModel):
+    """Règlement immédiat d'une dépense : le montant est celui de la dépense."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    method: PaymentMethod
+    paid_at: datetime | None = None
+    reference: Annotated[str, Field(max_length=REFERENCE_MAX_LENGTH)] | None = None
+
+    @model_validator(mode="after")
+    def _check_paid_at(self) -> Self:
+        if self.paid_at is not None and self.paid_at > datetime.now(UTC):
+            raise ValueError("La date d'un paiement ne peut pas être dans le futur.")
+        return self
 
 
 class ExpenseCreate(BaseModel):
@@ -116,6 +136,9 @@ class ExpenseCreate(BaseModel):
     amount: ExpenseAmount
     spent_at: date
     supplier_id: UUID | None = None
+    #: Présent : la dépense et son décaissement s'écrivent dans la même transaction,
+    #: sous la même clé d'idempotence (ADR 0053).
+    payment: ExpensePaymentInput | None = None
 
     @model_validator(mode="after")
     def _check_date(self) -> Self:

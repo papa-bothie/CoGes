@@ -241,8 +241,12 @@ def list_debts(
     allocations = service.allocations_of_debts(
         tenant.session, tenant.ctx, [debt.id for debt in debts]
     )
+    names = service.party_names_of_debts(tenant.session, tenant.ctx, debts)
     return DebtPage(
-        items=[service.build_debt_detail(debt, allocations.get(debt.id, [])) for debt in debts],
+        items=[
+            service.build_debt_detail(debt, allocations.get(debt.id, []), names.get(debt.id))
+            for debt in debts
+        ],
         page=page,
         page_size=page_size,
         total=total,
@@ -276,7 +280,9 @@ def create_debt(
         tenant.ctx,
         key=idempotency_key,
         status_code=status.HTTP_201_CREATED,
-        model=service.build_debt_detail(debt, []),
+        model=service.build_debt_detail(
+            debt, [], service.party_names_of_debts(tenant.session, tenant.ctx, [debt]).get(debt.id)
+        ),
     )
 
 
@@ -288,7 +294,8 @@ def get_debt(
     """Détail d'une dette, ses règlements compris."""
     debt = service.get_debt(tenant.session, tenant.ctx, debt_id)
     allocations = service.allocations_of_debts(tenant.session, tenant.ctx, [debt.id])
-    return service.build_debt_detail(debt, allocations.get(debt.id, []))
+    names = service.party_names_of_debts(tenant.session, tenant.ctx, [debt])
+    return service.build_debt_detail(debt, allocations.get(debt.id, []), names.get(debt.id))
 
 
 @debts_router.post("/{debt_id}/write-off", response_model=DebtDetail)
@@ -312,4 +319,5 @@ def write_off_debt(
         ip_address=client_ip(request),
     )
     allocations = service.allocations_of_debts(tenant.session, tenant.ctx, [debt.id])
-    return service.build_debt_detail(debt, allocations.get(debt.id, []))
+    names = service.party_names_of_debts(tenant.session, tenant.ctx, [debt])
+    return service.build_debt_detail(debt, allocations.get(debt.id, []), names.get(debt.id))

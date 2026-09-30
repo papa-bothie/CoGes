@@ -483,6 +483,126 @@
         }
       }
     },
+    "/api/v1/users/{user_id}/roles": {
+      "post": {
+        "tags": [
+          "users",
+          "rbac"
+        ],
+        "summary": "Assign Role",
+        "description": "Attribue un rôle. Élévation de privilège : audit critique.",
+        "operationId": "assign_role_api_v1_users__user_id__roles_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleAssignment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "title": "Response Assign Role Api V1 Users  User Id  Roles Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{user_id}/roles/{role_id}": {
+      "delete": {
+        "tags": [
+          "users",
+          "rbac"
+        ],
+        "summary": "Revoke Role",
+        "description": "Retire un rôle. Refusé (409 `last_manager`) s'il s'agit du dernier gérant actif.",
+        "operationId": "revoke_role_api_v1_users__user_id__roles__role_id__delete",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "role_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Role Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "title": "Response Revoke Role Api V1 Users  User Id  Roles  Role Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/permissions": {
       "get": {
         "tags": [
@@ -723,124 +843,6 @@
         "responses": {
           "204": {
             "description": "Successful Response"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/users/{user_id}/roles": {
-      "post": {
-        "tags": [
-          "rbac"
-        ],
-        "summary": "Assign Role",
-        "description": "Attribue un rôle. Élévation de privilège : audit critique.",
-        "operationId": "assign_role_api_v1_users__user_id__roles_post",
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "User Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RoleAssignment"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "format": "uuid"
-                  },
-                  "title": "Response Assign Role Api V1 Users  User Id  Roles Post"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/users/{user_id}/roles/{role_id}": {
-      "delete": {
-        "tags": [
-          "rbac"
-        ],
-        "summary": "Revoke Role",
-        "description": "Retire un rôle. La trace reste dans `audit_logs`.",
-        "operationId": "revoke_role_api_v1_users__user_id__roles__role_id__delete",
-        "parameters": [
-          {
-            "name": "user_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "User Id"
-            }
-          },
-          {
-            "name": "role_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Role Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "format": "uuid"
-                  },
-                  "title": "Response Revoke Role Api V1 Users  User Id  Roles  Role Id  Delete"
-                }
-              }
-            }
           },
           "422": {
             "description": "Validation Error",
@@ -4007,7 +4009,7 @@
           "expenses"
         ],
         "summary": "Create Expense",
-        "description": "Constate une charge. Écriture financière : clé d'idempotence obligatoire.",
+        "description": "Constate une charge. Écriture financière : clé d'idempotence obligatoire.\n\nAvec `payment`, la charge et son décaissement (montant de la charge) s'écrivent\ndans la même transaction ; `payments:create` est alors exigé en plus.",
         "operationId": "create_expense_api_v1_expenses_post",
         "requestBody": {
           "required": true,
@@ -5161,6 +5163,165 @@
           }
         }
       }
+    },
+    "/api/v1/audit-logs": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "summary": "List Audit Logs",
+        "description": "Journal d'activité : audit critique et secondaire, le plus récent d'abord.\n\n`audit:read` : gérant et comptable (ADR 0007, ADR 0053). Lecture seule — il\nn'existe aucune route pour corriger ou effacer une ligne du journal.",
+        "operationId": "list_audit_logs_api_v1_audit_logs_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "actor_user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor User Id"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/AuditActionName"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
+            }
+          },
+          {
+            "name": "entity_table",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Table"
+            }
+          },
+          {
+            "name": "entity_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Id"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5268,6 +5429,144 @@
       },
       "Amount-Output": {
         "type": "string"
+      },
+      "AuditActionName": {
+        "type": "string",
+        "enum": [
+          "insert",
+          "update",
+          "delete",
+          "login",
+          "export",
+          "confirm",
+          "cancel",
+          "rebuild"
+        ]
+      },
+      "AuditLogPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditLogRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "AuditLogPage"
+      },
+      "AuditLogRead": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "actor_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor User Id"
+          },
+          "actor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Name"
+          },
+          "action": {
+            "$ref": "#/components/schemas/AuditActionName"
+          },
+          "entity_table": {
+            "type": "string",
+            "title": "Entity Table"
+          },
+          "entity_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id"
+          },
+          "diff": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diff"
+          },
+          "ip_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip Address"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "actor_user_id",
+          "actor_name",
+          "action",
+          "entity_table",
+          "entity_id",
+          "diff",
+          "ip_address",
+          "occurred_at"
+        ],
+        "title": "AuditLogRead",
+        "description": "Une ligne du journal. `diff` est rendu tel qu'il a été écrit (avant / après)."
       },
       "Barcode": {
         "type": "string",
@@ -6009,6 +6308,17 @@
             ],
             "title": "Supplier Id"
           },
+          "party_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Party Name"
+          },
           "sale_id": {
             "anyOf": [
               {
@@ -6379,6 +6689,16 @@
               }
             ],
             "title": "Supplier Id"
+          },
+          "payment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpensePaymentInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -6435,6 +6755,44 @@
         ],
         "title": "ExpensePage"
       },
+      "ExpensePaymentInput": {
+        "properties": {
+          "method": {
+            "$ref": "#/components/schemas/PaymentMethod"
+          },
+          "paid_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid At"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "method"
+        ],
+        "title": "ExpensePaymentInput",
+        "description": "Règlement immédiat d'une dépense : le montant est celui de la dépense."
+      },
       "ExpenseRead": {
         "properties": {
           "id": {
@@ -6486,6 +6844,10 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "amount_paid": {
+            "$ref": "#/components/schemas/Amount-Output",
+            "default": "0"
           }
         },
         "additionalProperties": false,
@@ -11227,6 +11589,13 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/UserRoleRead"
+            },
+            "type": "array",
+            "title": "Roles"
           }
         },
         "additionalProperties": false,
@@ -11241,6 +11610,44 @@
         ],
         "title": "UserRead",
         "description": "Vue publique d'un utilisateur. Le hachage du mot de passe n'en fait jamais partie."
+      },
+      "UserRoleRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_system": {
+            "type": "boolean",
+            "title": "Is System"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "is_system"
+        ],
+        "title": "UserRoleRead",
+        "description": "Rôle porté par un compte. `description` est le libellé affiché (ADR 0007)."
       },
       "UserUpdate": {
         "properties": {

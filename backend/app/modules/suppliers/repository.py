@@ -31,6 +31,14 @@ class SupplierRepository(TenantRepository[Supplier]):
             self._live().where(Supplier.id == supplier_id)
         ).scalar_one_or_none()
 
+    def names_by_ids(self, supplier_ids: Sequence[UUID]) -> dict[UUID, str]:
+        """Noms d'un lot de fournisseurs, en une requête plutôt qu'une par ligne."""
+        if not supplier_ids:
+            return {}
+        stmt = self._live().where(Supplier.id.in_(list(supplier_ids)))
+        rows = self.session.execute(stmt.with_only_columns(Supplier.id, Supplier.name)).all()
+        return {row[0]: row[1] for row in rows}
+
     def get_by_code(self, code: str) -> Supplier | None:
         """Homonyme de code vivant (`suppliers_code_uq` est partielle)."""
         return self.session.execute(self._live().where(Supplier.code == code)).scalar_one_or_none()

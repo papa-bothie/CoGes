@@ -24,6 +24,7 @@ from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
 from app.core.observability import init_sentry
 from app.modules.analytics.router import router as analytics_router
+from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
 from app.modules.categories.router import router as categories_router
 from app.modules.companies.router import router as companies_router
@@ -123,6 +124,8 @@ api_router.include_router(imports_router)
 api_router.include_router(exports_router)
 # Hors commerce : santé du chemin asynchrone, gérant seul.
 api_router.include_router(system_router)
+# Journal d'activité : lecture d'`audit_logs`, gérant et comptable (ADR 0053).
+api_router.include_router(audit_router)
 
 app.include_router(api_router)
 

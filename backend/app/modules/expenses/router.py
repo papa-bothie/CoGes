@@ -114,21 +114,7 @@ def list_expenses(
         supplier_id=supplier_id,
     )
     return ExpensePage(
-        items=[
-            ExpenseRead(
-                id=expense.id,
-                expense_no=expense.expense_no,
-                category_id=expense.category_id,
-                category_name=category_name,
-                kind=kind,
-                supplier_id=expense.supplier_id,
-                label=expense.label,
-                amount=expense.amount,
-                spent_at=expense.spent_at,
-                created_at=expense.created_at,
-            )
-            for expense, category_name, kind in rows
-        ],
+        items=service.build_reads(tenant.session, tenant.ctx, rows),
         page=page,
         page_size=page_size,
         total=total,
@@ -142,7 +128,11 @@ def create_expense(
     tenant: Annotated[TenantSession, Depends(require_permission("expenses:create"))],
     idempotency_key: IdempotencyKey,
 ) -> Response:
-    """Constate une charge. Écriture financière : clé d'idempotence obligatoire."""
+    """Constate une charge. Écriture financière : clé d'idempotence obligatoire.
+
+    Avec `payment`, la charge et son décaissement (montant de la charge) s'écrivent
+    dans la même transaction ; `payments:create` est alors exigé en plus.
+    """
     replay = idempotency.reserve(
         tenant.session,
         tenant.ctx,

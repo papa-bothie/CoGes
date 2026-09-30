@@ -5,6 +5,7 @@ Les autres modules passent **par ici**, jamais par le repository ni les modèles
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -14,7 +15,7 @@ from app.core.errors import NotFoundError
 from app.core.tenancy import TenantContext
 from app.modules.companies.models import Company
 from app.modules.companies.repository import CompanyRepository
-from app.modules.companies.schemas import CompanyUpdate
+from app.modules.companies.schemas import DEFAULT_REORDER_POINT, CompanyUpdate
 
 #: Modifier ces champs change l'interprétation de toutes les données suivantes :
 #: devise, fuseau, TVA, seuils. L'audit critique est donc obligatoire.
@@ -72,6 +73,12 @@ def is_intelligence_enabled(session: Session, ctx: TenantContext) -> bool:
     """
     setting = get_current_company(session, ctx).settings.get("intelligence_enabled", True)
     return bool(setting)
+
+
+def default_reorder_point(session: Session, ctx: TenantContext) -> Decimal | None:
+    """Seuil d'alerte appliqué à un produit suivi créé sans seuil (ADR 0054), ou `None`."""
+    value = get_current_company(session, ctx).settings.get(DEFAULT_REORDER_POINT)
+    return None if value is None else Decimal(str(value))
 
 
 def get_current_company(session: Session, ctx: TenantContext) -> Company:

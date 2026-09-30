@@ -188,6 +188,22 @@ class PaymentRepository(TenantRepository[Payment]):
             totals[direction] = Decimal(total)
         return totals
 
+    def paid_by_expenses(self, expense_ids: Sequence[UUID]) -> dict[UUID, Decimal]:
+        """Décaissé par dépense, hors paiements annulés et annulations (ADR 0053)."""
+        if not expense_ids:
+            return {}
+        stmt = (
+            select(Payment.expense_id, func.coalesce(func.sum(Payment.amount), 0))
+            .where(
+                Payment.company_id == self.ctx.company_id,
+                Payment.expense_id.in_(list(expense_ids)),
+                Payment.direction == "outflow",
+                *_counts_as_cash(),
+            )
+            .group_by(Payment.expense_id)
+        )
+        return {row[0]: Decimal(row[1]) for row in self.session.execute(stmt)}
+
     def daily_cash(
         self, *, period_from: datetime, period_to: datetime, timezone: str
     ) -> Sequence[Row[tuple[date, str, Decimal]]]:

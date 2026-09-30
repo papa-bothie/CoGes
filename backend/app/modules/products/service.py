@@ -27,6 +27,7 @@ from app.core.errors import BusinessRuleError, NotFoundError, sqlstate
 from app.core.search import normalise_term
 from app.core.tenancy import TenantContext
 from app.modules.categories import service as categories_service
+from app.modules.companies import service as companies_service
 from app.modules.products.models import Product, ProductPrice
 from app.modules.products.repository import ProductPriceRepository, ProductRepository
 from app.modules.products.schemas import (
@@ -260,6 +261,12 @@ def create_product(
         categories_service.assert_exists(session, ctx, payload.category_id)
     _assert_codes_are_free(repository, sku=payload.sku, barcode=payload.barcode)
 
+    # Seuil par défaut de l'entreprise pour un produit suivi saisi sans seuil (ADR 0054) :
+    # appliqué ici, donc aussi à l'import CSV. Un seuil saisi, même 0, n'est pas remplacé.
+    reorder_point = payload.reorder_point
+    if reorder_point is None and payload.is_stock_tracked:
+        reorder_point = companies_service.default_reorder_point(session, ctx)
+
     product = repository.add(
         Product(
             company_id=ctx.company_id,
@@ -270,7 +277,7 @@ def create_product(
             unit=payload.unit,
             is_stock_tracked=payload.is_stock_tracked,
             default_tax_rate=payload.default_tax_rate,
-            reorder_point=payload.reorder_point,
+            reorder_point=reorder_point,
             is_active=True,
         )
     )

@@ -16,7 +16,6 @@ export const DEFAULT_NEXT = "/dashboard";
 
 // Antislash (lu comme « / » par les navigateurs) et caractères de contrôle C0 et DEL
 // (supprimés silencieusement par le parseur d'URL).
-// eslint-disable-next-line no-control-regex
 const FORBIDDEN = /[\\\u0000-\u001f\u007f]/;
 
 export function safeNext(next: string | null | undefined, origin: string): string {

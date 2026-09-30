@@ -60,8 +60,10 @@ test("connexion → coquille → navigation → rechargement → déconnexion", 
   await page.getByRole("button", { name: "Changer de thème" }).click();
   await page.getByRole("menuitemradio", { name: "Clair" }).click();
 
-  // La cloche mène aux notifications.
-  await page.getByRole("link", { name: /^Notifications/ }).click();
+  // La cloche ouvre le panneau des alertes, qui mène à la page complète.
+  await page.getByRole("button", { name: /^Notifications/ }).click();
+  await expect(page.getByRole("dialog", { name: "Notifications" })).toBeVisible();
+  await page.getByRole("link", { name: "Toutes les notifications" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Notifications" })).toBeVisible();
 
   // Déconnexion : retour à la connexion, et l'application reste fermée.
