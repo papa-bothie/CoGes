@@ -108,4 +108,32 @@ test.describe("captures du pilotage", () => {
       await api.patch("/companies/me", { settings: company.settings });
     }
   });
+
+  test("paramètres", async ({ page }) => {
+    await page.goto("/settings");
+    await expect(page.getByLabel("Nom de l'entreprise")).toBeVisible({ timeout: 30_000 });
+    await shoot(page, "parametres-entreprise");
+    // Avertissement avant une modification sensible, sans l'enregistrer.
+    await page.getByLabel("Seuil d'alerte par défaut (facultatif)").fill("7");
+    await page.getByRole("button", { name: "Enregistrer" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await shoot(page, "parametres-confirmation");
+    await page.getByRole("button", { name: "Annuler" }).click();
+
+    for (const [tab, column, name] of [
+      ["Utilisateurs", "Rôles", "parametres-utilisateurs"],
+      ["Rôles et permissions", "Permission", "parametres-roles"],
+      ["Journal d'activité", "Élément", "parametres-journal"],
+    ] as const) {
+      await page.getByRole("tab", { name: tab }).click();
+      await expect(page.getByRole("columnheader", { name: column }).first()).toBeVisible({
+        timeout: 30_000,
+      });
+      await page.waitForLoadState("networkidle");
+      await shoot(page, name);
+    }
+    await page.getByRole("button", { name: "Voir" }).first().click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await shoot(page, "parametres-journal-detail");
+  });
 });

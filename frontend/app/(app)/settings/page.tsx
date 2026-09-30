@@ -1,11 +1,16 @@
-import { Settings } from "lucide-react";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 
-import { PlaceholderPage } from "@/components/placeholder-page";
 import { labels } from "@/lib/labels";
+
+import { SettingsView } from "./settings-view";
 
 export const metadata: Metadata = { title: labels.nav.settings };
 
 export default function SettingsPage() {
-  return <PlaceholderPage title={labels.nav.settings} icon={Settings} />;
+  return (
+    <Suspense>
+      <SettingsView />
+    </Suspense>
+  );
 }
