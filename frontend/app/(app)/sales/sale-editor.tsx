@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/page-header";
 import { SearchCombobox } from "@/components/search-combobox";
 import { SaleStatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -502,32 +503,20 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
               <CardTitle>{labels.sales.settlement}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div
-                role="radiogroup"
+              <SegmentedControl
                 aria-label={labels.sales.settlement}
-                className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1"
-              >
-                {MODES.map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    role="radio"
-                    aria-checked={mode === value}
-                    onClick={() => {
-                      setMode(value);
-                      setSettlementError(null);
-                    }}
-                    className={cn(
-                      "rounded-md px-2 py-1.5 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                      mode === value
-                        ? "bg-card text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {labels.sales.settlementModes[value]}
-                  </button>
-                ))}
-              </div>
+                value={mode}
+                onValueChange={(value) => {
+                  setMode(value);
+                  setSettlementError(null);
+                }}
+                options={MODES.map((value) => ({
+                  value,
+                  label: labels.sales.settlementModes[value],
+                }))}
+                className="grid w-full"
+                itemClassName="px-2 py-1.5"
+              />
 
               {mode === "partial" && (
                 <div className="space-y-1.5">

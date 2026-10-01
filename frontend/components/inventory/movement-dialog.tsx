@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { FieldError } from "@/components/field-error";
 import { SearchCombobox } from "@/components/search-combobox";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   Dialog,
   DialogContent,
@@ -37,7 +38,6 @@ import { compareDecimal, parseDecimalInput } from "@/lib/decimal";
 import { formatQty } from "@/lib/format";
 import { zonedDateTimeIso } from "@/lib/format/zoned";
 import { labels } from "@/lib/labels";
-import { cn } from "@/lib/utils";
 
 type ManualType = Schemas["ManualMovementType"];
 type Product = Schemas["ProductRead"];
@@ -266,29 +266,17 @@ export function MovementDialog({
             {type === "adjustment" && (
               <div className="space-y-1.5">
                 <Label id="direction-label">{labels.stock.form.direction}</Label>
-                <div
-                  role="radiogroup"
+                <SegmentedControl
                   aria-labelledby="direction-label"
-                  className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1"
-                >
-                  {(["in", "out"] as const).map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      role="radio"
-                      aria-checked={direction === value}
-                      onClick={() => setDirection(value)}
-                      className={cn(
-                        "rounded-md px-2 py-1 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                        direction === value
-                          ? "bg-card text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {value === "in" ? labels.stock.form.increase : labels.stock.form.decrease}
-                    </button>
-                  ))}
-                </div>
+                  value={direction}
+                  onValueChange={setDirection}
+                  options={[
+                    { value: "in", label: labels.stock.form.increase },
+                    { value: "out", label: labels.stock.form.decrease },
+                  ]}
+                  className="grid w-full"
+                  itemClassName="px-2"
+                />
               </div>
             )}
           </div>

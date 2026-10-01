@@ -7,10 +7,11 @@ import { SCREENS, settle } from "./screens";
 
 /**
  * Accessibilité WCAG 2 AA (axe) sur les écrans de référence, en clair et en sombre.
- * Le rapport détaillé est écrit dans test-results/a11y-<thème>.json. Aucune violation
- * « serious » ou « critical » n'est tolérée si `A11Y_STRICT=1`.
+ * Le rapport détaillé est écrit dans test-results/a11y-<thème>.json. Bloquant par défaut :
+ * aucune violation « serious » ou « critical » n'est tolérée (`A11Y_STRICT=0` pour l'ignorer
+ * ponctuellement).
  */
-const STRICT = process.env.A11Y_STRICT === "1";
+const STRICT = process.env.A11Y_STRICT !== "0";
 
 for (const scheme of ["light", "dark"] as const) {
   test.describe(`accessibilité (${scheme})`, () => {

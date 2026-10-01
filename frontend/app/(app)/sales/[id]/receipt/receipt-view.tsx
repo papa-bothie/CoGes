@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { ErrorState } from "@/components/error-state";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale, useMe } from "@/hooks/use-me";
 import { api, unwrap } from "@/lib/api/client";
@@ -55,29 +56,15 @@ export function ReceiptView({ saleId }: { saleId: string }) {
           {labels.receipt.back}
         </Link>
         <div className="flex items-center gap-2">
-          <div
-            role="radiogroup"
+          <SegmentedControl
             aria-label={labels.receipt.format}
-            className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1"
-          >
-            {(["ticket", "a4"] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={format === value}
-                onClick={() => setFormat(value)}
-                className={cn(
-                  "rounded-md px-3 py-1 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                  format === value
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {value === "ticket" ? labels.receipt.ticket : labels.receipt.a4}
-              </button>
-            ))}
-          </div>
+            value={format}
+            onValueChange={setFormat}
+            options={[
+              { value: "ticket", label: labels.receipt.ticket },
+              { value: "a4", label: labels.receipt.a4 },
+            ]}
+          />
           <Button onClick={() => window.print()} disabled={!receipt.data}>
             <Printer aria-hidden />
             {labels.receipt.print}

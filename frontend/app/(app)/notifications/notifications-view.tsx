@@ -8,7 +8,7 @@ import { NotificationItem } from "@/components/notifications/notification-item";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useTableParams } from "@/hooks/use-table-params";
 import { api, unwrap } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queries/keys";
@@ -33,15 +33,16 @@ export function NotificationsView() {
         title={labels.nav.notifications}
         count={query.data ? t.count(query.data.total) : undefined}
       />
-      <Tabs
+      {/* Un filtre, pas des onglets : rien ne s'y rattache comme un panneau. */}
+      <SegmentedControl
+        aria-label={t.filter}
         value={unreadOnly ? "unread" : "all"}
         onValueChange={(value) => table.setFilter("unread", value === "unread" ? "1" : null)}
-      >
-        <TabsList aria-label={t.filter}>
-          <TabsTrigger value="all">{t.all}</TabsTrigger>
-          <TabsTrigger value="unread">{t.unreadOnly}</TabsTrigger>
-        </TabsList>
-      </Tabs>
+        options={[
+          { value: "all", label: t.all },
+          { value: "unread", label: t.unreadOnly },
+        ]}
+      />
       {query.isError ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : !query.data ? (

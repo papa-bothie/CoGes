@@ -55,7 +55,7 @@ export function ForecastBandChart({
           <YAxis
             tickLine={false}
             axisLine={false}
-            width={44}
+            width="auto"
             tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
             tickFormatter={(value: number) => axisFormatter.format(value)}
           />
