@@ -16,8 +16,10 @@ désactivés sur les deux projets (aucun code ne part sans la CI).
 ## Options envisagées
 
 1. **Production Vercel de `coges-web` à chaque push sur `main` (retenue)** : adresse stable
-   `https://coges-web-cipher-one1.vercel.app`, publique comme l'API de préproduction ; la
-   connexion CoGes reste exigée.
+   `https://coges-app.vercel.app`, publique comme l'API de préproduction ; la connexion CoGes
+   reste exigée. Ce domaine est **attribué au projet** : avec la protection standard de
+   Vercel, l'adresse générée `coges-web-cipher-one1.vercel.app` reste, elle, derrière la
+   connexion Vercel (`coges-web.vercel.app` était déjà pris).
 2. Une préversion protégée par push : URL changeante, réservée aux comptes Vercel de l'équipe.
 3. Statu quo (déploiement manuel).
 
@@ -30,6 +32,8 @@ désactivés sur les deux projets (aucun code ne part sans la CI).
   `/api/v1` du front, sur `COGES_WEB_PUBLIC_URL`.
 - Le front part **après** l'API, jamais avant : il réécrit vers elle (ADR 0047).
 - Le garde-fou 2 (ADR 0042) contrôle aussi les variables du projet `coges-web`.
+- `COGES_API_URL` de `coges-web` est une variable **`encrypted`**, jamais *sensitive* : le build
+  a lieu sur GitHub (`vercel build`), qui ne peut pas lire une variable sensible (ADR 0044).
 
 ## Conséquences
 

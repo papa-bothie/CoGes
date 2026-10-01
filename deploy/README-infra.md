@@ -246,9 +246,17 @@ lue **au build** par la réécriture `/api/v1/*` (ADR 0047).
 
 **Depuis le 2026-10-01 (ADR 0058)**, le front se déploie avec l'API à chaque push sur `main`,
 par le workflow « Déploiement », en production Vercel du projet : adresse stable et
-**publique** **`https://coges-web-cipher-one1.vercel.app`** (la connexion CoGes reste exigée).
+**publique** **`https://coges-app.vercel.app`** (la connexion CoGes reste exigée). Ce domaine est
+attribué au projet `coges-web` ; l'adresse générée `coges-web-cipher-one1.vercel.app` reste
+derrière la protection Vercel (seuls les domaines attribués échappent à la protection standard).
 Environnement GitHub `preprod` : secret `VERCEL_WEB_PROJECT_ID`, variable
 `COGES_WEB_PUBLIC_URL`. Le garde-fou 2 contrôle aussi les variables de `coges-web`.
+
+Piège rencontré au premier déploiement (2026-10-01) : `COGES_API_URL` avait été posée par
+`vercel env add`, donc **sensible** ; `vercel pull` sur GitHub la récupère alors sous la forme
+`[SENSITIVE]` et `next build` refuse la réécriture (« Invalid rewrite found »). Les préversions
+manuelles passaient, car construites sur les serveurs de Vercel. Comme pour l'API (ADR 0044),
+la variable est posée **par l'API Vercel avec `type: "encrypted"`** (production et preview).
 
 Préversion manuelle d'une branche, toujours possible :
 

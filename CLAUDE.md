@@ -264,7 +264,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0055 | 2026-09-30 | **Écrans de pilotage** : cartes d'Intelligence compactes + panneau, métrique en liste déroulante nommée sur chaque ligne, période commune dans l'URL, règlement réparti prérempli, journal en lecture ; écarts au prototype listés | `docs/decisions/0055-ecrans-de-pilotage-cote-front.md` |
 | 0056 | 2026-10-01 | **Finition visuelle** : identité raffinée, `docs/design/DESIGN.md` fait foi (liens à la racine pour Impeccable) ; Inter + axe optique, échelle par rôle en tokens (déclarée dans `cn`) ; fil d'Ariane, barre latérale repliée sous 1024 px, barre d'actions de vente sous 1280 px ; densité compacte/confortable **dans le navigateur** ; **encres d'état** pour tout texte d'état ; animations discrètes et `prefers-reduced-motion` ; `SegmentedControl` ; axe AA bloquant ; textes de notifications du worker reportés | `docs/decisions/0056-finition-visuelle.md` |
 | 0057 | 2026-10-01 | **Recommandations triées par sévérité** (critique, attention, information) puis date, `CASE` explicite ; **textes de notification à la française** par `app/core/display.py` (FCFA fixe, `jj/mm/aaaa`, quantités du front), `data` inchangé | `docs/decisions/0057-tri-des-recommandations-et-textes-de-notification.md` |
-| 0058 | 2026-10-01 | **Front déployé avec l'API** à chaque push sur `main` (production Vercel de `coges-web`, adresse stable publique `https://coges-web-cipher-one1.vercel.app`), après le test de fumée de l'API ; fumée du front à travers sa réécriture ; garde-fou 2 étendu à `coges-web` | `docs/decisions/0058-deploiement-automatique-du-front.md` |
+| 0058 | 2026-10-01 | **Front déployé avec l'API** à chaque push sur `main` (production Vercel de `coges-web`, adresse stable publique `https://coges-app.vercel.app`), après le test de fumée de l'API ; fumée du front à travers sa réécriture ; garde-fou 2 étendu à `coges-web` | `docs/decisions/0058-deploiement-automatique-du-front.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**
@@ -281,7 +281,7 @@ P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; r
 > products, timeseries) · `dashboard` · `notifications` · `insights`, `forecasts`,
 > `intelligence/summary` · `imports/{kind}` (+ template) · `exports` (referentials, sales, file) ·
 > `system/outbox` · `audit-logs`. Préproduction en ligne depuis le 2026-09-27 : `https://coges-api.vercel.app`
-> (`deploy/README-infra.md`). Front : projet Vercel `coges-web`, déployé avec l'API à chaque push sur `main` (ADR 0058, `https://coges-web-cipher-one1.vercel.app` ; `frontend/README.md`,
+> (`deploy/README-infra.md`). Front : projet Vercel `coges-web`, déployé avec l'API à chaque push sur `main` (ADR 0058, `https://coges-app.vercel.app` ; `frontend/README.md`,
 > `deploy/README-infra.md`). Phases 12 et 13 terminées (ADR 0052, 0055) : **le produit V1 est
 > fonctionnellement complet**. Phase 14 terminée (ADR 0056) : interface finie, système documenté dans
 > `docs/design/DESIGN.md`. Améliorations reportées : `docs/design/audit-phase-14-apres.md` (« Ce qui reste »).
