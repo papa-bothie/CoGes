@@ -225,7 +225,7 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
               </Row>
               <div className="flex items-baseline justify-between border-t pt-3">
                 <span className="font-semibold">{labels.returns.refundDue}</span>
-                <Money value={data.refund_due} currency={currency} className="text-xl font-bold" />
+                <Money value={data.refund_due} currency={currency} className="text-figure-sm" />
               </div>
             </CardContent>
           </Card>

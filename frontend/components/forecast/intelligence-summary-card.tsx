@@ -51,11 +51,12 @@ export function IntelligenceSummaryCard() {
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-3">
-        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {/* Compteurs posés sur la carte, séparés par l'espace : pas de cases dans la case. */}
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
           {rows.map(([label, count]) => (
-            <div key={label} className="rounded-lg border px-3 py-2">
+            <div key={label}>
               <dt className="text-xs text-muted-foreground">{label}</dt>
-              <dd className="text-xl font-semibold numeric">{count}</dd>
+              <dd className="text-figure-sm numeric">{count}</dd>
             </div>
           ))}
         </dl>

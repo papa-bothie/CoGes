@@ -1,0 +1,286 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-30T22:12:43+00:00",
+  "title": "Design System: CoGes",
+  "extensions": {
+    "colorMeta": {
+      "bleu-petrole": {
+        "role": "primary",
+        "displayName": "Bleu pétrole",
+        "canonical": "hsl(199 89% 28%)",
+        "tonalRamp": [
+          "hsl(199 89% 15%)",
+          "hsl(199 89% 22%)",
+          "hsl(199 89% 28%)",
+          "hsl(199 89% 38%)",
+          "hsl(199 89% 48%)",
+          "hsl(199 80% 65%)",
+          "hsl(199 80% 82%)",
+          "hsl(199 80% 95%)"
+        ]
+      },
+      "vert-encaisse": {
+        "role": "secondary",
+        "displayName": "Vert encaissé",
+        "canonical": "hsl(152 63% 40%)"
+      },
+      "vert-succes": {
+        "role": "tertiary",
+        "displayName": "Vert succès",
+        "canonical": "hsl(142 71% 45%)"
+      },
+      "orange-alerte": {
+        "role": "tertiary",
+        "displayName": "Orange alerte",
+        "canonical": "hsl(32 95% 50%)"
+      },
+      "rouge-danger": {
+        "role": "tertiary",
+        "displayName": "Rouge danger",
+        "canonical": "hsl(0 72% 51%)"
+      },
+      "violet-serie": {
+        "role": "tertiary",
+        "displayName": "Violet série",
+        "canonical": "hsl(259 84% 56%)"
+      },
+      "papier": {
+        "role": "neutral",
+        "displayName": "Papier",
+        "canonical": "hsl(210 20% 98%)"
+      },
+      "encre": {
+        "role": "neutral",
+        "displayName": "Encre",
+        "canonical": "hsl(215 28% 17%)"
+      },
+      "gris-regle": {
+        "role": "neutral",
+        "displayName": "Gris règle",
+        "canonical": "hsl(214 20% 88%)"
+      },
+      "gris-annotation": {
+        "role": "neutral",
+        "displayName": "Gris annotation",
+        "canonical": "hsl(215 16% 42%)"
+      },
+      "nuit": {
+        "role": "neutral",
+        "displayName": "Nuit",
+        "canonical": "hsl(215 28% 10%)"
+      },
+      "encre-succes": {
+        "role": "semantic",
+        "displayName": "Encre succès",
+        "canonical": "hsl(145 63% 28%)"
+      },
+      "encre-alerte": {
+        "role": "semantic",
+        "displayName": "Encre alerte",
+        "canonical": "hsl(26 90% 33%)"
+      },
+      "encre-danger": {
+        "role": "semantic",
+        "displayName": "Encre danger",
+        "canonical": "hsl(0 74% 40%)"
+      },
+      "encre-succes-nuit": {
+        "role": "semantic",
+        "displayName": "Encre succès (nuit)",
+        "canonical": "hsl(142 60% 60%)"
+      },
+      "encre-alerte-nuit": {
+        "role": "semantic",
+        "displayName": "Encre alerte (nuit)",
+        "canonical": "hsl(35 95% 62%)"
+      },
+      "encre-danger-nuit": {
+        "role": "semantic",
+        "displayName": "Encre danger (nuit)",
+        "canonical": "hsl(0 90% 72%)"
+      }
+    },
+    "typographyMeta": {
+      "page-title": {
+        "displayName": "Titre de page",
+        "purpose": "h1 de chaque page (text-page-title)."
+      },
+      "figure": {
+        "displayName": "Chiffre",
+        "purpose": "Valeur des cartes KPI et chiffre clé du panneau d'Intelligence, tabulaire (text-figure)."
+      },
+      "figure-sm": {
+        "displayName": "Total",
+        "purpose": "Totaux de vente et de retour, prix courant, compteurs d'Intelligence (text-figure-sm)."
+      },
+      "heading": {
+        "displayName": "Titre de carte",
+        "purpose": "Cartes, dialogues, panneaux, états vides (text-heading)."
+      },
+      "body": {
+        "displayName": "Courant",
+        "purpose": "Texte, cellules de tableau, boutons."
+      },
+      "label": {
+        "displayName": "Étiquette",
+        "purpose": "En-têtes de tableau, badges, indications."
+      },
+      "micro": {
+        "displayName": "Compteur",
+        "purpose": "Pastille de la cloche uniquement (text-2xs)."
+      }
+    },
+    "shadows": [
+      {
+        "name": "flottant-bas",
+        "value": "0 4px 6px -1px rgb(0 0 0 / .1), 0 2px 4px -2px rgb(0 0 0 / .1)",
+        "purpose": "Menus déroulants, listes de sélection."
+      },
+      {
+        "name": "flottant-haut",
+        "value": "0 10px 15px -3px rgb(0 0 0 / .1), 0 4px 6px -4px rgb(0 0 0 / .1)",
+        "purpose": "Dialogues et panneaux latéraux."
+      }
+    ],
+    "motion": [
+      {
+        "name": "etat",
+        "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Transitions de couleur au survol (Tailwind transition-colors)."
+      },
+      {
+        "name": "panneau",
+        "value": "100-200ms ease-in-out",
+        "purpose": "Ouverture des dialogues, menus et panneaux (tw-animate-css)."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Bouton principal",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Action principale d'une page ou d'un formulaire.",
+      "html": "<button class=\"ds-btn-primary\">Nouvelle vente</button>",
+      "css": ".ds-btn-primary{font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#085F87;color:#fff;height:36px;padding:0 12px;border:1px solid transparent;border-radius:6px;font-size:14px;font-weight:500;cursor:pointer;transition:background .15s}.ds-btn-primary:hover{background:rgb(8 95 135 / .8)}.ds-btn-primary:focus-visible{outline:none;box-shadow:0 0 0 3px rgb(8 95 135 / .5)}"
+    },
+    {
+      "name": "Bouton contour",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Action secondaire.",
+      "html": "<button class=\"ds-btn-outline\">Exporter</button>",
+      "css": ".ds-btn-outline{font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#F9FAFB;color:#1F2937;height:36px;padding:0 12px;border:1px solid #DAE0E7;border-radius:6px;font-size:14px;font-weight:500;cursor:pointer;transition:background .15s}.ds-btn-outline:hover{background:#EAEDF0}.ds-btn-outline:focus-visible{outline:none;box-shadow:0 0 0 3px rgb(8 95 135 / .5)}"
+    },
+    {
+      "name": "Champ",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Champ de saisie.",
+      "html": "<input class=\"ds-input\" placeholder=\"Rechercher un produit\">",
+      "css": ".ds-input{font-family:Inter,ui-sans-serif,system-ui,sans-serif;height:32px;padding:4px 10px;border:1px solid #DAE0E7;border-radius:8px;background:transparent;color:#1F2937;font-size:14px}.ds-input::placeholder{color:#65758B}.ds-input:focus-visible{outline:none;border-color:#085F87;box-shadow:0 0 0 3px rgb(8 95 135 / .5)}"
+    },
+    {
+      "name": "Badges de statut",
+      "kind": "chip",
+      "refersTo": "badge-status",
+      "description": "Statuts teintés, jamais pleins.",
+      "html": "<span class=\"ds-badge ds-n\">Brouillon</span> <span class=\"ds-badge ds-i\">Confirmée</span> <span class=\"ds-badge ds-w\">Retournée</span> <span class=\"ds-badge ds-d\">Annulée</span>",
+      "css": ".ds-badge{font-family:Inter,ui-sans-serif,system-ui,sans-serif;display:inline-flex;align-items:center;height:20px;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:500;border:1px solid}.ds-n{background:rgb(234 237 240 / .6);color:#65758B;border-color:#DAE0E7}.ds-i{background:rgb(8 95 135 / .1);color:#085F87;border-color:rgb(8 95 135 / .25)}.ds-w{background:rgb(249 136 6 / .1);color:#F98806;border-color:rgb(249 136 6 / .3)}.ds-d{background:rgb(220 40 40 / .1);color:#DC2828;border-color:rgb(220 40 40 / .3)}"
+    },
+    {
+      "name": "Navigation",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Barre latérale ; élément actif plein.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item ds-active\" href=\"#\">Tableau de bord</a><a class=\"ds-nav-item\" href=\"#\">Ventes</a><a class=\"ds-nav-item\" href=\"#\">Stock</a></nav>",
+      "css": ".ds-nav{font-family:Inter,ui-sans-serif,system-ui,sans-serif;display:flex;flex-direction:column;gap:4px;width:192px;padding:8px;background:#fff;border-right:1px solid #DAE0E7}.ds-nav-item{padding:8px 12px;border-radius:8px;font-size:14px;font-weight:500;color:#65758B;text-decoration:none;transition:background .15s,color .15s}.ds-nav-item:hover{background:#F0F2F4;color:#1F2937}.ds-active,.ds-active:hover{background:#085F87;color:#fff}"
+    },
+    {
+      "name": "Carte KPI",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Indicateur du tableau de bord.",
+      "html": "<div class=\"ds-kpi\"><div class=\"ds-kpi-icon\">₣</div><p class=\"ds-kpi-label\">Chiffre d'affaires</p><p class=\"ds-kpi-value\">1 234 567 FCFA</p></div>",
+      "css": ".ds-kpi{font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#fff;border:1px solid #DAE0E7;border-radius:12px;padding:20px;width:240px;color:#1F2937}.ds-kpi-icon{display:grid;place-items:center;width:40px;height:40px;border-radius:8px;background:rgb(8 95 135 / .1);color:#085F87;margin-bottom:12px}.ds-kpi-label{margin:0;font-size:14px;color:#65758B}.ds-kpi-value{margin:2px 0 0;font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Le Registre de comptoir",
+    "overview": "CoGes se lit comme un livre de caisse moderne tenu au comptoir d'une boutique : lignes calmes, chiffres nets et alignés, couleur réservée à l'action et à l'état. Densité d'un outil ouvert toute la journée sur un écran modeste ; profondeur réservée à ce qui flotte.",
+    "keyCharacteristics": [
+      "Chiffres tabulaires, jamais coupés, alignés à droite dans les tableaux.",
+      "Une seule couleur d'action (bleu pétrole) ; couleurs d'état réservées à leur sens.",
+      "Surfaces plates, filets fins (1 px), ombres seulement sur ce qui flotte.",
+      "Coins doucement arrondis, plus ronds à mesure que l'objet grandit (6 → 8 → 12 px).",
+      "Pile shadcn/ui (Radix) + Tailwind 4 ; icônes lucide à traits fins."
+    ],
+    "rules": [
+      {
+        "name": "La règle du Sens unique",
+        "body": "Vert, orange et rouge disent un état, jamais une décoration ni une catégorie.",
+        "section": "colors"
+      },
+      {
+        "name": "La règle du Badge discret",
+        "body": "Un badge de statut est teinté, texte en encre d'état ; seul un bouton est plein.",
+        "section": "colors"
+      },
+      {
+        "name": "La règle du Signal unique",
+        "body": "Un état se dit une fois par ligne : badge, pas de ligne teintée ni d'opacité réduite.",
+        "section": "colors"
+      },
+      {
+        "name": "La règle de l'Encre",
+        "body": "Une couleur d'état écrite est toujours une encre (text-*-ink), jamais le jeton de fond.",
+        "section": "colors"
+      },
+      {
+        "name": "La règle du Chiffre aligné",
+        "body": "Tout montant ou quantité passe par numeric ou Money : 1 234 567 FCFA ne se coupe jamais ; toute cellule de tableau est tabulaire.",
+        "section": "typography"
+      },
+      {
+        "name": "La règle du Même chiffre, même taille",
+        "body": "figure pour un indicateur, figure-sm pour un total ; pas de taille isolée.",
+        "section": "typography"
+      },
+      {
+        "name": "La règle du Plat par défaut",
+        "body": "Une surface posée n'a pas d'ombre ; une ombre signifie « ceci flotte et se ferme ».",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** passer chaque montant par `Money` ou `numeric` : chiffres tabulaires, `1 234 567 FCFA` sans décimales, alignés à droite.",
+      "**Do** modifier l'apparence par les tokens de `globals.css` et les composants partagés (`components/ui`, `components/*`), jamais page par page.",
+      "**Do** réserver les ombres aux éléments flottants (menus, dialogues, panneaux).",
+      "**Do** nommer la métrique, la date de calcul, le modèle et sa version, l'incertitude sur toute recommandation."
+    ],
+    "donts": [
+      "**Don't** remplir un badge de statut comme un bouton (défaut du prototype).",
+      "**Don't** couper un montant sur deux lignes (« 1 000 » puis « FCFA »).",
+      "**Don't** employer vert, orange ou rouge hors de leur sens d'état.",
+      "**Don't** afficher de sélecteur d'entreprise ni de bandeau « Mode démonstration »."
+    ]
+  }
+}

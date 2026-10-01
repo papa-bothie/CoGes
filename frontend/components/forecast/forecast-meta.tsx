@@ -28,7 +28,7 @@ export function ForecastMeta({
       {rows.map(([term, value]) => (
         <div key={term} className="contents">
           <dt className="text-muted-foreground">{term}</dt>
-          <dd className="numeric">{value}</dd>
+          <dd className="tabular-nums">{value}</dd>
         </div>
       ))}
     </dl>

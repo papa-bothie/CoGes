@@ -1,4 +1,8 @@
+"use client";
+
 import type { ReactNode } from "react";
+
+import { useDeclarePageTitle } from "@/components/shell/page-title";
 
 /** Titre `h1` + compteur à gauche, action principale à droite (motif du prototype). */
 export function PageHeader({
@@ -10,10 +14,11 @@ export function PageHeader({
   count?: ReactNode;
   actions?: ReactNode;
 }) {
+  useDeclarePageTitle(title);
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+        <h1 className="text-page-title">{title}</h1>
         {count !== undefined && <p className="mt-1 text-sm text-muted-foreground">{count}</p>}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}

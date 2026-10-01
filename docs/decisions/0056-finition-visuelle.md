@@ -1,0 +1,89 @@
+# 0056 — Finition visuelle (phase 14) : direction, typographie, mise en page, densité
+
+- **Date** : 2026-09-30
+- **Phase** : 14
+- **Statut** : acceptée
+- **Décideur** : utilisateur (via AskUserQuestion)
+
+## Contexte
+
+La phase 14 fait passer l'interface d'un état « prototype repris à l'identique » (ADR 0046) à une
+interface soignée, **sans changement fonctionnel** : aucune règle, aucun appel d'API, aucun
+parcours ne change. Elle s'appuie sur la skill Impeccable, par passes validées une à une
+(`docs/prompts/14-polish-impeccable.md` § 3). L'état de départ et l'audit sont consignés dans
+`docs/design/audit-phase-14-avant.md`.
+
+## Décisions
+
+1. **Direction** : raffiner l'identité du prototype (bleu pétrole sobre), ne pas la remplacer.
+   Périmètre : toutes les pages. Animations : discrètes, `prefers-reduced-motion` respecté.
+2. **Emplacement du système de design** : `docs/design/DESIGN.md` et `docs/design/PRODUCT.md`
+   font foi. Impeccable ne lit que la racine et n'a aucun réglage de chemin : `DESIGN.md` et
+   `PRODUCT.md` à la racine sont des **liens symboliques** vers `docs/design/` (aucune copie qui
+   puisse diverger). Le fichier annexe `.impeccable/design.json` est versionné.
+3. **Accessibilité mesurée** : `@axe-core/playwright` (devDependency) et `e2e/a11y.spec.ts`
+   (WCAG 2.1 AA, 16 écrans, clair et sombre). Rapports conservés par passe dans
+   `docs/design/captures/phase-14/<passe>/a11y-*.json`. `A11Y_STRICT=1` rend bloquantes les
+   violations sérieuses et critiques.
+4. **Audit** : les 19 constats sont retenus ; les passes suivent l'ordre du prompt.
+5. **Typographie (passe 3)** : **Inter conservée**, avec son axe optique (`opsz`, +25 Ko sur la
+   police préchargée). Échelle **par rôle** en tokens `@theme` (`text-page-title`,
+   `text-heading`, `text-figure`, `text-figure-sm`, `text-2xs`). Texte courant **14 px**,
+   **16 px en densité confortable**. En-têtes de tableau en rôle *label* (12 px, gris), toute
+   cellule en chiffres tabulaires.
+6. **`cn` configuré** (`lib/utils.ts`, `createCn`) : les rôles typographiques sont déclarés comme
+   tailles ; sinon la fusion les prenait pour des couleurs et les supprimait. Tous les
+   composants importent `cn` depuis `@/lib/utils`, plus jamais depuis `"cn"`.
+7. **Mise en page (passe 4)** :
+   - **En-tête = fil d'Ariane** (« Ventes › Nouvelle vente ») : section en lien, titre déclaré
+     par `PageHeader` via un contexte ; plus de titre répété. Hauteur 56 px.
+   - **Barre latérale repliée sous 1024 px** (`lg`, au lieu de `md`).
+   - **Nouvelle vente sous 1280 px** : barre fixée en bas avec le total, « Enregistrer en
+     brouillon » et « Confirmer la vente » ; Totaux et Règlement côte à côte. Un seul bouton de
+     confirmation dans le DOM.
+   - **Cartes KPI compactes**, sans pastille d'icône (≈ 110 px au lieu de 170).
+   - **Colonnes d'appoint** (`secondary` sur `DataTable`) masquées sous `lg`.
+   - **Panneaux latéraux** : la largeur passée par l'appelant l'emporte enfin sur celle du
+     composant de base ; les valeurs des listes de définitions peuvent passer à la ligne.
+8. **Densité des tableaux** : réglage **du navigateur** (`localStorage`, clé `coges-density`),
+   compacte par défaut, aucune donnée serveur ; menu dans l'en-tête ; attribut `data-density`
+   posé avant l'affichage par un script en ligne (la CSP autorise déjà `'unsafe-inline'`).
+9. **Couleurs (passe 5)** : un jeton d'**encre** par état (`--success-ink`, `--warning-ink`,
+   `--danger-ink`, clair et sombre) pour tout texte d'état ; les jetons d'état restent pour les
+   fonds et les graphiques. Gris d'annotation foncé (47 % → 42 %). Texte foncé sur fond plein
+   vert ou orange ; rouge sombre aligné sur le clair (blanc lisible dessus). Survol des menus en
+   gris (le jeton `accent`, vert encaissé, n'est plus une couleur d'interface). Seuil bas en
+   orange partout, rupture en rouge ; lignes du stock non teintées (le badge suffit) ; cartes
+   d'Intelligence lues sans opacité. Graphique de chiffre d'affaires **en barres**
+   (`PeriodBarChart`, ex-`AreaChart`). Résultat axe : 220 → 1 violation en clair, 23 → 1 en sombre.
+10. **Textes et épuration (passe 6)** : aucun texte métier réécrit (états vides et erreurs déjà
+    précis) ; croix des panneaux et dialogues en français (« Fermer le panneau », « Fermer la
+    fenêtre » ; elle était « Close »). Deux tests e2e (`customers`, `products`) cherchaient le
+    bouton de pied « Fermer » par inclusion de nom : ils le cherchent désormais en **nom exact**
+    (`exact: true`), choix validé par l'utilisateur ; le test est plus strict, le parcours
+    inchangé. Cartes d'Intelligence sans bordure latérale, badge de type masqué quand le titre
+    le répète, « Données insuffisantes » dit une seule fois par carte et par panneau ; action
+    principale du panneau = étape suivante. Synthèse d'Intelligence sans cases imbriquées.
+    **Séparateur des milliers élargi à l'affichage** (`spacedGroups`) : le caractère reste
+    l'espace fine insécable exigée par `CLAUDE.md` § 5, seul son rendu change.
+11. **Mouvement (passe 7)** : animations discrètes uniquement (pas de passe `delight`, conforme à la
+    réponse 3 du prompt). `prefers-reduced-motion` : déplacements et zooms neutralisés, fondus
+    conservés, squelettes figés. Voile des dialogues et panneaux sans `backdrop-blur` (25 %,
+    50 % en sombre). `transition-all` remplacé par des transitions ciblées. Panneaux : entrée
+    200 ms, sortie 150 ms, décélération douce.
+12. **Finition (passe 8)** : `SegmentedControl` partagé (radiogroup, clavier) remplace trois
+    sélecteurs écrits à la main et les onglets-filtres des notifications (dernière violation axe,
+    critique). Axes des graphiques en largeur automatique (graduations rognées). Encours de
+    Finance en ton neutre. **axe bloquant par défaut** dans `e2e/a11y.spec.ts`
+    (`A11Y_STRICT=0` pour l'ignorer ponctuellement). Audit : **13/20 → 18/20**
+    (`docs/design/audit-phase-14-apres.md`).
+13. **Reporté puis traité** : textes des notifications composés par le worker backend avec des
+    valeurs brutes (« 21830.00 », « 2026-09-17 ») ; corrigé par l'ADR 0057.
+
+## Conséquences
+
+- Aucun changement d'API ni de schéma ; les e2e des phases 11 à 13 restent le garde-fou.
+- Les nouveaux styles passent par les tokens et les composants partagés (`components/ui`,
+  `components/*`), jamais par une page isolée.
+- ESLint ignore `playwright-report/` et `test-results/` (artefacts déjà ignorés par git).
+- La densité n'est pas synchronisée entre appareils (choix assumé : aucune préférence serveur).

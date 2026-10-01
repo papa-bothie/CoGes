@@ -16,13 +16,7 @@ import type { StockLine } from "@/lib/api/queries/stock";
 import { formatDateTime, formatQty } from "@/lib/format";
 import { labels } from "@/lib/labels";
 
-const HIGHLIGHT = {
-  ok: undefined,
-  low: "bg-warning/5 hover:bg-warning/10",
-  out: "bg-destructive/5 hover:bg-destructive/10",
-} as const;
-
-/** Stock valorisé au CMP, ruptures et seuils bas en tête (ordre de l'API), surlignés. */
+/** Stock valorisé au CMP, ruptures et seuils bas en tête (ordre de l'API), signalés par leur badge. */
 export function StockTable({ onTotal }: { onTotal: (total: number) => void }) {
   const router = useRouter();
   const table = useTableParams();
@@ -54,6 +48,7 @@ export function StockTable({ onTotal }: { onTotal: (total: number) => void }) {
     },
     {
       id: "category",
+      secondary: true,
       header: labels.stock.columns.category,
       cell: (line) => line.category_name ?? <span className="text-muted-foreground">—</span>,
     },
@@ -85,6 +80,7 @@ export function StockTable({ onTotal }: { onTotal: (total: number) => void }) {
     },
     {
       id: "last",
+      secondary: true,
       header: labels.stock.columns.lastMovement,
       cell: (line) => (
         <span className="numeric whitespace-nowrap">
@@ -112,7 +108,6 @@ export function StockTable({ onTotal }: { onTotal: (total: number) => void }) {
         pageSize={table.pageSize}
         onPageChange={table.setPage}
         loading={query.isFetching}
-        rowClassName={(line) => HIGHLIGHT[line.status]}
         onRowClick={(line) => router.push(`/products/${line.product_id}`)}
         empty={labels.stock.empty}
       />

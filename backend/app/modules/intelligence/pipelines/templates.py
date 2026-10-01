@@ -7,10 +7,10 @@ Aucune formule de classement sans métrique : ni « meilleur », ni « top », n
 from __future__ import annotations
 
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 
-#: Espace fine insécable, séparateur de milliers de l'affichage (`CLAUDE.md` § 5).
-THIN_NBSP = " "
+# Formateurs partagés avec les textes de notifications (ADR 0057).
+from app.core.display import dmy, fcfa, number
 
 #: Libellés de métrique, repris tels quels dans `evidence.metric_name`.
 METRIC_STOCKOUT = "Jours avant rupture prévue"
@@ -28,22 +28,8 @@ def _name(name: str) -> str:
     return name if len(name) <= MAX_NAME else name[: MAX_NAME - 1] + "…"
 
 
-def fcfa(value: Decimal) -> str:
-    rounded = int(value.quantize(Decimal(1), rounding=ROUND_HALF_UP))
-    return f"{rounded:,}".replace(",", THIN_NBSP) + f"{THIN_NBSP}FCFA"
-
-
-def number(value: Decimal | float, decimals: int = 0) -> str:
-    """Nombre à la française : espace fine insécable pour les milliers, virgule décimale."""
-    text = f"{value:,.{decimals}f}"
-    return text.replace(",", THIN_NBSP).replace(".", ",")
-
-
-def dmy(day: date) -> str:
-    return day.strftime("%d/%m/%Y")
-
-
 def qty(value: Decimal) -> str:
+    """Quantité d'un texte d'insight : une décimale au plus (ordre de grandeur, pas inventaire)."""
     return number(value, 0 if value == value.to_integral() else 1)
 
 

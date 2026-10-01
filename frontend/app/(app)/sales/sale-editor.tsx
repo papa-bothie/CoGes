@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/page-header";
 import { SearchCombobox } from "@/components/search-combobox";
 import { SaleStatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -306,7 +307,8 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
         count={data && <SaleStatusBadge status={data.status} hasReturns={data.has_returns} />}
       />
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      {/* Sous `xl`, la barre d'actions est fixée en bas : on réserve sa hauteur. */}
+      <div className="grid items-start gap-6 pb-28 xl:grid-cols-[minmax(0,1fr)_20rem] xl:pb-0">
         <div className="space-y-6">
           <Card>
             <CardHeader>
@@ -384,7 +386,7 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
                       <span
                         className={cn(
                           "text-xs numeric",
-                          line?.status === "out" ? "text-destructive" : "text-muted-foreground",
+                          line?.status === "out" ? "text-danger-ink" : "text-muted-foreground",
                         )}
                       >
                         {line ? `${formatQty(line.qty_on_hand)} en stock` : "—"}
@@ -461,7 +463,7 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
           </Card>
         </div>
 
-        <div className="space-y-6 xl:sticky xl:top-20">
+        <div className="grid items-start gap-6 md:grid-cols-2 xl:sticky xl:top-20 xl:block xl:space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>{labels.sales.totals}</CardTitle>
@@ -478,11 +480,7 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
               )}
               <div className="flex items-baseline justify-between border-t pt-3">
                 <span className="font-semibold">{labels.sales.total}</span>
-                <Money
-                  value={data?.total ?? "0"}
-                  currency={currency}
-                  className="text-xl font-bold"
-                />
+                <Money value={data?.total ?? "0"} currency={currency} className="text-figure-sm" />
               </div>
               <p
                 aria-live="polite"
@@ -505,32 +503,20 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
               <CardTitle>{labels.sales.settlement}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div
-                role="radiogroup"
+              <SegmentedControl
                 aria-label={labels.sales.settlement}
-                className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1"
-              >
-                {MODES.map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    role="radio"
-                    aria-checked={mode === value}
-                    onClick={() => {
-                      setMode(value);
-                      setSettlementError(null);
-                    }}
-                    className={cn(
-                      "rounded-md px-2 py-1.5 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                      mode === value
-                        ? "bg-card text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {labels.sales.settlementModes[value]}
-                  </button>
-                ))}
-              </div>
+                value={mode}
+                onValueChange={(value) => {
+                  setMode(value);
+                  setSettlementError(null);
+                }}
+                options={MODES.map((value) => ({
+                  value,
+                  label: labels.sales.settlementModes[value],
+                }))}
+                className="grid w-full"
+                itemClassName="px-2 py-1.5"
+              />
 
               {mode === "partial" && (
                 <div className="space-y-1.5">
@@ -589,26 +575,41 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
             </CardContent>
           </Card>
 
-          <div className="space-y-2">
-            <Button className="w-full" size="lg" disabled={!canConfirm} onClick={submitConfirm}>
-              {confirm.isPending && <Loader2 className="animate-spin" aria-hidden />}
-              {confirm.isPending ? labels.sales.confirming : labels.sales.confirm}
-            </Button>
+          {/*
+            Actions : sous la colonne à partir de `xl` ; en dessous (tablette), barre fixée en
+            bas avec le total, pour que « Confirmer la vente » reste toujours à portée.
+          */}
+          <div className="space-y-2 max-xl:fixed max-xl:inset-x-0 max-xl:bottom-0 max-xl:z-20 max-xl:border-t max-xl:bg-card max-xl:px-4 max-xl:py-3 max-xl:shadow-lg md:max-xl:px-6 lg:max-xl:left-52 print:hidden">
+            <div className="flex flex-wrap items-center gap-2 xl:flex-col xl:items-stretch">
+              <div className="mr-auto min-w-0 xl:hidden">
+                <p className="text-xs text-muted-foreground">{labels.sales.total}</p>
+                <Money value={data?.total ?? "0"} currency={currency} className="text-figure-sm" />
+              </div>
+              <Button
+                className="max-xl:order-last xl:w-full"
+                size="lg"
+                disabled={!canConfirm}
+                onClick={submitConfirm}
+              >
+                {confirm.isPending && <Loader2 className="animate-spin" aria-hidden />}
+                {confirm.isPending ? labels.sales.confirming : labels.sales.confirm}
+              </Button>
+              <Button
+                variant="outline"
+                className="xl:order-last xl:w-full"
+                disabled={!saleId || busy}
+                onClick={() => {
+                  toast.success(labels.sales.draftSaved);
+                  router.push("/sales");
+                }}
+              >
+                {labels.sales.saveDraft}
+              </Button>
+            </div>
             {shortProducts.size > 0 && (
-              <p className="text-sm text-destructive">{labels.sales.confirmBlocked}</p>
+              <p className="text-sm text-danger-ink">{labels.sales.confirmBlocked}</p>
             )}
             <FieldError message={confirmError} />
-            <Button
-              variant="outline"
-              className="w-full"
-              disabled={!saleId || busy}
-              onClick={() => {
-                toast.success(labels.sales.draftSaved);
-                router.push("/sales");
-              }}
-            >
-              {labels.sales.saveDraft}
-            </Button>
           </div>
         </div>
       </div>

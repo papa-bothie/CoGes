@@ -4,14 +4,14 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 const TONES = {
-  danger: "border-destructive/30 bg-destructive/5 text-destructive",
-  warning: "border-warning/30 bg-warning/5 text-warning",
+  danger: "border-destructive/30 bg-destructive/5 text-danger-ink",
+  warning: "border-warning/30 bg-warning/5 text-warning-ink",
   neutral: "border-border bg-card text-foreground",
 } as const;
 
 /**
- * Bandeau d'alerte cliquable : rouge pâle pour le stock bas, neutre pour une dette
- * échue ; détail à droite et flèche vers l'élément concerné.
+ * Bandeau d'alerte cliquable : orange pour un seuil bas, rouge pour une rupture, neutre pour
+ * une dette échue ; détail à droite et flèche vers l'élément concerné.
  */
 export function AlertBanner({
   icon: Icon,

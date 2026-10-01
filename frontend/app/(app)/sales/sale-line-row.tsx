@@ -107,7 +107,7 @@ export function SaleLineRow({
             id={`stock-${item.id}`}
             className={cn(
               "mt-1 text-right text-xs numeric whitespace-nowrap",
-              short ? "font-medium text-destructive" : "text-muted-foreground",
+              short ? "font-medium text-danger-ink" : "text-muted-foreground",
             )}
           >
             {stock

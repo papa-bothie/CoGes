@@ -37,6 +37,14 @@ FORECASTS_TABLE: Table = Forecast.__table__  # type: ignore[assignment]
 #: Un insight « vivant » est affiché ; écarté ou résolu, il ne l'est plus.
 LIVE_STATUSES = ("new", "read", "acknowledged")
 
+#: Ordre de lecture des recommandations (ADR 0057) : critique, attention, information. Un
+#: `CASE` explicite plutôt que l'ordre de déclaration de l'ENUM `insight_severity`.
+SEVERITY_RANK = case(
+    (Insight.severity == "critical", 0),
+    (Insight.severity == "warning", 1),
+    else_=2,
+)
+
 
 def _check_page(page: int, page_size: int) -> None:
     if page < 1:
@@ -304,7 +312,7 @@ class InsightRepository(TenantRepository[Insight]):
             .where(
                 *self._visible(now=now, status=status, severity=severity, insight_type=insight_type)
             )
-            .order_by(Insight.generated_at.desc(), Insight.id.desc())
+            .order_by(SEVERITY_RANK, Insight.generated_at.desc(), Insight.id.desc())
             .limit(page_size)
             .offset((page - 1) * page_size)
         )

@@ -99,7 +99,7 @@ export function SalesListView() {
           <Money
             value={sale.balance}
             currency={currency}
-            className={compareDecimal(sale.balance, "0") === 1 ? "text-warning" : undefined}
+            className={compareDecimal(sale.balance, "0") === 1 ? "text-warning-ink" : undefined}
           />
         ) : (
           <span className="text-muted-foreground">—</span>

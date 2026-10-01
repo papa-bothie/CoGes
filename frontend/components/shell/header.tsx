@@ -1,6 +1,7 @@
 "use client";
 
-import { LogOut, Menu } from "lucide-react";
+import { ChevronRight, LogOut, Menu } from "lucide-react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
@@ -10,9 +11,11 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import type { Me } from "@/lib/api/schema";
 import { logout, loginUrl } from "@/lib/auth/session";
 import { labels } from "@/lib/labels";
-import { pageTitle } from "@/lib/navigation";
+import { pageSection } from "@/lib/navigation";
 
+import { DensityToggle } from "./density-toggle";
 import { NotificationBell } from "./notification-bell";
+import { usePageTitle } from "./page-title";
 import { SidebarContent } from "./sidebar";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -28,6 +31,10 @@ export function Header({ me }: { me: Me }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const section = pageSection(pathname);
+  const title = usePageTitle();
+  // Sous-page (vente, fiche, nouvelle saisie) : la section devient un lien, le titre suit.
+  const leaf = title && title !== section.label ? title : null;
 
   const handleLogout = async () => {
     setLeaving(true);
@@ -37,13 +44,13 @@ export function Header({ me }: { me: Me }) {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b bg-card px-4 md:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-card px-4 md:px-6">
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetTrigger asChild>
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden"
+            className="lg:hidden"
             aria-label={labels.nav.openMenu}
           >
             <Menu aria-hidden />
@@ -61,12 +68,41 @@ export function Header({ me }: { me: Me }) {
       </Sheet>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-lg leading-tight font-semibold">{pageTitle(pathname)}</p>
-        <p className="truncate text-xs text-muted-foreground">{me.company.name}</p>
+        <nav aria-label={labels.nav.breadcrumb}>
+          <ol className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+            <li className="shrink-0">
+              {leaf ? (
+                <Link
+                  href={section.href}
+                  className="rounded-sm font-medium outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  {section.label}
+                </Link>
+              ) : (
+                <span aria-current="page" className="font-medium text-foreground">
+                  {section.label}
+                </span>
+              )}
+            </li>
+            {leaf && (
+              <>
+                <li aria-hidden className="shrink-0">
+                  <ChevronRight className="size-3.5" />
+                </li>
+                <li aria-current="page" className="min-w-0 truncate text-foreground">
+                  {leaf}
+                </li>
+              </>
+            )}
+          </ol>
+        </nav>
+        {/* La barre latérale, qui porte le nom de l'entreprise, est repliée sous `lg`. */}
+        <p className="truncate text-xs text-muted-foreground lg:hidden">{me.company.name}</p>
       </div>
 
       <div className="flex items-center gap-1 md:gap-2">
         <NotificationBell />
+        <DensityToggle />
         <ThemeToggle />
         <div className="ml-1 hidden items-center gap-2.5 sm:flex">
           <div className="text-right leading-tight">

@@ -11,6 +11,7 @@ import { loginUrl, onLogoutElsewhere } from "@/lib/auth/session";
 import { labels } from "@/lib/labels";
 
 import { Header } from "./header";
+import { PageTitleProvider } from "./page-title";
 import { SidebarContent } from "./sidebar";
 
 /**
@@ -37,40 +38,42 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-dvh">
-      <a
-        href="#contenu"
-        className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
-      >
-        {labels.app.skipToContent}
-      </a>
-      <aside className="sticky top-0 hidden h-dvh w-52 shrink-0 border-r bg-sidebar md:block print:hidden">
-        <SidebarContent
-          companyName={me.data.company.name}
-          permissions={me.data.permissions}
-          pathname={pathname}
-        />
-      </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="contents print:hidden">
-          <Header me={me.data} />
-        </div>
-        <main
-          id="contenu"
-          tabIndex={-1}
-          className="flex-1 space-y-6 p-4 outline-none md:p-6 print:p-0"
+    <PageTitleProvider>
+      <div className="flex min-h-dvh">
+        <a
+          href="#contenu"
+          className="sr-only z-50 rounded-md bg-primary px-3 py-2 text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
         >
-          {children}
-        </main>
+          {labels.app.skipToContent}
+        </a>
+        <aside className="sticky top-0 hidden h-dvh w-52 shrink-0 border-r bg-sidebar lg:block print:hidden">
+          <SidebarContent
+            companyName={me.data.company.name}
+            permissions={me.data.permissions}
+            pathname={pathname}
+          />
+        </aside>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="contents print:hidden">
+            <Header me={me.data} />
+          </div>
+          <main
+            id="contenu"
+            tabIndex={-1}
+            className="flex-1 space-y-6 p-4 outline-none md:p-6 print:p-0"
+          >
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </PageTitleProvider>
   );
 }
 
 function ShellSkeleton() {
   return (
     <div className="flex min-h-dvh" aria-busy="true" aria-label={labels.table.loading}>
-      <div className="hidden w-52 shrink-0 space-y-3 border-r p-4 md:block">
+      <div className="hidden w-52 shrink-0 space-y-3 border-r p-4 lg:block">
         <Skeleton className="h-9 w-32" />
         {Array.from({ length: 8 }, (_, i) => (
           <Skeleton key={i} className="h-8 w-full" />

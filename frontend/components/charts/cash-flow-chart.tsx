@@ -74,7 +74,7 @@ export function CashFlowChart({
             <YAxis
               tickLine={false}
               axisLine={false}
-              width={72}
+              width="auto"
               tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
               tickFormatter={formatAxis}
             />

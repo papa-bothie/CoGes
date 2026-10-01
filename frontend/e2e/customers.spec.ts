@@ -70,7 +70,7 @@ test("fiche client : encours, achats, dettes ; code en double refusé", async ({
   await dialog.getByRole("button", { name: "Enregistrer" }).click();
   await expect(dialog.getByRole("alert").first()).toBeVisible();
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Fermer" }).click();
+  await dialog.getByRole("button", { name: "Fermer", exact: true }).click();
 
   await page.getByRole("searchbox").fill(name);
   await expect(page.getByRole("row").filter({ hasText: name })).toContainText(/50\s000\sFCFA/);

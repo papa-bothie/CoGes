@@ -1,9 +1,8 @@
 "use client";
 
-import { useId } from "react";
 import {
-  Area,
-  AreaChart as RechartsAreaChart,
+  Bar,
+  BarChart as RechartsBarChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
@@ -12,7 +11,7 @@ import {
   type TooltipContentProps,
 } from "recharts";
 
-export type AreaPoint = {
+export type PeriodPoint = {
   /** Libellé de l'axe X, déjà formaté (« 29/09 »). */
   label: string;
   /** Position sur le graphique **uniquement** : jamais réutilisée pour un calcul. */
@@ -22,32 +21,30 @@ export type AreaPoint = {
 };
 
 /**
- * Série unique en aire (CA sur 30 jours du prototype) : courbe `chart-1` de 2 px,
- * remplissage en dégradé léger, grille horizontale discrète, réticule + info-bulle au
+ * Série unique en barres (CA par jour, semaine ou mois) : **une barre par période**, car chaque
+ * valeur est un total distinct ; une courbe lissée suggérait des valeurs entre deux jours.
+ * Barres `chart-1` aux coins hauts arrondis, grille horizontale discrète, info-bulle au
  * survol. Une seule série : pas de légende, le titre de la carte la nomme.
  */
-export function AreaChart({
+export function PeriodBarChart({
   data,
   label,
   formatAxis,
   height = 260,
 }: {
-  data: readonly AreaPoint[];
+  data: readonly PeriodPoint[];
   label: string;
   formatAxis: (value: number) => string;
   height?: number;
 }) {
-  const gradientId = useId();
   return (
     <div role="img" aria-label={label} style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <RechartsAreaChart data={[...data]} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-          <defs>
-            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.25} />
-              <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.02} />
-            </linearGradient>
-          </defs>
+        <RechartsBarChart
+          data={[...data]}
+          margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+          barCategoryGap="20%"
+        >
           <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="3 3" />
           <XAxis
             dataKey="label"
@@ -59,31 +56,26 @@ export function AreaChart({
           <YAxis
             tickLine={false}
             axisLine={false}
-            width={72}
+            width="auto"
             tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
             tickFormatter={formatAxis}
           />
-          <Tooltip
-            cursor={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
-            content={ChartTooltip}
-          />
-          <Area
-            type="monotone"
+          <Tooltip cursor={{ fill: "hsl(var(--muted))" }} content={ChartTooltip} />
+          <Bar
             dataKey="y"
-            stroke="hsl(var(--chart-1))"
-            strokeWidth={2}
-            fill={`url(#${gradientId})`}
-            activeDot={{ r: 4, strokeWidth: 2, stroke: "hsl(var(--card))" }}
+            fill="hsl(var(--chart-1))"
+            radius={[3, 3, 0, 0]}
+            maxBarSize={28}
             isAnimationActive={false}
           />
-        </RechartsAreaChart>
+        </RechartsBarChart>
       </ResponsiveContainer>
     </div>
   );
 }
 
 function ChartTooltip({ active, payload }: TooltipContentProps) {
-  const point = payload?.[0]?.payload as AreaPoint | undefined;
+  const point = payload?.[0]?.payload as PeriodPoint | undefined;
   if (!active || !point) return null;
   return (
     <div className="rounded-md border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-sm">

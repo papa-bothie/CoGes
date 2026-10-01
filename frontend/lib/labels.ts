@@ -23,6 +23,7 @@ export const labels = {
     settings: "Paramètres",
     notifications: "Notifications",
     openMenu: "Ouvrir le menu",
+    breadcrumb: "Fil d'Ariane",
     mainNavigation: "Navigation principale",
   },
   header: {
@@ -35,6 +36,9 @@ export const labels = {
     themeLight: "Clair",
     themeDark: "Sombre",
     themeSystem: "Système",
+    density: "Densité des tableaux",
+    densityCompact: "Compacte",
+    densityComfortable: "Confortable",
   },
   login: {
     title: "Connexion",
@@ -114,6 +118,9 @@ export const labels = {
   },
   common: {
     close: "Fermer",
+    // Croix des dialogues et panneaux : nom distinct d'un bouton « Fermer » de pied de dialogue.
+    closeDialog: "Fermer la fenêtre",
+    closePanel: "Fermer le panneau",
     cancel: "Annuler",
     save: "Enregistrer",
     edit: "Modifier",

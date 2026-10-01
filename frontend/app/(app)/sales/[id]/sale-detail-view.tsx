@@ -298,7 +298,7 @@ export function SaleDetailView({ saleId }: { saleId: string }) {
               )}
               <div className="flex items-baseline justify-between border-t pt-3">
                 <span className="font-semibold">{labels.sales.total}</span>
-                <Money value={data.total} currency={currency} className="text-xl font-bold" />
+                <Money value={data.total} currency={currency} className="text-figure-sm" />
               </div>
               {data.status === "confirmed" && (
                 <>
@@ -336,7 +336,7 @@ export function SaleDetailView({ saleId }: { saleId: string }) {
                   <Row label={labels.sales.cancelledAt}>
                     <span className="numeric">{formatDateTime(data.cancelled_at, timeZone)}</span>
                   </Row>
-                  <div className="rounded-md bg-destructive/5 p-3 text-destructive">
+                  <div className="rounded-md bg-destructive/5 p-3 text-danger-ink">
                     <p className="text-xs font-medium">{labels.sales.cancelReasonLabel}</p>
                     <p>{data.cancel_reason}</p>
                   </div>

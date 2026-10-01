@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { ForecastMeta } from "@/components/forecast/forecast-meta";
 import { ProductForecast } from "@/components/forecast/product-forecast";
+import { spacedGroups } from "@/components/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +28,7 @@ import {
   insightHref,
   insightValue,
   modelLabel,
+  titleNamesType,
   uncertaintyLabel,
   type Insight,
 } from "@/lib/intelligence";
@@ -36,6 +38,22 @@ import { SEVERITY_VARIANTS } from "./insight-card";
 
 type StatusChange = Schemas["InsightStatusChange"];
 const ACTIONS: readonly StatusChange[] = ["read", "acknowledged", "dismissed", "resolved"];
+
+/** Étape suivante naturelle d'une recommandation : l'action principale du panneau. */
+const NEXT_STEP: Record<Insight["status"], StatusChange | null> = {
+  new: "acknowledged",
+  read: "acknowledged",
+  acknowledged: "resolved",
+  dismissed: null,
+  resolved: null,
+};
+
+/** Actions possibles, l'étape suivante en tête ; le statut courant n'est pas proposé. */
+function orderedActions(status: Insight["status"]): StatusChange[] {
+  const next = NEXT_STEP[status];
+  const rest = ACTIONS.filter((action) => action !== status && action !== next);
+  return next ? [next, ...rest] : rest;
+}
 
 /**
  * Détail d'une recommandation : texte, métrique nommée, date de calcul, modèle, incertitude,
@@ -79,25 +97,22 @@ export function InsightSheet({
           <>
             <SheetHeader className="border-b">
               <div className="flex flex-wrap gap-1.5 pr-8">
-                <Badge variant="neutral">{t.type[insight.insight_type]}</Badge>
+                {!titleNamesType(insight.title, t.type[insight.insight_type]) && (
+                  <Badge variant="neutral">{t.type[insight.insight_type]}</Badge>
+                )}
                 <Badge variant={SEVERITY_VARIANTS[insight.severity]}>
                   {t.severity[insight.severity]}
                 </Badge>
                 <Badge variant="outline">{t.status[insight.status]}</Badge>
               </div>
-              <SheetTitle className="text-base">{insight.title}</SheetTitle>
+              <SheetTitle>{insight.title}</SheetTitle>
               {insight.body && <SheetDescription>{insight.body}</SheetDescription>}
             </SheetHeader>
 
             <div className="space-y-6 p-4">
               <section className="space-y-2 rounded-lg border bg-muted/30 p-3">
-                <p className="text-2xl font-bold numeric">
-                  {value ?? (
-                    <span className="text-base text-muted-foreground">
-                      {labels.forecast.insufficientData}
-                    </span>
-                  )}
-                </p>
+                {/* Sans valeur, l'incertitude ci-dessous dit déjà « Données insuffisantes ». */}
+                {value && <p className="text-figure numeric">{spacedGroups(value)}</p>}
                 <ForecastMeta
                   metric={insight.metric_name ?? "—"}
                   computedAt={formatDateTime(insight.computed_at, timeZone)}
@@ -131,7 +146,7 @@ export function InsightSheet({
                     {evidence.facts.map((fact) => (
                       <div key={fact.key} className="contents">
                         <dt className="text-muted-foreground">{fact.label}</dt>
-                        <dd className="numeric">{fact.value}</dd>
+                        <dd className="tabular-nums">{fact.value}</dd>
                       </div>
                     ))}
                   </dl>
@@ -144,7 +159,7 @@ export function InsightSheet({
                     {evidence.thresholds.map((fact) => (
                       <div key={fact.key} className="contents">
                         <dt className="text-muted-foreground">{fact.label}</dt>
-                        <dd className="numeric">{fact.value}</dd>
+                        <dd className="tabular-nums">{fact.value}</dd>
                       </div>
                     ))}
                   </dl>
@@ -163,10 +178,10 @@ export function InsightSheet({
 
               {canUpdate && (
                 <div className="flex flex-wrap gap-2 border-t pt-4">
-                  {ACTIONS.filter((status) => status !== insight.status).map((status) => (
+                  {orderedActions(insight.status).map((status) => (
                     <Button
                       key={status}
-                      variant={status === "dismissed" ? "outline" : "secondary"}
+                      variant={status === NEXT_STEP[insight.status] ? "default" : "outline"}
                       size="sm"
                       disabled={update.isPending}
                       onClick={() => update.mutate({ id: insight.id, status })}

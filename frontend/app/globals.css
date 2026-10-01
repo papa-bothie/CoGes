@@ -3,6 +3,8 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
+/* Densité confortable des tableaux (réglage du navigateur, lib/density.ts). */
+@custom-variant comfortable (&:where([data-density="comfortable"] *));
 
 /*
  * Tokens du prototype Bolt, repris à l'identique (docs/design/prototype-reference.md § 1).
@@ -20,15 +22,23 @@
   --secondary: 210 16% 95%;
   --secondary-foreground: 215 28% 17%;
   --muted: 210 16% 93%;
-  --muted-foreground: 215 16% 47%;
+  --muted-foreground: 215 16% 42%;
   --accent: 152 63% 40%;
   --accent-foreground: 0 0% 100%;
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
   --warning: 32 95% 50%;
-  --warning-foreground: 0 0% 100%;
+  --warning-foreground: 215 28% 17%;
   --success: 142 71% 45%;
-  --success-foreground: 0 0% 100%;
+  --success-foreground: 215 28% 17%;
+  /*
+   * Encres d'état : couleur d'un TEXTE qui dit un état (badge, montant dû, écart). Les jetons
+   * --success / --warning / --destructive restent pour les fonds, pastilles et graphiques ;
+   * trop clairs pour du texte (2,0 à 4,3:1). Encres ≥ 4,5:1 sur carte, fond et teinte à 10 %.
+   */
+  --success-ink: 145 63% 28%;
+  --warning-ink: 26 90% 33%;
+  --danger-ink: 0 74% 40%;
   --border: 214 20% 88%;
   --input: 214 20% 88%;
   --ring: 199 89% 28%;
@@ -55,9 +65,14 @@
   --muted-foreground: 215 16% 60%;
   --accent: 152 63% 50%;
   --accent-foreground: 215 28% 10%;
-  --destructive: 0 72% 55%;
+  --destructive: 0 72% 51%;
   --warning: 32 95% 55%;
+  --warning-foreground: 215 28% 10%;
   --success: 142 71% 50%;
+  --success-foreground: 215 28% 10%;
+  --success-ink: 142 60% 60%;
+  --warning-ink: 35 95% 62%;
+  --danger-ink: 0 90% 72%;
   --border: 215 28% 22%;
   --input: 215 28% 22%;
   --ring: 199 89% 48%;
@@ -71,6 +86,27 @@
 @theme inline {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-heading: var(--font-sans);
+
+  /*
+   * Échelle typographique par rôle (docs/design/DESIGN.md § Typography). Le texte courant
+   * reste `text-sm` (14 px) et les métadonnées `text-xs` (12 px) ; ces rôles s'y ajoutent.
+   */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-page-title: 1.5rem;
+  --text-page-title--line-height: 2rem;
+  --text-page-title--font-weight: 700;
+  --text-page-title--letter-spacing: -0.02em;
+  --text-heading: 1rem;
+  --text-heading--line-height: 1.5rem;
+  --text-heading--font-weight: 600;
+  --text-figure: 1.5rem;
+  --text-figure--line-height: 2rem;
+  --text-figure--font-weight: 700;
+  --text-figure--letter-spacing: -0.01em;
+  --text-figure-sm: 1.25rem;
+  --text-figure-sm--line-height: 1.75rem;
+  --text-figure-sm--font-weight: 700;
 
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
@@ -92,6 +128,9 @@
   --color-warning-foreground: hsl(var(--warning-foreground));
   --color-success: hsl(var(--success));
   --color-success-foreground: hsl(var(--success-foreground));
+  --color-success-ink: hsl(var(--success-ink));
+  --color-warning-ink: hsl(var(--warning-ink));
+  --color-danger-ink: hsl(var(--danger-ink));
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
@@ -129,6 +168,30 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+  }
+
+  /*
+   * Mouvement réduit : les panneaux, menus et dialogues ne glissent ni ne zooment plus, mais
+   * gardent leur fondu (l'apparition reste perceptible). Les squelettes cessent de pulser ;
+   * les indicateurs de chargement qui tournent restent, ils disent qu'une action est en cours.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      --tw-enter-translate-x: 0 !important;
+      --tw-enter-translate-y: 0 !important;
+      --tw-exit-translate-x: 0 !important;
+      --tw-exit-translate-y: 0 !important;
+      --tw-enter-scale: 1 !important;
+      --tw-exit-scale: 1 !important;
+      --tw-enter-rotate: 0 !important;
+      --tw-exit-rotate: 0 !important;
+      scroll-behavior: auto !important;
+    }
+    [data-slot="skeleton"] {
+      animation: none;
+    }
   }
 }
 

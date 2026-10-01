@@ -61,13 +61,18 @@ const EXTRA_TITLES: Record<string, string> = {
   "/notifications": labels.nav.notifications,
 };
 
-/** Titre affiché dans l'en-tête pour un chemin (préfixe le plus long). */
-export function pageTitle(pathname: string): string {
-  if (EXTRA_TITLES[pathname]) return EXTRA_TITLES[pathname];
+/** Section d'un chemin (préfixe le plus long) : premier maillon du fil d'Ariane. */
+export function pageSection(pathname: string): { label: string; href: string } {
+  if (EXTRA_TITLES[pathname]) return { label: EXTRA_TITLES[pathname], href: pathname };
   const match = NAV_ITEMS.filter(
     (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
   ).sort((a, b) => b.href.length - a.href.length)[0];
-  return match?.label ?? labels.app.name;
+  return match ? { label: match.label, href: match.href } : { label: labels.app.name, href: "/" };
+}
+
+/** Titre de section affiché dans l'en-tête pour un chemin. */
+export function pageTitle(pathname: string): string {
+  return pageSection(pathname).label;
 }
 
 export function isActive(pathname: string, href: string): boolean {

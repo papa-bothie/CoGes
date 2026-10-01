@@ -37,7 +37,7 @@ test("catégories, création d'un produit, changement de prix, ajustement", asyn
   await page.getByRole("button", { name: `Supprimer ${parent}` }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Supprimer" }).click();
   await expect(page.getByRole("dialog").getByRole("alert")).toBeVisible();
-  await page.getByRole("dialog").getByRole("button", { name: "Fermer" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Fermer", exact: true }).click();
   await shot(page, "categories");
 
   // Création d'un produit dans la sous-catégorie.

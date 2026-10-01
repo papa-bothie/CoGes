@@ -138,3 +138,12 @@ export function insightHref(insight: Pick<Insight, "entity_table" | "entity_id">
       return null;
   }
 }
+
+/**
+ * Le titre répète-t-il déjà le type (« Écoulement lent — Stylo ») ? Le badge de type devient
+ * alors redondant. Comparaison stricte du début du titre : quand le libellé diffère
+ * (« Demande inhabituelle » pour un pic de demande), le badge reste.
+ */
+export function titleNamesType(title: string, typeLabel: string): boolean {
+  return title.toLocaleLowerCase("fr").startsWith(typeLabel.toLocaleLowerCase("fr"));
+}

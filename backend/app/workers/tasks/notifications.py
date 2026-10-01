@@ -18,6 +18,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.display import dmy, fcfa, qty
 from app.core.events.inbox import Event, handle
 from app.core.money import serialize
 from app.core.tenancy import TenantContext, tenant_transaction
@@ -49,9 +50,9 @@ def on_stock_updated(**message: Any) -> str:
 
     def _alert(session: Session, ctx: TenantContext, received: Event) -> None:
         payload = received.payload
-        qty = Decimal(str(payload.get("qty_on_hand", "0")))
+        on_hand = Decimal(str(payload.get("qty_on_hand", "0")))
         below = bool(payload.get("below_reorder_point", False))
-        if qty > 0 and not below:
+        if on_hand > 0 and not below:
             # Situation normale : pas d'alerte, mais la marque d'idempotence est
             # tout de même posée. C'est voulu — « rien à faire » est un traitement.
             return
@@ -61,14 +62,14 @@ def on_stock_updated(**message: Any) -> str:
         summary = names.get(product_id)
         label = summary.name if summary is not None else "Produit"
 
-        if qty <= 0:
+        if on_hand <= 0:
             kind = NotificationType.STOCK_OUT
             title = f"Rupture de stock — {label}"
             body = f"{label} n'est plus disponible."
         else:
             kind = NotificationType.STOCK_LOW
             title = f"Stock bas — {label}"
-            body = f"Il reste {serialize(qty)} de {label}, au niveau du seuil d'alerte."
+            body = f"Il reste {qty(on_hand)} de {label}, au niveau du seuil d'alerte."
 
         sent = notifications_service.notify(
             session,
@@ -77,7 +78,7 @@ def on_stock_updated(**message: Any) -> str:
             title=title,
             body=body,
             entity_id=str(product_id),
-            data={"product_id": str(product_id), "qty_on_hand": serialize(qty)},
+            data={"product_id": str(product_id), "qty_on_hand": serialize(on_hand)},
         )
         logger.info(
             "Alerte de stock",
@@ -101,16 +102,17 @@ def on_sale_cancelled(**message: Any) -> str:
     def _alert(session: Session, ctx: TenantContext, received: Event) -> None:
         payload = received.payload
         sale_no = str(payload.get("sale_no", ""))
-        total = serialize(Decimal(str(payload.get("total", "0"))))
+        amount = Decimal(str(payload.get("total", "0")))
+        total = serialize(amount)
         reason = str(payload.get("reason", "")).strip()
         notifications_service.notify(
             session,
             ctx,
             notification_type=NotificationType.SALE_CANCELLED,
             title=f"Vente annulée — {sale_no}",
-            body=f"La vente {sale_no} ({total}) a été annulée. Motif : {reason}"
+            body=f"La vente {sale_no} ({fcfa(amount)}) a été annulée. Motif : {reason}"
             if reason
-            else f"La vente {sale_no} ({total}) a été annulée.",
+            else f"La vente {sale_no} ({fcfa(amount)}) a été annulée.",
             entity_id=str(received.aggregate_id),
             data={"sale_id": str(received.aggregate_id), "sale_no": sale_no, "total": total},
         )
@@ -138,7 +140,11 @@ def scan_due_debts(company_id: str, today: str | None = None) -> int:
                 ctx,
                 notification_type=NotificationType.DEBT_DUE,
                 title="Dette échue",
-                body=f"Une dette de {serialize(debt.balance)} est échue depuis le {due_date}.",
+                body=(
+                    f"Une dette de {fcfa(debt.balance)} est échue depuis le {dmy(debt.due_date)}."
+                    if debt.due_date
+                    else f"Une dette de {fcfa(debt.balance)} est échue."
+                ),
                 entity_id=str(debt.id),
                 data={
                     "debt_id": str(debt.id),

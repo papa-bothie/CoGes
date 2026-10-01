@@ -16,7 +16,7 @@ import {
 import Link from "next/link";
 
 import { AlertBanner } from "@/components/alerts/alert-banner";
-import { AreaChart } from "@/components/charts/area-chart";
+import { PeriodBarChart } from "@/components/charts/period-bar-chart";
 import { ErrorState } from "@/components/error-state";
 import { IntelligenceSummaryCard } from "@/components/forecast/intelligence-summary-card";
 import { KpiCard } from "@/components/kpi-card";
@@ -35,9 +35,9 @@ type Alert = Schemas["ActiveAlert"];
 /** Où mène une alerte : l'écran qui permet d'agir, faute d'identifiant d'entité dans l'alerte. */
 const ALERT_TARGETS: Record<
   string,
-  { href: string; icon: LucideIcon; tone: "danger" | "neutral" }
+  { href: string; icon: LucideIcon; tone: "danger" | "warning" | "neutral" }
 > = {
-  stock_low: { href: "/inventory", icon: AlertTriangle, tone: "danger" },
+  stock_low: { href: "/inventory", icon: AlertTriangle, tone: "warning" },
   stock_out: { href: "/inventory", icon: PackageX, tone: "danger" },
   debt_due: { href: "/finance", icon: Clock, tone: "neutral" },
   sale_cancelled: { href: "/sales?status=cancelled", icon: Receipt, tone: "neutral" },
@@ -106,7 +106,7 @@ export function DashboardView() {
             !data.active_alerts.some((alert) => alert.type.startsWith("stock_")) && (
               <AlertBanner
                 icon={AlertTriangle}
-                tone="danger"
+                tone="warning"
                 title={labels.dashboard.stockAlertBanner(data.stock_alert_count)}
                 detail={labels.dashboard.seeStock}
                 href="/inventory"
@@ -192,7 +192,7 @@ export function DashboardView() {
           </CardHeader>
           <CardContent>
             {data ? (
-              <AreaChart
+              <PeriodBarChart
                 label={labels.dashboard.revenueTrendLabel}
                 formatAxis={(value) => formatAxisAmount(value, currency)}
                 data={data.revenue_trend.map((point) => ({

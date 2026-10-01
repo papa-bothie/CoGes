@@ -60,7 +60,7 @@ def test_metric_labels_are_named() -> None:
 
 
 def test_amounts_are_displayed_the_french_way() -> None:
-    assert templates.fcfa(Decimal("1234567.40")) == "1 234 567 FCFA"
+    assert templates.fcfa(Decimal("1234567.40")) == "1\u202f234\u202f567\u00a0FCFA"
     assert templates.dmy(DAY) == "24/09/2026"
     assert templates.number(Decimal("10864")) == "10\u202f864"
     assert templates.number(Decimal("0.036"), 3) == "0,036"

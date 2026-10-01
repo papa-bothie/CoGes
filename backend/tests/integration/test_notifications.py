@@ -331,6 +331,71 @@ def test_a_cancelled_sale_reaches_those_who_may_cancel(
     assert "Erreur de caisse" in (alerts[0]["body"] or "")
 
 
+# ----------------------------------------------------- textes à la française
+
+
+def test_alert_texts_read_like_the_screen(
+    api_client: TestClient, alpha_token: str, company_alpha: DemoCompany
+) -> None:
+    """Montants en FCFA sans décimales, milliers séparés, dates jj/mm/aaaa (ADR 0057).
+
+    Le texte est lu tel quel par l'écran : « 21830.00 » ou « 2026-09-17 » y seraient
+    des valeurs brutes. Les champs `data`, eux, gardent leur forme machine.
+    """
+    nnbsp, nbsp = "\u202f", "\u00a0"
+
+    product_id = _product(api_client, alpha_token)
+    on_stock_updated(
+        **_stock_event(
+            company_alpha.company_id, product_id, qty="1500.500", below=True
+        ).as_message()
+    )
+    stock = _about(_feed(api_client, alpha_token), product_id)[0]
+    assert f"Il reste 1{nnbsp}500,5 de " in stock["body"]
+    assert stock["data"]["qty_on_hand"] == "1500.500"
+
+    sale_id = uuid4()
+    on_sale_cancelled(
+        **Event(
+            id=next(_ids),
+            company_id=company_alpha.company_id,
+            event_type=EventType.SALE_CANCELLED,
+            aggregate_type="sale",
+            aggregate_id=sale_id,
+            payload={"sale_no": "V-000888", "total": "12000.00", "reason": ""},
+            occurred_at=datetime.now(UTC),
+        ).as_message()
+    )
+    cancelled = _about(_feed(api_client, alpha_token), sale_id)[0]
+    assert cancelled["body"] == f"La vente V-000888 (12{nnbsp}000{nbsp}FCFA) a été annulée."
+    assert cancelled["data"]["total"] == "12000.00"
+
+    supplier = api_client.post(
+        "/api/v1/suppliers",
+        headers=auth_headers(alpha_token),
+        json={"name": f"F {uuid4().hex[:6]}"},
+    )
+    assert supplier.status_code == 201, supplier.text
+    due_on = date.today() - timedelta(days=5)
+    debt = api_client.post(
+        "/api/v1/debts",
+        headers=write_headers(alpha_token),
+        json={
+            "party_type": "supplier",
+            "supplier_id": supplier.json()["id"],
+            "principal": "21830.40",
+            "due_date": due_on.isoformat(),
+        },
+    )
+    assert debt.status_code == 201, debt.text
+    scan_due_debts(str(company_alpha.company_id), date.today().isoformat())
+    due = _about(_feed(api_client, alpha_token), UUID(debt.json()["id"]))[0]
+    assert due["body"] == (
+        f"Une dette de 21{nnbsp}830{nbsp}FCFA est échue depuis le {due_on:%d/%m/%Y}."
+    )
+    assert due["data"]["due_date"] == due_on.isoformat()
+
+
 # ------------------------------------------------------------------- le fil
 
 

@@ -135,7 +135,7 @@ export function OverviewTab() {
             value={money(data?.receivables_open)}
             hint={t.openHint}
             icon={HandCoins}
-            tone="warning"
+            tone="neutral"
             loading={loading}
           />
           <KpiCard
@@ -143,7 +143,7 @@ export function OverviewTab() {
             value={money(data?.payables_open)}
             hint={t.openHint}
             icon={Truck}
-            tone="warning"
+            tone="neutral"
             loading={loading}
           />
         </div>

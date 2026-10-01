@@ -28,6 +28,8 @@ export type Column<T> = {
   /** Le tri n'est proposé que si l'API sait trier sur cette colonne. */
   sortable?: boolean;
   className?: string;
+  /** Colonne d'appoint : masquée sous `lg` (tablette en portrait) pour garder l'essentiel. */
+  secondary?: boolean;
 };
 
 export type SortState = { id: string; direction: "asc" | "desc" } | null;
@@ -142,8 +144,9 @@ export function DataTable<T>({
                       active === "asc" ? "ascending" : active === "desc" ? "descending" : undefined
                     }
                     className={cn(
-                      "h-10 px-4 font-medium",
+                      "h-10 px-4 comfortable:h-12",
                       column.numeric && "text-right",
+                      column.secondary && "max-lg:hidden",
                       column.className,
                     )}
                   >
@@ -181,7 +184,10 @@ export function DataTable<T>({
               Array.from({ length: Math.min(pageSize, 5) }, (_, index) => (
                 <TableRow key={`skeleton-${index}`}>
                   {columns.map((column) => (
-                    <TableCell key={column.id} className="px-4">
+                    <TableCell
+                      key={column.id}
+                      className={cn("px-4", column.secondary && "max-lg:hidden")}
+                    >
                       <Skeleton className={cn("h-4", column.numeric ? "ml-auto w-16" : "w-32")} />
                     </TableCell>
                   ))}
@@ -212,7 +218,12 @@ export function DataTable<T>({
                 {columns.map((column) => (
                   <TableCell
                     key={column.id}
-                    className={cn("px-4", column.numeric && "text-right numeric", column.className)}
+                    className={cn(
+                      "px-4",
+                      column.numeric && "text-right numeric",
+                      column.secondary && "max-lg:hidden",
+                      column.className,
+                    )}
                   >
                     {column.cell(row)}
                   </TableCell>

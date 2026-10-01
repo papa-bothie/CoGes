@@ -1,0 +1,119 @@
+{
+  "connexion": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 1
+    }
+  ],
+  "tableau-de-bord": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 3
+    }
+  ],
+  "ventes": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 27
+    }
+  ],
+  "nouvelle-vente": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 2
+    }
+  ],
+  "vente-detail": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 3
+    }
+  ],
+  "stock": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 31
+    }
+  ],
+  "produits": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 23
+    }
+  ],
+  "produit-detail": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 4
+    }
+  ],
+  "clients": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 3
+    }
+  ],
+  "fournisseurs": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 3
+    }
+  ],
+  "finance": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 7
+    }
+  ],
+  "analytics": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 2
+    }
+  ],
+  "intelligence": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 18
+    }
+  ],
+  "intelligence-panneau": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 24
+    }
+  ],
+  "parametres": [
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 3
+    }
+  ],
+  "notifications": [
+    {
+      "id": "aria-valid-attr-value",
+      "impact": "critical",
+      "nodes": 1
+    },
+    {
+      "id": "color-contrast",
+      "impact": "serious",
+      "nodes": 63
+    }
+  ]
+}
