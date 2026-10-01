@@ -73,6 +73,10 @@ test.describe("captures du pilotage", () => {
     await expect(page.getByText(/Données arrêtées au/).first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole("listitem").first()).toBeVisible({ timeout: 30_000 });
     await shoot(page, "intelligence-recommandations");
+    // Les recommandations sont triées par sévérité (ADR 0057) : un écoulement lent
+    // (information) n'est pas forcément en première page. On filtre sur son type.
+    await page.goto("/insights?status=all&type=slow_mover");
+    await expect(page.getByRole("listitem").first()).toBeVisible({ timeout: 30_000 });
     await page
       .getByRole("button", { name: /Écoulement lent/ })
       .first()

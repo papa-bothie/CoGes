@@ -6,14 +6,17 @@ statut d'un insight est modifiable ; une ressource d'une autre entreprise est un
 
 from __future__ import annotations
 
+import datetime as dt
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
+from app.core.tenancy import TenantContext, tenant_transaction
 from app.modules.intelligence.estimators.artifacts import ArtifactStore
 from tests.conftest import auth_headers, create_user_with_role, login_token
 from tests.integration import intelligence_harness as ih
@@ -80,6 +83,68 @@ def test_insights_filter_by_type_and_severity(
 
     paged = api_client.get(f"{INSIGHTS}?page_size=1&page=2", headers=auth_headers(token)).json()
     assert len(paged["items"]) == 1 and paged["page"] == 2
+
+
+SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
+
+
+def test_insights_are_listed_by_severity_then_newest_first(
+    api_client: TestClient,
+    boutique: scenario.Boutique,
+    token: str,
+    analytics_session_factory: sessionmaker[Any],
+) -> None:
+    """Critique, attention, information ; dans une même sévérité, le plus récent d'abord.
+
+    Le cas construit est celui que l'ancien tri (date seule) aurait mal rangé : une
+    information toute récente ne passe pas devant une critique plus ancienne.
+    """
+    now = dt.datetime.now(dt.UTC)
+    planted = {
+        "info-recente": ("info", now),
+        "critique-ancienne": ("critical", now - dt.timedelta(days=2)),
+        "critique-recente": ("critical", now - dt.timedelta(hours=1)),
+        "attention": ("warning", now - dt.timedelta(days=1)),
+    }
+    ctx = TenantContext.bootstrap(boutique.shop.company_id)
+    with tenant_transaction(ctx, session_factory=analytics_session_factory) as session:
+        for key, (severity, generated_at) in planted.items():
+            session.execute(
+                text(
+                    "INSERT INTO insights (company_id, insight_type, severity, title, "
+                    "dedupe_key, generated_at) VALUES (:company, 'debt_overdue', "
+                    "CAST(:severity AS insight_severity), :title, :key, :at)"
+                ),
+                {
+                    "company": ctx.company_id,
+                    "severity": severity,
+                    "title": f"Tri {key}",
+                    "key": f"tri:{key}",
+                    "at": generated_at,
+                },
+            )
+
+    response = api_client.get(f"{INSIGHTS}?page_size=100", headers=auth_headers(token))
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+
+    # Toute la liste : sévérité jamais croissante, date décroissante à sévérité égale.
+    keys = [
+        (
+            SEVERITY_RANK[item["severity"]],
+            -dt.datetime.fromisoformat(item["computed_at"]).timestamp(),
+        )
+        for item in items
+    ]
+    assert keys == sorted(keys)
+
+    ours = [item["title"] for item in items if item["title"].startswith("Tri ")]
+    assert ours == [
+        "Tri critique-recente",
+        "Tri critique-ancienne",
+        "Tri attention",
+        "Tri info-recente",
+    ]
 
 
 def test_forecasts_carry_date_model_and_interval(
