@@ -67,10 +67,8 @@ date de calcul, modèle et version, incertitude, « Données insuffisantes », F
 
 ## Ce qui reste (reporté)
 
-1. **Textes des notifications composés par le worker** (`backend/app/workers/tasks/notifications.py`) :
-   montants, quantités et dates bruts (« 21830.00 », « 1.000 », « 2026-09-17 »). Correctif
-   **backend** à part (formatage français + tests) ; les notifications déjà en base resteront
-   telles quelles. Décision de l'utilisateur : reporté.
+1. ~~**Textes des notifications composés par le worker**~~ : **traité** après la phase
+   (ADR 0057) ; montants, quantités et dates à la française, comme l'écran.
 2. **Cibles tactiles de 28 px** (`icon-sm` : pagination, croix) : à porter à 36–44 px sur
    tablette.
 3. **Passage manuel** au lecteur d'écran (NVDA ou Orca) et au zoom 200 % : non fait.

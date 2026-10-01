@@ -77,8 +77,8 @@ parcours ne change. Elle s'appuie sur la skill Impeccable, par passes validées 
     Finance en ton neutre. **axe bloquant par défaut** dans `e2e/a11y.spec.ts`
     (`A11Y_STRICT=0` pour l'ignorer ponctuellement). Audit : **13/20 → 18/20**
     (`docs/design/audit-phase-14-apres.md`).
-13. **Reporté** (décision de l'utilisateur) : textes des notifications composés par le worker
-    backend avec des valeurs brutes (« 21830.00 », « 2026-09-17 ») ; correctif backend à part.
+13. **Reporté puis traité** : textes des notifications composés par le worker backend avec des
+    valeurs brutes (« 21830.00 », « 2026-09-17 ») ; corrigé par l'ADR 0057.
 
 ## Conséquences
 
