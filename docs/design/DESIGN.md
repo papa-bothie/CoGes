@@ -130,7 +130,7 @@ components:
   passe 3 (typeset), mise en page par la passe 4 (layout),
   couleurs par la passe 5 (colorize),
   textes et épuration par la passe 6 (clarify, distill),
-  mouvement par la passe 7 (animate). Chaque passe
+  mouvement par la passe 7 (animate), finition par la passe 8 (polish). Chaque passe
   Impeccable qui change un token met ce fichier à jour. Source normative des valeurs :
   frontend/app/globals.css (triplets HSL shadcn) ; ce fichier les décrit.
 -->
@@ -214,6 +214,9 @@ menu est gris, jamais vert (le vert encaissé n'est pas une couleur d'interface)
 **La règle du Signal unique.** Un état se dit une fois par ligne : le badge suffit, la ligne du
 tableau n'est pas teintée en plus. Une recommandation lue reste lisible : son statut est un
 badge, pas une opacité réduite.
+
+**Exception de domaine.** Les quantités signées d'un journal de stock (+5, −2) gardent l'encre
+verte ou rouge : c'est la convention comptable des entrées et sorties, le signe la double.
 
 **La règle de l'Encre.** Une couleur d'état écrite est toujours une encre ; un jeton d'état nu
 (`text-warning`) n'apparaît jamais dans le code.
@@ -353,6 +356,12 @@ Précis et retenus.
 - **State:** Brouillon (neutre), Confirmée (info), Annulée (danger), Retournée (alerte) ; Actif,
   Seuil bas, Rupture ; À régler, Partiellement réglé, Réglé.
 
+### Sélecteur segmenté
+`SegmentedControl` (`components/ui/segmented-control.tsx`) pour tout choix exclusif entre
+quelques valeurs : mode de règlement, sens d'un mouvement, format du reçu, filtre « Toutes / Non
+lues ». Rôle `radiogroup` (jamais des onglets sans panneau), fond gris sourdine, option choisie
+sur feuille avec ombre douce ; un seul arrêt de tabulation, flèches, Début et Fin.
+
 ### Cards / Containers
 - **Corner Style:** 12 px.
 - **Background:** feuille (nuit-feuille en sombre).
@@ -396,7 +405,9 @@ carte.
 Une barre par période (`PeriodBarChart`) pour un total journalier, hebdomadaire ou mensuel :
 chaque valeur est distincte, une courbe lissée en inventait entre deux points. Série principale
 `chart-1` (bleu pétrole), grille horizontale en pointillés gris règle, axes en gris annotation,
-info-bulle sur feuille. Les flux de trésorerie gardent vert encaissé (entrées) et rouge (sorties).
+info-bulle sur feuille. Les flux de trésorerie : vert encaissé (entrées), bleu pétrole (sorties)
+— une sortie de caisse n'est pas un danger. Axe des valeurs à **largeur automatique** : une
+graduation n'est jamais rognée (« 800 k FCFA » ne doit pas se lire « 300 k »).
 
 ## Do's and Don'ts
 

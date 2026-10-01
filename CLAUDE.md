@@ -160,7 +160,8 @@ make front-install           # pnpm (corepack) + dépendances + Chromium pour Pl
 make front-dev               # Next sur :3000, /api/v1 réécrit vers COGES_API_URL (défaut http://localhost:8000)
 make front-api               # régénère frontend/types/api.ts après `make openapi`
 make front-check             # types à jour, lint, typecheck, Vitest, build (ce que joue la CI)
-make front-e2e               # Playwright contre l'API locale (make api + make seed-demo + front-dev)
+make front-e2e               # Playwright contre l'API locale (make api + make seed-demo + front-dev), axe AA bloquant
+CAPTURES_STAGE=apres make front-e2e   # + captures clair/sombre de la phase 14 (docs/design/captures/phase-14/<étape>/)
 make api API_PORT=8001       # si le port 8000 est déjà pris ; front : COGES_API_URL=http://localhost:8001
 ```
 
@@ -200,7 +201,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 11 Front : fondations et design system | `11-front-fondations.md` | 10 (ou 07 + OpenAPI stable) | e2e login | ✅ 61 Vitest, 6 e2e locaux ; préversion `coges-web` en ligne, connexion vérifiée contre la préprod |
 | 12 Front : opérations | `12-front-operations.md` | 11 | e2e vente | ✅ 81 Vitest, 16 e2e locaux (vente, survente, retour, ajustement, produits, clients, fournisseurs) ; captures `docs/design/captures/phase-12/` |
 | 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ✅ 92 Vitest, 26 e2e locaux (dont paiement réparti, métrique, insight écarté, vendeur sans paramètres) ; 674 tests backend ; captures `docs/design/captures/phase-13/` |
-| 14 Finition visuelle (Impeccable) | `14-polish-impeccable.md` | 13 | audit Impeccable | ⬜ |
+| 14 Finition visuelle (Impeccable) | `14-polish-impeccable.md` | 13 | audit Impeccable | ✅ audit 13/20 → 18/20, axe 241 → 0 violation (clair + sombre), 96 Vitest, 30 e2e ; `docs/design/DESIGN.md` ; captures `docs/design/captures/phase-14/` |
 
 ## 9. Journal des décisions
 
@@ -261,6 +262,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0053 | 2026-09-30 | **Journal d'activité** `GET /audit-logs` (gérant + comptable) ; `roles` sur les utilisateurs, `party_name` sur les dettes, `amount_paid` sur les dépenses ; **dépense payée atomique** (bloc `payment` sous la même `Idempotency-Key`) | `docs/decisions/0053-journal-d-activite-et-lectures-de-pilotage.md` |
 | 0054 | 2026-09-30 | `settings.default_reorder_point` appliqué **par le serveur** aux produits suivis sans seuil ; réglages connus vérifiés ; devise en lecture seule à l'écran ; **garde du dernier gérant actif** (409 `last_manager`), routes de rôles d'un utilisateur servies par Users | `docs/decisions/0054-parametres-seuil-par-defaut-et-dernier-gerant.md` |
 | 0055 | 2026-09-30 | **Écrans de pilotage** : cartes d'Intelligence compactes + panneau, métrique en liste déroulante nommée sur chaque ligne, période commune dans l'URL, règlement réparti prérempli, journal en lecture ; écarts au prototype listés | `docs/decisions/0055-ecrans-de-pilotage-cote-front.md` |
+| 0056 | 2026-10-01 | **Finition visuelle** : identité raffinée, `docs/design/DESIGN.md` fait foi (liens à la racine pour Impeccable) ; Inter + axe optique, échelle par rôle en tokens (déclarée dans `cn`) ; fil d'Ariane, barre latérale repliée sous 1024 px, barre d'actions de vente sous 1280 px ; densité compacte/confortable **dans le navigateur** ; **encres d'état** pour tout texte d'état ; animations discrètes et `prefers-reduced-motion` ; `SegmentedControl` ; axe AA bloquant ; textes de notifications du worker reportés | `docs/decisions/0056-finition-visuelle.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**
@@ -279,7 +281,8 @@ P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; r
 > `system/outbox` · `audit-logs`. Préproduction en ligne depuis le 2026-09-27 : `https://coges-api.vercel.app`
 > (`deploy/README-infra.md`). Front : projet Vercel `coges-web`, déployé en préversion (`frontend/README.md`,
 > `deploy/README-infra.md`). Phases 12 et 13 terminées (ADR 0052, 0055) : **le produit V1 est
-> fonctionnellement complet**. Prochaine étape : phase 14 (finition visuelle, Impeccable).
+> fonctionnellement complet**. Phase 14 terminée (ADR 0056) : interface finie, système documenté dans
+> `docs/design/DESIGN.md`. Améliorations reportées : `docs/design/audit-phase-14-apres.md` (« Ce qui reste »).
 
 ## 10. Ce que tu ne fais jamais
 

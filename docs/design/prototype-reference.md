@@ -83,14 +83,19 @@ Fond de page `#F9FAFB`, texte `#1F2937`, bordures `#DAE0E7`.
 
 ## 5. Défauts du prototype à corriger (ne pas copier)
 
-- Les montants passent sur deux lignes (« 1 000 » puis « FCFA ») dans les colonnes étroites :
-  utiliser `white-space: nowrap` et des chiffres tabulaires.
-- Le badge « Actif » est rempli en bleu primaire, comme un bouton : les badges de statut doivent
-  être plus discrets que les actions.
-- Les cartes d'Intelligence sont très hautes et leur texte est long : prévoir une version
-  compacte avec le détail dans un panneau latéral.
-- La pile de polices système donne des rendus différents selon les systèmes : fixer une police.
-- Le sélecteur multi-entreprise et le bandeau démo ne sont pas à reprendre (voir plus haut).
+> **Tous corrigés** à la phase 14 (finition visuelle, ADR 0056 ; `docs/design/DESIGN.md`).
+
+- ✅ Les montants passent sur deux lignes (« 1 000 » puis « FCFA ») dans les colonnes étroites :
+  utiliser `white-space: nowrap` et des chiffres tabulaires. *(`Money`, `numeric`, cellules
+  tabulaires ; séparateur des milliers élargi à l'affichage.)*
+- ✅ Le badge « Actif » est rempli en bleu primaire, comme un bouton : les badges de statut doivent
+  être plus discrets que les actions. *(Badges teintés, texte en encre d'état.)*
+- ✅ Les cartes d'Intelligence sont très hautes et leur texte est long : prévoir une version
+  compacte avec le détail dans un panneau latéral. *(Cartes compactes sans répétition, panneau
+  de 512 px.)*
+- ✅ La pile de polices système donne des rendus différents selon les systèmes : fixer une police.
+  *(Inter, axe optique, échelle par rôle.)*
+- ✅ Le sélecteur multi-entreprise et le bandeau démo ne sont pas à reprendre (voir plus haut).
 
 ## 6. Écrans de référence à consulter
 

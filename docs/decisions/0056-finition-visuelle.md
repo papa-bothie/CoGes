@@ -2,7 +2,7 @@
 
 - **Date** : 2026-09-30
 - **Phase** : 14
-- **Statut** : acceptée (complétée à chaque passe)
+- **Statut** : acceptée
 - **Décideur** : utilisateur (via AskUserQuestion)
 
 ## Contexte
@@ -71,6 +71,14 @@ parcours ne change. Elle s'appuie sur la skill Impeccable, par passes validées 
     conservés, squelettes figés. Voile des dialogues et panneaux sans `backdrop-blur` (25 %,
     50 % en sombre). `transition-all` remplacé par des transitions ciblées. Panneaux : entrée
     200 ms, sortie 150 ms, décélération douce.
+12. **Finition (passe 8)** : `SegmentedControl` partagé (radiogroup, clavier) remplace trois
+    sélecteurs écrits à la main et les onglets-filtres des notifications (dernière violation axe,
+    critique). Axes des graphiques en largeur automatique (graduations rognées). Encours de
+    Finance en ton neutre. **axe bloquant par défaut** dans `e2e/a11y.spec.ts`
+    (`A11Y_STRICT=0` pour l'ignorer ponctuellement). Audit : **13/20 → 18/20**
+    (`docs/design/audit-phase-14-apres.md`).
+13. **Reporté** (décision de l'utilisateur) : textes des notifications composés par le worker
+    backend avec des valeurs brutes (« 21830.00 », « 2026-09-17 ») ; correctif backend à part.
 
 ## Conséquences
 
