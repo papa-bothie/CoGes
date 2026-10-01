@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { ErrorState } from "@/components/error-state";
 import { FieldError } from "@/components/field-error";
 import { MovementDialog } from "@/components/inventory/movement-dialog";
-import { Money } from "@/components/money";
+import { Money, spacedGroups } from "@/components/money";
 import { PageHeader } from "@/components/page-header";
 import { StockStatusBadge } from "@/components/status/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -285,10 +285,12 @@ export function ProductDetailView({ productId }: { productId: string }) {
                   <>
                     <Row label={labels.products.qtyOnHand}>
                       <span className="text-figure-sm numeric">
-                        {formatQtyWithUnit(
-                          line.qty_on_hand,
-                          labels.units[data.unit],
-                          labels.unitsPlural[data.unit],
+                        {spacedGroups(
+                          formatQtyWithUnit(
+                            line.qty_on_hand,
+                            labels.units[data.unit],
+                            labels.unitsPlural[data.unit],
+                          ),
                         )}
                       </span>
                     </Row>

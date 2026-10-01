@@ -56,6 +56,16 @@ parcours ne change. Elle s'appuie sur la skill Impeccable, par passes validées 
    orange partout, rupture en rouge ; lignes du stock non teintées (le badge suffit) ; cartes
    d'Intelligence lues sans opacité. Graphique de chiffre d'affaires **en barres**
    (`PeriodBarChart`, ex-`AreaChart`). Résultat axe : 220 → 1 violation en clair, 23 → 1 en sombre.
+10. **Textes et épuration (passe 6)** : aucun texte métier réécrit (états vides et erreurs déjà
+    précis) ; croix des panneaux et dialogues en français (« Fermer le panneau », « Fermer la
+    fenêtre » ; elle était « Close »). Deux tests e2e (`customers`, `products`) cherchaient le
+    bouton de pied « Fermer » par inclusion de nom : ils le cherchent désormais en **nom exact**
+    (`exact: true`), choix validé par l'utilisateur ; le test est plus strict, le parcours
+    inchangé. Cartes d'Intelligence sans bordure latérale, badge de type masqué quand le titre
+    le répète, « Données insuffisantes » dit une seule fois par carte et par panneau ; action
+    principale du panneau = étape suivante. Synthèse d'Intelligence sans cases imbriquées.
+    **Séparateur des milliers élargi à l'affichage** (`spacedGroups`) : le caractère reste
+    l'espace fine insécable exigée par `CLAUDE.md` § 5, seul son rendu change.
 
 ## Conséquences
 

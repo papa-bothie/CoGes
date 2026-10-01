@@ -118,6 +118,9 @@ export const labels = {
   },
   common: {
     close: "Fermer",
+    // Croix des dialogues et panneaux : nom distinct d'un bouton « Fermer » de pied de dialogue.
+    closeDialog: "Fermer la fenêtre",
+    closePanel: "Fermer le panneau",
     cancel: "Annuler",
     save: "Enregistrer",
     edit: "Modifier",

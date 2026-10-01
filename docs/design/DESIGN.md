@@ -128,7 +128,8 @@ components:
 <!--
   État de référence relevé le 30/09/2026 avant la phase 14 ; typographie mise à jour par la
   passe 3 (typeset), mise en page par la passe 4 (layout),
-  couleurs par la passe 5 (colorize). Chaque passe
+  couleurs par la passe 5 (colorize),
+  textes et épuration par la passe 6 (clarify, distill). Chaque passe
   Impeccable qui change un token met ce fichier à jour. Source normative des valeurs :
   frontend/app/globals.css (triplets HSL shadcn) ; ce fichier les décrit.
 -->
@@ -252,6 +253,11 @@ interligne, graisse et interlettrage.
 (`tabular-nums` + `nowrap`) ou le composant `Money` : `1 234 567 FCFA` ne se coupe jamais. Toute
 cellule de tableau est en chiffres tabulaires par défaut (`TableCell`).
 
+**La règle de l'Espace visible.** Le séparateur des milliers reste l'espace fine insécable
+(`1 234 567 FCFA`), mais `Money` et les chiffres en grand corps l'élargissent à l'écran
+(`spacedGroups`, interlettrage de 0,12 em) : Inter la dessine si étroite que « 13 000 » se lisait
+« 13000 ». Le texte, lui, ne change pas.
+
 **La règle du Même chiffre, même taille.** Un rôle de chiffre n'a qu'une taille : `figure` pour
 un indicateur, `figure-sm` pour un total. Pas de `text-xl font-bold` isolé.
 
@@ -355,8 +361,17 @@ un état d'alerte ou de danger), valeur en Figure, indication en Label ; 16 px d
 formatée par l'API.
 
 ### Carte de recommandation (signature)
-Carte d'Intelligence cliquable : badges type + confiance, titre, lignes **Métrique / Valeur /
-Date de calcul** ; le détail (modèle et version, incertitude) s'ouvre dans un panneau latéral.
+Carte d'Intelligence cliquable, filet fin, **sans bordure latérale colorée** : la sévérité est
+dite par son badge. Badge de type **seulement si le titre ne le dit pas déjà** (« Écoulement
+lent — Stylo » n'a pas besoin du badge « Écoulement lent »), badge de statut si elle n'est plus
+nouvelle, titre, lignes **Métrique (· valeur) / Date de calcul / Confiance**. « Données
+insuffisantes » n'y est dit qu'une fois. Le détail (modèle et version, incertitude, éléments du
+calcul) s'ouvre dans un panneau latéral dont l'**action principale** est l'étape suivante
+(« Prendre en compte », puis « Marquer résolu ») ; les autres restent en contour.
+
+### Synthèse d'Intelligence (tableau de bord)
+Quatre compteurs posés sur la carte, séparés par l'espace : pas de cases encadrées dans la
+carte.
 
 ### Graphiques
 Une barre par période (`PeriodBarChart`) pour un total journalier, hebdomadaire ou mensuel :

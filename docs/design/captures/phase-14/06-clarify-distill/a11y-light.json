@@ -1,0 +1,24 @@
+{
+  "connexion": [],
+  "tableau-de-bord": [],
+  "ventes": [],
+  "nouvelle-vente": [],
+  "vente-detail": [],
+  "stock": [],
+  "produits": [],
+  "produit-detail": [],
+  "clients": [],
+  "fournisseurs": [],
+  "finance": [],
+  "analytics": [],
+  "intelligence": [],
+  "intelligence-panneau": [],
+  "parametres": [],
+  "notifications": [
+    {
+      "id": "aria-valid-attr-value",
+      "impact": "critical",
+      "nodes": 1
+    }
+  ]
+}

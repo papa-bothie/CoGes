@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 
+import { spacedGroups } from "@/components/money";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -39,7 +40,11 @@ export function KpiCard({
         <Icon className={cn("size-4 shrink-0", TONES[tone])} aria-hidden />
         {label}
       </p>
-      {loading ? <Skeleton className="h-8 w-32" /> : <p className="text-figure numeric">{value}</p>}
+      {loading ? (
+        <Skeleton className="h-8 w-32" />
+      ) : (
+        <p className="text-figure numeric">{spacedGroups(value)}</p>
+      )}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </Card>
   );
