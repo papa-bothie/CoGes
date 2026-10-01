@@ -124,6 +124,7 @@ def test_a_stock_below_its_threshold_alerts_those_who_can_act(
     alerts = _about(_feed(api_client, alpha_token), product_id)
     assert len(alerts) == 1
     assert alerts[0]["type"] == "stock_low"
+    assert alerts[0]["severity"] == "warning"
     assert alerts[0]["data"]["qty_on_hand"] == "3.000"
     assert alerts[0]["read_at"] is None
 
@@ -144,6 +145,8 @@ def test_an_empty_stock_is_named_a_stock_out(
 
     alerts = _about(_feed(api_client, alpha_token), product_id)
     assert [alert["type"] for alert in alerts] == ["stock_out"]
+    # Gravité dérivée par le serveur (ADR 0059) : une rupture est critique.
+    assert alerts[0]["severity"] == "critical"
 
 
 def test_a_healthy_stock_alerts_nobody_but_is_still_processed(

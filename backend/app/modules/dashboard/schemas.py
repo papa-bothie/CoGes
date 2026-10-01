@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict
 
 from app.core.money import Amount
+from app.modules.notifications.schemas import NotificationSeverity
 
 #: Profondeur de la courbe d'accueil, en jours.
 REVENUE_TREND_DAYS = 30
@@ -47,6 +48,8 @@ class ActiveAlert(BaseModel):
 
     id: UUID
     type: str
+    #: Dérivée du type par le module Notifications (ADR 0059) : couleur du bandeau.
+    severity: NotificationSeverity
     title: str
     created_at: datetime
 

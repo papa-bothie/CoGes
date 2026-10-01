@@ -36,6 +36,9 @@ const contentSecurityPolicy = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // Le front des parcours e2e tourne à côté de celui de développement, dans son propre
+  // répertoire de build (deploy/scripts/e2e.sh, ADR 0059). Vercel et `pnpm dev` : `.next`.
+  distDir: process.env.COGES_NEXT_DIST_DIR || ".next",
   poweredByHeader: false,
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,

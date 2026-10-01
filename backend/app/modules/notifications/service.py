@@ -25,6 +25,9 @@ from app.core.tenancy import TenantContext
 from app.modules.notifications.models import Notification
 from app.modules.notifications.repository import NotificationRepository
 from app.modules.notifications.schemas import NotificationType
+
+# Ré-export : la façade expose la gravité d'un type d'alerte (ADR 0059).
+from app.modules.notifications.schemas import severity_of as severity_of
 from app.modules.rbac import service as rbac_service
 from app.modules.users import service as users_service
 

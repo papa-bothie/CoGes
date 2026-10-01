@@ -171,6 +171,19 @@
   }
 
   /*
+   * Cibles tactiles (ADR 0059) : sur un écran tactile, une case à cocher ou un bouton radio
+   * natif mesure 44 × 44 px, comme les composants de components/ui (variante
+   * `pointer-coarse:`). Sur ordinateur, rien ne change.
+   */
+  @media (pointer: coarse) {
+    input[type="checkbox"],
+    input[type="radio"] {
+      min-width: 2.75rem;
+      min-height: 2.75rem;
+    }
+  }
+
+  /*
    * Mouvement réduit : les panneaux, menus et dialogues ne glissent ni ne zooment plus, mais
    * gardent leur fondu (l'apparition reste perceptible). Les squelettes cessent de pulser ;
    * les indicateurs de chargement qui tournent restent, ils disent qu'une action est en cours.

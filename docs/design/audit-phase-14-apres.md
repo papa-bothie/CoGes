@@ -69,15 +69,15 @@ date de calcul, modèle et version, incertitude, « Données insuffisantes », F
 
 1. ~~**Textes des notifications composés par le worker**~~ : **traité** après la phase
    (ADR 0057) ; montants, quantités et dates à la française, comme l'écran.
-2. **Cibles tactiles de 28 px** (`icon-sm` : pagination, croix) : à porter à 36–44 px sur
+2. ~~**Cibles tactiles de 28 px**~~ (traité, ADR 0059) (`icon-sm` : pagination, croix) : à porter à 36–44 px sur
    tablette.
 3. **Passage manuel** au lecteur d'écran (NVDA ou Orca) et au zoom 200 % : non fait.
 4. **Champs de date natifs** : leur gabarit dépend de la langue du navigateur (« dd/mm/yyyy » dans
    le Chromium des tests) ; à vérifier sur un navigateur réglé en français.
-5. **Bandeau « Dette échue » neutre** alors que `DESIGN.md` range « en retard » dans le rouge :
+5. ~~**Bandeau « Dette échue » neutre**~~ (traité, ADR 0059) alors que `DESIGN.md` range « en retard » dans le rouge :
    laissé tel quel (inchangé depuis la phase 13), à trancher.
 6. **Commande `delight` non lancée** : hors de la réponse « animations discrètes ».
-7. **Deux instabilités e2e en fin de suite longue**, chacune vue une fois et jamais reproduite
+7. **Deux instabilités e2e en fin de suite longue** (base e2e dédiée, ADR 0059), chacune vue une fois et jamais reproduite
    seule (3 relances vertes chacune) : « session révoquée » (passe 3) et la recherche de la liste
    Produits, filtrée en plus de 5 s quand la base de démo a accumulé les articles des tests
    (passe 8). Hors du périmètre visuel ; à surveiller, voire à purger les données e2e entre deux

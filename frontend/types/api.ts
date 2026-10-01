@@ -1579,6 +1579,7 @@ export interface components {
       id: string;
       /** Type */
       type: string;
+      severity: components["schemas"]["NotificationSeverity"];
       /** Title */
       title: string;
       /**
@@ -2677,7 +2678,16 @@ export interface components {
        * Format: date-time
        */
       created_at: string;
+      readonly severity: components["schemas"]["NotificationSeverity"];
     };
+    /**
+     * NotificationSeverity
+     * @description Gravité d'une alerte, **dérivée de son type** par le serveur (ADR 0059).
+     *
+     *     Le front en tire la couleur d'un bandeau ; il ne la devine jamais lui-même.
+     * @enum {string}
+     */
+    NotificationSeverity: "warning" | "critical";
     /**
      * NotificationType
      * @description Liste **fermée**, identique au `CHECK` de `notifications.type` (§ 8.8).
