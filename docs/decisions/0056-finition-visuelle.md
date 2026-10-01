@@ -48,6 +48,14 @@ parcours ne change. Elle s'appuie sur la skill Impeccable, par passes validées 
 8. **Densité des tableaux** : réglage **du navigateur** (`localStorage`, clé `coges-density`),
    compacte par défaut, aucune donnée serveur ; menu dans l'en-tête ; attribut `data-density`
    posé avant l'affichage par un script en ligne (la CSP autorise déjà `'unsafe-inline'`).
+9. **Couleurs (passe 5)** : un jeton d'**encre** par état (`--success-ink`, `--warning-ink`,
+   `--danger-ink`, clair et sombre) pour tout texte d'état ; les jetons d'état restent pour les
+   fonds et les graphiques. Gris d'annotation foncé (47 % → 42 %). Texte foncé sur fond plein
+   vert ou orange ; rouge sombre aligné sur le clair (blanc lisible dessus). Survol des menus en
+   gris (le jeton `accent`, vert encaissé, n'est plus une couleur d'interface). Seuil bas en
+   orange partout, rupture en rouge ; lignes du stock non teintées (le badge suffit) ; cartes
+   d'Intelligence lues sans opacité. Graphique de chiffre d'affaires **en barres**
+   (`PeriodBarChart`, ex-`AreaChart`). Résultat axe : 220 → 1 violation en clair, 23 → 1 en sombre.
 
 ## Conséquences
 

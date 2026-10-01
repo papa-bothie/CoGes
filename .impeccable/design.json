@@ -62,12 +62,42 @@
       "gris-annotation": {
         "role": "neutral",
         "displayName": "Gris annotation",
-        "canonical": "hsl(215 16% 47%)"
+        "canonical": "hsl(215 16% 42%)"
       },
       "nuit": {
         "role": "neutral",
         "displayName": "Nuit",
         "canonical": "hsl(215 28% 10%)"
+      },
+      "encre-succes": {
+        "role": "semantic",
+        "displayName": "Encre succès",
+        "canonical": "hsl(145 63% 28%)"
+      },
+      "encre-alerte": {
+        "role": "semantic",
+        "displayName": "Encre alerte",
+        "canonical": "hsl(26 90% 33%)"
+      },
+      "encre-danger": {
+        "role": "semantic",
+        "displayName": "Encre danger",
+        "canonical": "hsl(0 74% 40%)"
+      },
+      "encre-succes-nuit": {
+        "role": "semantic",
+        "displayName": "Encre succès (nuit)",
+        "canonical": "hsl(142 60% 60%)"
+      },
+      "encre-alerte-nuit": {
+        "role": "semantic",
+        "displayName": "Encre alerte (nuit)",
+        "canonical": "hsl(35 95% 62%)"
+      },
+      "encre-danger-nuit": {
+        "role": "semantic",
+        "displayName": "Encre danger (nuit)",
+        "canonical": "hsl(0 90% 72%)"
       }
     },
     "typographyMeta": {
@@ -211,7 +241,17 @@
       },
       {
         "name": "La règle du Badge discret",
-        "body": "Un badge de statut est teinté ; seul un bouton est plein.",
+        "body": "Un badge de statut est teinté, texte en encre d'état ; seul un bouton est plein.",
+        "section": "colors"
+      },
+      {
+        "name": "La règle du Signal unique",
+        "body": "Un état se dit une fois par ligne : badge, pas de ligne teintée ni d'opacité réduite.",
+        "section": "colors"
+      },
+      {
+        "name": "La règle de l'Encre",
+        "body": "Une couleur d'état écrite est toujours une encre (text-*-ink), jamais le jeton de fond.",
         "section": "colors"
       },
       {

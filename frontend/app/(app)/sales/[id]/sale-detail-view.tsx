@@ -336,7 +336,7 @@ export function SaleDetailView({ saleId }: { saleId: string }) {
                   <Row label={labels.sales.cancelledAt}>
                     <span className="numeric">{formatDateTime(data.cancelled_at, timeZone)}</span>
                   </Row>
-                  <div className="rounded-md bg-destructive/5 p-3 text-destructive">
+                  <div className="rounded-md bg-destructive/5 p-3 text-danger-ink">
                     <p className="text-xs font-medium">{labels.sales.cancelReasonLabel}</p>
                     <p>{data.cancel_reason}</p>
                   </div>

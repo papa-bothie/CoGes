@@ -227,7 +227,10 @@ export function RolesTab() {
                                 onChange={() => toggle(role, permission.code)}
                               />
                             ) : has ? (
-                              <Check className="mx-auto size-4 text-success" aria-label={name} />
+                              <Check
+                                className="mx-auto size-4 text-success-ink"
+                                aria-label={name}
+                              />
                             ) : (
                               <Minus
                                 className={cn("mx-auto size-4 text-muted-foreground/40")}

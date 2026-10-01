@@ -4,7 +4,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Info, SearchX } from "lucide-react";
 import Link from "next/link";
 
-import { AreaChart } from "@/components/charts/area-chart";
+import { PeriodBarChart } from "@/components/charts/period-bar-chart";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { ForecastMeta } from "@/components/forecast/forecast-meta";
@@ -265,7 +265,7 @@ function SeriesCard({
         ) : query.data.points.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">{t.empty}</p>
         ) : (
-          <AreaChart
+          <PeriodBarChart
             label={measure === "revenue" ? t.revenueLabel : t.marginLabel}
             formatAxis={(value) => formatAxisAmount(value, currency)}
             data={query.data.points.map((point) => ({

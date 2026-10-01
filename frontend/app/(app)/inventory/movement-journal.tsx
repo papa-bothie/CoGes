@@ -160,7 +160,7 @@ export function MovementJournal() {
       cell: (movement) => {
         const positive = compareDecimal(movement.qty_delta, "0") === 1;
         return (
-          <span className={cn("font-medium", positive ? "text-success" : "text-destructive")}>
+          <span className={cn("font-medium", positive ? "text-success-ink" : "text-danger-ink")}>
             {positive ? "+" : ""}
             {formatQty(movement.qty_delta)}
           </span>

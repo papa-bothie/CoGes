@@ -385,7 +385,7 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
                       <span
                         className={cn(
                           "text-xs numeric",
-                          line?.status === "out" ? "text-destructive" : "text-muted-foreground",
+                          line?.status === "out" ? "text-danger-ink" : "text-muted-foreground",
                         )}
                       >
                         {line ? `${formatQty(line.qty_on_hand)} en stock` : "—"}
@@ -618,7 +618,7 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
               </Button>
             </div>
             {shortProducts.size > 0 && (
-              <p className="text-sm text-destructive">{labels.sales.confirmBlocked}</p>
+              <p className="text-sm text-danger-ink">{labels.sales.confirmBlocked}</p>
             )}
             <FieldError message={confirmError} />
           </div>

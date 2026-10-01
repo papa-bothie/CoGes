@@ -24,12 +24,12 @@ import { notificationHref, type AppNotification } from "@/lib/notifications";
 import { cn } from "@/lib/utils";
 
 const ICONS: Record<AppNotification["type"], { icon: LucideIcon; tone: string }> = {
-  stock_low: { icon: AlertTriangle, tone: "bg-warning/10 text-warning" },
-  stock_out: { icon: PackageX, tone: "bg-destructive/10 text-destructive" },
+  stock_low: { icon: AlertTriangle, tone: "bg-warning/10 text-warning-ink" },
+  stock_out: { icon: PackageX, tone: "bg-destructive/10 text-danger-ink" },
   debt_due: { icon: Clock, tone: "bg-muted text-muted-foreground" },
   sale_cancelled: { icon: Receipt, tone: "bg-muted text-muted-foreground" },
   forecast_alert: { icon: LineChart, tone: "bg-primary/10 text-primary" },
-  insight_critical: { icon: Sparkles, tone: "bg-destructive/10 text-destructive" },
+  insight_critical: { icon: Sparkles, tone: "bg-destructive/10 text-danger-ink" },
 };
 
 /** Marque lu / non lu ; le compteur de la cloche et le tableau de bord suivent. */

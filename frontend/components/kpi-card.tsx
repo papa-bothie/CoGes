@@ -9,8 +9,8 @@ import { cn } from "@/lib/utils";
 const TONES = {
   primary: "text-muted-foreground",
   success: "text-muted-foreground",
-  warning: "text-warning",
-  danger: "text-destructive",
+  warning: "text-warning-ink",
+  danger: "text-danger-ink",
   neutral: "text-muted-foreground",
 } as const;
 

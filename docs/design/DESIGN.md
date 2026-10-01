@@ -15,7 +15,13 @@ colors:
   gris-regle: "hsl(214 20% 88%)"
   gris-voile: "hsl(210 16% 95%)"
   gris-sourdine: "hsl(210 16% 93%)"
-  gris-annotation: "hsl(215 16% 47%)"
+  gris-annotation: "hsl(215 16% 42%)"
+  encre-succes: "hsl(145 63% 28%)"
+  encre-alerte: "hsl(26 90% 33%)"
+  encre-danger: "hsl(0 74% 40%)"
+  encre-succes-nuit: "hsl(142 60% 60%)"
+  encre-alerte-nuit: "hsl(35 95% 62%)"
+  encre-danger-nuit: "hsl(0 90% 72%)"
   nuit: "hsl(215 28% 10%)"
   nuit-feuille: "hsl(215 28% 13%)"
   nuit-voile: "hsl(215 28% 18%)"
@@ -121,7 +127,8 @@ components:
 
 <!--
   État de référence relevé le 30/09/2026 avant la phase 14 ; typographie mise à jour par la
-  passe 3 (typeset), mise en page par la passe 4 (layout). Chaque passe
+  passe 3 (typeset), mise en page par la passe 4 (layout),
+  couleurs par la passe 5 (colorize). Chaque passe
   Impeccable qui change un token met ce fichier à jour. Source normative des valeurs :
   frontend/app/globals.css (triplets HSL shadcn) ; ce fichier les décrit.
 -->
@@ -168,16 +175,27 @@ couleurs d'état vives réservées à la signalisation.
 - **Vert succès** (`vert-succes`, #21C45D ; nuit #25DA67) : réglé, stock sain, opération réussie.
 - **Orange alerte** (`orange-alerte`, #F98806 ; nuit #F9941F) : seuil bas, partiellement réglé,
   retournée, avertissement.
-- **Rouge danger** (`rouge-danger`, #DC2828 ; nuit #DF3A3A) : rupture, annulée, en retard,
-  erreur, action destructrice.
+- **Rouge danger** (`rouge-danger`, #DC2828, identique en nuit depuis la passe 5) : rupture,
+  annulée, en retard, erreur, action destructrice.
 - **Violet série** (`violet-serie`, #6C31ED ; nuit #8E5FF1) : cinquième série de graphique
   uniquement.
+
+### Encres d'état (passe 5)
+Les couleurs d'état ci-dessus sont des **fonds** (pastille, teinte de badge, barre de
+graphique) : comme texte, elles ne lisaient qu'à 2,0–4,3:1. Tout texte qui dit un état utilise
+son **encre** (`text-success-ink`, `text-warning-ink`, `text-danger-ink`), ≥ 4,5:1 sur carte,
+fond de page et teinte à 10 % :
+- **Encre succès** (`encre-succes`, #1A7440 ; nuit #5CD689).
+- **Encre alerte** (`encre-alerte`, #A04A08 ; nuit #FAAD42).
+- **Encre danger** (`encre-danger`, #B11B1B ; nuit #F87777).
+Sur un fond plein vert ou orange, le texte est en encre foncée (`*-foreground`), pas en blanc.
 
 ### Neutral
 - **Papier** (`papier`, #F9FAFB) : fond de page. **Feuille** (`feuille`, #FFFFFF) : cartes,
   barre latérale, menus.
 - **Encre** (`encre`, #1F2937) : texte courant et titres.
-- **Gris annotation** (`gris-annotation`, #65758B) : libellés secondaires, compteurs, légendes.
+- **Gris annotation** (`gris-annotation`, #5A687C, foncé à la passe 5 : 4,8:1 sur gris
+  sourdine) : libellés secondaires, compteurs, légendes, onglets inactifs, en-têtes de tableau.
 - **Gris règle** (`gris-regle`, #DAE0E7) : bordures, filets de tableau, contour des champs.
 - **Gris voile** (`gris-voile`, #F0F2F4) et **gris sourdine** (`gris-sourdine`, #EAEDF0) :
   survol, boutons secondaires, fonds de badges neutres.
@@ -187,10 +205,19 @@ couleurs d'état vives réservées à la signalisation.
 
 ### Named Rules
 **La règle du Sens unique.** Vert, orange et rouge disent un état, jamais une décoration ni une
-catégorie. Une icône de carte KPI n'a pas à être rouge si rien n'est en danger.
+catégorie. Une icône de carte KPI n'a pas à être rouge si rien n'est en danger. Un seuil bas est
+**orange** partout (badge, bandeau du tableau de bord) ; une rupture est **rouge**. Le survol d'un
+menu est gris, jamais vert (le vert encaissé n'est pas une couleur d'interface).
+
+**La règle du Signal unique.** Un état se dit une fois par ligne : le badge suffit, la ligne du
+tableau n'est pas teintée en plus. Une recommandation lue reste lisible : son statut est un
+badge, pas une opacité réduite.
+
+**La règle de l'Encre.** Une couleur d'état écrite est toujours une encre ; un jeton d'état nu
+(`text-warning`) n'apparaît jamais dans le code.
 
 **La règle du Badge discret.** Un badge de statut est teinté (fond à 10 %, filet à 25-30 %, texte
-de la couleur d'état) ; seul un bouton est plein.
+en encre d'état) ; seul un bouton est plein.
 
 ## Typography
 
@@ -330,6 +357,12 @@ formatée par l'API.
 ### Carte de recommandation (signature)
 Carte d'Intelligence cliquable : badges type + confiance, titre, lignes **Métrique / Valeur /
 Date de calcul** ; le détail (modèle et version, incertitude) s'ouvre dans un panneau latéral.
+
+### Graphiques
+Une barre par période (`PeriodBarChart`) pour un total journalier, hebdomadaire ou mensuel :
+chaque valeur est distincte, une courbe lissée en inventait entre deux points. Série principale
+`chart-1` (bleu pétrole), grille horizontale en pointillés gris règle, axes en gris annotation,
+info-bulle sur feuille. Les flux de trésorerie gardent vert encaissé (entrées) et rouge (sorties).
 
 ## Do's and Don'ts
 

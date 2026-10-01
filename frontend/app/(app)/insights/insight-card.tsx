@@ -38,7 +38,6 @@ export function InsightCard({ insight, onOpen }: { insight: Insight; onOpen: () 
       className={cn(
         "flex h-full w-full flex-col gap-2 rounded-xl border border-l-4 bg-card p-4 text-left transition-colors outline-none hover:bg-muted/40 focus-visible:ring-3 focus-visible:ring-ring/50",
         SEVERITY_EDGE[insight.severity],
-        insight.status !== "new" && "opacity-75",
       )}
     >
       <div className="flex flex-wrap items-center gap-1.5">

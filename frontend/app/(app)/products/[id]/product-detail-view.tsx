@@ -224,7 +224,7 @@ export function ProductDetailView({ productId }: { productId: string }) {
                           <span
                             className={cn(
                               "font-medium numeric",
-                              positive ? "text-success" : "text-destructive",
+                              positive ? "text-success-ink" : "text-danger-ink",
                             )}
                           >
                             {positive ? "+" : ""}
