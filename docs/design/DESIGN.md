@@ -129,7 +129,8 @@ components:
   État de référence relevé le 30/09/2026 avant la phase 14 ; typographie mise à jour par la
   passe 3 (typeset), mise en page par la passe 4 (layout),
   couleurs par la passe 5 (colorize),
-  textes et épuration par la passe 6 (clarify, distill). Chaque passe
+  textes et épuration par la passe 6 (clarify, distill),
+  mouvement par la passe 7 (animate). Chaque passe
   Impeccable qui change un token met ce fichier à jour. Source normative des valeurs :
   frontend/app/globals.css (triplets HSL shadcn) ; ce fichier les décrit.
 -->
@@ -303,12 +304,30 @@ sans ombre. La profondeur est réservée à ce qui flotte au-dessus du registre.
 
 ### Shadow Vocabulary
 - **Flottant bas** (`shadow-md`) : menus déroulants, listes de sélection.
-- **Flottant haut** (`shadow-lg`) : dialogues et panneaux latéraux, sur voile sombre.
+- **Flottant haut** (`shadow-lg`) : dialogues et panneaux latéraux, sur un voile noir à 25 %
+  (50 % en sombre), **sans flou** : le flou d'arrière-plan coûtait cher sur un PC d'entrée de
+  gamme et n'apportait rien. Barre d'actions de la vente sur tablette : même ombre, elle flotte.
 - **Champ** (`shadow-sm` / `0 1px 2px rgb(0 0 0 / .05)`) : certains déclencheurs de sélection.
 
 ### Named Rules
 **La règle du Plat par défaut.** Une surface posée n'a pas d'ombre ; une ombre signifie « ceci
 flotte et se ferme ».
+
+## Motion
+
+Discret, au service de l'état : aucun moment mis en scène dans un outil ouvert toute la journée.
+- **Retour d'action** (≈ 150 ms, `transition`) : couleur, fond, filet, ombre au survol ;
+  enfoncement de 1 px au clic d'un bouton. Jamais `transition-all`.
+- **Menus, listes, info-bulles, dialogues** : fondu + léger zoom (95 %) en 100 ms.
+- **Panneaux latéraux** : glissement de 10 % de leur largeur, entrée 200 ms, sortie 150 ms
+  (sortir plus vite qu'entrer), décélération `cubic-bezier(0.16, 1, 0.3, 1)`.
+- **Graphiques** : pas d'animation d'apparition, les valeurs s'affichent directement.
+
+### Named Rules
+**La règle du Mouvement réduit.** Avec `prefers-reduced-motion`, rien ne glisse ni ne zoome
+(variables `--tw-enter-*` / `--tw-exit-*` neutralisées dans `globals.css`) mais les fondus restent :
+une apparition doit rester perceptible. Les squelettes cessent de pulser ; les indicateurs de
+chargement qui tournent restent, ils disent qu'une action est en cours.
 
 ## Shapes
 

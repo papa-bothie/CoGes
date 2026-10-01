@@ -66,6 +66,11 @@ parcours ne change. Elle s'appuie sur la skill Impeccable, par passes validées 
     principale du panneau = étape suivante. Synthèse d'Intelligence sans cases imbriquées.
     **Séparateur des milliers élargi à l'affichage** (`spacedGroups`) : le caractère reste
     l'espace fine insécable exigée par `CLAUDE.md` § 5, seul son rendu change.
+11. **Mouvement (passe 7)** : animations discrètes uniquement (pas de passe `delight`, conforme à la
+    réponse 3 du prompt). `prefers-reduced-motion` : déplacements et zooms neutralisés, fondus
+    conservés, squelettes figés. Voile des dialogues et panneaux sans `backdrop-blur` (25 %,
+    50 % en sombre). `transition-all` remplacé par des transitions ciblées. Panneaux : entrée
+    200 ms, sortie 150 ms, décélération douce.
 
 ## Conséquences
 

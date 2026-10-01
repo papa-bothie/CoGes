@@ -169,6 +169,30 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+
+  /*
+   * Mouvement réduit : les panneaux, menus et dialogues ne glissent ni ne zooment plus, mais
+   * gardent leur fondu (l'apparition reste perceptible). Les squelettes cessent de pulser ;
+   * les indicateurs de chargement qui tournent restent, ils disent qu'une action est en cours.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      --tw-enter-translate-x: 0 !important;
+      --tw-enter-translate-y: 0 !important;
+      --tw-exit-translate-x: 0 !important;
+      --tw-exit-translate-y: 0 !important;
+      --tw-enter-scale: 1 !important;
+      --tw-exit-scale: 1 !important;
+      --tw-enter-rotate: 0 !important;
+      --tw-exit-rotate: 0 !important;
+      scroll-behavior: auto !important;
+    }
+    [data-slot="skeleton"] {
+      animation: none;
+    }
+  }
 }
 
 /* Montants et quantités : chiffres tabulaires, jamais coupés sur deux lignes. */
