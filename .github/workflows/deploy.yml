@@ -5,7 +5,9 @@ name: Déploiement
 #
 #   1. contrôle des environnements d'exécution (garde-fou 2, ADR 0042) ;
 #   2. migrations Alembic sous `coges_owner` — seul job qui connaît ce DSN ;
-#   3. déploiement Vercel, puis test de fumée.
+#   3. déploiement Vercel de l'API, puis test de fumée ;
+#   4. déploiement Vercel du front (`coges-web`), puis test de fumée à travers sa
+#      réécriture `/api/v1` (ADR 0058).
 #
 # Environnements GitHub, aux secrets distincts :
 #   • `preprod`    — Neon offre gratuite, Vercel Hobby. Déployé à chaque push sur `main`.
@@ -47,8 +49,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Garde-fou 2 — aucun DSN propriétaire à l'exécution
-        run: python3 deploy/scripts/check_runtime_env.py --require-vercel
+      - name: Garde-fou 2 — aucun DSN propriétaire à l'exécution (API puis front)
+        env:
+          VERCEL_WEB_PROJECT_ID: ${{ secrets.VERCEL_WEB_PROJECT_ID }}
+        run: |
+          python3 deploy/scripts/check_runtime_env.py --require-vercel
+          VERCEL_PROJECT_ID="$VERCEL_WEB_PROJECT_ID" \
+            python3 deploy/scripts/check_runtime_env.py --require-vercel
 
       - uses: astral-sh/setup-uv@v6
         with: { enable-cache: true }
@@ -96,3 +103,51 @@ jobs:
           # (« Protection Bypass for Automation ») laisse passer le seul test de fumée.
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: python3 deploy/scripts/smoke.py
+
+      # ------------------------------------------------------------- front (ADR 0058)
+      # Après l'API : le front réécrit /api/v1 vers elle (ADR 0047) et ne doit pas partir
+      # vers une API qui n'aurait pas passé son test de fumée.
+      - uses: pnpm/action-setup@v4
+        with: { package_json_file: frontend/package.json }
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Déploiement Vercel du front
+        id: web
+        working-directory: frontend
+        env:
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_WEB_PROJECT_ID }}
+        run: |
+          if [ "$TARGET" = "preview" ]; then
+            vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+            vercel build --token="$VERCEL_TOKEN"
+            url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+          else
+            vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+            vercel build --prod --token="$VERCEL_TOKEN"
+            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Front déployé : $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Test de fumée du front (page de connexion, puis l'API à travers la réécriture)
+        env:
+          # preprod / production : l'adresse stable du front ; preview : l'URL du déploiement.
+          COGES_SMOKE_URL: ${{ vars.COGES_WEB_PUBLIC_URL || steps.web.outputs.url }}
+          COGES_SMOKE_SLUG: ${{ secrets.SMOKE_SLUG }}
+          COGES_SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          COGES_SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_WEB_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          headers=()
+          if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            headers=(-H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET")
+          fi
+          page=$(curl --fail --silent --show-error --retry 3 "${headers[@]}" "$COGES_SMOKE_URL/login")
+          grep -q "Connexion · CoGes" <<< "$page"
+          echo "GET $COGES_SMOKE_URL/login → page de connexion servie"
+          python3 deploy/scripts/smoke.py

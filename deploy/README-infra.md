@@ -182,7 +182,11 @@ des valeurs aléatoires hachées en base (`auth_sessions`), indépendantes de la
    sans la CI ;
 5. test de fumée : `deploy/scripts/smoke.py` (santé, connexion, tableau de bord), sur le
    domaine public `COGES_PUBLIC_URL` ; les URL propres à chaque déploiement restent derrière
-   la protection Vercel (seule la préversion passe par le jeton de contournement).
+   la protection Vercel (seule la préversion passe par le jeton de contournement) ;
+6. **front** (`coges-web`, ADR 0058) : même `vercel build` puis `vercel deploy --prebuilt`
+   depuis `frontend/` (projet `VERCEL_WEB_PROJECT_ID`), **après** le test de fumée de l'API ;
+7. test de fumée du front sur `COGES_WEB_PUBLIC_URL` : page `/login` servie, puis
+   `smoke.py` **à travers la réécriture** `/api/v1` du front (le chemin d'un utilisateur).
 
 Une migration destructive se déploie en deux temps (décision 17) : d'abord la version
 compatible avec l'ancien et le nouveau code, puis le nettoyage.
@@ -238,14 +242,24 @@ asynchrone vérifiée (outbox → relais → Redis → worker en ~10 s). Écarts
 Projet Vercel **`coges-web`** (équipe CipherOne, Hobby), lié depuis `frontend/` (lien
 `.vercel/` ignoré), configuré par `frontend/vercel.json` (Next.js, `cdg1`, déploiements Git
 désactivés). Variable `COGES_API_URL=https://coges-api.vercel.app` (preview et production),
-lue **au build** par la réécriture `/api/v1/*` (ADR 0047). Déploiement manuel en préversion :
+lue **au build** par la réécriture `/api/v1/*` (ADR 0047).
+
+**Depuis le 2026-10-01 (ADR 0058)**, le front se déploie avec l'API à chaque push sur `main`,
+par le workflow « Déploiement », en production Vercel du projet : adresse stable et
+**publique** **`https://coges-web-cipher-one1.vercel.app`** (la connexion CoGes reste exigée).
+Environnement GitHub `preprod` : secret `VERCEL_WEB_PROJECT_ID`, variable
+`COGES_WEB_PUBLIC_URL`. Le garde-fou 2 contrôle aussi les variables de `coges-web`.
+
+Préversion manuelle d'une branche, toujours possible :
 
 ```bash
 cd frontend && vercel deploy --scope cipher-one1
 ```
 
 Les préversions sont derrière la protection Vercel : ouvrir l'URL dans un navigateur connecté
-à un compte de l'équipe, ou `vercel curl <url>/api/v1/health --scope cipher-one1`.
+à un compte de l'équipe, ou `vercel curl <url>/api/v1/health --scope cipher-one1`. Une cible
+`preview` du workflow a besoin du secret `VERCEL_WEB_AUTOMATION_BYPASS_SECRET` (jeton de
+contournement du projet `coges-web`) pour son test de fumée.
 Entreprise de test du front : slug `demo-front`, gérant `gerant@demo-front.example.com`
 (créée par `create-company` ; mot de passe transmis hors dépôt).
 
