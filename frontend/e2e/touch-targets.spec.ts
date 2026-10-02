@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { DEMO, loginThroughUi, managerApi, stockedProduct } from "./fixtures";
+import { DEMO, loginThroughUi } from "./fixtures";
 import { settle } from "./screens";
 
 /**
@@ -91,8 +91,9 @@ test.beforeEach(async ({ page }) => {
   await expect(page.evaluate(() => matchMedia("(pointer: coarse)").matches)).resolves.toBe(true);
 });
 
-test("Nouvelle vente : saisie, ligne d'article et barre d'actions", async ({ page, request }) => {
-  const product = await stockedProduct(await managerApi(request), { stock: "5" });
+test("Nouvelle vente : saisie, ligne d'article et barre d'actions", async ({ page }) => {
+  // Un article du catalogue de démonstration, toujours en stock (ADR 0060).
+  const product = { name: "Sucre en poudre" };
   await page.goto("/sales/new");
   await settle(page);
   await page.getByRole("combobox", { name: "Ajouter un article (nom ou SKU)" }).fill(product.name);

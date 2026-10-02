@@ -38,11 +38,16 @@ make up            # PostgreSQL et Redis locaux
 make front-e2e     # = make e2e-reset, puis la suite complète
 ```
 
-- **`make e2e-reset`** recrée la base avant chaque suite : `DROP` / `CREATE DATABASE
-  coges_e2e` (superutilisateur du conteneur local), migrations, `seed-demo` (entreprise
-  `demo`, `gerant@demo.example.com`, `demo-coges-2026`), puis ce que la nuit ferait :
-  agrégats des 61 derniers jours et CoGes Intelligence. Aucune suppression de lignes dans le
-  code applicatif.
+- **`make e2e-reset`** recrée la base avant chaque suite : `DROP` puis `CREATE DATABASE`
+  de `coges_e2e` (superutilisateur du conteneur local), migrations, `seed-demo` (épicerie
+  `demo`, `gerant@demo.example.com`, `demo-coges-2026`), ce que la nuit ferait (agrégats des
+  91 derniers jours et CoGes Intelligence), puis l'entreprise **`e2e`** vide
+  (`gerant@e2e.example.com`, même mot de passe). Aucune suppression de lignes dans le code
+  applicatif.
+- **Deux entreprises** (ADR 0060) : les parcours qui écrivent (articles, clients, vendeurs
+  « E2E ») se connectent à `e2e` — `E2E` dans `e2e/fixtures.ts`, valeur par défaut de
+  `managerApi` et `createSalesperson` ; captures, axe, classement par métrique,
+  recommandations et cibles tactiles lisent `demo` (`DEMO`), qui reste propre.
 - **`make e2e-api`** : API sur **:8100**, branchée sur `coges_e2e`, Redis local base n° 1,
   **limites de débit désactivées** (`COGES_RATE_LIMIT_*=0`) — une suite enchaîne des
   dizaines de connexions depuis la même IP.

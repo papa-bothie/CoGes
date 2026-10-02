@@ -45,7 +45,10 @@ test.describe("captures du pilotage", () => {
       await page.waitForLoadState("networkidle");
       await shoot(page, name);
       if (tab === "Dettes") {
-        await page.getByRole("button", { name: "Régler" }).nth(2).click();
+        // Sur la démo, la première page « tous statuts » est faite de dettes soldées : le
+        // règlement réparti part des créances clients encore ouvertes.
+        await page.goto("/finance?tab=debts&party=customer&status=open");
+        await page.getByRole("button", { name: "Régler" }).first().click();
         await page.getByRole("button", { name: "Répartir" }).waitFor();
         await page.getByLabel("Montant versé").fill("30000");
         await page.getByRole("button", { name: "Répartir" }).click();
@@ -94,7 +97,7 @@ test.describe("captures du pilotage", () => {
   });
 
   test("intelligence désactivée", async ({ page, request }) => {
-    const api = await managerApi(request);
+    const api = await managerApi(request, DEMO);
     const company = await api.get("/companies/me");
     await api.patch("/companies/me", {
       settings: { ...company.settings, intelligence_enabled: false },

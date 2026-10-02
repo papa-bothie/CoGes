@@ -66,7 +66,7 @@ worker: ## Lance un worker Celery avec le scheduler beat
 relay: ## Lance le relais de l'outbox (rôle coges_relay, processus séparé)
 	$(UV) python -m app.workers.relay
 
-seed-demo: ## Remplit une entreprise de démonstration (20 produits, 50 ventes sur 60 jours)
+seed-demo: ## Épicerie de démonstration `demo` : 46 articles, 15 clients, 90 jours (≈ 1 200 ventes)
 	$(UV) python -m app.seed
 
 openapi: ## Régénère backend/openapi.json (source des types du frontend)
@@ -100,7 +100,7 @@ front-check: ## Types à jour, lint, typecheck, tests unitaires, build
 front-e2e: e2e-reset ## Parcours Playwright sur la base dédiée coges_e2e (recréée avant la suite)
 	$(PNPM) e2e
 
-e2e-reset: ## Recrée la base coges_e2e : base vide, migrations, seed-demo (jamais coges ni Neon)
+e2e-reset: ## Recrée coges_e2e : migrations, démo `demo` et entreprise `e2e` vide (jamais coges ni Neon)
 	deploy/scripts/e2e.sh reset
 
 e2e-api: ## API des parcours e2e sur :8100, base coges_e2e, limites de débit désactivées

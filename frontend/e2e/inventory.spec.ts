@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { DEMO, loginThroughUi, managerApi, stockedProduct } from "./fixtures";
+import { E2E, loginThroughUi, managerApi, stockedProduct } from "./fixtures";
 
 const CAPTURES = "../docs/design/captures/phase-12";
 
@@ -8,7 +8,7 @@ test.describe.configure({ timeout: 60_000 });
 
 async function login(page: Page) {
   await page.goto("/login");
-  await loginThroughUi(page, DEMO);
+  await loginThroughUi(page, E2E);
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 }
 

@@ -2,7 +2,7 @@
 # Base dédiée aux parcours Playwright (ADR 0059) : `coges_e2e`, jamais `coges`, la
 # préproduction ou Neon.
 #
-#   deploy/scripts/e2e.sh reset   # recrée coges_e2e : base vide, migrations, seed-demo
+#   deploy/scripts/e2e.sh reset   # recrée coges_e2e : migrations, démo (`demo`) et entreprise `e2e` vide
 #   deploy/scripts/e2e.sh api     # API sur :8100, branchée sur coges_e2e, débit non limité
 #   deploy/scripts/e2e.sh front   # front sur :3100, branché sur l'API e2e (build séparé)
 #
@@ -77,8 +77,13 @@ SQL
     # Sans relais ni worker, rien ne construit les agrégats ni les recommandations : on
     # exécute ici, une fois, ce que la nuit ferait (tableau de bord, analytics, Intelligence).
     uv run --directory backend python -c \
-      "from app.workers.tasks.analytics import rebuild_recent_facts; rebuild_recent_facts('$company', 61)"
+      "from app.workers.tasks.analytics import rebuild_recent_facts; rebuild_recent_facts('$company', 91)"
     uv run --directory backend python -m app.cli run-intelligence --company-id "$company" --train
+    # Les parcours qui écrivent ont leur propre entreprise, vide (ADR 0060) : la démo ne
+    # reçoit jamais d'« Article E2E », et les captures la montrent telle quelle.
+    uv run --directory backend python -m app.cli create-company --name "Parcours e2e" \
+      --slug e2e --manager-email gerant@e2e.example.com --manager-name "Gérant des parcours" \
+      --password demo-coges-2026
     ;;
   api)
     # Limite à 0 = désactivée (app/core/rate_limit.py) : une suite enchaîne des dizaines de

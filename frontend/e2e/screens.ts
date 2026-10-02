@@ -1,6 +1,6 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
-import { managerApi } from "./fixtures";
+import { DEMO, managerApi } from "./fixtures";
 
 /**
  * Écrans de référence de la phase 14 (captures avant / après et contrôle axe), sur le jeu de
@@ -12,7 +12,7 @@ export type Screen = {
 };
 
 async function firstId(request: APIRequestContext, path: string): Promise<string> {
-  const api = await managerApi(request);
+  const api = await managerApi(request, DEMO);
   const page = await api.get(`${path}${path.includes("?") ? "&" : "?"}page_size=1`);
   return page.items[0].id as string;
 }

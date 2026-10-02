@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import {
   createSalesperson,
-  DEMO,
+  E2E,
   loginThroughUi,
   managerApi,
   stockedProduct,
@@ -13,7 +13,7 @@ const CAPTURES = "../docs/design/captures/phase-12";
 
 test.describe.configure({ timeout: 90_000 });
 
-async function login(page: Page, credentials = DEMO) {
+async function login(page: Page, credentials = E2E) {
   await page.goto("/login");
   await loginThroughUi(page, credentials);
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
@@ -75,7 +75,7 @@ test("fiche client : encours, achats, dettes ; code en double refusé", async ({
   await page.getByRole("searchbox").fill(name);
   await expect(page.getByRole("row").filter({ hasText: name })).toContainText(/50\s000\sFCFA/);
   await page.getByRole("searchbox").fill("");
-  await expect(page.getByText(/\d+ clients/)).toBeVisible();
+  await expect(page.getByText(/^\d+ clients?$/)).toBeVisible();
   await page.screenshot({
     path: `${CAPTURES}/clients.png`,
     fullPage: true,

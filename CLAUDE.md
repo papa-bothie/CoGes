@@ -152,7 +152,8 @@ make format                  # ruff format + ruff check --fix
 make api                     # uvicorn → http://localhost:8000/api/v1/health
 make worker                  # celery worker + beat
 make relay                   # relais de l'outbox (rôle coges_relay, processus séparé)
-make seed-demo               # entreprise de démo : 20 produits, 50 ventes sur 60 jours
+make seed-demo               # épicerie de démo `demo` : 46 articles, 15 clients, 90 jours (≈ 1 200 ventes)
+uv run --directory backend python -m app.seed --existing-slug <slug> --password …   # remplit une entreprise existante sans vente
 uv run --directory backend python -m app.cli create-company --help   # créer une entreprise
 uv run --directory backend python -m app.cli rebuild-stock --company-id <uuid>   # recalcul stock/CMP
 uv run --directory backend python -m app.cli run-intelligence --company-id <uuid> [--as-of AAAA-MM-JJ] [--train]
@@ -267,6 +268,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0057 | 2026-10-01 | **Recommandations triées par sévérité** (critique, attention, information) puis date, `CASE` explicite ; **textes de notification à la française** par `app/core/display.py` (FCFA fixe, `jj/mm/aaaa`, quantités du front), `data` inchangé | `docs/decisions/0057-tri-des-recommandations-et-textes-de-notification.md` |
 | 0058 | 2026-10-01 | **Front déployé avec l'API** à chaque push sur `main` (production Vercel de `coges-web`, adresse stable publique `https://coges-app.vercel.app`), après le test de fumée de l'API ; fumée du front à travers sa réécriture ; garde-fou 2 étendu à `coges-web` | `docs/decisions/0058-deploiement-automatique-du-front.md` |
 | 0059 | 2026-10-01 | **Cibles tactiles 44 px** sur `pointer: coarse` (composants partagés, ordinateur inchangé) ; **e2e sur `coges_e2e`** (`make e2e-reset`, API :8100 sans limite de débit, front :3100, hôtes non locaux refusés) ; **gravité des alertes** dérivée par le serveur (`severity`), bandeaux orange ou rouge, jamais neutres | `docs/decisions/0059-cibles-tactiles-base-e2e-et-gravite-des-alertes.md` |
+| 0060 | 2026-10-02 | **Démo réaliste** : `seed-demo` remplacé par une épicerie de Dakar (46 articles, 15 clients, 90 jours, crédit, règlements, retours, réassorts), `--existing-slug` remplit une entreprise existante par connexion du gérant (`demo-front` en préprod) ; **entreprise `e2e` à part** pour les parcours qui écrivent ; dates serveur (encaissements de confirmation, sorties de stock) concentrées sur le jour du remplissage, assumé | `docs/decisions/0060-demo-realiste-et-entreprise-e2e.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**
