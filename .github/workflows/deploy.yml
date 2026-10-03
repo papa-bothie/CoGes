@@ -102,7 +102,9 @@ jobs:
           # Les déploiements de préversion sont protégés par Vercel ; ce jeton
           # (« Protection Bypass for Automation ») laisse passer le seul test de fumée.
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-        run: python3 deploy/scripts/smoke.py
+        run: |
+          deploy/scripts/wait-stable.sh "$COGES_SMOKE_URL/api/v1/health"
+          python3 deploy/scripts/smoke.py
 
       # ------------------------------------------------------------- front (ADR 0058)
       # Après l'API : le front réécrit /api/v1 vers elle (ADR 0047) et ne doit pas partir
@@ -143,27 +145,5 @@ jobs:
           COGES_SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_WEB_AUTOMATION_BYPASS_SECRET }}
         run: |
-          headers=()
-          if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
-            headers=(-H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET")
-          fi
-          # L'adresse stable bascule sur le nouveau déploiement quelques secondes après
-          # `vercel deploy` et répond par intermittence 404 (NOT_FOUND de Vercel) pendant
-          # la bascule : un seul succès ne suffit pas, on en exige 5 d'affilée (2 min au plus).
-          ok=0
-          for _ in $(seq 40); do
-            if page=$(curl --fail --silent "${headers[@]}" "$COGES_SMOKE_URL/login") \
-              && grep -q "Connexion · CoGes" <<< "$page"; then
-              ok=$((ok + 1))
-              [ "$ok" -ge 5 ] && break
-            else
-              ok=0
-            fi
-            sleep 3
-          done
-          if [ "$ok" -lt 5 ]; then
-            echo "::error::$COGES_SMOKE_URL/login ne sert pas la page de connexion de façon stable"
-            exit 1
-          fi
-          echo "GET $COGES_SMOKE_URL/login → page de connexion servie (5 fois d'affilée)"
+          deploy/scripts/wait-stable.sh "$COGES_SMOKE_URL/login" "Connexion · CoGes"
           python3 deploy/scripts/smoke.py
