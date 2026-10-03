@@ -54,6 +54,8 @@ GRANT coges_bus  TO coges_owner WITH INHERIT FALSE;
 
 CREATE DATABASE coges      OWNER coges_owner;
 CREATE DATABASE coges_test OWNER coges_owner;
+-- Parcours Playwright (ADR 0059) ; recréée avant chaque suite par `make e2e-reset`.
+CREATE DATABASE coges_e2e  OWNER coges_owner;
 
 \connect coges
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
@@ -64,6 +66,14 @@ GRANT USAGE ON SCHEMA public TO coges_analytics;
 GRANT USAGE ON SCHEMA public TO coges_bus;
 
 \connect coges_test
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+GRANT USAGE ON SCHEMA public TO coges_app;
+GRANT USAGE ON SCHEMA public TO coges_auth;
+GRANT USAGE ON SCHEMA public TO coges_relay;
+GRANT USAGE ON SCHEMA public TO coges_analytics;
+GRANT USAGE ON SCHEMA public TO coges_bus;
+
+\connect coges_e2e
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO coges_app;
 GRANT USAGE ON SCHEMA public TO coges_auth;

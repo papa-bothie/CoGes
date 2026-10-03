@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { DEMO, loginThroughUi } from "./fixtures";
+import { E2E, loginThroughUi } from "./fixtures";
 
 const CAPTURES = "../docs/design/captures/phase-12";
 const shot = (page: Page, name: string) =>
@@ -10,7 +10,7 @@ test.describe.configure({ timeout: 90_000 });
 
 async function login(page: Page) {
   await page.goto("/login");
-  await loginThroughUi(page, DEMO);
+  await loginThroughUi(page, E2E);
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 }
 
@@ -84,6 +84,6 @@ test("catégories, création d'un produit, changement de prix, ajustement", asyn
   await expect(row).toContainText("12 pièces");
   await expect(row).toContainText("Disponible");
   await page.getByRole("searchbox").fill("");
-  await expect(page.getByText(/\d+ produits/)).toBeVisible();
+  await expect(page.getByText(/^\d+ produits?$/)).toBeVisible();
   await shot(page, "produits");
 });

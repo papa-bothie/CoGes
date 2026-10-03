@@ -74,7 +74,7 @@ export function Header({ me }: { me: Me }) {
               {leaf ? (
                 <Link
                   href={section.href}
-                  className="rounded-sm font-medium outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+                  className="rounded-sm font-medium outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
                 >
                   {section.label}
                 </Link>

@@ -305,6 +305,10 @@ def test_the_active_alerts_are_the_readers_own_unread_ones(
 
     assert len(manager["active_alerts"]) <= ACTIVE_ALERTS
     assert any(alert["type"] == "stock_out" for alert in manager["active_alerts"])
+    # Chaque alerte porte la gravité que le front traduit en couleur (ADR 0059).
+    for alert in manager["active_alerts"]:
+        expected = "critical" if alert["type"] in {"stock_out", "insight_critical"} else "warning"
+        assert alert["severity"] == expected
     # Le vendeur n'a pas `inventory:update` : l'alerte ne lui a jamais été adressée.
     assert seller["active_alerts"] == []
 

@@ -166,6 +166,12 @@ def _active_alerts(session: Session, ctx: TenantContext) -> list[ActiveAlert]:
         session, ctx, page=1, page_size=ACTIVE_ALERTS, unread_only=True
     )
     return [
-        ActiveAlert(id=item.id, type=item.type, title=item.title, created_at=item.created_at)
+        ActiveAlert(
+            id=item.id,
+            type=item.type,
+            severity=notifications_service.severity_of(item.type),
+            title=item.title,
+            created_at=item.created_at,
+        )
         for item in items
     ]

@@ -5337,6 +5337,9 @@
             "type": "string",
             "title": "Type"
           },
+          "severity": {
+            "$ref": "#/components/schemas/NotificationSeverity"
+          },
           "title": {
             "type": "string",
             "title": "Title"
@@ -5352,6 +5355,7 @@
         "required": [
           "id",
           "type",
+          "severity",
           "title",
           "created_at"
         ],
@@ -8266,6 +8270,10 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/NotificationSeverity",
+            "readOnly": true
           }
         },
         "additionalProperties": false,
@@ -8277,10 +8285,20 @@
           "body",
           "data",
           "read_at",
-          "created_at"
+          "created_at",
+          "severity"
         ],
         "title": "NotificationRead",
         "description": "Une alerte, telle que le fil la présente."
+      },
+      "NotificationSeverity": {
+        "type": "string",
+        "enum": [
+          "warning",
+          "critical"
+        ],
+        "title": "NotificationSeverity",
+        "description": "Gravité d'une alerte, **dérivée de son type** par le serveur (ADR 0059).\n\nLe front en tire la couleur d'un bandeau ; il ne la devine jamais lui-même."
       },
       "NotificationType": {
         "type": "string",

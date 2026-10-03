@@ -152,7 +152,8 @@ make format                  # ruff format + ruff check --fix
 make api                     # uvicorn → http://localhost:8000/api/v1/health
 make worker                  # celery worker + beat
 make relay                   # relais de l'outbox (rôle coges_relay, processus séparé)
-make seed-demo               # entreprise de démo : 20 produits, 50 ventes sur 60 jours
+make seed-demo               # épicerie de démo `demo` : 46 articles, 15 clients, 90 jours (≈ 1 200 ventes)
+uv run --directory backend python -m app.seed --existing-slug <slug> --password …   # remplit une entreprise existante sans vente
 uv run --directory backend python -m app.cli create-company --help   # créer une entreprise
 uv run --directory backend python -m app.cli rebuild-stock --company-id <uuid>   # recalcul stock/CMP
 uv run --directory backend python -m app.cli run-intelligence --company-id <uuid> [--as-of AAAA-MM-JJ] [--train]
@@ -160,7 +161,8 @@ make front-install           # pnpm (corepack) + dépendances + Chromium pour Pl
 make front-dev               # Next sur :3000, /api/v1 réécrit vers COGES_API_URL (défaut http://localhost:8000)
 make front-api               # régénère frontend/types/api.ts après `make openapi`
 make front-check             # types à jour, lint, typecheck, Vitest, build (ce que joue la CI)
-make front-e2e               # Playwright contre l'API locale (make api + make seed-demo + front-dev), axe AA bloquant
+make front-e2e               # e2e-reset puis Playwright sur coges_e2e (API :8100 et front :3100 lancés seuls), axe AA bloquant
+make e2e-reset / e2e-api / e2e-front   # base e2e recréée (migrations + seed) / API e2e sans limite de débit / front e2e
 CAPTURES_STAGE=apres make front-e2e   # + captures clair/sombre de la phase 14 (docs/design/captures/phase-14/<étape>/)
 make api API_PORT=8001       # si le port 8000 est déjà pris ; front : COGES_API_URL=http://localhost:8001
 ```
@@ -264,7 +266,9 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0055 | 2026-09-30 | **Écrans de pilotage** : cartes d'Intelligence compactes + panneau, métrique en liste déroulante nommée sur chaque ligne, période commune dans l'URL, règlement réparti prérempli, journal en lecture ; écarts au prototype listés | `docs/decisions/0055-ecrans-de-pilotage-cote-front.md` |
 | 0056 | 2026-10-01 | **Finition visuelle** : identité raffinée, `docs/design/DESIGN.md` fait foi (liens à la racine pour Impeccable) ; Inter + axe optique, échelle par rôle en tokens (déclarée dans `cn`) ; fil d'Ariane, barre latérale repliée sous 1024 px, barre d'actions de vente sous 1280 px ; densité compacte/confortable **dans le navigateur** ; **encres d'état** pour tout texte d'état ; animations discrètes et `prefers-reduced-motion` ; `SegmentedControl` ; axe AA bloquant ; textes de notifications du worker reportés | `docs/decisions/0056-finition-visuelle.md` |
 | 0057 | 2026-10-01 | **Recommandations triées par sévérité** (critique, attention, information) puis date, `CASE` explicite ; **textes de notification à la française** par `app/core/display.py` (FCFA fixe, `jj/mm/aaaa`, quantités du front), `data` inchangé | `docs/decisions/0057-tri-des-recommandations-et-textes-de-notification.md` |
-| 0058 | 2026-10-01 | **Front déployé avec l'API** à chaque push sur `main` (production Vercel de `coges-web`, adresse stable publique `https://coges-web-cipher-one1.vercel.app`), après le test de fumée de l'API ; fumée du front à travers sa réécriture ; garde-fou 2 étendu à `coges-web` | `docs/decisions/0058-deploiement-automatique-du-front.md` |
+| 0058 | 2026-10-01 | **Front déployé avec l'API** à chaque push sur `main` (production Vercel de `coges-web`, adresse stable publique `https://coges-app.vercel.app`), après le test de fumée de l'API ; fumée du front à travers sa réécriture ; garde-fou 2 étendu à `coges-web` | `docs/decisions/0058-deploiement-automatique-du-front.md` |
+| 0059 | 2026-10-01 | **Cibles tactiles 44 px** sur `pointer: coarse` (composants partagés, ordinateur inchangé) ; **e2e sur `coges_e2e`** (`make e2e-reset`, API :8100 sans limite de débit, front :3100, hôtes non locaux refusés) ; **gravité des alertes** dérivée par le serveur (`severity`), bandeaux orange ou rouge, jamais neutres | `docs/decisions/0059-cibles-tactiles-base-e2e-et-gravite-des-alertes.md` |
+| 0060 | 2026-10-02 | **Démo réaliste** : `seed-demo` remplacé par une épicerie de Dakar (46 articles, 15 clients, 90 jours, crédit, règlements, retours, réassorts), `--existing-slug` remplit une entreprise existante par connexion du gérant (`demo-front` en préprod) ; **entreprise `e2e` à part** pour les parcours qui écrivent ; dates serveur (encaissements de confirmation, sorties de stock) concentrées sur le jour du remplissage, assumé | `docs/decisions/0060-demo-realiste-et-entreprise-e2e.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**
@@ -281,7 +285,7 @@ P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; r
 > products, timeseries) · `dashboard` · `notifications` · `insights`, `forecasts`,
 > `intelligence/summary` · `imports/{kind}` (+ template) · `exports` (referentials, sales, file) ·
 > `system/outbox` · `audit-logs`. Préproduction en ligne depuis le 2026-09-27 : `https://coges-api.vercel.app`
-> (`deploy/README-infra.md`). Front : projet Vercel `coges-web`, déployé avec l'API à chaque push sur `main` (ADR 0058, `https://coges-web-cipher-one1.vercel.app` ; `frontend/README.md`,
+> (`deploy/README-infra.md`). Front : projet Vercel `coges-web`, déployé avec l'API à chaque push sur `main` (ADR 0058, `https://coges-app.vercel.app` ; `frontend/README.md`,
 > `deploy/README-infra.md`). Phases 12 et 13 terminées (ADR 0052, 0055) : **le produit V1 est
 > fonctionnellement complet**. Phase 14 terminée (ADR 0056) : interface finie, système documenté dans
 > `docs/design/DESIGN.md`. Améliorations reportées : `docs/design/audit-phase-14-apres.md` (« Ce qui reste »).

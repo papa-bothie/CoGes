@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { customerWithCredit, DEMO, loginThroughUi, managerApi, stockedProduct } from "./fixtures";
+import { customerWithCredit, E2E, loginThroughUi, managerApi, stockedProduct } from "./fixtures";
 
 const CAPTURES = "../docs/design/captures/phase-12";
 
@@ -12,7 +12,7 @@ const amount = (digits: string) => new RegExp(`${digits.replace(/ /g, "\\s")}\\s
 
 async function login(page: Page) {
   await page.goto("/login");
-  await loginThroughUi(page, DEMO);
+  await loginThroughUi(page, E2E);
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 }
 

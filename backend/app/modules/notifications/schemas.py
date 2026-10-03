@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
 
 
 class NotificationType(StrEnum):
@@ -26,6 +26,29 @@ class NotificationType(StrEnum):
     INSIGHT_CRITICAL = "insight_critical"
 
 
+class NotificationSeverity(StrEnum):
+    """Gravité d'une alerte, **dérivée de son type** par le serveur (ADR 0059).
+
+    Le front en tire la couleur d'un bandeau ; il ne la devine jamais lui-même.
+    """
+
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+
+#: Ce qui bloque une vente ou signale un risque critique ; tout le reste demande attention.
+CRITICAL_TYPES = frozenset({NotificationType.STOCK_OUT, NotificationType.INSIGHT_CRITICAL})
+
+
+def severity_of(notification_type: str) -> NotificationSeverity:
+    """Gravité d'un type d'alerte : `critical` pour une rupture ou un insight critique."""
+    return (
+        NotificationSeverity.CRITICAL
+        if notification_type in CRITICAL_TYPES
+        else NotificationSeverity.WARNING
+    )
+
+
 class NotificationRead(BaseModel):
     """Une alerte, telle que le fil la présente."""
 
@@ -38,6 +61,11 @@ class NotificationRead(BaseModel):
     data: dict[str, Any]
     read_at: datetime | None
     created_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def severity(self) -> NotificationSeverity:
+        return severity_of(self.type)
 
 
 class NotificationPage(BaseModel):

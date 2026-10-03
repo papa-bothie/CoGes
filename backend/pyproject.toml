@@ -53,6 +53,8 @@ select = ["E", "F", "I", "UP", "B", "SIM", "N"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
+# Tables du jeu de démonstration : une ligne par article, plus lisible qu'un éclatement.
+"app/seed.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

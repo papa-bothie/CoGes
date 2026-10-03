@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# Base dédiée aux parcours Playwright (ADR 0059) : `coges_e2e`, jamais `coges`, la
+# préproduction ou Neon.
+#
+#   deploy/scripts/e2e.sh reset   # recrée coges_e2e : migrations, démo (`demo`) et entreprise `e2e` vide
+#   deploy/scripts/e2e.sh api     # API sur :8100, branchée sur coges_e2e, débit non limité
+#   deploy/scripts/e2e.sh front   # front sur :3100, branché sur l'API e2e (build séparé)
+#
+# Les DSN viennent du .env local (exporté par le Makefile, ou lu ici) ; seul le nom de la
+# base change. Un DSN dont l'hôte n'est pas local fait tout échouer avant la moindre
+# commande : ce script ne peut pas viser une base distante.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT"
+
+# Le .env local complète l'environnement sans jamais remplacer une variable déjà fixée
+# (par le Makefile ou par l'appelant).
+if [ -f .env ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    [[ "$line" =~ ^([A-Z][A-Z0-9_]*)=(.*)$ ]] || continue
+    key=${BASH_REMATCH[1]} value=${BASH_REMATCH[2]}
+    value=${value%\"} value=${value#\"}
+    [ -n "${!key+x}" ] || export "$key=$value"
+  done <.env
+fi
+
+E2E_DB=coges_e2e
+E2E_API_PORT="${E2E_API_PORT:-8100}"
+E2E_FRONT_PORT="${E2E_FRONT_PORT:-3100}"
+
+die() {
+  echo "e2e : $*" >&2
+  exit 1
+}
+
+# postgresql+psycopg://rôle:secret@localhost:5433/coges -> …/coges_e2e, hôte local exigé.
+# Le contrôle se fait dans le shell principal, avant toute commande : un `die` dans une
+# substitution `$(…)` ne quitterait que le sous-shell.
+LOCAL_PG='^postgresql(\+psycopg)?://[^@]+@(localhost|127\.0\.0\.1)(:[0-9]+)?/[A-Za-z0-9_]+$'
+for var in COGES_DATABASE_URL_OWNER COGES_DATABASE_URL_APP COGES_DATABASE_URL_RELAY \
+  COGES_DATABASE_URL_ANALYTICS; do
+  url=${!var:-}
+  [ -n "$url" ] || die "$var manquant (copier .env.example vers .env)"
+  [[ "$url" =~ $LOCAL_PG ]] ||
+    die "$var doit viser une base PostgreSQL locale (localhost), jamais une base distante"
+  export "$var=${url%/*}/$E2E_DB"
+done
+
+# Redis local, base n° 1 : le cache et les compteurs des tests ne croisent pas ceux du
+# développement (base n° 0).
+redis=${COGES_REDIS_URL:-redis://localhost:6379/0}
+[[ "$redis" =~ ^redis://([^@]*@)?(localhost|127\.0\.0\.1)(:[0-9]+)?(/[0-9]+)?$ ]] ||
+  die "COGES_REDIS_URL doit viser un Redis local"
+[[ "$redis" =~ /[0-9]+$ ]] && redis=${redis%/*}
+export COGES_REDIS_URL="$redis/1"
+
+case "${1:-}" in
+  reset)
+    echo "e2e : recréation de la base $E2E_DB"
+    docker compose exec -T postgres psql -U postgres -v ON_ERROR_STOP=1 -q <<SQL
+DROP DATABASE IF EXISTS $E2E_DB WITH (FORCE);
+CREATE DATABASE $E2E_DB OWNER coges_owner;
+\connect $E2E_DB
+REVOKE ALL ON SCHEMA public FROM PUBLIC;
+GRANT USAGE ON SCHEMA public TO coges_app;
+GRANT USAGE ON SCHEMA public TO coges_auth;
+GRANT USAGE ON SCHEMA public TO coges_relay;
+GRANT USAGE ON SCHEMA public TO coges_analytics;
+GRANT USAGE ON SCHEMA public TO coges_bus;
+SQL
+    uv run --directory backend alembic upgrade head
+    seeded=$(uv run --directory backend python -m app.seed)
+    echo "$seeded"
+    company=$(awk '/créée :/ { print $NF }' <<<"$seeded")
+    [ -n "$company" ] || die "identifiant de l'entreprise de démonstration introuvable"
+    # Sans relais ni worker, rien ne construit les agrégats ni les recommandations : on
+    # exécute ici, une fois, ce que la nuit ferait (tableau de bord, analytics, Intelligence).
+    uv run --directory backend python -c \
+      "from app.workers.tasks.analytics import rebuild_recent_facts; rebuild_recent_facts('$company', 91)"
+    uv run --directory backend python -m app.cli run-intelligence --company-id "$company" --train
+    # Les parcours qui écrivent ont leur propre entreprise, vide (ADR 0060) : la démo ne
+    # reçoit jamais d'« Article E2E », et les captures la montrent telle quelle.
+    uv run --directory backend python -m app.cli create-company --name "Parcours e2e" \
+      --slug e2e --manager-email gerant@e2e.example.com --manager-name "Gérant des parcours" \
+      --password demo-coges-2026
+    ;;
+  api)
+    # Limite à 0 = désactivée (app/core/rate_limit.py) : une suite enchaîne des dizaines de
+    # connexions depuis la même IP, ce que la limite de connexion refuserait.
+    export COGES_RATE_LIMIT_IP_PER_MINUTE=0
+    export COGES_RATE_LIMIT_TENANT_PER_MINUTE=0
+    export COGES_RATE_LIMIT_LOGIN_PER_MINUTE=0
+    exec uv run --directory backend uvicorn app.main:app --port "$E2E_API_PORT"
+    ;;
+  front)
+    # Répertoire de build distinct : le front de développement (:3000, .next) continue de
+    # tourner à côté sans conflit.
+    cd frontend
+    COGES_NEXT_DIST_DIR=.next-e2e COGES_API_URL="http://localhost:$E2E_API_PORT" \
+      exec pnpm exec next dev --port "$E2E_FRONT_PORT"
+    ;;
+  *)
+    die "usage : $0 reset|api|front"
+    ;;
+esac

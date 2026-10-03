@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-import { AlertBanner } from "@/components/alerts/alert-banner";
+import { AlertBanner, type AlertSeverity } from "@/components/alerts/alert-banner";
 import { PeriodBarChart } from "@/components/charts/period-bar-chart";
 import { ErrorState } from "@/components/error-state";
 import { IntelligenceSummaryCard } from "@/components/forecast/intelligence-summary-card";
@@ -33,21 +33,24 @@ import { labels } from "@/lib/labels";
 type Alert = Schemas["ActiveAlert"];
 
 /** Où mène une alerte : l'écran qui permet d'agir, faute d'identifiant d'entité dans l'alerte. */
-const ALERT_TARGETS: Record<
-  string,
-  { href: string; icon: LucideIcon; tone: "danger" | "warning" | "neutral" }
-> = {
-  stock_low: { href: "/inventory", icon: AlertTriangle, tone: "warning" },
-  stock_out: { href: "/inventory", icon: PackageX, tone: "danger" },
-  debt_due: { href: "/finance", icon: Clock, tone: "neutral" },
-  sale_cancelled: { href: "/sales?status=cancelled", icon: Receipt, tone: "neutral" },
+const ALERT_TARGETS: Record<string, { href: string; icon: LucideIcon }> = {
+  stock_low: { href: "/inventory", icon: AlertTriangle },
+  stock_out: { href: "/inventory", icon: PackageX },
+  debt_due: { href: "/finance", icon: Clock },
+  sale_cancelled: { href: "/sales?status=cancelled", icon: Receipt },
 };
 
 function alertTarget(type: string) {
-  return ALERT_TARGETS[type] ?? { href: "/notifications", icon: Bell, tone: "neutral" };
+  return ALERT_TARGETS[type] ?? { href: "/notifications", icon: Bell };
 }
 
-type AlertGroup = { type: string; title: string; count: number; latest: string };
+type AlertGroup = {
+  type: string;
+  title: string;
+  count: number;
+  latest: string;
+  severity: AlertSeverity;
+};
 
 /**
  * Une ligne par type d'alerte : cinq « Dette échue » identiques empilées noient
@@ -63,10 +66,13 @@ function groupAlerts(alerts: readonly Alert[]): AlertGroup[] {
         title: alert.title,
         count: 1,
         latest: alert.created_at,
+        severity: alert.severity,
       });
     } else {
       group.count += 1;
       if (alert.created_at > group.latest) group.latest = alert.created_at;
+      // Un groupe prend la gravité la plus haute de ses alertes.
+      if (alert.severity === "critical") group.severity = "critical";
     }
   }
   return [...groups.values()];
@@ -106,7 +112,7 @@ export function DashboardView() {
             !data.active_alerts.some((alert) => alert.type.startsWith("stock_")) && (
               <AlertBanner
                 icon={AlertTriangle}
-                tone="warning"
+                severity="warning"
                 title={labels.dashboard.stockAlertBanner(data.stock_alert_count)}
                 detail={labels.dashboard.seeStock}
                 href="/inventory"
@@ -118,7 +124,7 @@ export function DashboardView() {
               <AlertBanner
                 key={group.type}
                 icon={target.icon}
-                tone={target.tone}
+                severity={group.severity}
                 title={
                   group.count === 1
                     ? group.title

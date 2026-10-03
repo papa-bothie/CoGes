@@ -15,7 +15,7 @@ PNPM := pnpm --dir frontend
 API_PORT ?= 8000
 COGES_API_URL ?= http://localhost:$(API_PORT)
 
-.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format api worker relay seed-demo openapi requirements check-generated front-install front-dev front-api front-check front-e2e
+.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format api worker relay seed-demo openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front
 
 help: ## Liste les cibles disponibles
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -66,7 +66,7 @@ worker: ## Lance un worker Celery avec le scheduler beat
 relay: ## Lance le relais de l'outbox (rôle coges_relay, processus séparé)
 	$(UV) python -m app.workers.relay
 
-seed-demo: ## Remplit une entreprise de démonstration (20 produits, 50 ventes sur 60 jours)
+seed-demo: ## Épicerie de démonstration `demo` : 46 articles, 15 clients, 90 jours (≈ 1 200 ventes)
 	$(UV) python -m app.seed
 
 openapi: ## Régénère backend/openapi.json (source des types du frontend)
@@ -97,5 +97,14 @@ front-check: ## Types à jour, lint, typecheck, tests unitaires, build
 	$(PNPM) test
 	COGES_API_URL=$(COGES_API_URL) $(PNPM) build
 
-front-e2e: ## Parcours Playwright (API et front locaux démarrés, entreprise de démo)
+front-e2e: e2e-reset ## Parcours Playwright sur la base dédiée coges_e2e (recréée avant la suite)
 	$(PNPM) e2e
+
+e2e-reset: ## Recrée coges_e2e : migrations, démo `demo` et entreprise `e2e` vide (jamais coges ni Neon)
+	deploy/scripts/e2e.sh reset
+
+e2e-api: ## API des parcours e2e sur :8100, base coges_e2e, limites de débit désactivées
+	deploy/scripts/e2e.sh api
+
+e2e-front: ## Front des parcours e2e sur :3100, branché sur l'API e2e (build .next-e2e)
+	deploy/scripts/e2e.sh front

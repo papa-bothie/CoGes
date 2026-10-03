@@ -4,6 +4,7 @@ import {
   createSalesperson,
   customerWithCredit,
   DEMO,
+  E2E,
   loginThroughUi,
   managerApi,
   stockedProduct,
@@ -12,7 +13,7 @@ import {
 // Le serveur de développement compile chaque page à la première visite.
 test.describe.configure({ timeout: 60_000 });
 
-async function login(page: Page, credentials = DEMO) {
+async function login(page: Page, credentials = E2E) {
   await page.goto("/login");
   await loginThroughUi(page, credentials);
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
@@ -60,8 +61,10 @@ test("un paiement réparti solde deux dettes du même client", async ({ page, re
   await expect(page.getByRole("row", { name: new RegExp(customer.name) })).toHaveCount(0);
 });
 
+// Classement et recommandations : il faut l'historique de la démo, que ces deux
+// parcours lisent sans y créer d'article.
 test("changer de métrique change le classement et son libellé", async ({ page }) => {
-  await login(page);
+  await login(page, DEMO);
   await page.goto("/analytics");
   await expect(page.getByTestId("ranking-title")).toContainText("chiffre d'affaires généré", {
     timeout: 30_000,
@@ -84,12 +87,12 @@ test("changer de métrique change le classement et son libellé", async ({ page 
 });
 
 test("une recommandation écartée quitte la liste des nouvelles", async ({ page, request }) => {
-  const client = await managerApi(request);
+  const client = await managerApi(request, DEMO);
   const fresh = await client.get("/insights?status=new&page_size=100");
   test.skip(fresh.items.length === 0, "Aucune recommandation nouvelle dans le jeu de démo.");
   const insight = fresh.items[0] as { id: string; title: string };
 
-  await login(page);
+  await login(page, DEMO);
   await page.goto("/insights");
   const card = page.getByRole("button", { name: new RegExp(insight.title) }).first();
   await card.click();

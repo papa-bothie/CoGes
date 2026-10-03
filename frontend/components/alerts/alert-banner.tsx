@@ -1,30 +1,33 @@
 import { ChevronRight, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 
+import type { Schemas } from "@/lib/api/schema";
 import { cn } from "@/lib/utils";
 
-const TONES = {
-  danger: "border-destructive/30 bg-destructive/5 text-danger-ink",
+export type AlertSeverity = Schemas["NotificationSeverity"];
+
+// La couleur suit la gravité **renvoyée par le serveur** (ADR 0059) : attention (orange)
+// par défaut, danger (rouge) si `critical`. Jamais neutre : une alerte demande d'agir.
+const TONES: Record<AlertSeverity, string> = {
   warning: "border-warning/30 bg-warning/5 text-warning-ink",
-  neutral: "border-border bg-card text-foreground",
-} as const;
+  critical: "border-destructive/30 bg-destructive/5 text-danger-ink",
+};
 
 /**
- * Bandeau d'alerte cliquable : orange pour un seuil bas, rouge pour une rupture, neutre pour
- * une dette échue ; détail à droite et flèche vers l'élément concerné.
+ * Bandeau d'alerte cliquable : détail à droite et flèche vers l'élément concerné.
  */
 export function AlertBanner({
   icon: Icon,
   title,
   detail,
   href,
-  tone = "neutral",
+  severity = "warning",
 }: {
   icon: LucideIcon;
   title: string;
   detail?: string;
   href?: string;
-  tone?: keyof typeof TONES;
+  severity?: AlertSeverity;
 }) {
   const content = (
     <>
@@ -36,16 +39,16 @@ export function AlertBanner({
   );
   const className = cn(
     "flex items-center gap-3 rounded-lg border px-4 py-3 text-sm",
-    TONES[tone],
+    TONES[severity],
     href &&
       "hover:bg-muted/60 focus-visible:ring-ring/50 transition-colors outline-none focus-visible:ring-3",
   );
   return href ? (
-    <Link href={href} className={className}>
+    <Link href={href} data-severity={severity} className={className}>
       {content}
     </Link>
   ) : (
-    <div role="status" className={className}>
+    <div role="status" data-severity={severity} className={className}>
       {content}
     </div>
   );
