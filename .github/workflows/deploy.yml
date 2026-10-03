@@ -147,7 +147,10 @@ jobs:
           if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
             headers=(-H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET")
           fi
-          page=$(curl --fail --silent --show-error --retry 3 "${headers[@]}" "$COGES_SMOKE_URL/login")
+          # L'adresse stable bascule sur le nouveau déploiement quelques secondes après
+          # `vercel deploy` et peut répondre 404 entre-temps : on réessaie aussi sur 404.
+          page=$(curl --fail --silent --show-error --retry 6 --retry-delay 5 --retry-all-errors \
+            "${headers[@]}" "$COGES_SMOKE_URL/login")
           grep -q "Connexion · CoGes" <<< "$page"
           echo "GET $COGES_SMOKE_URL/login → page de connexion servie"
           python3 deploy/scripts/smoke.py
