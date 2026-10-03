@@ -148,9 +148,22 @@ jobs:
             headers=(-H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET")
           fi
           # L'adresse stable bascule sur le nouveau déploiement quelques secondes après
-          # `vercel deploy` et peut répondre 404 entre-temps : on réessaie aussi sur 404.
-          page=$(curl --fail --silent --show-error --retry 6 --retry-delay 5 --retry-all-errors \
-            "${headers[@]}" "$COGES_SMOKE_URL/login")
-          grep -q "Connexion · CoGes" <<< "$page"
-          echo "GET $COGES_SMOKE_URL/login → page de connexion servie"
+          # `vercel deploy` et répond par intermittence 404 (NOT_FOUND de Vercel) pendant
+          # la bascule : un seul succès ne suffit pas, on en exige 5 d'affilée (2 min au plus).
+          ok=0
+          for _ in $(seq 40); do
+            if page=$(curl --fail --silent "${headers[@]}" "$COGES_SMOKE_URL/login") \
+              && grep -q "Connexion · CoGes" <<< "$page"; then
+              ok=$((ok + 1))
+              [ "$ok" -ge 5 ] && break
+            else
+              ok=0
+            fi
+            sleep 3
+          done
+          if [ "$ok" -lt 5 ]; then
+            echo "::error::$COGES_SMOKE_URL/login ne sert pas la page de connexion de façon stable"
+            exit 1
+          fi
+          echo "GET $COGES_SMOKE_URL/login → page de connexion servie (5 fois d'affilée)"
           python3 deploy/scripts/smoke.py
