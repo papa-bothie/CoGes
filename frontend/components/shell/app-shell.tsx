@@ -46,12 +46,16 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           {labels.app.skipToContent}
         </a>
-        <aside className="sticky top-0 hidden h-dvh w-52 shrink-0 border-r bg-sidebar lg:block print:hidden">
-          <SidebarContent
-            companyName={me.data.company.name}
-            permissions={me.data.permissions}
-            pathname={pathname}
-          />
+        {/* Le fond et la bordure suivent toute la hauteur de la page ; le contenu, lui,
+            reste collé en haut de l'écran pendant le défilement. */}
+        <aside className="hidden w-52 shrink-0 self-stretch border-r bg-sidebar lg:block print:hidden">
+          <div className="sticky top-0 h-dvh">
+            <SidebarContent
+              companyName={me.data.company.name}
+              permissions={me.data.permissions}
+              pathname={pathname}
+            />
+          </div>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="contents print:hidden">
