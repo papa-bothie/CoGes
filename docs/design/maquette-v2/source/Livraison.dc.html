@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Recevoir une livraison</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#FFF0E3;color:#9A3412}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box}
+.card{background:#fff;border-radius:22px;border:1px solid #ECE6DC;padding:22px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:56px;padding:0 20px;border-radius:18px;border:0;font:inherit;font-weight:700;font-size:17px;cursor:pointer;text-decoration:none}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+.lbl{font-weight:700;font-size:17px;margin-bottom:10px}
+.chip{min-height:52px;padding:0 18px;border-radius:999px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:16px;color:#1E2320;cursor:pointer}
+.chip.on{border-color:#C2410C;background:#FFF0E3;color:#9A3412}
+.big{flex:1 1 140px;min-height:60px;border-radius:18px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:17px;cursor:pointer;color:#1E2320}
+.big.on{border-color:#C2410C;background:#C2410C;color:#fff}
+.line{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;padding:14px 0;border-top:1px solid #F0EBE2}
+.sq{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;flex:none}
+.in{width:100%;box-sizing:border-box;min-height:52px;border-radius:14px;border:2px solid #E3DCD0;padding:0 12px;font:inherit;font-size:19px;font-weight:700;background:#fff;color:#1E2320}
+.in:focus{outline:3px solid #FCC9A3;border-color:#C2410C}
+.small{font-size:14px;font-weight:600;color:#5B625E;display:block;margin-bottom:4px}
+.rm{width:48px;height:48px;border-radius:14px;border:2px solid #E3DCD0;background:#fff;cursor:pointer;color:#A51D24;display:flex;align-items:center;justify-content:center}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab on" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="display:flex;flex-direction:column;gap:20px">
+    <h1>Recevoir une livraison</h1>
+
+    <sc-if value="{{done}}" hint-placeholder-val="{{ false }}">
+      <div class="card" style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:36px 24px">
+        <div style="width:80px;height:80px;border-radius:50%;background:#C2410C;color:#fff;display:flex;align-items:center;justify-content:center">
+          <svg class="ico" viewBox="0 0 24 24" style="width:44px;height:44px;stroke-width:2.5"><path d="M4 12.5 9.5 18 20 6"></path></svg>
+        </div>
+        <h1 style="font-size:26px">Livraison enregistrée</h1>
+        <div style="font-size:18px;font-weight:600">{{doneLine}}</div>
+        <div class="muted" style="font-size:17px">Le stock et le prix d'achat moyen sont mis à jour.</div>
+        <a class="btn" href="Articles.dc.html" style="background:#C2410C;color:#fff;margin-top:8px">Voir le stock</a>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{editing}}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+        <section class="card" style="flex:3 1 500px;min-width:0">
+          <div class="lbl">Qui livre ?</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{suppliers}}" as="f" hint-placeholder-count="3">
+              <button type="button" class="chip {{f.cls}}" onClick="{{f.pick}}">{{f.label}}</button>
+            </sc-for>
+            <a class="chip" href="Contact.dc.html" style="display:inline-flex;align-items:center;text-decoration:none;border-style:dashed">+ Nouveau fournisseur</a>
+          </div>
+
+          <div class="lbl" style="margin-top:22px">Qu'est-ce qui arrive ?</div>
+          <sc-for list="{{lines}}" as="l" hint-placeholder-count="3">
+            <div class="line">
+              <div class="sq" style="background:{{l.color}}">{{l.initial}}</div>
+              <div style="flex:1 1 170px;min-width:0;align-self:center"><div style="font-weight:700">{{l.name}}</div><div class="muted">En stock : {{l.stock}}</div></div>
+              <div style="width:110px"><label class="small" for="q{{l.id}}">Quantité</label><input id="q{{l.id}}" class="in num" inputmode="numeric" value="{{l.qtyTxt}}" onChange="{{l.onQty}}"></div>
+              <div style="width:150px"><label class="small" for="c{{l.id}}">Prix d'achat (F)</label><input id="c{{l.id}}" class="in num" inputmode="numeric" value="{{l.costTxt}}" onChange="{{l.onCost}}"></div>
+              <div class="num" style="width:110px;text-align:right;font-weight:800;font-size:18px;align-self:center">{{l.totalTxt}}</div>
+              <button type="button" class="rm" onClick="{{l.remove}}" aria-label="Retirer {{l.name}}"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></svg></button>
+            </div>
+          </sc-for>
+          <div style="margin-top:12px;font-weight:700">Ajouter un article</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+            <sc-for list="{{addable}}" as="a" hint-placeholder-count="3">
+              <button type="button" class="chip" onClick="{{a.add}}">+ {{a.name}}</button>
+            </sc-for>
+          </div>
+        </section>
+
+        <section class="card" style="flex:2 1 340px;min-width:0;display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:14px 16px;border-radius:16px;background:#FFF0E3">
+            <span style="font-weight:700;font-size:18px">Total</span><span class="num" style="font-weight:800;font-size:30px;color:#9A3412">{{totalTxt}} F</span>
+          </div>
+          <div class="lbl" style="margin:0">Vous payez</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{modes}}" as="m" hint-placeholder-count="3">
+              <button type="button" class="big {{m.cls}}" onClick="{{m.pick}}">{{m.label}}</button>
+            </sc-for>
+          </div>
+          <sc-if value="{{isPart}}" hint-placeholder-val="{{ false }}">
+            <div>
+              <label for="paid" class="lbl" style="display:block">Vous donnez maintenant</label>
+              <input id="paid" class="in num" inputmode="numeric" value="{{paidTxt}}" onChange="{{onPaid}}" placeholder="Tapez le montant" style="min-height:60px;font-size:24px">
+              <div style="margin-top:8px;font-weight:700;color:#9A3412">{{partMsg}}</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{showMethod}}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <sc-for list="{{methods}}" as="m" hint-placeholder-count="3">
+                <button type="button" class="chip {{m.cls}}" onClick="{{m.pick}}" style="flex:1 1 110px">{{m.label}}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{showDue}}" hint-placeholder-val="{{ false }}">
+            <div>
+              <div class="lbl">À payer avant</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <sc-for list="{{dues}}" as="d" hint-placeholder-count="3">
+                  <button type="button" class="chip {{d.cls}}" onClick="{{d.pick}}" style="flex:1 1 110px">{{d.label}}</button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+          <button type="button" class="btn" onClick="{{save}}" disabled="{{blocked}}" style="width:100%;min-height:68px;font-size:20px;background:{{cta}};color:#fff">Enregistrer la livraison</button>
+        </section>
+      </div>
+    </sc-if>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      sup: 'sandaga', mode: 'later', paidTxt: '', method: 'cash', due: 15, done: false,
+      lines: [{ id: 'riz', qty: '10', cost: '14000' }, { id: 'huile', qty: '24', cost: '1150' }]
+    };
+  }
+  renderVals() {
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const digits = (v) => String(v).replace(/\D/g, '').slice(0, 9);
+    const cat = {
+      riz: { name: 'Riz brisé 25 kg', stock: '2 sacs', color: '#B45309', cost: '14000' },
+      huile: { name: 'Huile Dinor 1 L', stock: '4 bouteilles', color: '#CA8A04', cost: '1150' },
+      sucre: { name: 'Sucre en morceaux 1 kg', stock: '3 paquets', color: '#0E7490', cost: '700' },
+      laitp: { name: 'Lait en poudre 500 g', stock: 'épuisé', color: '#1D4ED8', cost: '2600' }
+    };
+    const patch = (i, key, v) => { const lines = this.state.lines.map((l, j) => j === i ? Object.assign({}, l, { [key]: digits(v) }) : l); set({ lines: lines }); };
+    const lines = s.lines.map((l, i) => {
+      const c = cat[l.id];
+      const t = (parseInt(l.qty, 10) || 0) * (parseInt(l.cost, 10) || 0);
+      return {
+        id: l.id, name: c.name, stock: c.stock, color: c.color, initial: c.name.charAt(0),
+        qtyTxt: l.qty, costTxt: l.cost, totalTxt: fmt(t) + ' F',
+        onQty: (e) => patch(i, 'qty', e.target.value), onCost: (e) => patch(i, 'cost', e.target.value),
+        remove: () => set({ lines: this.state.lines.filter((_, j) => j !== i) })
+      };
+    });
+    const total = s.lines.reduce((t, l) => t + (parseInt(l.qty, 10) || 0) * (parseInt(l.cost, 10) || 0), 0);
+    const addable = Object.keys(cat).filter((id) => !s.lines.some((l) => l.id === id)).map((id) => ({
+      name: cat[id].name, add: () => set({ lines: this.state.lines.concat([{ id: id, qty: '', cost: cat[id].cost }]) })
+    }));
+    const names = { sandaga: 'Grossiste Sandaga', sendis: 'Sénégal Distribution', boul: 'Boulangerie Mame Diarra' };
+    const suppliers = Object.keys(names).map((id) => ({ label: names[id], cls: s.sup === id ? 'on' : '', pick: () => set({ sup: id }) }));
+    const modes = [['full', 'Tout maintenant'], ['part', 'Une partie'], ['later', 'Plus tard']].map(([id, label]) => ({
+      label: label, cls: s.mode === id ? 'on' : '', pick: () => set({ mode: id, paidTxt: '' })
+    }));
+    const methods = [['cash', 'Espèces'], ['wave', 'Wave'], ['om', 'Orange Money']].map(([id, label]) => ({ label: label, cls: s.method === id ? 'on' : '', pick: () => set({ method: id }) }));
+    const dues = [[7, 'Dans 7 jours'], [15, 'Dans 15 jours'], [30, 'Dans 30 jours']].map(([d, label]) => ({ label: label, cls: s.due === d ? 'on' : '', pick: () => set({ due: d }) }));
+    const paid = parseInt(s.paidTxt, 10) || 0;
+    const partOk = paid > 0 && paid < total;
+    const blocked = total === 0 || (s.mode === 'part' && !partOk);
+    const doneLine = s.mode === 'full' ? 'Payé ' + fmt(total) + ' F à ' + names[s.sup]
+      : 'Vous devez ' + fmt(s.mode === 'part' ? total - paid : total) + ' F à ' + names[s.sup] + ', à payer dans ' + s.due + ' jours';
+    return {
+      suppliers: suppliers, lines: lines, addable: addable, totalTxt: fmt(total), modes: modes, methods: methods, dues: dues,
+      isPart: s.mode === 'part', showMethod: s.mode !== 'later', showDue: s.mode !== 'full',
+      paidTxt: s.paidTxt, onPaid: (e) => set({ paidTxt: digits(e.target.value) }),
+      partMsg: paid === 0 ? 'Tapez ce que vous payez maintenant' : paid >= total ? 'C’est le total : choisissez « Tout maintenant »' : 'Il restera ' + fmt(total - paid) + ' F à payer',
+      blocked: blocked, cta: blocked ? '#E2B79C' : '#C2410C',
+      save: () => { if (!blocked) set({ done: true }); }, done: s.done, editing: !s.done, doneLine: doneLine
+    };
+  }
+}
+</script>
+</body>
+</html>

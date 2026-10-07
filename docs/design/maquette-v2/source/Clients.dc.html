@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Clients et fournisseurs</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#F2ECFC;color:#5530A3}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:56px;padding:0 20px;border-radius:18px;border:0;font:inherit;font-weight:700;font-size:17px;cursor:pointer;text-decoration:none}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+.seg{flex:1 1 200px;min-height:64px;border-radius:18px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:800;font-size:18px;color:#3C4440;cursor:pointer}
+.chip{min-height:48px;padding:0 18px;border-radius:999px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:600;font-size:16px;color:#1E2320;cursor:pointer}
+.chip.on{border-color:#6D3FC8;background:#6D3FC8;color:#fff}
+.chip.onb{border-color:#1F5BD8;background:#1F5BD8;color:#fff}
+.pc{display:flex;align-items:center;gap:14px;padding:16px;border-radius:20px;background:#fff;border:1px solid #ECE6DC;text-decoration:none;color:#1E2320;min-height:88px;box-sizing:border-box}
+.pc:hover{border-color:#B9AFA0;color:#1E2320}
+.av{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;flex:none}
+input.search{width:100%;box-sizing:border-box;min-height:56px;border-radius:16px;border:2px solid #E3DCD0;padding:0 16px 0 48px;font:inherit;font-size:17px;background:#fff;color:#1E2320}
+input.search:focus{outline:3px solid #D5C6F5;border-color:#6D3FC8}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab on" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px">
+      <div>
+        <h1>{{title}}</h1>
+        <div class="muted" style="font-size:18px">{{summary}}</div>
+      </div>
+      <a class="btn" href="Contact.dc.html" style="background:{{accent}};color:#fff;min-height:60px;font-size:19px">
+        <svg class="ico" viewBox="0 0 24 24" style="width:24px;height:24px"><path d="M12 5v14M5 12h14"></path></svg>{{addLabel}}
+      </a>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:12px" role="group" aria-label="Qui afficher">
+      <button type="button" class="seg" onClick="{{showClients}}" aria-pressed="{{isClients}}" style="border-color:{{cBorder}};background:{{cBg}};color:{{cInk}}">Clients (15)</button>
+      <button type="button" class="seg" onClick="{{showSuppliers}}" aria-pressed="{{isSuppliers}}" style="border-color:{{sBorder}};background:{{sBg}};color:{{sInk}}">Fournisseurs (5)</button>
+    </div>
+
+    <div style="position:relative">
+      <svg class="ico" viewBox="0 0 24 24" style="position:absolute;left:16px;top:17px;color:#5B625E"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+      <label for="qc" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Chercher</label>
+      <input id="qc" class="search" type="search" placeholder="Chercher par nom ou téléphone" value="{{q}}" onChange="{{onSearch}}">
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <sc-for list="{{filters}}" as="f" hint-placeholder-count="2">
+        <button type="button" class="chip {{f.cls}}" onClick="{{f.pick}}">{{f.label}}</button>
+      </sc-for>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">
+      <sc-for list="{{people}}" as="p" hint-placeholder-count="8">
+        <a class="pc" href="{{p.href}}">
+          <div class="av" style="background:{{p.avBg}};color:{{p.avInk}}">{{p.initials}}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:17px">{{p.name}}</div>
+            <div class="muted num">{{p.phone}}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="num" style="font-weight:800;font-size:17px;color:{{p.ink}}">{{p.amount}}</div>
+            <div class="muted" style="font-size:15px">{{p.sub}}</div>
+          </div>
+        </a>
+      </sc-for>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { kind: 'c', f: 'all', q: '' };
+  }
+  renderVals() {
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const clients = [
+      ['Moussa Fall', '76 220 15 90', 25000, 'Depuis 12 jours'], ['Aminata Sow', '77 655 90 21', 12000, 'Depuis 8 jours'],
+      ['Mariama Diallo', '77 903 27 58', 7500, 'Depuis 3 jours'], ['Ibrahima Ba', '70 118 62 47', 6000, 'Depuis 6 jours'],
+      ['Awa Diop', '77 412 08 33', 4000, 'Depuis hier'], ['Boutique Ndiaye', '78 301 44 12', 0, 'Venu aujourd’hui'],
+      ['Ousmane Sarr', '76 584 11 06', 0, 'Venu samedi'], ['Fatou Gaye', '77 220 87 14', 0, 'Venue lundi'],
+      ['Cheikh Mbaye', '78 645 02 39', 0, 'Venu il y a 2 semaines'], ['Ndeye Faye', '77 318 55 70', 0, 'Venue jeudi']
+    ];
+    const suppliers = [
+      ['Grossiste Sandaga', '33 821 45 10', 120000, 'Avant le 10 octobre'], ['Sénégal Distribution', '33 864 22 07', 65000, 'Avant le 18 octobre'],
+      ['Boulangerie Mame Diarra', '77 540 19 82', 0, 'Livre chaque matin'], ['Laiterie du Berger', '33 957 30 44', 0, 'Dernière livraison le 1er oct.'],
+      ['Ets Diouf et Frères', '77 609 73 21', 0, 'Dernière livraison en septembre']
+    ];
+    const isC = s.kind === 'c';
+    const accent = isC ? '#6D3FC8' : '#1F5BD8';
+    const q = s.q.trim().toLowerCase().replace(/\s/g, '');
+    const people = (isC ? clients : suppliers)
+      .filter((p) => (s.f === 'all' || p[2] > 0) && (!q || p[0].toLowerCase().replace(/\s/g, '').indexOf(q) >= 0 || p[1].replace(/\s/g, '').indexOf(q) >= 0))
+      .map((p) => ({
+        name: p[0], phone: p[1], sub: p[3],
+        initials: p[0].split(' ').filter(Boolean).slice(0, 2).map((w) => w.charAt(0)).join('').toUpperCase(),
+        amount: p[2] > 0 ? (isC ? 'Doit ' : 'Vous devez ') + fmt(p[2]) + ' F' : (isC ? 'Ne doit rien' : 'Rien à payer'),
+        ink: p[2] > 0 ? (isC ? '#5530A3' : '#1747AE') : '#024A2C',
+        avBg: isC ? '#F2ECFC' : '#EAF1FD', avInk: isC ? '#5530A3' : '#1747AE',
+        href: isC ? 'ClientFiche.dc.html' : 'FournisseurFiche.dc.html'
+      }));
+    return {
+      accent: accent, title: isC ? 'Clients' : 'Fournisseurs',
+      summary: isC ? '5 clients vous doivent 54 500 F au total' : 'Vous devez 185 000 F à 2 fournisseurs',
+      addLabel: isC ? 'Nouveau client' : 'Nouveau fournisseur',
+      isClients: isC, isSuppliers: !isC,
+      cBorder: isC ? '#6D3FC8' : '#E3DCD0', cBg: isC ? '#F2ECFC' : '#fff', cInk: isC ? '#5530A3' : '#3C4440',
+      sBorder: !isC ? '#1F5BD8' : '#E3DCD0', sBg: !isC ? '#EAF1FD' : '#fff', sInk: !isC ? '#1747AE' : '#3C4440',
+      showClients: () => set({ kind: 'c', f: 'all' }), showSuppliers: () => set({ kind: 's', f: 'all' }),
+      q: s.q, onSearch: (e) => set({ q: e.target.value }),
+      filters: [['all', 'Tous'], ['owe', isC ? 'Qui me doivent' : 'À qui je dois']].map(([id, label]) => ({ label: label, cls: s.f === id ? (isC ? 'on' : 'onb') : '', pick: () => set({ f: id }) })),
+      people: people
+    };
+  }
+}
+</script>
+</body>
+</html>

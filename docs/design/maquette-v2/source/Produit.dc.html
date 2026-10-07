@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Nouvel article</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#FFF0E3;color:#9A3412}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:820px;margin:0 auto;padding:24px;box-sizing:border-box}
+.card{background:#fff;border-radius:22px;border:1px solid #ECE6DC;padding:24px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:56px;padding:0 22px;border-radius:18px;border:0;font:inherit;font-weight:700;font-size:18px;cursor:pointer;text-decoration:none}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+.lbl{display:block;font-weight:700;font-size:17px;margin-bottom:8px}
+.in{width:100%;box-sizing:border-box;min-height:58px;border-radius:16px;border:2px solid #E3DCD0;padding:0 16px;font:inherit;font-size:19px;background:#fff;color:#1E2320}
+.in:focus{outline:3px solid #FCC9A3;border-color:#C2410C}
+.chip{min-height:50px;padding:0 18px;border-radius:999px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:600;font-size:16px;color:#1E2320;cursor:pointer}
+.chip.on{border-color:#C2410C;background:#FFF0E3;color:#9A3412}
+.step{width:56px;height:56px;border-radius:16px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-size:26px;font-weight:700;cursor:pointer;color:#1E2320}
+input.qty{width:100px;height:56px;box-sizing:border-box;border-radius:16px;border:2px solid #E3DCD0;text-align:center;font:inherit;font-size:26px;font-weight:800;background:#fff;color:#1E2320}
+input.qty:focus{outline:3px solid #FCC9A3;border-color:#C2410C}
+.ghost{display:flex;align-items:center;justify-content:center;gap:10px;min-height:120px;flex:1 1 200px;border-radius:18px;border:2px dashed #D8CFC1;background:#FBF8F3;font:inherit;font-weight:700;font-size:17px;color:#3C4440;cursor:pointer;flex-direction:column}
+.ghost:hover{border-color:#C2410C;color:#9A3412}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab on" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="display:flex;flex-direction:column;gap:20px">
+    <a href="Stock.dc.html" style="display:inline-flex;align-items:center;gap:8px;font-weight:700;text-decoration:none;min-height:44px">
+      <svg class="ico" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg>Retour au stock
+    </a>
+    <h1>Nouvel article</h1>
+
+    <sc-if value="{{saved}}" hint-placeholder-val="{{ false }}">
+      <div class="card" style="display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;padding:40px 24px">
+        <div style="width:80px;height:80px;border-radius:50%;background:#C2410C;color:#fff;display:flex;align-items:center;justify-content:center">
+          <svg class="ico" viewBox="0 0 24 24" style="width:44px;height:44px;stroke-width:2.5"><path d="M4 12.5 9.5 18 20 6"></path></svg>
+        </div>
+        <h1 style="font-size:28px">{{name}} est ajouté</h1>
+        <div class="muted" style="font-size:18px">{{qty}} {{unitLower}} en stock · vendu {{saleTxt}} F</div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:10px">
+          <button type="button" class="btn" onClick="{{again}}" style="background:#C2410C;color:#fff">Ajouter un autre article</button>
+          <a class="btn" href="Vente.dc.html" style="background:#fff;color:#1E2320;border:2px solid #E3DCD0">Aller vendre</a>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{editing}}" hint-placeholder-val="{{ true }}">
+      <form class="card" style="display:flex;flex-direction:column;gap:24px">
+        <div style="display:flex;flex-wrap:wrap;gap:12px">
+          <button type="button" class="ghost">
+            <svg class="ico" viewBox="0 0 24 24" style="width:30px;height:30px"><path d="M4 8h3l2-3h6l2 3h3v12H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>
+            Prendre une photo
+          </button>
+          <button type="button" class="ghost">
+            <svg class="ico" viewBox="0 0 24 24" style="width:30px;height:30px"><path d="M4 5v14M7 5v14M11 5v14M14 5v14M18 5v14M20 5v14"></path></svg>
+            Scanner le code-barres
+          </button>
+        </div>
+
+        <div>
+          <label class="lbl" for="pname">Nom de l'article</label>
+          <input id="pname" class="in" value="{{name}}" onChange="{{onName}}" placeholder="Ex. Riz brisé 25 kg">
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:16px">
+          <div style="flex:1 1 220px">
+            <label class="lbl" for="psale">Prix de vente (F)</label>
+            <input id="psale" class="in num" inputmode="numeric" value="{{sale}}" onChange="{{onSale}}">
+          </div>
+          <div style="flex:1 1 220px">
+            <label class="lbl" for="pbuy">Prix d'achat (F)</label>
+            <input id="pbuy" class="in num" inputmode="numeric" value="{{buy}}" onChange="{{onBuy}}">
+          </div>
+        </div>
+        <div style="padding:14px 18px;border-radius:16px;font-weight:700;font-size:18px;background:{{gainBg}};color:{{gainInk}}">{{gainTxt}}</div>
+
+        <div>
+          <span class="lbl">Vendu par</span>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{units}}" as="u" hint-placeholder-count="7">
+              <button type="button" class="chip {{u.cls}}" onClick="{{u.pick}}">{{u.label}}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div>
+          <span class="lbl">Rayon</span>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{cats}}" as="c" hint-placeholder-count="5">
+              <button type="button" class="chip {{c.cls}}" onClick="{{c.pick}}">{{c.label}}</button>
+            </sc-for>
+            <button type="button" class="chip" style="border-style:dashed">+ Nouveau rayon</button>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:24px">
+          <div style="flex:1 1 260px">
+            <span class="lbl">Combien en avez-vous ?</span>
+            <div style="display:flex;align-items:center;gap:12px">
+              <button type="button" class="step" onClick="{{qtyDown}}" aria-label="Un de moins">−</button>
+              <input class="qty num" inputmode="numeric" value="{{qtyField}}" onChange="{{onQty}}" aria-label="Quantité en stock">
+              <button type="button" class="step" onClick="{{qtyUp}}" aria-label="Un de plus">+</button>
+            </div>
+          </div>
+          <div style="flex:1 1 260px">
+            <span class="lbl">Me prévenir quand il en reste</span>
+            <div style="display:flex;align-items:center;gap:12px">
+              <button type="button" class="step" onClick="{{alertDown}}" aria-label="Un de moins">−</button>
+              <input class="qty num" inputmode="numeric" value="{{alertField}}" onChange="{{onAlert}}" aria-label="Seuil d’alerte">
+              <button type="button" class="step" onClick="{{alertUp}}" aria-label="Un de plus">+</button>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" class="btn" onClick="{{save}}" style="width:100%;min-height:68px;font-size:21px;background:#C2410C;color:#fff">
+          <svg class="ico" viewBox="0 0 24 24" style="width:26px;height:26px"><path d="M4 12.5 9.5 18 20 6"></path></svg>Enregistrer l'article
+        </button>
+      </form>
+    </sc-if>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { name: 'Riz brisé 25 kg', sale: '15500', buy: '14000', unit: 'Sac', cat: 'Céréales', qty: 10, alert: 3, saved: false };
+  }
+  renderVals() {
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const sale = parseInt(String(s.sale).replace(/\D/g, ''), 10) || 0;
+    const buy = parseInt(String(s.buy).replace(/\D/g, ''), 10) || 0;
+    const gain = sale - buy;
+    const gainTxt = sale && buy
+      ? (gain > 0 ? 'Vous gagnez ' + fmt(gain) + ' F sur chaque ' + s.unit.toLowerCase()
+        : gain === 0 ? 'Vous ne gagnez rien sur cet article' : 'Attention : vous perdez ' + fmt(-gain) + ' F à chaque vente')
+      : 'Indiquez les deux prix pour voir ce que vous gagnez';
+    const good = sale && buy && gain > 0;
+    const units = ['Pièce', 'Sac', 'Kg', 'Litre', 'Carton', 'Paquet', 'Bouteille'].map((u) => ({
+      label: u, cls: s.unit === u ? 'on' : '', pick: () => set({ unit: u })
+    }));
+    const cats = ['Céréales', 'Huiles', 'Boissons', 'Hygiène', 'Épicerie'].map((c) => ({
+      label: c, cls: s.cat === c ? 'on' : '', pick: () => set({ cat: c })
+    }));
+    return {
+      name: s.name, sale: s.sale, buy: s.buy, qty: s.qty, alert: s.alert,
+      qtyField: s.qty === 0 ? '' : s.qty, alertField: s.alert === 0 ? '' : s.alert,
+      onQty: (e) => { const n = parseInt(String(e.target.value).replace(/\D/g, ''), 10); set({ qty: isNaN(n) ? 0 : Math.min(n, 99999) }); },
+      onAlert: (e) => { const n = parseInt(String(e.target.value).replace(/\D/g, ''), 10); set({ alert: isNaN(n) ? 0 : Math.min(n, 99999) }); },
+      saleTxt: fmt(sale), unitLower: s.unit.toLowerCase() + (s.qty > 1 && s.unit !== 'Kg' ? 's' : ''),
+      gainTxt: gainTxt, gainBg: good ? '#E6F4EC' : '#FFF0E3', gainInk: good ? '#024A2C' : '#9A3412',
+      units: units, cats: cats,
+      onName: (e) => set({ name: e.target.value }),
+      onSale: (e) => set({ sale: e.target.value }),
+      onBuy: (e) => set({ buy: e.target.value }),
+      qtyUp: () => set({ qty: s.qty + 1 }), qtyDown: () => set({ qty: Math.max(0, s.qty - 1) }),
+      alertUp: () => set({ alert: s.alert + 1 }), alertDown: () => set({ alert: Math.max(0, s.alert - 1) }),
+      save: () => set({ saved: true }), saved: s.saved, editing: !s.saved,
+      again: () => set({ name: '', sale: '', buy: '', qty: 0, alert: 3, saved: false })
+    };
+  }
+}
+</script>
+</body>
+</html>

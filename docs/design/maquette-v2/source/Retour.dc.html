@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Retour d'articles</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#E6F4EC;color:#024A2C}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box}
+.card{background:#fff;border-radius:22px;border:1px solid #ECE6DC;padding:22px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:56px;padding:0 20px;border-radius:18px;border:0;font:inherit;font-weight:700;font-size:17px;cursor:pointer;text-decoration:none}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+.lbl{font-weight:700;font-size:17px;margin-bottom:10px}
+.line{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:14px 0;border-top:1px solid #F0EBE2}
+.sq{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;flex:none}
+.step{width:52px;height:52px;border-radius:14px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-size:24px;font-weight:700;cursor:pointer;color:#1E2320}
+input.qty{width:72px;height:52px;box-sizing:border-box;border-radius:14px;border:2px solid #E3DCD0;text-align:center;font:inherit;font-size:22px;font-weight:800;background:#fff;color:#1E2320}
+input.amount{width:100%;box-sizing:border-box;min-height:64px;border-radius:16px;border:2px solid #E3DCD0;padding:0 48px 0 18px;font:inherit;font-size:28px;font-weight:800;background:#fff;color:#1E2320}
+input.qty:focus,input.amount:focus{outline:3px solid #A9C4F2;border-color:#1F5BD8}
+.chip{min-height:52px;padding:0 18px;border-radius:999px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:16px;color:#1E2320;cursor:pointer}
+.chip.on{border-color:#1F5BD8;background:#EAF1FD;color:#1747AE}
+.opt{display:flex;align-items:center;gap:12px;text-align:left;min-height:76px;flex:1 1 230px;padding:12px 16px;border-radius:18px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:17px;color:#1E2320;cursor:pointer}
+.opt.on{border-color:#1F5BD8;background:#EAF1FD;color:#1747AE}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab on" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="display:flex;flex-direction:column;gap:20px">
+    <a href="VenteDetail.dc.html" style="display:inline-flex;align-items:center;gap:8px;font-weight:700;text-decoration:none;min-height:44px;align-self:flex-start">
+      <svg class="ico" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg>Vente n° 1044
+    </a>
+    <div>
+      <h1>Retour d'articles</h1>
+      <div class="muted" style="font-size:18px">Moussa Fall · vente d'aujourd'hui, 9 h 58</div>
+    </div>
+
+    <sc-if value="{{done}}" hint-placeholder-val="{{ false }}">
+      <div class="card" style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:36px 24px">
+        <div style="width:80px;height:80px;border-radius:50%;background:#1F5BD8;color:#fff;display:flex;align-items:center;justify-content:center">
+          <svg class="ico" viewBox="0 0 24 24" style="width:44px;height:44px;stroke-width:2.5"><path d="M4 12.5 9.5 18 20 6"></path></svg>
+        </div>
+        <h1 style="font-size:26px">Retour enregistré</h1>
+        <div style="font-size:18px;font-weight:600">{{doneLine}}</div>
+        <div class="muted" style="font-size:17px">Les articles rendus sont remis dans le stock.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:8px">
+          <a class="btn" href="Recu.dc.html" style="background:#1F5BD8;color:#fff">Imprimer le bon de retour</a>
+          <a class="btn" href="Ventes.dc.html" style="background:#fff;color:#1E2320;border:2px solid #E3DCD0">Retour aux ventes</a>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{editing}}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+        <section class="card" style="flex:3 1 480px;min-width:0">
+          <div class="lbl">Qu'est-ce qu'il rend ?</div>
+          <sc-for list="{{lines}}" as="l" hint-placeholder-count="3">
+            <div class="line">
+              <div class="sq" style="background:{{l.color}}">{{l.initial}}</div>
+              <div style="flex:1 1 160px;min-width:0">
+                <div style="font-weight:700">{{l.name}}</div>
+                <div class="muted num">Acheté : {{l.sold}} · {{l.priceTxt}} F l'unité</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <button type="button" class="step" onClick="{{l.dec}}" aria-label="Un de moins">−</button>
+                <input class="qty num" inputmode="numeric" value="{{l.field}}" onChange="{{l.set}}" aria-label="Quantité rendue de {{l.name}}">
+                <button type="button" class="step" onClick="{{l.inc}}" aria-label="Un de plus">+</button>
+              </div>
+            </div>
+          </sc-for>
+          <div class="lbl" style="margin-top:18px">Pourquoi ?</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{reasons}}" as="r" hint-placeholder-count="4">
+              <button type="button" class="chip {{r.cls}}" onClick="{{r.pick}}">{{r.label}}</button>
+            </sc-for>
+          </div>
+        </section>
+
+        <section class="card" style="flex:2 1 360px;min-width:0;display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:14px 16px;border-radius:16px;background:#EAF1FD">
+            <span style="font-weight:700;font-size:18px">Valeur rendue</span>
+            <span class="num" style="font-weight:800;font-size:30px;color:#1747AE">{{valueTxt}} F</span>
+          </div>
+          <div class="lbl" style="margin:0">Que fait-on de cet argent ?</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <sc-for list="{{ways}}" as="w" hint-placeholder-count="3">
+              <button type="button" class="opt {{w.cls}}" onClick="{{w.pick}}">
+                <span style="flex:1">{{w.label}}<span style="display:block;font-weight:500;font-size:15px;color:#5B625E">{{w.sub}}</span></span>
+              </button>
+            </sc-for>
+          </div>
+          <sc-if value="{{cash}}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <label for="ref" style="font-weight:700;font-size:17px">Combien vous lui rendez ?</label>
+              <div style="position:relative">
+                <input id="ref" class="amount num" inputmode="numeric" value="{{refundTxt}}" onChange="{{onRefund}}" placeholder="Tapez le montant">
+                <span style="position:absolute;right:18px;top:50%;transform:translateY(-50%);font-weight:800;font-size:22px;color:#5B625E">F</span>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <sc-for list="{{methods}}" as="m" hint-placeholder-count="3">
+                  <button type="button" class="chip {{m.cls}}" onClick="{{m.pick}}" style="flex:1 1 110px">{{m.label}}</button>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{hasMsg}}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 16px;border-radius:16px;background:#FFF0E3;color:#9A3412;font-weight:700">{{msg}}</div>
+          </sc-if>
+          <button type="button" class="btn" onClick="{{save}}" disabled="{{blocked}}" style="width:100%;min-height:68px;font-size:20px;background:{{cta}};color:#fff">Enregistrer le retour</button>
+        </section>
+      </div>
+    </sc-if>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { q: { riz: 0, huile: 2, bougie: 0 }, why: 'broken', way: 'debt', refundTxt: '', method: 'cash', done: false };
+  }
+  renderVals() {
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const items = [
+      { id: 'riz', name: 'Riz brisé 25 kg', sold: 1, price: 15500, color: '#B45309' },
+      { id: 'huile', name: 'Huile Dinor 1 L', sold: 5, price: 1400, color: '#CA8A04' },
+      { id: 'bougie', name: 'Bougies (paquet)', sold: 5, price: 500, color: '#4D7C0F' }
+    ];
+    const put = (id, n) => { const q = Object.assign({}, this.state.q); q[id] = n; set({ q: q }); };
+    const lines = items.map((it) => {
+      const n = s.q[it.id];
+      return {
+        name: it.name, sold: it.sold, priceTxt: fmt(it.price), color: it.color, initial: it.name.charAt(0),
+        field: n === 0 ? '' : n,
+        inc: () => put(it.id, Math.min(it.sold, n + 1)), dec: () => put(it.id, Math.max(0, n - 1)),
+        set: (e) => { const v = parseInt(String(e.target.value).replace(/\D/g, ''), 10); put(it.id, isNaN(v) ? 0 : Math.min(v, it.sold)); }
+      };
+    });
+    const value = items.reduce((t, it) => t + it.price * s.q[it.id], 0);
+    const reasons = [['broken', 'Abîmé'], ['wrong', 'Pas le bon article'], ['mind', 'Il a changé d’avis'], ['expired', 'Périmé'], ['other', 'Autre']].map(([id, label]) => ({
+      label: label, cls: s.why === id ? 'on' : '', pick: () => set({ why: id })
+    }));
+    const ways = [
+      ['debt', 'Déduire de ce qu’il doit', 'Il doit 10 000 F : sa dette baisse'],
+      ['cash', 'Lui rendre de l’argent', 'Espèces, Wave ou Orange Money'],
+      ['later', 'Plus tard', 'Vous lui devez ce montant']
+    ].map(([id, label, sub]) => ({ label: label, sub: sub, cls: s.way === id ? 'on' : '', pick: () => set({ way: id, refundTxt: '' }) }));
+    const methods = [['cash', 'Espèces'], ['wave', 'Wave'], ['om', 'Orange Money']].map(([id, label]) => ({
+      label: label, cls: s.method === id ? 'on' : '', pick: () => set({ method: id })
+    }));
+    const refund = s.refundTxt === '' ? value : parseInt(s.refundTxt, 10) || 0;
+    let msg = '';
+    if (value === 0) msg = 'Indiquez au moins un article rendu';
+    else if (s.way === 'cash' && refund > value) msg = 'Vous ne pouvez pas rendre plus que ' + fmt(value) + ' F';
+    else if (s.way === 'debt' && value > 10000) msg = 'Sa dette tombe à 0 ; il restera ' + fmt(value - 10000) + ' F à lui rendre';
+    const blocked = value === 0 || (s.way === 'cash' && (refund <= 0 || refund > value));
+    const doneLine = s.way === 'debt' ? 'Moussa Fall doit maintenant ' + fmt(Math.max(0, 10000 - value)) + ' F'
+      : s.way === 'cash' ? fmt(refund) + ' F rendus à Moussa Fall' : 'Vous devez ' + fmt(value) + ' F à Moussa Fall';
+    return {
+      lines: lines, reasons: reasons, ways: ways, methods: methods, valueTxt: fmt(value),
+      cash: s.way === 'cash', refundTxt: s.refundTxt === '' ? String(value || '') : s.refundTxt,
+      onRefund: (e) => set({ refundTxt: String(e.target.value).replace(/\D/g, '').slice(0, 9) }),
+      hasMsg: Boolean(msg), msg: msg, blocked: blocked, cta: blocked ? '#A9BDE6' : '#1F5BD8',
+      save: () => { if (!blocked) set({ done: true }); }, done: s.done, editing: !s.done, doneLine: doneLine
+    };
+  }
+}
+</script>
+</body>
+</html>

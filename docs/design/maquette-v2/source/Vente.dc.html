@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Nouvelle vente</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#E6F4EC;color:#024A2C}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1240px;margin:0 auto;padding:24px;box-sizing:border-box}
+.card{background:#fff;border-radius:22px;border:1px solid #ECE6DC;padding:20px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:56px;padding:0 22px;border-radius:18px;border:0;font:inherit;font-weight:700;font-size:18px;cursor:pointer;text-decoration:none}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+h2{font-size:20px;margin:0;font-weight:700}
+.chip{min-height:48px;padding:0 18px;border-radius:999px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:600;font-size:16px;color:#1E2320;cursor:pointer}
+.chip.on{border-color:#117A3C;background:#E6F4EC;color:#024A2C}
+.prod{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:14px;border-radius:18px;border:2px solid #ECE6DC;background:#fff;font:inherit;color:#1E2320;cursor:pointer;text-align:left;min-height:150px}
+.prod:hover{border-color:#117A3C}
+.sq{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;color:#fff}
+.step{width:48px;height:48px;border-radius:14px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-size:22px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#1E2320}
+.big{flex:1 1 140px;min-height:64px;border-radius:18px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:17px;cursor:pointer;color:#1E2320;padding:8px 12px}
+.big.on{border-color:#117A3C;background:#117A3C;color:#fff}
+.cust{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:8px 12px;border-radius:16px;border:2px solid transparent;background:#fff;font:inherit;color:#1E2320;cursor:pointer;text-align:left}
+.cust:hover{background:#F6F2EB}
+.cust.on{border-color:#6D3FC8;background:#F2ECFC}
+.av{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+input.field{width:100%;box-sizing:border-box;min-height:56px;border-radius:16px;border:2px solid #E3DCD0;padding:0 16px 0 48px;font:inherit;font-size:17px;background:#fff;color:#1E2320}
+input.field:focus{outline:3px solid #9BD3B6;border-color:#117A3C}
+input.amount{width:100%;box-sizing:border-box;min-height:64px;border-radius:16px;border:2px solid #E3DCD0;padding:0 48px 0 18px;font:inherit;font-size:28px;font-weight:800;background:#fff;color:#1E2320}
+input.amount:focus,input.qty:focus{outline:3px solid #9BD3B6;border-color:#117A3C}
+input.qty{width:56px;height:48px;box-sizing:border-box;border-radius:12px;border:2px solid #E3DCD0;text-align:center;font:inherit;font-weight:800;font-size:19px;background:#fff;color:#1E2320}
+.key{min-height:56px;border-radius:14px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-size:22px;font-weight:700;color:#1E2320;cursor:pointer}
+.key:active{background:#E6F4EC}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab on" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <sc-if value="{{done}}" hint-placeholder-val="{{ false }}">
+    <main class="wrap" style="display:flex;justify-content:center;padding-top:64px">
+      <div class="card" style="max-width:520px;width:100%;text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px 28px">
+        <div style="width:88px;height:88px;border-radius:50%;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center">
+          <svg class="ico" viewBox="0 0 24 24" style="width:48px;height:48px;stroke-width:2.5"><path d="M4 12.5 9.5 18 20 6"></path></svg>
+        </div>
+        <h1>Vente enregistrée</h1>
+        <div class="num" style="font-size:40px;font-weight:800">{{totalTxt}} F</div>
+        <div class="muted" style="font-size:18px">{{doneLine}}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:12px;width:100%">
+          <button class="btn" type="button" onClick="{{reset}}" style="background:#117A3C;color:#fff;flex:1 1 200px">Nouvelle vente</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:center;width:100%">
+          <a class="btn" href="Recu.dc.html" style="background:#fff;color:#1E2320;border:2px solid #E3DCD0;flex:1 1 200px">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"></path></svg>Imprimer le reçu
+          </a>
+          <a class="btn" href="Recu.dc.html" style="background:#fff;color:#1E2320;border:2px solid #E3DCD0;flex:1 1 200px">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"></path></svg>Envoyer par WhatsApp
+          </a>
+        </div>
+        <a href="Main.dc.html" style="font-weight:700;font-size:17px;margin-top:6px">Voir l'accueil (déjà à jour)</a>
+      </div>
+    </main>
+  </sc-if>
+
+  <sc-if value="{{editing}}" hint-placeholder-val="{{ true }}">
+    <main class="wrap" style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+      <section style="flex:3 1 560px;min-width:0;display:flex;flex-direction:column;gap:16px">
+        <h1>Nouvelle vente</h1>
+        <div style="position:relative">
+          <svg class="ico" viewBox="0 0 24 24" style="position:absolute;left:16px;top:17px;color:#5B625E"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+          <label for="q" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Chercher un article</label>
+          <input id="q" class="field" type="search" placeholder="Chercher un article ou scanner son code" value="{{q}}" onChange="{{onSearch}}">
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <sc-for list="{{cats}}" as="c" hint-placeholder-count="6">
+            <button type="button" class="chip {{c.cls}}" onClick="{{c.pick}}">{{c.label}}</button>
+          </sc-for>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px">
+          <sc-for list="{{products}}" as="p" hint-placeholder-count="12">
+            <button type="button" class="prod" onClick="{{p.add}}" aria-label="Ajouter {{p.name}}">
+              <div class="sq" style="background:{{p.color}}">{{p.initial}}</div>
+              <div style="font-weight:700;font-size:16px;line-height:1.25">{{p.name}}</div>
+              <div class="num" style="font-weight:800;font-size:18px">{{p.priceTxt}} F</div>
+              <div style="font-size:15px;font-weight:600;color:{{p.stockInk}}">{{p.stockTxt}}</div>
+              <sc-if value="{{p.inCart}}" hint-placeholder-val="{{ false }}">
+                <div class="num" style="position:absolute;top:10px;right:10px;min-width:32px;height:32px;border-radius:999px;background:#117A3C;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 6px">{{p.qty}}</div>
+              </sc-if>
+            </button>
+          </sc-for>
+        </div>
+      </section>
+
+      <aside class="card" style="flex:2 1 360px;min-width:0;display:flex;flex-direction:column;gap:18px">
+        <div>
+          <div style="font-weight:700;font-size:17px;margin-bottom:8px">Client</div>
+          <button type="button" class="cust on" onClick="{{toggleCustomers}}">
+            <div class="av" style="background:#6D3FC8;color:#fff">{{customer.initials}}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700">{{customer.name}}</div>
+              <div class="muted">{{customer.sub}}</div>
+            </div>
+            <span style="font-weight:700;color:#5530A3">Changer</span>
+          </button>
+          <sc-if value="{{showCustomers}}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:8px;border:2px solid #ECE6DC;border-radius:18px;padding:8px;display:flex;flex-direction:column;gap:2px">
+              <sc-for list="{{customers}}" as="c" hint-placeholder-count="8">
+                <button type="button" class="cust" onClick="{{c.pick}}">
+                  <div class="av" style="background:{{c.avBg}};color:{{c.avInk}}">{{c.initials}}</div>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-weight:700">{{c.name}}</div>
+                    <div class="muted num">{{c.sub}}</div>
+                  </div>
+                  <sc-if value="{{c.owes}}" hint-placeholder-val="{{ false }}">
+                    <span style="font-weight:700;color:#9A3412;font-size:15px;white-space:nowrap">Doit {{c.debt}} F</span>
+                  </sc-if>
+                </button>
+              </sc-for>
+              <a href="Contact.dc.html" style="display:flex;align-items:center;gap:10px;min-height:56px;padding:0 12px;font-weight:700;text-decoration:none">
+                <svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>Nouveau client
+              </a>
+            </div>
+          </sc-if>
+        </div>
+
+        <div>
+          <div style="font-weight:700;font-size:17px;margin-bottom:4px">Panier</div>
+          <sc-if value="{{empty}}" hint-placeholder-val="{{ false }}">
+            <div class="muted" style="padding:28px 8px;text-align:center;font-size:17px;border:2px dashed #E3DCD0;border-radius:18px">Touchez un article pour l'ajouter</div>
+          </sc-if>
+          <sc-for list="{{lines}}" as="l" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:10px;padding:12px 0 4px;border-top:1px solid #F0EBE2">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:700">{{l.name}}</div>
+                <div class="muted num">{{l.priceTxt}} F l'unité</div>
+              </div>
+              <button type="button" class="step" onClick="{{l.dec}}" aria-label="Enlever un {{l.name}}">−</button>
+              <input class="qty num" inputmode="numeric" value="{{l.qty}}" onChange="{{l.set}}" aria-label="Quantité de {{l.name}}">
+              <button type="button" class="step" onClick="{{l.inc}}" aria-label="Ajouter un {{l.name}}">+</button>
+              <div class="num" style="width:92px;text-align:right;font-weight:800">{{l.totalTxt}}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:0 0 10px;flex-wrap:wrap">
+              <button type="button" onClick="{{l.toggleDisc}}" style="min-height:44px;padding:0 4px;border:0;background:none;font:inherit;font-weight:700;color:#024A2C;cursor:pointer">{{l.discLabel}}</button>
+              <sc-if value="{{l.discOpen}}" hint-placeholder-val="{{ false }}">
+                <label style="display:flex;align-items:center;gap:8px;font-weight:600">Remise
+                  <input class="qty num" inputmode="numeric" value="{{l.discTxt}}" onChange="{{l.onDisc}}" aria-label="Remise sur {{l.name}} en francs" style="width:110px">F</label>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:16px 18px;border-radius:18px;background:#E6F4EC">
+          <span style="font-weight:700;font-size:20px">Total</span>
+          <span class="num" style="font-weight:800;font-size:36px;color:#024A2C">{{totalTxt}} F</span>
+        </div>
+
+        <div>
+          <div style="font-weight:700;font-size:17px;margin-bottom:8px">Le client paie</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{modes}}" as="m" hint-placeholder-count="3">
+              <button type="button" class="big {{m.cls}}" onClick="{{m.pick}}">{{m.label}}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <sc-if value="{{showMethod}}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <sc-for list="{{methods}}" as="m" hint-placeholder-count="3">
+              <button type="button" class="chip {{m.cls}}" onClick="{{m.pick}}" style="flex:1 1 110px">{{m.label}}</button>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{showChange}}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="font-weight:700;font-size:17px;margin-bottom:8px">Le client donne</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <sc-for list="{{bills}}" as="b" hint-placeholder-count="4">
+                <button type="button" class="chip num {{b.cls}}" onClick="{{b.pick}}" style="flex:1 1 90px">{{b.label}}</button>
+              </sc-for>
+            </div>
+            <div style="position:relative;margin-top:8px">
+              <label for="given" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Autre montant donné</label>
+              <input id="given" class="amount num" inputmode="numeric" value="{{givenTxt}}" onChange="{{onGiven}}" placeholder="Autre montant" style="min-height:56px;font-size:20px">
+              <span style="position:absolute;right:18px;top:50%;transform:translateY(-50%);font-weight:800;font-size:20px;color:#5B625E">F</span>
+            </div>
+            <sc-if value="{{hasChange}}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:baseline;padding:12px 16px;border-radius:16px;background:#EAF1FD">
+                <span style="font-weight:700">À rendre</span><span class="num" style="font-weight:800;font-size:26px;color:#1747AE">{{changeTxt}} F</span>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{showPart}}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <label for="part" style="font-weight:700;font-size:17px">Il donne maintenant</label>
+            <div style="position:relative">
+              <input id="part" class="amount num" inputmode="numeric" value="{{partTxt}}" onChange="{{onPart}}" placeholder="Tapez le montant">
+              <span style="position:absolute;right:18px;top:50%;transform:translateY(-50%);font-weight:800;font-size:22px;color:#5B625E">F</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <sc-for list="{{parts}}" as="b" hint-placeholder-count="2">
+                <button type="button" class="chip num {{b.cls}}" onClick="{{b.pick}}" style="flex:1 1 100px">{{b.label}}</button>
+              </sc-for>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+              <sc-for list="{{partKeys}}" as="k" hint-placeholder-count="12">
+                <button type="button" class="key" onClick="{{k.press}}" aria-label="{{k.aria}}">{{k.label}}</button>
+              </sc-for>
+            </div>
+            <div style="padding:12px 16px;border-radius:16px;font-weight:700;background:{{partBg}};color:{{partInk}}">{{partMsg}}</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{needCustomer}}" hint-placeholder-val="{{ false }}">
+          <div style="padding:12px 16px;border-radius:16px;background:#FFF0E3;color:#9A3412;font-weight:700">Choisissez le client pour lui faire crédit</div>
+        </sc-if>
+
+        <button type="button" class="btn" onClick="{{confirm}}" disabled="{{blocked}}" style="width:100%;min-height:68px;font-size:21px;background:{{cta}};color:#fff">
+          <svg class="ico" viewBox="0 0 24 24" style="width:26px;height:26px"><path d="M4 12.5 9.5 18 20 6"></path></svg>{{ctaLabel}}
+        </button>
+      </aside>
+    </main>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { cart: { riz: 1, huile: 2, sucre: 3 }, cat: 'Tout', q: '', cust: 'passage', showCustomers: false, mode: 'full', method: 'cash', given: 0, givenTxt: '', partTxt: '', done: false };
+  }
+  renderVals() {
+    const s = this.state;
+    const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const catalog = [
+      { id: 'riz', name: 'Riz brisé 25 kg', price: 15500, stock: 2, unit: 'sacs', cat: 'Céréales', color: '#B45309' },
+      { id: 'huile', name: 'Huile Dinor 1 L', price: 1400, stock: 4, unit: 'bouteilles', cat: 'Huiles', color: '#CA8A04' },
+      { id: 'sucre', name: 'Sucre en morceaux 1 kg', price: 900, stock: 3, unit: 'paquets', cat: 'Épicerie', color: '#0E7490' },
+      { id: 'lait', name: 'Lait Vitalait 400 g', price: 2600, stock: 18, unit: 'boîtes', cat: 'Épicerie', color: '#1F5BD8' },
+      { id: 'cafe', name: 'Café Touba 250 g', price: 1000, stock: 25, unit: 'sachets', cat: 'Boissons', color: '#7C2D12' },
+      { id: 'savon', name: 'Savon Madar', price: 300, stock: 60, unit: 'pièces', cat: 'Hygiène', color: '#6D3FC8' },
+      { id: 'oignon', name: 'Oignons 1 kg', price: 600, stock: 40, unit: 'kg', cat: 'Épicerie', color: '#BE185D' },
+      { id: 'the', name: 'Thé Lipton 25 sachets', price: 1250, stock: 14, unit: 'boîtes', cat: 'Boissons', color: '#B91C1C' },
+      { id: 'pates', name: 'Pâtes 500 g', price: 650, stock: 32, unit: 'paquets', cat: 'Céréales', color: '#A16207' },
+      { id: 'tomate', name: 'Tomate concentrée 400 g', price: 1100, stock: 22, unit: 'boîtes', cat: 'Épicerie', color: '#C2410C' },
+      { id: 'eau', name: 'Eau Kirène 1,5 L', price: 400, stock: 48, unit: 'bouteilles', cat: 'Boissons', color: '#0369A1' },
+      { id: 'bougie', name: 'Bougies (paquet)', price: 500, stock: 12, unit: 'paquets', cat: 'Épicerie', color: '#4D7C0F' }
+    ];
+    const set = (patch) => this.setState(patch);
+    const cartOf = (id, delta) => {
+      const c = Object.assign({}, this.state.cart);
+      c[id] = Math.max(0, (c[id] || 0) + delta);
+      if (c[id] === 0) delete c[id];
+      return c;
+    };
+    const cats = ['Tout', 'Céréales', 'Huiles', 'Boissons', 'Hygiène', 'Épicerie'].map((label) => ({
+      label: label, cls: s.cat === label ? 'on' : '', pick: () => set({ cat: label })
+    }));
+    const q = s.q.trim().toLowerCase();
+    const products = catalog
+      .filter((p) => (s.cat === 'Tout' || p.cat === s.cat) && (!q || p.name.toLowerCase().indexOf(q) >= 0))
+      .map((p) => ({
+        name: p.name, initial: p.name.charAt(0), color: p.color, priceTxt: fmt(p.price),
+        stockTxt: p.stock <= 5 ? 'Plus que ' + p.stock + ' ' + p.unit : p.stock + ' ' + p.unit + ' en stock',
+        stockInk: p.stock <= 5 ? '#9A3412' : '#5B625E',
+        qty: s.cart[p.id] || 0, inCart: Boolean(s.cart[p.id]),
+        add: () => set({ cart: cartOf(p.id, 1) })
+      }));
+    const lines = catalog.filter((p) => s.cart[p.id] !== undefined).map((p) => ({
+      name: p.name, qty: s.cart[p.id] || '', priceTxt: fmt(p.price), totalTxt: fmt(Math.max(0, p.price * (s.cart[p.id] || 0) - (parseInt((s.disc || {})[p.id], 10) || 0))),
+      discOpen: s.discOpen === p.id || Boolean((s.disc || {})[p.id]), discTxt: (s.disc || {})[p.id] || '',
+      discLabel: (s.disc || {})[p.id] ? 'Remise de ' + fmt(parseInt(s.disc[p.id], 10)) + ' F' : 'Faire une remise',
+      toggleDisc: () => set({ discOpen: this.state.discOpen === p.id ? null : p.id }),
+      onDisc: (e) => { const d = Object.assign({}, this.state.disc || {}); d[p.id] = String(e.target.value).replace(/\D/g, '').slice(0, 7); set({ disc: d }); },
+      inc: () => set({ cart: cartOf(p.id, 1) }), dec: () => set({ cart: cartOf(p.id, -1) }),
+      set: (e) => {
+        const n = parseInt(String(e.target.value).replace(/\D/g, ''), 10);
+        const c = Object.assign({}, this.state.cart);
+        c[p.id] = isNaN(n) ? 0 : Math.min(n, 9999);
+        set({ cart: c });
+      }
+    }));
+    const total = catalog.reduce((t, p) => t + Math.max(0, p.price * (s.cart[p.id] || 0) - (parseInt((s.disc || {})[p.id], 10) || 0)), 0);
+
+    const people = [
+      { id: 'passage', name: 'Client de passage', sub: 'Pas besoin de nom', initials: '·', debt: 0 },
+      { id: 'awa', name: 'Awa Diop', sub: '77 412 08 33', initials: 'AD', debt: 0 },
+      { id: 'moussa', name: 'Moussa Fall', sub: '76 220 15 90', initials: 'MF', debt: 25000 },
+      { id: 'ndiaye', name: 'Boutique Ndiaye', sub: '78 301 44 12', initials: 'BN', debt: 0 },
+      { id: 'aminata', name: 'Aminata Sow', sub: '77 655 90 21', initials: 'AS', debt: 12000 },
+      { id: 'ibrahima', name: 'Ibrahima Ba', sub: '70 118 62 47', initials: 'IB', debt: 0 },
+      { id: 'mariama', name: 'Mariama Diallo', sub: '77 903 27 58', initials: 'MD', debt: 7500 },
+      { id: 'ousmane', name: 'Ousmane Sarr', sub: '76 584 11 06', initials: 'OS', debt: 0 }
+    ];
+    const current = people.find((p) => p.id === s.cust) || people[0];
+    const customers = people.map((p) => ({
+      name: p.name, sub: p.sub, initials: p.initials, owes: p.debt > 0, debt: fmt(p.debt),
+      avBg: p.id === 'passage' ? '#F3EEE5' : '#F2ECFC', avInk: p.id === 'passage' ? '#3C4440' : '#5530A3',
+      pick: () => set({ cust: p.id, showCustomers: false })
+    }));
+
+    const modes = [['full', 'Tout payé'], ['part', 'Une partie'], ['credit', 'À crédit']].map(([id, label]) => ({
+      label: label, cls: s.mode === id ? 'on' : '', pick: () => set({ mode: id, partTxt: '', given: 0, givenTxt: '' })
+    }));
+    const digits = (v) => String(v).replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(0, 9);
+    const keypad = (field) => ['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', '⌫'].map((k) => ({
+      label: k, aria: k === '⌫' ? 'Effacer un chiffre' : k,
+      press: () => {
+        const v = String(this.state[field] || '');
+        const patch = {};
+        patch[field] = k === '⌫' ? v.slice(0, -1) : digits(v + k);
+        this.setState(patch);
+      }
+    }));
+    const methods = [['cash', 'Espèces'], ['wave', 'Wave'], ['om', 'Orange Money']].map(([id, label]) => ({
+      label: label, cls: s.method === id ? 'on' : '', pick: () => set({ method: id })
+    }));
+    const bills = [total, 10000, 20000, 50000].filter((v, i, a) => v > 0 && v >= total && a.indexOf(v) === i).map((v) => ({
+      label: v === total ? 'Le compte juste' : fmt(v), cls: s.given === v && !s.givenTxt ? 'on' : '', pick: () => set({ given: v, givenTxt: '' })
+    }));
+    const given = s.givenTxt ? parseInt(s.givenTxt, 10) : s.given;
+    const halves = [Math.round(total / 2 / 500) * 500, Math.round(total / 4 / 500) * 500].filter((v, i, a) => v > 0 && a.indexOf(v) === i);
+    const part = parseInt(s.partTxt, 10) || 0;
+    const parts = halves.map((v, i) => ({ label: (i === 0 ? 'La moitié : ' : '') + fmt(v) + ' F', cls: part === v ? 'on' : '', pick: () => set({ partTxt: String(v) }) }));
+    const partOk = part > 0 && part < total;
+    const partMsg = part === 0 ? 'Tapez ce qu’il donne, ou touchez un montant'
+      : part >= total ? 'C’est le total ou plus : choisissez « Tout payé »'
+      : 'Il restera ' + fmt(total - part) + ' F à payer';
+    const needCustomer = (s.mode !== 'full') && s.cust === 'passage';
+    const blocked = total === 0 || needCustomer || (s.mode === 'part' && !partOk);
+    const methodName = { cash: 'en espèces', wave: 'par Wave', om: 'par Orange Money' }[s.method];
+    const ctaLabel = s.mode === 'credit' ? 'Enregistrer le crédit' : 'Encaisser ' + fmt(s.mode === 'part' ? part : total) + ' F';
+    const doneLine = s.mode === 'full' ? 'Payé ' + methodName
+      : s.mode === 'part' ? current.name + ' doit encore ' + fmt(total - part) + ' F'
+      : current.name + ' doit ' + fmt(total) + ' F';
+
+    return {
+      done: s.done, editing: !s.done, q: s.q,
+      onSearch: (e) => set({ q: e.target.value }),
+      cats: cats, products: products, lines: lines, empty: lines.length === 0,
+      totalTxt: fmt(total),
+      customer: current, customers: customers, showCustomers: s.showCustomers,
+      toggleCustomers: () => set({ showCustomers: !s.showCustomers }),
+      modes: modes, methods: methods, showMethod: s.mode !== 'credit',
+      showChange: s.mode === 'full' && s.method === 'cash' && total > 0, bills: bills,
+      givenTxt: s.givenTxt, onGiven: (e) => set({ givenTxt: digits(e.target.value) }),
+      hasChange: given > total, changeTxt: fmt(Math.max(0, given - total)),
+      showPart: s.mode === 'part' && total > 0, parts: parts,
+      partTxt: s.partTxt, onPart: (e) => set({ partTxt: digits(e.target.value) }), partKeys: keypad('partTxt'),
+      partMsg: partMsg, partBg: partOk ? '#FFF0E3' : '#F3EEE5', partInk: partOk ? '#9A3412' : '#3C4440',
+      needCustomer: needCustomer && total > 0, blocked: blocked,
+      cta: blocked ? '#9BB5A7' : '#117A3C', ctaLabel: ctaLabel, doneLine: doneLine,
+      confirm: () => { if (!blocked) set({ done: true }); },
+      reset: () => set({ disc: {}, discOpen: null, cart: {}, cust: 'passage', mode: 'full', method: 'cash', given: 0, givenTxt: '', partTxt: '', done: false, q: '', cat: 'Tout' })
+    };
+  }
+}
+</script>
+</body>
+</html>

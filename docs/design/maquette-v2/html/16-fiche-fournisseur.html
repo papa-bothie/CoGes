@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="fr"><head><style>
+    .sc-placeholder{background:color-mix(in srgb,currentColor 8%,transparent);
+      border:1px solid color-mix(in srgb,currentColor 50%,transparent);
+      border-radius:2px;box-sizing:border-box;overflow:hidden}
+    @keyframes sc-shine{0%{background-position:100% 50%}100%{background-position:0% 50%}}
+    html.sc-dc-streaming .sc-placeholder,
+    html.sc-dc-streaming .sc-interp.sc-missing{position:relative;
+      background:color-mix(in srgb,currentColor 5%,transparent);
+      border-color:transparent}
+    html.sc-dc-streaming .sc-placeholder::before,
+    html.sc-dc-streaming .sc-interp.sc-missing::before{content:'';
+      position:absolute;inset:0;pointer-events:none;
+      background:linear-gradient(90deg,rgba(217,119,87,0) 25%,rgba(247,225,211,.95) 37%,rgba(217,119,87,0) 63%);
+      background-size:400% 100%;animation:sc-shine 1.4s ease infinite}
+    html.sc-dc-streaming .sc-placeholder:nth-child(n+9 of .sc-placeholder)::before,
+    html.sc-dc-streaming .sc-interp.sc-missing:nth-child(n+9 of .sc-interp.sc-missing)::before{animation:none;
+      background:color-mix(in srgb,currentColor 8%,transparent)}
+    .sc-placeholder-error{padding:4px 8px;font:11px/1.4 ui-monospace,monospace;
+      color:color-mix(in srgb,currentColor 70%,transparent);word-break:break-word}
+    .sc-interp.sc-missing{display:inline-block;width:2em;height:1em;overflow:hidden;
+      vertical-align:text-bottom;background:rgba(255,255,255,.3);border:1px solid rgba(0,0,0,.5);
+      border-radius:2px;box-sizing:border-box;color:transparent;
+      user-select:none}
+    .sc-interp.sc-unresolved{font-family:ui-monospace,monospace;font-size:.85em;
+      color:color-mix(in srgb,currentColor 50%,transparent);
+      background:color-mix(in srgb,currentColor 10%,transparent);border-radius:3px;
+      padding:0 3px}
+    .sc-host.sc-has-error{position:relative}
+    .sc-logic-error{position:absolute;top:8px;left:8px;z-index:2147483647;max-width:60ch;
+      padding:6px 10px;background:#b00020;color:#fff;font:12px/1.4 ui-monospace,monospace;
+      border-radius:4px;white-space:pre-wrap;pointer-events:none}
+    /* Mirrors PRINT_BASELINE_CSS in apps/web deck-stage-export.ts — keep both
+       in sync until dc-runtime regains a build step. */
+    @media print {
+      @page { margin: 0.5cm; }
+      figure, table { break-inside: avoid; }
+      #dc-root, #dc-root > .sc-host { height: auto; }
+      *, *::before, *::after {
+        print-color-adjust: exact; -webkit-print-color-adjust: exact;
+        backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+        animation-delay: -99s !important; animation-duration: .001s !important;
+        animation-iteration-count: 1 !important; animation-fill-mode: both !important;
+        animation-play-state: running !important; transition-duration: 0s !important;
+      }
+    }
+  </style>
+<meta charset="utf-8">
+<title>CoGes — Grossiste Sandaga</title>
+<style>x-dc{display:none!important}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com" data-dc-tpl="1"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap" data-dc-tpl="2"><style data-dc-tpl="3">
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#EAF1FD;color:#1747AE}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box}
+.card{background:#fff;border-radius:22px;border:1px solid #ECE6DC;padding:22px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:56px;padding:0 20px;border-radius:18px;border:0;font:inherit;font-weight:700;font-size:17px;cursor:pointer;text-decoration:none}
+.gb{background:#fff;color:#1E2320;border:2px solid #E3DCD0}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+.tile{border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:4px}
+.seg{min-height:52px;padding:0 20px;border-radius:999px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:16px;color:#1E2320;cursor:pointer}
+.seg.on{border-color:#1F5BD8;background:#1F5BD8;color:#fff}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:14px 0;border-top:1px solid #F0EBE2}
+.pill{display:inline-flex;align-items:center;justify-content:center;padding:6px 12px;border-radius:999px;font-weight:700;font-size:15px;white-space:nowrap;min-width:150px}
+</style></head>
+<body>
+<div id="dc-root"><div class="sc-host" data-sc-name="FournisseurFiche"><div data-dc-tpl="4">
+  <nav data-dc-tpl="5" class="nav" aria-label="Menu principal">
+    <div data-dc-tpl="6" class="brand">
+      <img data-dc-tpl="7" src="../logo/coges-mark.png" alt="" style="width: 40px; height: 43px; flex: 0 0 auto;">
+      <div data-dc-tpl="8"><img data-dc-tpl="9" src="../logo/coges-wordmark.png" alt="CoGes" style="height: 24px; width: 102px; display: block;"><div data-dc-tpl="10" class="muted" style="font-size: 15px;">Alimentation Keur Fatou</div></div>
+    </div>
+    <div data-dc-tpl="11" class="tabs">
+      <a data-dc-tpl="12" class="tab" href="#Main"><svg data-dc-tpl="13" class="ico" viewBox="0 0 24 24"><path data-dc-tpl="14" d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a data-dc-tpl="15" class="tab" href="#Vente"><svg data-dc-tpl="16" class="ico" viewBox="0 0 24 24"><circle data-dc-tpl="17" cx="9" cy="20" r="1.5"></circle><circle data-dc-tpl="18" cx="18" cy="20" r="1.5"></circle><path data-dc-tpl="19" d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a data-dc-tpl="20" class="tab" href="#Articles"><svg data-dc-tpl="21" class="ico" viewBox="0 0 24 24"><path data-dc-tpl="22" d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path data-dc-tpl="23" d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a data-dc-tpl="24" class="tab on" href="#Clients"><svg data-dc-tpl="25" class="ico" viewBox="0 0 24 24"><circle data-dc-tpl="26" cx="9" cy="8" r="4"></circle><path data-dc-tpl="27" d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a data-dc-tpl="28" class="tab" href="#Finance"><svg data-dc-tpl="29" class="ico" viewBox="0 0 24 24"><rect data-dc-tpl="30" x="2" y="6" width="20" height="14" rx="3"></rect><path data-dc-tpl="31" d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div data-dc-tpl="32" style="display: flex; gap: 6px; align-items: center;">
+      <a data-dc-tpl="33" class="tab" href="#Conseils"><svg data-dc-tpl="34" class="ico" viewBox="0 0 24 24"><path data-dc-tpl="35" d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a data-dc-tpl="36" class="tab" href="#Alertes" aria-label="Alertes, 3 non lues" style="position: relative; padding: 0px 12px;"><svg data-dc-tpl="37" class="ico" viewBox="0 0 24 24"><path data-dc-tpl="38" d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span data-dc-tpl="39" style="position: absolute; top: 4px; right: 2px; min-width: 20px; height: 20px; border-radius: 999px; background: rgb(194, 65, 12); color: rgb(255, 255, 255); font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center;">3</span></a>
+      <a data-dc-tpl="40" class="tab" href="#Reglages" aria-label="Réglages" style="padding: 0px 12px;"><svg data-dc-tpl="41" class="ico" viewBox="0 0 24 24"><circle data-dc-tpl="42" cx="12" cy="12" r="3"></circle><path data-dc-tpl="43" d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main data-dc-tpl="44" class="wrap" style="display: flex; flex-direction: column; gap: 20px;">
+    <a data-dc-tpl="45" href="#Clients" style="display: inline-flex; align-items: center; gap: 8px; font-weight: 700; text-decoration: none; min-height: 44px; align-self: flex-start;">
+      <svg data-dc-tpl="46" class="ico" viewBox="0 0 24 24"><path data-dc-tpl="47" d="M19 12H5M11 6l-6 6 6 6"></path></svg>Tous les fournisseurs
+    </a>
+
+    <div data-dc-tpl="48" style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px;">
+      <div data-dc-tpl="49" style="width: 76px; height: 76px; border-radius: 22px; background: rgb(31, 91, 216); color: rgb(255, 255, 255); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 28px;">GS</div>
+      <div data-dc-tpl="50" style="flex: 1 1 240px;">
+        <h1 data-dc-tpl="51">Grossiste Sandaga</h1>
+        <div data-dc-tpl="52" class="muted num" style="font-size: 18px;">33 821 45 10 · Marché Sandaga, Dakar</div>
+      </div>
+      <div data-dc-tpl="53" style="display: flex; flex-wrap: wrap; gap: 8px;">
+        <a data-dc-tpl="54" class="btn gb" href="tel:+221338214510"><svg data-dc-tpl="55" class="ico" viewBox="0 0 24 24"><path data-dc-tpl="56" d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"></path></svg>Appeler</a>
+        <a data-dc-tpl="57" class="btn gb" href="#Contact">Modifier</a>
+      </div>
+    </div>
+
+    <div data-dc-tpl="58" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
+      <div data-dc-tpl="59" class="tile" style="background: rgb(234, 241, 253);"><span data-dc-tpl="60" style="font-weight: 600;">Vous lui devez</span><span data-dc-tpl="61" class="num" style="font-size: 34px; font-weight: 800; color: rgb(23, 71, 174);">120 000 F</span><span data-dc-tpl="62" style="color: rgb(154, 52, 18); font-weight: 700;">À payer avant le 10 octobre</span></div>
+      <div data-dc-tpl="63" class="tile" style="background: rgb(255, 240, 227);"><span data-dc-tpl="64" style="font-weight: 600;">Acheté ce mois</span><span data-dc-tpl="65" class="num" style="font-size: 34px; font-weight: 800; color: rgb(154, 52, 18);">312 600 F</span><span data-dc-tpl="66" class="muted">3 livraisons</span></div>
+      <div data-dc-tpl="67" class="tile" style="background: rgb(246, 242, 235);"><span data-dc-tpl="68" style="font-weight: 600;">Il vous livre</span><span data-dc-tpl="69" style="font-size: 22px; font-weight: 800;">Riz, huile, sucre, pâtes</span><span data-dc-tpl="70" class="muted">12 articles</span></div>
+    </div>
+
+    <div data-dc-tpl="71" style="display: flex; flex-wrap: wrap; gap: 10px;">
+      <a data-dc-tpl="72" class="btn" href="#PayerFournisseur" style="background: rgb(31, 91, 216); color: rgb(255, 255, 255); flex: 1 1 220px;">Le payer</a>
+      <a data-dc-tpl="73" class="btn" href="#Livraison" style="background: rgb(194, 65, 12); color: rgb(255, 255, 255); flex: 1 1 220px;">Recevoir une livraison</a>
+    </div>
+
+    <section data-dc-tpl="74" class="card">
+      <div data-dc-tpl="75" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px;">
+
+          <button data-dc-tpl="77" type="button" class="seg on"><span class="sc-interp">Ses livraisons</span></button>
+
+          <button data-dc-tpl="77" type="button" class="seg "><span class="sc-interp">Vos paiements</span></button>
+
+      </div>
+
+        <div data-dc-tpl="79" class="row">
+          <div data-dc-tpl="80" style="flex: 1 1 220px; min-width: 0px;"><div data-dc-tpl="81" style="font-weight: 700;"><span class="sc-interp">Livraison : 10 sacs de riz, 24 huiles</span></div><div data-dc-tpl="82" class="muted"><span class="sc-interp">Samedi 3 octobre</span></div></div>
+          <div data-dc-tpl="83" class="num" style="font-weight: 800; font-size: 18px;"><span class="sc-interp">167 600 F</span></div>
+          <span data-dc-tpl="84" class="pill" style="background: rgb(234, 241, 253); color: rgb(23, 71, 174);"><span class="sc-interp">Reste 120 000 F</span></span>
+        </div>
+
+        <div data-dc-tpl="79" class="row">
+          <div data-dc-tpl="80" style="flex: 1 1 220px; min-width: 0px;"><div data-dc-tpl="81" style="font-weight: 700;"><span class="sc-interp">Livraison : sucre, pâtes, tomate</span></div><div data-dc-tpl="82" class="muted"><span class="sc-interp">Mardi 22 septembre</span></div></div>
+          <div data-dc-tpl="83" class="num" style="font-weight: 800; font-size: 18px;"><span class="sc-interp">85 000 F</span></div>
+          <span data-dc-tpl="84" class="pill" style="background: rgb(230, 244, 236); color: rgb(2, 74, 44);"><span class="sc-interp">Payé</span></span>
+        </div>
+
+        <div data-dc-tpl="79" class="row">
+          <div data-dc-tpl="80" style="flex: 1 1 220px; min-width: 0px;"><div data-dc-tpl="81" style="font-weight: 700;"><span class="sc-interp">Livraison : 5 sacs de riz</span></div><div data-dc-tpl="82" class="muted"><span class="sc-interp">Lundi 7 septembre</span></div></div>
+          <div data-dc-tpl="83" class="num" style="font-weight: 800; font-size: 18px;"><span class="sc-interp">60 000 F</span></div>
+          <span data-dc-tpl="84" class="pill" style="background: rgb(230, 244, 236); color: rgb(2, 74, 44);"><span class="sc-interp">Payé</span></span>
+        </div>
+
+    </section>
+  </main></div></div></div>
+
+
+
+</body></html>

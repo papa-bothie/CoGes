@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Moussa Fall</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#F2ECFC;color:#5530A3}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box}
+.card{background:#fff;border-radius:22px;border:1px solid #ECE6DC;padding:22px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:56px;padding:0 20px;border-radius:18px;border:0;font:inherit;font-weight:700;font-size:17px;cursor:pointer;text-decoration:none}
+.gb{background:#fff;color:#1E2320;border:2px solid #E3DCD0}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+h2{font-size:20px;margin:0;font-weight:700}
+.tile{border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:4px}
+.seg{min-height:52px;padding:0 20px;border-radius:999px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:16px;color:#1E2320;cursor:pointer}
+.seg.on{border-color:#6D3FC8;background:#6D3FC8;color:#fff}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:14px 0;border-top:1px solid #F0EBE2;text-decoration:none;color:#1E2320}
+.pill{display:inline-flex;align-items:center;justify-content:center;padding:6px 12px;border-radius:999px;font-weight:700;font-size:15px;white-space:nowrap;min-width:130px}
+textarea.msg{width:100%;box-sizing:border-box;min-height:120px;border-radius:16px;border:2px solid #E3DCD0;padding:14px;font:inherit;font-size:17px;background:#fff;color:#1E2320;resize:vertical}
+textarea.msg:focus{outline:3px solid #D5C6F5;border-color:#6D3FC8}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab on" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="display:flex;flex-direction:column;gap:20px">
+    <a href="Clients.dc.html" style="display:inline-flex;align-items:center;gap:8px;font-weight:700;text-decoration:none;min-height:44px;align-self:flex-start">
+      <svg class="ico" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg>Tous les clients
+    </a>
+
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:16px">
+      <div style="width:76px;height:76px;border-radius:50%;background:#6D3FC8;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:28px">MF</div>
+      <div style="flex:1 1 240px">
+        <h1>Moussa Fall</h1>
+        <div class="muted num" style="font-size:18px">76 220 15 90 · client depuis mars 2026</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <a class="btn gb" href="tel:+221762201590"><svg class="ico" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"></path></svg>Appeler</a>
+        <a class="btn gb" href="Contact.dc.html">Modifier</a>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+      <div class="tile" style="background:#F2ECFC"><span style="font-weight:600">Il vous doit</span><span class="num" style="font-size:34px;font-weight:800;color:#5530A3">25 000 F</span><span style="color:#5530A3;font-weight:600">Depuis 12 jours</span></div>
+      <div class="tile" style="background:#E6F4EC"><span style="font-weight:600">Acheté ce mois</span><span class="num" style="font-size:34px;font-weight:800;color:#024A2C">87 000 F</span><span class="muted">6 visites</span></div>
+      <div class="tile" style="background:#EAF1FD"><span style="font-weight:600">Dernière visite</span><span style="font-size:34px;font-weight:800;color:#1747AE">Aujourd'hui</span><span class="muted">À 9 h 58</span></div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:10px">
+      <a class="btn" href="Reglement.dc.html" style="background:#6D3FC8;color:#fff;flex:1 1 220px">Encaisser sa dette</a>
+      <a class="btn" href="Vente.dc.html" style="background:#117A3C;color:#fff;flex:1 1 220px">Nouvelle vente pour lui</a>
+      <button type="button" class="btn gb" onClick="{{toggleRemind}}" style="flex:1 1 220px"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"></path></svg>Lui rappeler sa dette</button>
+    </div>
+
+    <sc-if value="{{remind}}" hint-placeholder-val="{{ false }}">
+      <section class="card" style="display:flex;flex-direction:column;gap:12px;border:2px solid #D5C6F5">
+        <label for="msg" style="font-weight:700;font-size:17px">Message WhatsApp</label>
+        <textarea id="msg" class="msg" onChange="{{onMsg}}" value="{{msg}}"></textarea>
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <button type="button" class="btn" style="background:#117A3C;color:#fff;flex:1 1 220px">Ouvrir WhatsApp</button>
+          <button type="button" class="btn gb" onClick="{{toggleRemind}}" style="flex:0 1 160px">Fermer</button>
+        </div>
+      </section>
+    </sc-if>
+
+    <section class="card">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+        <sc-for list="{{views}}" as="v" hint-placeholder-count="2">
+          <button type="button" class="seg {{v.cls}}" onClick="{{v.pick}}">{{v.label}}</button>
+        </sc-for>
+      </div>
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="4">
+        <a class="row" href="{{r.href}}">
+          <div style="flex:1 1 220px;min-width:0"><div style="font-weight:700">{{r.what}}</div><div class="muted">{{r.when}}</div></div>
+          <div class="num" style="font-weight:800;font-size:18px">{{r.amount}}</div>
+          <span class="pill" style="background:{{r.bg}};color:{{r.ink}}">{{r.status}}</span>
+        </a>
+      </sc-for>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { view: 'sales', remind: false, msg: 'Bonjour Moussa, c’est Fatou de l’Alimentation Keur Fatou. Il reste 25 000 F à régler sur vos achats. Vous pouvez payer à la boutique ou par Wave au 77 123 45 67. Merci !' };
+  }
+  renderVals() {
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const sales = [
+      ['Vente n° 1044 · Riz, huile, bougies', "Aujourd'hui, 9 h 58", '25 000 F', 'Reste 10 000 F', 'due'],
+      ['Vente n° 1012 · Riz, huile, sucre', 'Jeudi 24 septembre', '30 000 F', 'Reste 15 000 F', 'due'],
+      ['Vente n° 0987 · Lait, café', 'Lundi 14 septembre', '12 500 F', 'Payé', 'paid'],
+      ['Vente n° 0955 · Courses du mois', 'Mardi 1er septembre', '19 500 F', 'Payé', 'paid']
+    ];
+    const pays = [
+      ['Payé en espèces', "Aujourd'hui, 9 h 58", '15 000 F', 'Vente n° 1044', 'in'],
+      ['Payé par Wave', 'Jeudi 24 septembre', '15 000 F', 'Vente n° 1012', 'in'],
+      ['Dette encaissée en espèces', 'Samedi 19 septembre', '12 500 F', 'Vente n° 0987', 'in']
+    ];
+    const look = (k) => k === 'due' ? ['#FFF0E3', '#9A3412'] : k === 'paid' ? ['#E6F4EC', '#024A2C'] : ['#EAF1FD', '#1747AE'];
+    const rows = (s.view === 'sales' ? sales : pays).map(([what, when, amount, status, k]) => ({
+      what: what, when: when, amount: amount, status: status, bg: look(k)[0], ink: look(k)[1], href: 'VenteDetail.dc.html'
+    }));
+    return {
+      remind: s.remind, toggleRemind: () => set({ remind: !s.remind }), msg: s.msg, onMsg: (e) => set({ msg: e.target.value }),
+      views: [['sales', 'Ses achats'], ['pays', 'Ses paiements']].map(([id, label]) => ({ label: label, cls: s.view === id ? 'on' : '', pick: () => set({ view: id }) })),
+      rows: rows
+    };
+  }
+}
+</script>
+</body>
+</html>

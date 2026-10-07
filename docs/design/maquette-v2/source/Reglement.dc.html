@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Encaisser une dette</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#E6F4EC;color:#024A2C}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1180px;margin:0 auto;padding:24px;box-sizing:border-box}
+.card{background:#fff;border-radius:22px;border:1px solid #ECE6DC;padding:20px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:56px;padding:0 22px;border-radius:18px;border:0;font:inherit;font-weight:700;font-size:18px;cursor:pointer;text-decoration:none}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+h2{font-size:20px;margin:0;font-weight:700}
+.chip{min-height:52px;padding:0 18px;border-radius:999px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:16px;color:#1E2320;cursor:pointer}
+.chip.on{border-color:#6D3FC8;background:#F2ECFC;color:#5530A3}
+.who{display:flex;align-items:center;gap:12px;width:100%;min-height:72px;padding:10px 14px;border-radius:18px;border:2px solid transparent;background:transparent;font:inherit;color:#1E2320;cursor:pointer;text-align:left}
+.who:hover{background:#F6F2EB}
+.who.on{border-color:#6D3FC8;background:#F2ECFC}
+.av{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;background:#6D3FC8;color:#fff}
+input.amount{width:100%;box-sizing:border-box;min-height:64px;border-radius:16px;border:2px solid #E3DCD0;padding:0 48px 0 18px;font:inherit;font-size:28px;font-weight:800;background:#fff;color:#1E2320}
+input.amount:focus{outline:3px solid #D5C6F5;border-color:#6D3FC8}
+.key{min-height:56px;border-radius:14px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-size:22px;font-weight:700;color:#1E2320;cursor:pointer}
+.key:active{background:#F2ECFC}
+.pill{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:6px 12px;border-radius:999px;font-weight:700;font-size:15px;white-space:nowrap;min-width:120px}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab on" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="display:flex;flex-direction:column;gap:20px">
+    <div>
+      <h1>Encaisser une dette</h1>
+      <div class="muted" style="font-size:18px;margin-top:4px">Les clients vous doivent <span class="num" style="font-weight:800;color:#5530A3">{{allTxt}} F</span></div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+      <section class="card" style="flex:2 1 320px;min-width:0;padding:12px">
+        <sc-for list="{{people}}" as="p" hint-placeholder-count="5">
+          <button type="button" class="who {{p.cls}}" onClick="{{p.pick}}">
+            <div class="av">{{p.initials}}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:17px">{{p.name}}</div>
+              <div class="muted">{{p.since}}</div>
+            </div>
+            <div class="num" style="font-weight:800;font-size:18px;color:{{p.ink}}">{{p.owesTxt}}</div>
+          </button>
+        </sc-for>
+      </section>
+
+      <section class="card" style="flex:3 1 460px;min-width:0;display:flex;flex-direction:column;gap:20px">
+        <sc-if value="{{justPaid}}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:14px;padding:16px 18px;border-radius:18px;background:#E6F4EC;color:#024A2C">
+            <div style="width:44px;height:44px;border-radius:50%;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">
+              <svg class="ico" viewBox="0 0 24 24" style="stroke-width:2.6"><path d="M4 12.5 9.5 18 20 6"></path></svg>
+            </div>
+            <div style="font-weight:700;font-size:18px">{{thanks}}</div>
+          </div>
+        </sc-if>
+
+        <div style="display:flex;align-items:center;gap:14px">
+          <div class="av" style="width:56px;height:56px;font-size:19px">{{sel.initials}}</div>
+          <div style="flex:1;min-width:0">
+            <h2 style="font-size:24px">{{sel.name}}</h2>
+            <div class="muted num">{{sel.phone}}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="muted" style="font-weight:600">Doit encore</div>
+            <div class="num" style="font-size:34px;font-weight:800;color:{{sel.ink}}">{{sel.owesTxt}} F</div>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-weight:700;font-size:17px;margin-bottom:4px">Ses achats</div>
+          <sc-for list="{{sales}}" as="s" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #F0EBE2;flex-wrap:wrap">
+              <div style="flex:1;min-width:160px">
+                <div style="font-weight:700">{{s.what}}</div>
+                <div class="muted">{{s.date}} · total {{s.totalTxt}} F</div>
+              </div>
+              <span class="pill" style="background:{{s.bg}};color:{{s.ink}}">{{s.status}}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{owes}}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div>
+              <label for="amt" style="display:block;font-weight:700;font-size:17px;margin-bottom:8px">Combien il paie ?</label>
+              <div style="position:relative">
+                <input id="amt" class="amount num" inputmode="numeric" value="{{amountField}}" onChange="{{onAmount}}" placeholder="Tapez le montant">
+                <span style="position:absolute;right:18px;top:50%;transform:translateY(-50%);font-weight:800;font-size:22px;color:#5B625E">F</span>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
+                <sc-for list="{{amounts}}" as="a" hint-placeholder-count="3">
+                  <button type="button" class="chip num {{a.cls}}" onClick="{{a.pick}}" style="flex:1 1 130px">{{a.label}}</button>
+                </sc-for>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px;max-width:420px">
+                <sc-for list="{{keys}}" as="k" hint-placeholder-count="12">
+                  <button type="button" class="key" onClick="{{k.press}}" aria-label="{{k.aria}}">{{k.label}}</button>
+                </sc-for>
+              </div>
+              <div style="margin-top:10px;padding:12px 16px;border-radius:16px;font-weight:700;background:{{msgBg}};color:{{msgInk}}">{{msg}}</div>
+            </div>
+            <div>
+              <div style="font-weight:700;font-size:17px;margin-bottom:8px">Comment ?</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <sc-for list="{{methods}}" as="m" hint-placeholder-count="3">
+                  <button type="button" class="chip {{m.cls}}" onClick="{{m.pick}}" style="flex:1 1 120px">{{m.label}}</button>
+                </sc-for>
+              </div>
+            </div>
+            <button type="button" class="btn" onClick="{{pay}}" disabled="{{blocked}}" style="width:100%;min-height:68px;font-size:21px;background:{{cta}};color:#fff">
+              <svg class="ico" viewBox="0 0 24 24" style="width:26px;height:26px"><path d="M4 12.5 9.5 18 20 6"></path></svg>Encaisser {{amountTxt}} F
+            </button>
+          </div>
+        </sc-if>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      sel: 'moussa', amountTxt: '', method: 'cash', justPaid: null,
+      book: {
+        moussa: [{ what: 'Riz, huile, sucre', date: '24 septembre', total: 30000, rest: 15000 }, { what: 'Lait et café', date: '1er octobre', total: 12500, rest: 10000 }],
+        aminata: [{ what: 'Courses du mois', date: '28 septembre', total: 20000, rest: 12000 }],
+        mariama: [{ what: 'Savon, bougies, thé', date: '3 octobre', total: 7500, rest: 7500 }],
+        ibrahima: [{ what: 'Sac de riz', date: '30 septembre', total: 15500, rest: 6000 }],
+        awa: [{ what: 'Huile et tomate', date: '5 octobre', total: 9000, rest: 4000 }]
+      }
+    };
+  }
+  renderVals() {
+    const s = this.state;
+    const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const info = {
+      moussa: { name: 'Moussa Fall', initials: 'MF', phone: '76 220 15 90', since: 'Depuis 12 jours' },
+      aminata: { name: 'Aminata Sow', initials: 'AS', phone: '77 655 90 21', since: 'Depuis 8 jours' },
+      ibrahima: { name: 'Ibrahima Ba', initials: 'IB', phone: '70 118 62 47', since: 'Depuis 6 jours' },
+      mariama: { name: 'Mariama Diallo', initials: 'MD', phone: '77 903 27 58', since: 'Depuis 3 jours' },
+      awa: { name: 'Awa Diop', initials: 'AD', phone: '77 412 08 33', since: 'Depuis hier' }
+    };
+    const owed = (id) => s.book[id].reduce((t, x) => t + x.rest, 0);
+    const ids = Object.keys(info);
+    const all = ids.reduce((t, id) => t + owed(id), 0);
+    const people = ids.map((id) => {
+      const o = owed(id);
+      return Object.assign({}, info[id], {
+        cls: s.sel === id ? 'on' : '',
+        owesTxt: o > 0 ? fmt(o) + ' F' : 'Rien',
+        ink: o > 0 ? '#5530A3' : '#024A2C',
+        since: o > 0 ? info[id].since : 'A tout payé',
+        pick: () => this.setState({ sel: id, amountTxt: '', justPaid: null })
+      });
+    });
+    const o = owed(s.sel);
+    const sel = Object.assign({}, info[s.sel], { owesTxt: fmt(o), ink: o > 0 ? '#5530A3' : '#024A2C' });
+    const sales = s.book[s.sel].map((x) => {
+      const paid = x.rest === 0;
+      return {
+        what: x.what, date: x.date, totalTxt: fmt(x.total),
+        status: paid ? 'Payé' : 'Reste ' + fmt(x.rest) + ' F',
+        bg: paid ? '#E6F4EC' : '#FFF0E3', ink: paid ? '#024A2C' : '#9A3412'
+      };
+    });
+    const options = [o, Math.round(o / 2 / 500) * 500, 5000].filter((v, i, a) => v > 0 && v <= o && a.indexOf(v) === i);
+    const digits = (v) => String(v).replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(0, 9);
+    const amount = parseInt(s.amountTxt, 10) || 0;
+    const amounts = options.map((v, i) => ({
+      label: i === 0 ? 'Tout : ' + fmt(v) + ' F' : (i === 1 ? 'La moitié : ' : '') + fmt(v) + ' F',
+      cls: amount === v ? 'on' : '',
+      pick: () => this.setState({ amountTxt: String(v) })
+    }));
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', '⌫'].map((k) => ({
+      label: k, aria: k === '⌫' ? 'Effacer un chiffre' : k,
+      press: () => this.setState({ amountTxt: k === '⌫' ? s.amountTxt.slice(0, -1) : digits(s.amountTxt + k) })
+    }));
+    const ok = amount > 0 && amount <= o;
+    const msg = amount === 0 ? 'Tapez le montant reçu, ou touchez un bouton'
+      : amount > o ? 'C’est plus que ce qu’il doit (' + fmt(o) + ' F)'
+      : amount === o ? 'Il ne devra plus rien' : 'Il restera ' + fmt(o - amount) + ' F à payer';
+    const methods = [['cash', 'Espèces'], ['wave', 'Wave'], ['om', 'Orange Money']].map(([id, label]) => ({
+      label: label, cls: s.method === id ? 'on' : '', pick: () => this.setState({ method: id })
+    }));
+    const pay = () => {
+      if (!ok) return;
+      let left = amount;
+      const book = Object.assign({}, s.book);
+      book[s.sel] = s.book[s.sel].map((x) => {
+        const take = Math.min(left, x.rest);
+        left -= take;
+        return Object.assign({}, x, { rest: x.rest - take });
+      });
+      const rest = book[s.sel].reduce((t, x) => t + x.rest, 0);
+      this.setState({
+        book: book, amountTxt: '',
+        justPaid: rest === 0 ? info[s.sel].name + ' ne doit plus rien. Ses achats sont marqués « Payé ».'
+          : fmt(amount) + ' F reçus. Il reste ' + fmt(rest) + ' F.'
+      });
+    };
+    return {
+      allTxt: fmt(all), people: people, sel: sel, sales: sales, owes: o > 0,
+      amounts: amounts, amountTxt: fmt(amount), methods: methods, pay: pay,
+      amountField: s.amountTxt, onAmount: (e) => this.setState({ amountTxt: digits(e.target.value) }), keys: keys,
+      msg: msg, msgBg: ok ? '#F2ECFC' : (amount > o ? '#FFF0E3' : '#F3EEE5'), msgInk: ok ? '#5530A3' : (amount > o ? '#9A3412' : '#3C4440'),
+      blocked: !ok, cta: ok ? '#6D3FC8' : '#B9A8DD',
+      justPaid: Boolean(s.justPaid), thanks: s.justPaid || ''
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="fr"><head><style>
+    .sc-placeholder{background:color-mix(in srgb,currentColor 8%,transparent);
+      border:1px solid color-mix(in srgb,currentColor 50%,transparent);
+      border-radius:2px;box-sizing:border-box;overflow:hidden}
+    @keyframes sc-shine{0%{background-position:100% 50%}100%{background-position:0% 50%}}
+    html.sc-dc-streaming .sc-placeholder,
+    html.sc-dc-streaming .sc-interp.sc-missing{position:relative;
+      background:color-mix(in srgb,currentColor 5%,transparent);
+      border-color:transparent}
+    html.sc-dc-streaming .sc-placeholder::before,
+    html.sc-dc-streaming .sc-interp.sc-missing::before{content:'';
+      position:absolute;inset:0;pointer-events:none;
+      background:linear-gradient(90deg,rgba(217,119,87,0) 25%,rgba(247,225,211,.95) 37%,rgba(217,119,87,0) 63%);
+      background-size:400% 100%;animation:sc-shine 1.4s ease infinite}
+    html.sc-dc-streaming .sc-placeholder:nth-child(n+9 of .sc-placeholder)::before,
+    html.sc-dc-streaming .sc-interp.sc-missing:nth-child(n+9 of .sc-interp.sc-missing)::before{animation:none;
+      background:color-mix(in srgb,currentColor 8%,transparent)}
+    .sc-placeholder-error{padding:4px 8px;font:11px/1.4 ui-monospace,monospace;
+      color:color-mix(in srgb,currentColor 70%,transparent);word-break:break-word}
+    .sc-interp.sc-missing{display:inline-block;width:2em;height:1em;overflow:hidden;
+      vertical-align:text-bottom;background:rgba(255,255,255,.3);border:1px solid rgba(0,0,0,.5);
+      border-radius:2px;box-sizing:border-box;color:transparent;
+      user-select:none}
+    .sc-interp.sc-unresolved{font-family:ui-monospace,monospace;font-size:.85em;
+      color:color-mix(in srgb,currentColor 50%,transparent);
+      background:color-mix(in srgb,currentColor 10%,transparent);border-radius:3px;
+      padding:0 3px}
+    .sc-host.sc-has-error{position:relative}
+    .sc-logic-error{position:absolute;top:8px;left:8px;z-index:2147483647;max-width:60ch;
+      padding:6px 10px;background:#b00020;color:#fff;font:12px/1.4 ui-monospace,monospace;
+      border-radius:4px;white-space:pre-wrap;pointer-events:none}
+    /* Mirrors PRINT_BASELINE_CSS in apps/web deck-stage-export.ts — keep both
+       in sync until dc-runtime regains a build step. */
+    @media print {
+      @page { margin: 0.5cm; }
+      figure, table { break-inside: avoid; }
+      #dc-root, #dc-root > .sc-host { height: auto; }
+      *, *::before, *::after {
+        print-color-adjust: exact; -webkit-print-color-adjust: exact;
+        backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+        animation-delay: -99s !important; animation-duration: .001s !important;
+        animation-iteration-count: 1 !important; animation-fill-mode: both !important;
+        animation-play-state: running !important; transition-duration: 0s !important;
+      }
+    }
+  </style>
+<meta charset="utf-8">
+<title>CoGes — Reçu de la vente n° 1044</title>
+<style>x-dc{display:none!important}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com" data-dc-tpl="1"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" data-dc-tpl="2"><style data-dc-tpl="3">
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:56px;padding:0 20px;border-radius:18px;border:0;font:inherit;font-weight:700;font-size:17px;cursor:pointer;text-decoration:none}
+.seg{min-height:56px;padding:0 20px;border-radius:16px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:17px;color:#1E2320;cursor:pointer}
+.seg.on{border-color:#117A3C;background:#117A3C;color:#fff}
+.muted{color:#5B625E}
+h1{font-size:28px;margin:0;font-weight:800}
+.tk{font-family:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.5;color:#111}
+.tkrow{display:flex;justify-content:space-between;gap:8px}
+.dash{border-top:1px dashed #555;margin:8px 0}
+.td,.th{padding:10px 12px;text-align:left;border-bottom:1px solid #E5E5E5}
+.th{font-size:13px;text-transform:uppercase;letter-spacing:0.04em;color:#444;background:#F5F5F5;font-weight:700}
+.r{text-align:right !important;font-variant-numeric:tabular-nums}
+</style></head>
+<body>
+<div id="dc-root"><div class="sc-host" data-sc-name="Recu"><div data-dc-tpl="4">
+  <main data-dc-tpl="5" class="wrap" style="display: flex; flex-direction: column; gap: 18px;">
+    <div data-dc-tpl="6" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
+      <a data-dc-tpl="7" href="#VenteDetail" class="btn" style="background: rgb(255, 255, 255); color: rgb(30, 35, 32); border: 2px solid rgb(227, 220, 208);">
+        <svg data-dc-tpl="8" class="ico" viewBox="0 0 24 24"><path data-dc-tpl="9" d="M19 12H5M11 6l-6 6 6 6"></path></svg>Retour à la vente
+      </a>
+      <h1 data-dc-tpl="10" style="flex: 1 1 240px;">Reçu de la vente n° 1044</h1>
+    </div>
+
+    <div data-dc-tpl="11" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px; border-radius: 22px; background: rgb(255, 255, 255); border: 1px solid rgb(236, 230, 220);">
+      <div data-dc-tpl="12" role="group" aria-label="Format" style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button data-dc-tpl="13" type="button" class="seg on">Petit ticket (caisse)</button>
+        <button data-dc-tpl="14" type="button" class="seg ">Facture A4</button>
+      </div>
+      <label data-dc-tpl="15" style="display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 0px 12px; font-weight: 600; cursor: pointer;">
+        <input data-dc-tpl="16" type="checkbox" style="width: 24px; height: 24px; accent-color: rgb(165, 29, 36);">Voir une vente annulée
+      </label>
+      <div data-dc-tpl="17" style="margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap;">
+        <button data-dc-tpl="18" type="button" class="btn" style="background: rgb(17, 122, 60); color: rgb(255, 255, 255);"><svg data-dc-tpl="19" class="ico" viewBox="0 0 24 24"><path data-dc-tpl="20" d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"></path></svg>Imprimer</button>
+        <button data-dc-tpl="21" type="button" class="btn" style="background: rgb(255, 255, 255); color: rgb(30, 35, 32); border: 2px solid rgb(227, 220, 208);"><svg data-dc-tpl="22" class="ico" viewBox="0 0 24 24"><path data-dc-tpl="23" d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"></path></svg>WhatsApp</button>
+        <button data-dc-tpl="24" type="button" class="btn" style="background: rgb(255, 255, 255); color: rgb(30, 35, 32); border: 2px solid rgb(227, 220, 208);"><svg data-dc-tpl="25" class="ico" viewBox="0 0 24 24"><path data-dc-tpl="26" d="M12 3v12M7 10l5 5 5-5M5 21h14"></path></svg>PDF</button>
+      </div>
+    </div>
+
+    <div data-dc-tpl="27" style="background: rgb(233, 228, 219); border-radius: 22px; padding: 32px 16px; display: flex; justify-content: center; overflow-x: auto;">
+
+        <div data-dc-tpl="29" class="tk" style="position: relative; width: 302px; background: rgb(255, 255, 255); padding: 18px 16px 24px; box-shadow: rgba(0, 0, 0, 0.12) 0px 2px 10px;">
+          <div data-dc-tpl="30" style="text-align: center;">
+            <div data-dc-tpl="31" style="font-weight: 700; font-size: 16px;">ALIMENTATION KEUR FATOU</div>
+            <div data-dc-tpl="32">Marché HLM 5, Dakar</div>
+            <div data-dc-tpl="33">Tél. 77 123 45 67</div>
+          </div>
+          <div data-dc-tpl="34" class="dash"></div>
+          <div data-dc-tpl="35" class="tkrow"><span data-dc-tpl="36">Vente n° 1044</span><span data-dc-tpl="37">06/10/2026 09:58</span></div>
+          <div data-dc-tpl="38">Client : Moussa Fall</div>
+          <div data-dc-tpl="39">Servi par : Fatou</div>
+          <div data-dc-tpl="40" class="dash"></div>
+
+            <div data-dc-tpl="42"><span class="sc-interp">Riz brisé 25 kg</span></div>
+            <div data-dc-tpl="43" class="tkrow"><span data-dc-tpl="44">  <span class="sc-interp">1</span> x <span class="sc-interp">15 500</span></span><span data-dc-tpl="45"><span class="sc-interp">15 500</span></span></div>
+
+            <div data-dc-tpl="42"><span class="sc-interp">Huile Dinor 1 L</span></div>
+            <div data-dc-tpl="43" class="tkrow"><span data-dc-tpl="44">  <span class="sc-interp">5</span> x <span class="sc-interp">1 400</span></span><span data-dc-tpl="45"><span class="sc-interp">7 000</span></span></div>
+
+            <div data-dc-tpl="42"><span class="sc-interp">Bougies (paquet)</span></div>
+            <div data-dc-tpl="43" class="tkrow"><span data-dc-tpl="44">  <span class="sc-interp">5</span> x <span class="sc-interp">500</span></span><span data-dc-tpl="45"><span class="sc-interp">2 500</span></span></div>
+
+          <div data-dc-tpl="46" class="dash"></div>
+          <div data-dc-tpl="47" class="tkrow" style="font-weight: 700; font-size: 16px;"><span data-dc-tpl="48">TOTAL</span><span data-dc-tpl="49">25 000 F</span></div>
+          <div data-dc-tpl="50" class="tkrow"><span data-dc-tpl="51">Payé (espèces)</span><span data-dc-tpl="52">15 000 F</span></div>
+          <div data-dc-tpl="53" class="tkrow" style="font-weight: 700;"><span data-dc-tpl="54">RESTE À PAYER</span><span data-dc-tpl="55">10 000 F</span></div>
+          <div data-dc-tpl="56">À payer avant le 20/10/2026</div>
+          <div data-dc-tpl="57" class="dash"></div>
+          <div data-dc-tpl="58" style="text-align: center;">Merci de votre visite !</div>
+          <div data-dc-tpl="59" style="text-align: center;">Les articles ne sont ni repris ni échangés après 7 jours.</div>
+          <div data-dc-tpl="60" style="text-align: center; margin-top: 8px; font-size: 11px;">Reçu édité avec CoGes</div>
+
+        </div>
+
+
+
+    </div>
+  </main></div></div></div>
+
+
+
+</body></html>

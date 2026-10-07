@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Rayons</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#FFF0E3;color:#9A3412}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:980px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box}
+.card{background:#fff;border-radius:22px;border:1px solid #ECE6DC;padding:22px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:56px;padding:0 20px;border-radius:18px;border:0;font:inherit;font-weight:700;font-size:17px;cursor:pointer;text-decoration:none}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+.ray{display:flex;align-items:center;gap:14px;padding:14px;border-radius:18px;border:1px solid #ECE6DC;background:#fff}
+.sw{width:48px;height:48px;border-radius:50%;border:3px solid transparent;cursor:pointer}
+.sw.on{border-color:#1E2320;box-shadow:inset 0 0 0 3px #fff}
+.in{flex:1 1 220px;box-sizing:border-box;min-height:56px;border-radius:16px;border:2px solid #E3DCD0;padding:0 16px;font:inherit;font-size:18px;background:#fff;color:#1E2320}
+.in:focus{outline:3px solid #FCC9A3;border-color:#C2410C}
+.iconbtn{width:48px;height:48px;border-radius:14px;border:2px solid #E3DCD0;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#3C4440}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab on" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="display:flex;flex-direction:column;gap:20px">
+    <a href="Articles.dc.html" style="display:inline-flex;align-items:center;gap:8px;font-weight:700;text-decoration:none;min-height:44px;align-self:flex-start">
+      <svg class="ico" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg>Stock
+    </a>
+    <h1>Rayons</h1>
+
+    <section class="card" style="display:flex;flex-direction:column;gap:14px">
+      <label for="nr" style="font-weight:700;font-size:17px">Nouveau rayon</label>
+      <div style="display:flex;flex-wrap:wrap;gap:10px">
+        <input id="nr" class="in" value="{{newName}}" onChange="{{onName}}" placeholder="Ex. Produits frais">
+        <button type="button" class="btn" onClick="{{add}}" disabled="{{noName}}" style="background:{{addBg}};color:#fff">Ajouter</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px" role="group" aria-label="Couleur du rayon">
+        <sc-for list="{{swatches}}" as="w" hint-placeholder-count="8">
+          <button type="button" class="sw {{w.cls}}" onClick="{{w.pick}}" aria-label="{{w.label}}" style="background:{{w.c}}"></button>
+        </sc-for>
+      </div>
+    </section>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <sc-for list="{{rays}}" as="r" hint-placeholder-count="5">
+        <div class="ray">
+          <div style="width:52px;height:52px;border-radius:16px;background:{{r.c}};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;flex:none">{{r.initial}}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:18px">{{r.name}}</div>
+            <div class="muted">{{r.countTxt}}</div>
+          </div>
+          <button type="button" class="iconbtn" aria-label="Renommer {{r.name}}"><svg class="ico" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg></button>
+          <button type="button" class="iconbtn" onClick="{{r.remove}}" disabled="{{r.locked}}" aria-label="Supprimer {{r.name}}" style="color:{{r.delInk}};opacity:{{r.delOpacity}}"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg></button>
+        </div>
+      </sc-for>
+    </div>
+    <div class="muted" style="font-size:16px">Un rayon qui contient des articles ne peut pas être supprimé.</div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      newName: '', color: '#0E7490',
+      rays: [
+        { name: 'Céréales', c: '#B45309', n: 8 }, { name: 'Huiles', c: '#CA8A04', n: 4 },
+        { name: 'Boissons', c: '#0369A1', n: 11 }, { name: 'Hygiène', c: '#6D3FC8', n: 9 },
+        { name: 'Épicerie', c: '#0E7490', n: 14 }, { name: 'Produits frais', c: '#4D7C0F', n: 0 }
+      ]
+    };
+  }
+  renderVals() {
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const palette = [['#B45309', 'Brun'], ['#CA8A04', 'Moutarde'], ['#0369A1', 'Bleu'], ['#6D3FC8', 'Violet'], ['#0E7490', 'Bleu-vert'], ['#4D7C0F', 'Vert'], ['#BE185D', 'Rose'], ['#B91C1C', 'Rouge']];
+    const rays = s.rays.map((r, i) => ({
+      name: r.name, c: r.c, initial: r.name.charAt(0),
+      countTxt: r.n === 0 ? 'Aucun article' : r.n + (r.n > 1 ? ' articles' : ' article'),
+      locked: r.n > 0, delInk: r.n > 0 ? '#9AA09C' : '#A51D24', delOpacity: r.n > 0 ? 0.6 : 1,
+      remove: () => { if (r.n === 0) set({ rays: this.state.rays.filter((_, j) => j !== i) }); }
+    }));
+    const name = s.newName.trim();
+    return {
+      rays: rays, newName: s.newName, onName: (e) => set({ newName: e.target.value }),
+      noName: !name, addBg: name ? '#C2410C' : '#E2B79C',
+      add: () => { if (name) set({ rays: this.state.rays.concat([{ name: name, c: s.color, n: 0 }]), newName: '' }); },
+      swatches: palette.map(([c, label]) => ({ c: c, label: label, cls: s.color === c ? 'on' : '', pick: () => set({ color: c }) }))
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Conseils</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#E3F3F6;color:#0B5566}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box}
+.card{background:#fff;border-radius:22px;border:1px solid #ECE6DC;padding:20px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:50px;padding:0 18px;border-radius:16px;border:0;font:inherit;font-weight:700;font-size:16px;cursor:pointer;text-decoration:none}
+.gb{background:#fff;color:#1E2320;border:2px solid #E3DCD0}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+h2{font-size:20px;margin:0;font-weight:700}
+.seg{flex:1 1 180px;min-height:60px;border-radius:18px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:800;font-size:17px;color:#3C4440;cursor:pointer}
+.seg.on{border-color:#0E7490;background:#0E7490;color:#fff}
+.chip{min-height:48px;padding:0 16px;border-radius:999px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:15px;color:#1E2320;cursor:pointer}
+.chip.on{border-color:#0E7490;background:#E3F3F6;color:#0B5566}
+.tip{display:flex;gap:14px;padding:18px;border-radius:20px;background:#fff;border:1px solid #ECE6DC}
+.disc{width:48px;height:48px;border-radius:16px;display:flex;align-items:center;justify-content:center;flex:none;color:#fff}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab on" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="display:flex;flex-direction:column;gap:20px">
+    <div>
+      <h1>Conseils pour votre boutique</h1>
+      <div class="muted" style="font-size:18px">Calculés cette nuit à partir de vos ventes</div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:10px">
+      <sc-for list="{{views}}" as="v" hint-placeholder-count="3">
+        <button type="button" class="seg {{v.cls}}" onClick="{{v.pick}}">{{v.label}}</button>
+      </sc-for>
+    </div>
+
+    <sc-if value="{{isTips}}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <sc-for list="{{tips}}" as="t" hint-placeholder-count="5">
+          <div class="tip" style="opacity:{{t.opacity}}">
+            <div class="disc" style="background:{{t.color}}"><svg class="ico" viewBox="0 0 24 24" style="width:26px;height:26px"><path d="{{t.icon}}"></path></svg></div>
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">
+              <div style="font-weight:800;font-size:19px">{{t.title}}</div>
+              <div style="font-size:17px;color:#3C4440">{{t.body}}</div>
+              <sc-if value="{{t.open}}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                  <a class="btn" href="{{t.href}}" style="background:{{t.color}};color:#fff">{{t.action}}</a>
+                  <button type="button" class="btn gb" onClick="{{t.doneFn}}">C'est fait</button>
+                  <button type="button" class="btn gb" onClick="{{t.hideFn}}">Ignorer</button>
+                </div>
+              </sc-if>
+              <sc-if value="{{t.closed}}" hint-placeholder-val="{{ false }}">
+                <div style="font-weight:700;color:#3C4440">{{t.closedTxt}}</div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isBest}}" hint-placeholder-val="{{ false }}">
+      <section class="card" style="display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <sc-for list="{{metrics}}" as="m" hint-placeholder-count="4">
+            <button type="button" class="chip {{m.cls}}" onClick="{{m.pick}}">{{m.label}}</button>
+          </sc-for>
+        </div>
+        <h2>{{rankTitle}} <span class="muted" style="font-weight:600;font-size:16px">· ce mois-ci</span></h2>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <sc-for list="{{ranking}}" as="r" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div class="num" style="width:32px;height:32px;border-radius:50%;background:#E3F3F6;color:#0B5566;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none">{{r.rank}}</div>
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;justify-content:space-between;gap:8px"><span style="font-weight:700">{{r.name}}</span><span class="num" style="font-weight:800">{{r.value}}</span></div>
+                <div style="height:12px;border-radius:999px;background:#EEF4F5;margin-top:6px;overflow:hidden"><div style="height:100%;width:{{r.pct}};background:#0E7490;border-radius:999px"></div></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </sc-if>
+
+    <sc-if value="{{isForecast}}" hint-placeholder-val="{{ false }}">
+      <section class="card">
+        <h2>La semaine prochaine, vous devriez vendre environ</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;margin-top:14px">
+          <sc-for list="{{forecast}}" as="f" hint-placeholder-count="6">
+            <div style="padding:16px;border-radius:18px;background:{{f.bg}}">
+              <div style="font-weight:700">{{f.name}}</div>
+              <div class="num" style="font-size:26px;font-weight:800">{{f.qty}}</div>
+              <div class="muted">{{f.range}}</div>
+              <div style="margin-top:6px;font-weight:700;color:{{f.ink}}">{{f.stock}}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div class="muted" style="margin-top:14px">Pas assez de ventes pour 12 autres articles : ils apparaîtront quand il y aura assez d'historique.</div>
+      </section>
+    </sc-if>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { view: 'tips', metric: 'margin', tipState: {} };
+  }
+  renderVals() {
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const mark = (id, v) => { const t = Object.assign({}, s.tipState); t[id] = v; set({ tipState: t }); };
+    const raw = [
+      { id: 'riz', color: '#C2410C', icon: 'M12 3 2 21h20zM12 10v5M12 18h.01', title: 'Le riz va bientôt manquer', body: 'Il vous reste 2 sacs et vous en vendez environ 1 par jour. Commandez 10 sacs pour tenir deux semaines.', action: 'Commander', href: 'Livraison.dc.html' },
+      { id: 'dette', color: '#6D3FC8', icon: 'M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', title: 'Moussa Fall vous doit 25 000 F depuis 12 jours', body: 'Un petit rappel par WhatsApp aide souvent à se faire payer.', action: 'Lui envoyer un rappel', href: 'ClientFiche.dc.html' },
+      { id: 'elec', color: '#A51D24', icon: 'M13 2 4 14h7l-1 8 9-12h-7z', title: 'Électricité plus chère que d’habitude', body: 'Vous avez payé 35 000 F ce mois, contre 22 000 F en moyenne. Vérifiez la facture ou un appareil qui consomme trop.', action: 'Voir les dépenses', href: 'Depenses.dc.html' },
+      { id: 'savon', color: '#0E7490', icon: 'M3 17l6-6 4 4 8-8M14 7h7v7', title: 'Le savon Madar se vend deux fois plus', body: 'Depuis 10 jours, vous en vendez 6 par jour au lieu de 3. Pensez à en garder assez.', action: 'Voir l’article', href: 'ArticleFiche.dc.html' },
+      { id: 'bougie', color: '#4D7C0F', icon: 'M12 3v18M5 12h14', title: 'Les bougies ne bougent pas', body: '12 paquets dorment depuis 40 jours. Mettez-les en avant ou faites un petit prix.', action: 'Changer le prix', href: 'ArticleFiche.dc.html' }
+    ];
+    const tips = raw.map((t) => {
+      const st = s.tipState[t.id];
+      return Object.assign({}, t, {
+        open: !st, closed: Boolean(st), opacity: st ? 0.6 : 1,
+        closedTxt: st === 'done' ? 'Fait, merci.' : 'Ignoré.',
+        doneFn: () => mark(t.id, 'done'), hideFn: () => mark(t.id, 'hidden')
+      });
+    });
+    const data = {
+      margin: ['Ce qui vous rapporte le plus', [['Riz brisé 25 kg', 27000], ['Lait Vitalait 400 g', 14400], ['Huile Dinor 1 L', 12500], ['Café Touba 250 g', 9800], ['Savon Madar', 6300]], ' F'],
+      qty: ['Ce qui se vend le plus', [['Savon Madar', 142], ['Eau Kirène 1,5 L', 118], ['Café Touba 250 g', 96], ['Huile Dinor 1 L', 84], ['Pâtes 500 g', 61]], ''],
+      revenue: ['Ce qui fait le plus de ventes', [['Riz brisé 25 kg', 279000], ['Lait Vitalait 400 g', 145600], ['Huile Dinor 1 L', 117600], ['Café Touba 250 g', 96000], ['Eau Kirène 1,5 L', 47200]], ' F'],
+      slow: ['Ce qui se vend rarement', [['Bougies (paquet)', 40], ['Tomate concentrée 400 g', 26], ['Thé Lipton 25 sachets', 18], ['Lait en poudre 500 g', 15], ['Sucre en morceaux 1 kg', 9]], ' jours']
+    };
+    const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const [rankTitle, rows, unit] = data[s.metric];
+    const max = rows[0][1];
+    const ranking = rows.map(([name, v], i) => ({ rank: i + 1, name: name, value: fmt(v) + (unit || (s.metric === 'qty' ? ' vendus' : '')), pct: Math.round(v / max * 100) + '%' }));
+    const forecast = [
+      ['Riz brisé 25 kg', '7 sacs', 'entre 5 et 9', 'Il vous en reste 2 : commandez', true],
+      ['Huile Dinor 1 L', '20 bouteilles', 'entre 15 et 26', 'Il vous en reste 4 : commandez', true],
+      ['Savon Madar', '42 pièces', 'entre 35 et 50', 'Stock suffisant (60)', false],
+      ['Café Touba 250 g', '22 sachets', 'entre 18 et 27', 'Stock suffisant (25)', false],
+      ['Eau Kirène 1,5 L', '30 bouteilles', 'entre 24 et 37', 'Stock suffisant (48)', false],
+      ['Lait Vitalait 400 g', '12 boîtes', 'entre 9 et 15', 'Stock suffisant (18)', false]
+    ].map(([name, qty, range, stock, low]) => ({ name: name, qty: qty, range: range, stock: stock, bg: low ? '#FFF0E3' : '#F6F2EB', ink: low ? '#9A3412' : '#024A2C' }));
+    return {
+      views: [['tips', 'Conseils (5)'], ['best', 'Vos meilleurs articles'], ['forecast', 'Prévisions']].map(([id, label]) => ({ label: label, cls: s.view === id ? 'on' : '', pick: () => set({ view: id }) })),
+      isTips: s.view === 'tips', isBest: s.view === 'best', isForecast: s.view === 'forecast',
+      tips: tips, rankTitle: rankTitle, ranking: ranking, forecast: forecast,
+      metrics: [['margin', 'Rapporte le plus'], ['qty', 'Se vend le plus'], ['revenue', 'Fait le plus de ventes'], ['slow', 'Vente rare']].map(([id, label]) => ({ label: label, cls: s.metric === id ? 'on' : '', pick: () => set({ metric: id }) }))
+    };
+  }
+}
+</script>
+</body>
+</html>
