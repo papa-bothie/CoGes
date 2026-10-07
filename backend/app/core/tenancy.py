@@ -16,7 +16,8 @@ Chaîne d'isolation (Diagramme 8) :
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import logging
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
@@ -27,6 +28,11 @@ from sqlalchemy.sql import text
 
 from app.core.database import get_session_factory
 from app.core.errors import TenantContextError
+
+logger = logging.getLogger(__name__)
+
+#: Clé de `Session.info` où s'empilent les rappels à jouer après COMMIT.
+_AFTER_COMMIT = "coges_after_commit"
 
 # Portée transaction (`is_local = true`) : strictement équivalent à SET LOCAL.
 # Publiques à dessein : le test T4 les rejoue telles quelles, pour qu'un jour où
@@ -85,5 +91,32 @@ def tenant_transaction(
                     details={"expected": str(ctx.company_id), "observed": observed},
                 )
             yield session
+        # Atteint seulement si le COMMIT a réussi : une exception sortie du bloc
+        # ci-dessus a déjà fait le ROLLBACK et ne passe pas par ici.
+        _run_after_commit(session)
     finally:
         session.close()
+
+
+def on_commit(session: Session, callback: Callable[[], None]) -> None:
+    """Joue `callback` une fois la transaction de `session` **validée**.
+
+    Sert aux effets hors base qui ne doivent jamais précéder le COMMIT, comme vider
+    un cache (ADR 0061) : vidé avant, il pourrait être rempli à nouveau par une
+    lecture qui ne voit pas encore l'écriture. Après un ROLLBACK, rien n'est joué.
+    """
+    session.info.setdefault(_AFTER_COMMIT, []).append(callback)
+
+
+def _run_after_commit(session: Session) -> None:
+    """Rappels après COMMIT : un échec est journalisé, jamais propagé.
+
+    La transaction est validée ; faire échouer la requête maintenant ferait croire au
+    client que son écriture n'a pas eu lieu.
+    """
+    callbacks: list[Callable[[], None]] = session.info.pop(_AFTER_COMMIT, [])
+    for callback in callbacks:
+        try:
+            callback()
+        except Exception:
+            logger.exception("Rappel après COMMIT en échec")

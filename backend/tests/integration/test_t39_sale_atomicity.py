@@ -154,7 +154,11 @@ def test_t39_a_confirmation_failing_on_its_last_line_rolls_everything_back(
     assert after.json()["payments"] == []
     assert after.json()["debt"] is None
 
-    stock = api_client.get("/api/v1/inventory/stock?page_size=100", headers=headers)
+    stock = api_client.get(
+        "/api/v1/inventory/stock",
+        params=[("product_id", product_id) for product_id in products],
+        headers=headers,
+    )
     quantities = {row["product_id"]: Decimal(row["qty_on_hand"]) for row in stock.json()["items"]}
     assert [quantities[product_id] for product_id in products] == [
         Decimal("10.000"),

@@ -30,6 +30,7 @@ dev = [
     "mypy>=1.13",
     "pre-commit>=4.0",
     "types-openpyxl>=3.1.5.20260827",
+    "honcho>=2.0.0",
 ]
 # CoGes Intelligence (phase 09, ADR 0035) : réservé à l'image worker. L'API ne lit
 # que `forecasts` et `insights` et n'importe jamais ces bibliothèques.

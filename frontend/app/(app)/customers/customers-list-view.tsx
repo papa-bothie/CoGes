@@ -18,7 +18,7 @@ import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
 import { labels } from "@/lib/labels";
 
-import { CustomerFormDialog } from "./customer-form-dialog";
+import { CustomerFormDialog } from "@/components/customers/customer-form-dialog";
 
 type Customer = Schemas["CustomerRead"];
 

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Connexion</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#024A2C}a:hover{color:#04432D}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.lbl{display:block;font-weight:700;font-size:17px;margin-bottom:8px}
+.in{width:100%;box-sizing:border-box;min-height:60px;border-radius:16px;border:2px solid #E3DCD0;padding:0 16px;font:inherit;font-size:19px;background:#fff;color:#1E2320}
+.in:focus{outline:3px solid #9BD3B6;border-color:#117A3C}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:64px;padding:0 22px;border-radius:18px;border:0;font:inherit;font-weight:800;font-size:20px;cursor:pointer}
+</style>
+</helmet>
+<div style="min-height:900px;display:flex;flex-wrap:wrap">
+  <section style="flex:1 1 380px;background:#E8F5EC;color:#024A2C;padding:56px 48px;display:flex;flex-direction:column;justify-content:space-between;gap:40px;box-sizing:border-box">
+    <img src="../logo/coges-logo.png" alt="CoGes, votre entreprise sous contrôle" style="width:320px;max-width:100%;height:auto">
+    <div>
+      <div style="font-size:44px;font-weight:800;line-height:1.1;max-width:440px">Votre boutique, simplement.</div>
+      <div style="font-size:20px;margin-top:16px;max-width:420px;color:#24543B">Vendre, suivre le stock et savoir ce que vous gagnez, chaque jour.</div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px">
+      <span style="padding:10px 16px;border-radius:999px;background:#FFFFFF;color:#024A2C;font-weight:700">Ventes</span>
+      <span style="padding:10px 16px;border-radius:999px;background:#FFFFFF;color:#024A2C;font-weight:700">Stock</span>
+      <span style="padding:10px 16px;border-radius:999px;background:#FFFFFF;color:#024A2C;font-weight:700">Dettes</span>
+      <span style="padding:10px 16px;border-radius:999px;background:#FFFFFF;color:#024A2C;font-weight:700">Argent</span>
+    </div>
+  </section>
+
+  <section style="flex:1 1 440px;display:flex;align-items:center;justify-content:center;padding:48px 24px;box-sizing:border-box">
+    <form style="width:100%;max-width:440px;display:flex;flex-direction:column;gap:20px">
+      <h1 style="font-size:32px;margin:0;font-weight:800">Se connecter</h1>
+      <sc-if value="{{error}}" hint-placeholder-val="{{ false }}">
+        <div role="alert" style="padding:14px 16px;border-radius:16px;background:#FDECEC;color:#A51D24;font-weight:700">Le mot de passe ne correspond pas. Réessayez, ou demandez à votre gérant de vous en donner un nouveau.</div>
+      </sc-if>
+      <div>
+        <label class="lbl" for="shop">Code de la boutique</label>
+        <input id="shop" class="in" value="keur-fatou" autocomplete="organization">
+      </div>
+      <div>
+        <label class="lbl" for="mail">Votre e-mail</label>
+        <input id="mail" class="in" value="fatou@keurfatou.sn" inputmode="email" autocomplete="username">
+      </div>
+      <div>
+        <label class="lbl" for="pw">Mot de passe</label>
+        <div style="position:relative">
+          <input id="pw" class="in" type="{{pwType}}" value="motdepasse" autocomplete="current-password" style="padding-right:120px">
+          <button type="button" onClick="{{toggle}}" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);min-height:48px;padding:0 14px;border-radius:12px;border:0;background:#F3EEE5;font:inherit;font-weight:700;cursor:pointer">{{toggleLabel}}</button>
+        </div>
+      </div>
+      <button type="button" class="btn" onClick="{{tryLogin}}" style="background:#117A3C;color:#fff;width:100%">Entrer</button>
+      <div style="color:#3C4440;font-size:17px">Mot de passe oublié ? Demandez à votre gérant : il peut vous en créer un nouveau.</div>
+      <a href="Main.dc.html" style="font-weight:700;font-size:17px;min-height:44px;display:inline-flex;align-items:center">Voir l'accueil de la démo</a>
+    </form>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { show: false, error: false };
+  }
+  renderVals() {
+    const s = this.state;
+    return {
+      pwType: s.show ? 'text' : 'password', toggleLabel: s.show ? 'Cacher' : 'Afficher',
+      toggle: () => this.setState({ show: !s.show }),
+      error: s.error, tryLogin: () => this.setState({ error: !s.error })
+    };
+  }
+}
+</script>
+</body>
+</html>

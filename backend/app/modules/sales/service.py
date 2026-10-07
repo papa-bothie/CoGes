@@ -11,7 +11,7 @@ Ce que ce module n'écrit **jamais** en Python :
   `sale_recompute_totals` à chaque écriture sur `sale_items` ;
 * `sales.total`, `sale_items.net_amount`, `tax_amount`, `line_total` — colonnes
   générées. L'égalité comptable est **produite** par la base (T24) ;
-* `sales.paid_total` — maintenu par `sale_paid_rollup` depuis `payments` ;
+* `sales.paid_total` — maintenu par `sale_paid_rollup` et `pa_sale_rollup` (ADR 0062) ;
 * le stock — il passe par la façade Inventory, qui seule compose un mouvement.
 
 Sales est en haut des dépendances : il lit Products, Customers, Companies,
@@ -42,6 +42,7 @@ from app.modules.finance import service as finance_service
 from app.modules.finance.schemas import (
     OFFSET_METHOD,
     DebtRead,
+    DebtStatus,
     RefundLinkRead,
 )
 from app.modules.inventory import service as inventory_service
@@ -67,6 +68,8 @@ from app.modules.sales.repository import (
     SaleRevenueRepository,
 )
 from app.modules.sales.schemas import (
+    CustomerChoice,
+    CustomerChoicePage,
     ReceiptCompany,
     ReceiptCustomer,
     ReceiptLine,
@@ -224,6 +227,62 @@ def get_sale(session: Session, ctx: TenantContext, sale_id: UUID) -> Sale:
     if sale is None:
         raise NotFoundError("Vente introuvable.")
     return sale
+
+
+#: Clients récents en tête de la liste de vente (ADR 0063).
+RECENT_CUSTOMERS = 5
+
+
+def customer_choices(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    page: int,
+    page_size: int,
+    search: str | None = None,
+) -> CustomerChoicePage:
+    """Liste des clients de « Nouvelle vente » (ADR 0063).
+
+    Sans recherche : la page 1 commence par les clients des dernières ventes, puis tous
+    les autres par ordre alphabétique, sans doublon. Avec une recherche : l'ordre de
+    pertinence de l'ADR 0050. Chaque ligne dit ce que le client doit encore.
+    """
+    term = search.strip() if search else None
+    recent: list[Any] = []
+    if not term:
+        recent = customers_service.get_many(
+            session,
+            ctx,
+            SaleRepository(session, ctx).recent_customer_ids(limit=RECENT_CUSTOMERS),
+        )
+    others, others_total = customers_service.list_customers(
+        session,
+        ctx,
+        page=page,
+        page_size=page_size,
+        search=term or None,
+        exclude_ids=[customer.id for customer in recent],
+    )
+    shown = [*(recent if page == 1 else []), *others]
+    debts = finance_service.open_balances_by_customer(
+        session, ctx, [customer.id for customer in shown]
+    )
+    recent_ids = {customer.id for customer in recent}
+    return CustomerChoicePage(
+        items=[
+            CustomerChoice(
+                id=customer.id,
+                name=customer.name,
+                phone=customer.phone,
+                open_debt=debts.get(customer.id, Decimal("0")),
+                recent=customer.id in recent_ids,
+            )
+            for customer in shown
+        ],
+        page=page,
+        page_size=page_size,
+        total=others_total + len(recent),
+    )
 
 
 def list_sales(
@@ -564,6 +623,10 @@ def cancel_sale(
     déjà retournée se corrige par un retour, pas en effaçant la trace. La règle
     est celle du § 5.2, telle quelle (ADR 0023).
     """
+    # La dette avant la vente : c'est l'ordre d'un règlement, que le trigger
+    # `pa_sale_rollup` prolonge jusqu'à la vente (ADR 0062). L'ordre inverse
+    # s'interbloquerait avec un règlement simultané.
+    finance_service.lock_sale_debt(session, ctx, sale_id)
     repository = SaleRepository(session, ctx)
     sale = repository.get_for_update(sale_id)
     if sale is None:
@@ -696,7 +759,11 @@ def _audited(sale: Sale) -> dict[str, Any]:
 
 
 def build_read(
-    sale: Sale, *, returned_total: Decimal | None, customer_name: str | None
+    sale: Sale,
+    *,
+    returned_total: Decimal | None,
+    customer_name: str | None,
+    debt_status: DebtStatus | None,
 ) -> SaleRead:
     """En-tête d'une vente, tel que la liste l'affiche.
 
@@ -718,6 +785,7 @@ def build_read(
         total=sale.total,
         paid_total=sale.paid_total,
         balance=sale.total - sale.paid_total,
+        debt_status=debt_status,
         has_returns=returned_total is not None,
         returned_total=Decimal("0") if returned_total is None else returned_total,
         cancel_reason=sale.cancel_reason,
@@ -732,15 +800,19 @@ def build_page(
     sales: Sequence[Sale],
     returned_totals: dict[UUID, Decimal],
 ) -> list[SaleRead]:
-    """En-têtes d'une page de ventes, avec le nom des clients lus en un seul appel."""
+    """En-têtes d'une page de ventes : noms des clients et statuts des dettes, un appel chacun."""
     names = customers_service.names_by_ids(
         session, ctx, [sale.customer_id for sale in sales if sale.customer_id is not None]
+    )
+    debt_statuses = finance_service.debt_statuses_for_sales(
+        session, ctx, [sale.id for sale in sales]
     )
     return [
         build_read(
             sale,
             returned_total=returned_totals.get(sale.id),
             customer_name=None if sale.customer_id is None else names.get(sale.customer_id),
+            debt_status=debt_statuses.get(sale.id),
         )
         for sale in sales
     ]

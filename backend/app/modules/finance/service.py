@@ -6,7 +6,8 @@ ce qui reste dû, éteindre cette dette quand la vente est annulée.
 
 Ce que ce module n'écrit **jamais** en Python :
 
-* `sales.paid_total` — maintenu par le trigger `sale_paid_rollup` depuis `payments` ;
+* `sales.paid_total` — maintenu par `sale_paid_rollup` et `pa_sale_rollup` : paiements
+  directs et lettrages sur la dette de la vente (ADR 0062) ;
 * `debts.amount_paid`, `balance` et `status` — maintenus par `pa_rollup` depuis
   `payment_allocations`, et `balance` est une colonne générée.
 
@@ -19,12 +20,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import cache
 from app.core.audit import AuditAction, audit_critical
 from app.core.errors import (
     BusinessRuleError,
@@ -59,6 +61,7 @@ from app.modules.finance.schemas import (
     AllocationRead,
     DebtCreate,
     DebtDetail,
+    DebtStatus,
     PaymentCreate,
     PaymentDetail,
     PaymentMethod,
@@ -333,6 +336,30 @@ def _cancellation_fields(payment: Payment, reversal: Payment | None) -> dict[str
 def debt_for_sale(session: Session, ctx: TenantContext, sale_id: UUID) -> Debt | None:
     """La dette née de cette vente, s'il y en a une."""
     return DebtRepository(session, ctx).for_sale(sale_id)
+
+
+def lock_sale_debt(session: Session, ctx: TenantContext, sale_id: UUID) -> None:
+    """Verrouille la dette d'une vente **avant** la vente elle-même (ADR 0062).
+
+    Un règlement prend la dette puis la vente (`pa_sale_rollup`) ; l'annulation d'une
+    vente doit suivre le même ordre, sans quoi les deux s'interbloqueraient.
+    """
+    DebtRepository(session, ctx).lock_for_sale(sale_id)
+
+
+def debt_statuses_for_sales(
+    session: Session, ctx: TenantContext, sale_ids: Sequence[UUID]
+) -> dict[UUID, DebtStatus]:
+    """Statut de la dette de chaque vente qui en porte une, pour les listes de ventes."""
+    statuses = DebtRepository(session, ctx).statuses_by_sale_ids(sale_ids)
+    return {sale_id: cast(DebtStatus, status) for sale_id, status in statuses.items()}
+
+
+def open_balances_by_customer(
+    session: Session, ctx: TenantContext, customer_ids: Sequence[UUID]
+) -> dict[UUID, Decimal]:
+    """Ce que doit chaque client du lot (dettes ouvertes), pour la liste de vente."""
+    return DebtRepository(session, ctx).open_balances_by_customer(customer_ids)
 
 
 def has_settled_payment(session: Session, ctx: TenantContext, sale_id: UUID) -> bool:
@@ -671,10 +698,10 @@ def record_return_offset(
     2. un `inflow` **sans contexte**, alloué à la dette — `pa_rollup` recalcule
        `amount_paid`, `status` et `closed_at`.
 
-    L'`inflow` ne porte pas `sale_id`, et ce n'est pas un oubli : `sale_paid_rollup`
-    somme les encaissements d'une vente pour en faire `paid_total`, qui doit rester ce
-    qui est **encaissé**. Une compensation n'encaisse rien. Le chaînage reste lisible
-    par la dette, qui porte déjà `sale_id`.
+    L'`inflow` ne porte pas `sale_id` : il passe par la dette, qui porte déjà `sale_id`.
+    Depuis la révision 0014, `pa_sale_rollup` compte ce lettrage dans le `paid_total`
+    de la vente, qui veut dire « réglé » et non « encaissé » (ADR 0062) : le reste dû
+    de la vente suit celui de sa dette. L'argent, lui, n'a pas bougé.
 
     Les deux écritures sont marquées `offset` : la trésorerie les exclut, les lettrages
     les gardent.
@@ -1029,6 +1056,9 @@ def write_off_debt(
         after={**_audited_debt(debt), "reason": reason},
         ip_address=ip_address,
     )
+    # Sans événement, le worker ne viderait pas le tableau de bord : les créances
+    # ouvertes y resteraient jusqu'au TTL (ADR 0061).
+    cache.invalidate_after_commit(session, ctx.company_id, cache.DASHBOARD_KEY)
     return debt
 
 

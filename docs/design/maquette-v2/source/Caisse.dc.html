@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Entrées et sorties de caisse</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#EAF1FD;color:#1747AE}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box}
+.card{background:#fff;border-radius:22px;border:1px solid #ECE6DC;padding:20px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:52px;padding:0 18px;border-radius:16px;border:0;font:inherit;font-weight:700;font-size:16px;cursor:pointer;text-decoration:none}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+.chip{min-height:48px;padding:0 18px;border-radius:999px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:16px;color:#1E2320;cursor:pointer}
+.chip.on{border-color:#1F5BD8;background:#1F5BD8;color:#fff}
+.why{min-height:50px;padding:0 16px;border-radius:14px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:15px;color:#1E2320;cursor:pointer}
+.mv{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:14px 4px;border-top:1px solid #F0EBE2}
+.dot{width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex:none}
+.tile{border-radius:20px;padding:16px 18px;display:flex;flex-direction:column;gap:2px}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab on" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px">
+      <h1>Entrées et sorties</h1>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <sc-for list="{{days}}" as="d" hint-placeholder-count="3">
+          <button type="button" class="chip {{d.cls}}" onClick="{{d.pick}}">{{d.label}}</button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+      <div class="tile" style="background:#E6F4EC"><span style="font-weight:600">Entré</span><span class="num" style="font-size:28px;font-weight:800;color:#024A2C">{{inTxt}} F</span></div>
+      <div class="tile" style="background:#FFF0E3"><span style="font-weight:600">Sorti</span><span class="num" style="font-size:28px;font-weight:800;color:#9A3412">{{outTxt}} F</span></div>
+      <div class="tile" style="background:#1F5BD8;color:#fff"><span style="font-weight:600">Différence</span><span class="num" style="font-size:28px;font-weight:800">{{diffTxt}} F</span></div>
+    </div>
+
+    <section class="card">
+      <div style="font-weight:700;font-size:17px;margin-bottom:10px">Par moyen de paiement (entrées moins sorties)</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
+        <sc-for list="{{byMethod}}" as="m" hint-placeholder-count="3">
+          <div style="padding:12px 14px;border-radius:16px;background:#F6F2EB">
+            <div style="font-weight:600">{{m.label}}</div>
+            <div class="num" style="font-weight:800;font-size:22px">{{m.totalTxt}} F</div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <section class="card" style="padding:12px 20px">
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="7">
+        <div>
+          <div class="mv" style="opacity:{{r.opacity}}">
+            <div class="dot" style="background:{{r.bg}};color:{{r.ink}}"><svg class="ico" viewBox="0 0 24 24"><path d="{{r.icon}}"></path></svg></div>
+            <div style="flex:1 1 220px;min-width:0">
+              <div style="font-weight:700;text-decoration:{{r.strike}}">{{r.what}}</div>
+              <div class="muted">{{r.time}} · {{r.how}}</div>
+            </div>
+            <div class="num" style="font-weight:800;font-size:18px;color:{{r.ink}};text-decoration:{{r.strike}}">{{r.amountTxt}}</div>
+            <sc-if value="{{r.canCancel}}" hint-placeholder-val="{{ true }}">
+              <button type="button" class="btn" onClick="{{r.ask}}" style="background:#fff;color:#A51D24;border:2px solid #F3C9CB">Annuler</button>
+            </sc-if>
+            <sc-if value="{{r.isCancelled}}" hint-placeholder-val="{{ false }}">
+              <span style="padding:6px 12px;border-radius:999px;background:#F3EEE5;font-weight:700">Annulé</span>
+            </sc-if>
+          </div>
+          <sc-if value="{{r.asking}}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:0 0 14px 58px">
+              <span style="font-weight:700;color:#A51D24">Pourquoi ?</span>
+              <sc-for list="{{r.reasons}}" as="w" hint-placeholder-count="3">
+                <button type="button" class="why" onClick="{{w.pick}}">{{w.label}}</button>
+              </sc-for>
+              <button type="button" class="why" onClick="{{r.close}}" style="border-color:transparent">Garder</button>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </section>
+    <div class="muted">Annuler ne supprime rien : une ligne inverse est ajoutée et l'historique reste visible.</div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { day: 'today', asking: null, cancelled: {} };
+  }
+  renderVals() {
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const base = [
+      { id: 1, what: 'Vente n° 1046 · Awa Diop', time: '10 h 42', how: 'Wave', amount: 12500 },
+      { id: 2, what: 'Vente n° 1045 · Client de passage', time: '10 h 15', how: 'Espèces', amount: 3200 },
+      { id: 3, what: 'Vente n° 1044 · Moussa Fall', time: '9 h 58', how: 'Espèces', amount: 15000 },
+      { id: 4, what: 'Vente n° 1043 · Boutique Ndiaye', time: '9 h 20', how: 'Orange Money', amount: 40000 },
+      { id: 5, what: 'Dette encaissée · Aminata Sow', time: '8 h 55', how: 'Espèces', amount: 6800 },
+      { id: 6, what: 'Dépense · Électricité', time: '8 h 30', how: 'Espèces', amount: -35000 },
+      { id: 7, what: 'Dépense · Transport de la livraison', time: '8 h 10', how: 'Espèces', amount: -6000 }
+    ];
+    const list = [];
+    base.forEach((m) => {
+      const c = s.cancelled[m.id];
+      if (c) list.push({ id: 'c' + m.id, what: 'Annulation : ' + m.what + ' (' + c + ')', time: '11 h 05', how: m.how, amount: -m.amount, reverse: true });
+      list.push(Object.assign({}, m, { cancelled: Boolean(c) }));
+    });
+    const total = (f) => list.filter(f).reduce((t, m) => t + m.amount, 0);
+    const cin = total((m) => m.amount > 0), cout = -total((m) => m.amount < 0);
+    const methods = ['Espèces', 'Wave', 'Orange Money'].map((h) => ({ label: h, totalTxt: fmt(total((m) => m.how === h)) }));
+    const reasons = ['Erreur de montant', 'Saisi deux fois', 'Mauvais client'];
+    const rows = list.map((m) => {
+      const inflow = m.amount > 0;
+      return {
+        what: m.what, time: m.time, how: m.how,
+        amountTxt: (inflow ? '+' : '−') + fmt(Math.abs(m.amount)) + ' F',
+        bg: m.reverse ? '#F3EEE5' : inflow ? '#E6F4EC' : '#FFF0E3', ink: m.reverse ? '#3C4440' : inflow ? '#024A2C' : '#9A3412',
+        icon: inflow ? 'M17 7 7 17M7 8v9h9' : 'M7 17 17 7M8 7h9v9',
+        opacity: m.cancelled ? 0.55 : 1, strike: m.cancelled ? 'line-through' : 'none',
+        canCancel: !m.cancelled && !m.reverse && s.asking !== m.id, isCancelled: Boolean(m.cancelled), asking: s.asking === m.id,
+        ask: () => set({ asking: m.id }), close: () => set({ asking: null }),
+        reasons: reasons.map((label) => ({ label: label, pick: () => { const c = Object.assign({}, s.cancelled); c[m.id] = label.toLowerCase(); set({ cancelled: c, asking: null }); } }))
+      };
+    });
+    return {
+      days: [['today', "Aujourd'hui"], ['yesterday', 'Hier'], ['other', 'Choisir un jour']].map(([id, label]) => ({ label: label, cls: s.day === id ? 'on' : '', pick: () => set({ day: id }) })),
+      inTxt: fmt(cin), outTxt: fmt(cout), diffTxt: (cin - cout >= 0 ? '+' : '−') + fmt(Math.abs(cin - cout)),
+      byMethod: methods, rows: rows
+    };
+  }
+}
+</script>
+</body>
+</html>

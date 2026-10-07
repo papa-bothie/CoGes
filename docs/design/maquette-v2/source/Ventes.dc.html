@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Ventes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#E6F4EC;color:#024A2C}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box}
+.card{background:#fff;border-radius:22px;border:1px solid #ECE6DC;padding:20px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:56px;padding:0 22px;border-radius:18px;border:0;font:inherit;font-weight:700;font-size:18px;cursor:pointer;text-decoration:none}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+h2{font-size:19px;margin:0;font-weight:700}
+.chip{min-height:48px;padding:0 18px;border-radius:999px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:600;font-size:16px;color:#1E2320;cursor:pointer}
+.chip.on{border-color:#117A3C;background:#117A3C;color:#fff}
+.pill{display:inline-flex;align-items:center;justify-content:center;padding:6px 12px;border-radius:999px;font-weight:700;font-size:15px;white-space:nowrap}
+.sale{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;padding:14px 16px;border-radius:18px;text-decoration:none;color:#1E2320;min-height:72px}
+.sale:hover{background:#F6F2EB;color:#1E2320}
+.av{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+input.search{width:100%;box-sizing:border-box;min-height:56px;border-radius:16px;border:2px solid #E3DCD0;padding:0 16px 0 48px;font:inherit;font-size:17px;background:#fff;color:#1E2320}
+input.search:focus{outline:3px solid #9BD3B6;border-color:#117A3C}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab on" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px">
+      <div>
+        <h1>Ventes</h1>
+        <div class="muted" style="font-size:18px;margin-top:2px">{{summary}}</div>
+      </div>
+      <a class="btn" href="Vente.dc.html" style="background:#117A3C;color:#fff;min-height:60px;font-size:19px">
+        <svg class="ico" viewBox="0 0 24 24" style="width:24px;height:24px"><path d="M12 5v14M5 12h14"></path></svg>Nouvelle vente
+      </a>
+    </div>
+
+    <div style="position:relative">
+      <svg class="ico" viewBox="0 0 24 24" style="position:absolute;left:16px;top:17px;color:#5B625E"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+      <label for="qs" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Chercher une vente</label>
+      <input id="qs" class="search" type="search" placeholder="Chercher par nom du client ou numéro de vente" value="{{q}}" onChange="{{onSearch}}">
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <sc-for list="{{periods}}" as="p" hint-placeholder-count="4">
+        <button type="button" class="chip {{p.cls}}" onClick="{{p.pick}}">{{p.label}}</button>
+      </sc-for>
+      <span style="width:1px;background:#E3DCD0;margin:4px 6px"></span>
+      <sc-for list="{{states}}" as="p" hint-placeholder-count="5">
+        <button type="button" class="chip {{p.cls}}" onClick="{{p.pick}}">{{p.label}}</button>
+      </sc-for>
+    </div>
+
+    <sc-for list="{{groups}}" as="g" hint-placeholder-count="2">
+      <section class="card" style="padding:12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:8px 16px 4px;flex-wrap:wrap;gap:8px">
+          <h2>{{g.day}}</h2>
+          <span class="muted">{{g.count}} · <span class="num" style="font-weight:800;color:#1E2320">{{g.totalTxt}} F</span></span>
+        </div>
+        <sc-for list="{{g.rows}}" as="s" hint-placeholder-count="4">
+          <a class="sale" href="VenteDetail.dc.html" style="opacity:{{s.opacity}}">
+            <div class="av" style="background:{{s.avBg}};color:{{s.avInk}}">{{s.initials}}</div>
+            <div style="flex:1 1 200px;min-width:0">
+              <div style="font-weight:700;font-size:17px">{{s.customer}}</div>
+              <div class="muted">Vente n° {{s.no}} · {{s.time}} · {{s.items}}</div>
+            </div>
+            <div class="num" style="font-weight:800;font-size:19px;text-decoration:{{s.strike}}">{{s.totalTxt}} F</div>
+            <span class="pill" style="background:{{s.bg}};color:{{s.ink}};min-width:140px">{{s.status}}</span>
+          </a>
+        </sc-for>
+      </section>
+    </sc-for>
+
+    <sc-if value="{{empty}}" hint-placeholder-val="{{ false }}">
+      <div class="card" style="text-align:center;padding:40px 20px;font-size:18px" >
+        <div style="font-weight:700">Aucune vente ici</div>
+        <div class="muted" style="margin-top:4px">Changez de période ou de filtre.</div>
+      </div>
+    </sc-if>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { period: 'week', st: 'all', q: '' };
+  }
+  renderVals() {
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const all = [
+      { d: 0, no: '1046', time: '10 h 42', customer: 'Awa Diop', initials: 'AD', items: '4 articles', total: 12500, st: 'paid' },
+      { d: 0, no: '1045', time: '10 h 15', customer: 'Client de passage', initials: '·', items: '2 articles', total: 3200, st: 'paid' },
+      { d: 0, no: '1044', time: '9 h 58', customer: 'Moussa Fall', initials: 'MF', items: '3 articles', total: 25000, st: 'due', rest: 10000 },
+      { d: 0, no: '1043', time: '9 h 20', customer: 'Boutique Ndiaye', initials: 'BN', items: '12 articles', total: 47500, st: 'paid' },
+      { d: 0, no: '1042', time: '8 h 47', customer: 'Client de passage', initials: '·', items: '1 article', total: 1800, st: 'cancelled' },
+      { d: 1, no: '1041', time: '19 h 05', customer: 'Aminata Sow', initials: 'AS', items: '6 articles', total: 20000, st: 'due', rest: 12000 },
+      { d: 1, no: '1040', time: '17 h 30', customer: 'Client de passage', initials: '·', items: '3 articles', total: 4300, st: 'return', back: 1400 },
+      { d: 1, no: '1039', time: '12 h 12', customer: 'Ibrahima Ba', initials: 'IB', items: '1 article', total: 15500, st: 'paid' },
+      { d: 1, no: '1038', time: '8 h 03', customer: 'Mariama Diallo', initials: 'MD', items: '5 articles', total: 7500, st: 'due', rest: 7500 }
+    ];
+    const q = s.q.trim().toLowerCase();
+    const keep = all.filter((x) =>
+      (s.period !== 'today' || x.d === 0) && (s.period !== 'yesterday' || x.d === 1) &&
+      (s.st === 'all' || x.st === s.st) &&
+      (!q || x.customer.toLowerCase().indexOf(q) >= 0 || x.no.indexOf(q) >= 0));
+    const look = (x) => {
+      if (x.st === 'paid') return { status: 'Payé', bg: '#E6F4EC', ink: '#024A2C' };
+      if (x.st === 'due') return { status: 'Reste ' + fmt(x.rest) + ' F', bg: '#FFF0E3', ink: '#9A3412' };
+      if (x.st === 'return') return { status: 'Retour : ' + fmt(x.back) + ' F', bg: '#EAF1FD', ink: '#1747AE' };
+      return { status: 'Annulée', bg: '#F3EEE5', ink: '#3C4440' };
+    };
+    const groups = [[0, "Aujourd'hui"], [1, 'Hier, lundi 5 octobre']].map(([d, day]) => {
+      const rows = keep.filter((x) => x.d === d);
+      const sum = rows.filter((x) => x.st !== 'cancelled').reduce((t, x) => t + x.total, 0);
+      return {
+        day: day, count: rows.length + (rows.length > 1 ? ' ventes' : ' vente'), totalTxt: fmt(sum), has: rows.length > 0,
+        rows: rows.map((x) => Object.assign({}, x, look(x), {
+          totalTxt: fmt(x.total),
+          avBg: x.initials === '·' ? '#F3EEE5' : '#F2ECFC', avInk: x.initials === '·' ? '#3C4440' : '#5530A3',
+          opacity: x.st === 'cancelled' ? 0.6 : 1, strike: x.st === 'cancelled' ? 'line-through' : 'none'
+        }))
+      };
+    }).filter((g) => g.has);
+    const chips = (list, key) => list.map(([id, label]) => ({
+      label: label, cls: s[key] === id ? 'on' : '', pick: () => { const p = {}; p[key] = id; set(p); }
+    }));
+    return {
+      summary: "Aujourd'hui : 4 ventes · 88 200 F",
+      q: s.q, onSearch: (e) => set({ q: e.target.value }),
+      periods: chips([['today', "Aujourd'hui"], ['yesterday', 'Hier'], ['week', 'Cette semaine'], ['month', 'Ce mois']], 'period'),
+      states: chips([['all', 'Toutes'], ['paid', 'Payées'], ['due', 'Pas encore payées'], ['return', 'Avec retour'], ['cancelled', 'Annulées']], 'st'),
+      groups: groups, empty: groups.length === 0
+    };
+  }
+}
+</script>
+</body>
+</html>

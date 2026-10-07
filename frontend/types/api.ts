@@ -652,6 +652,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/sales/customer-choices": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Customer Choices
+     * @description Clients à choisir pour une vente : récents d'abord, puis alphabétique (ADR 0063).
+     *
+     *     Déclarée avant `/{sale_id}` : sinon ce chemin serait lu comme un identifiant.
+     */
+    get: operations["customer_choices_api_v1_sales_customer_choices_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/sales/{sale_id}": {
     parameters: {
       query?: never;
@@ -1789,6 +1811,39 @@ export interface components {
     "CostPrice-Output": components["schemas"]["UnitCost-Output"];
     "CreditLimit-Input": components["schemas"]["Amount-Input"];
     "CreditLimit-Output": components["schemas"]["Amount-Output"];
+    /**
+     * CustomerChoice
+     * @description Un client tel que la liste de « Nouvelle vente » le montre (ADR 0063).
+     */
+    CustomerChoice: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Name */
+      name: string;
+      /** Phone */
+      phone: string | null;
+      open_debt: components["schemas"]["Amount-Output"];
+      /** Recent */
+      recent: boolean;
+    };
+    /**
+     * CustomerChoicePage
+     * @description Page de la liste. La page 1 commence par les clients récents, puis tous les autres
+     *     par ordre alphabétique ; `total` les compte tous, récents compris.
+     */
+    CustomerChoicePage: {
+      /** Items */
+      items: components["schemas"]["CustomerChoice"][];
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Total */
+      total: number;
+    };
     CustomerCode: string;
     /**
      * CustomerCreate
@@ -3396,6 +3451,7 @@ export interface components {
       total: components["schemas"]["Amount-Output"];
       paid_total: components["schemas"]["Amount-Output"];
       balance: components["schemas"]["Amount-Output"];
+      debt_status: components["schemas"]["DebtStatus"] | null;
       /** Has Returns */
       has_returns: boolean;
       returned_total: components["schemas"]["Amount-Output"];
@@ -3504,6 +3560,7 @@ export interface components {
       total: components["schemas"]["Amount-Output"];
       paid_total: components["schemas"]["Amount-Output"];
       balance: components["schemas"]["Amount-Output"];
+      debt_status: components["schemas"]["DebtStatus"] | null;
       /** Has Returns */
       has_returns: boolean;
       returned_total: components["schemas"]["Amount-Output"];
@@ -5478,6 +5535,39 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SaleDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  customer_choices_api_v1_sales_customer_choices_get: {
+    parameters: {
+      query?: {
+        page?: number;
+        page_size?: number;
+        search?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CustomerChoicePage"];
         };
       };
       /** @description Validation Error */

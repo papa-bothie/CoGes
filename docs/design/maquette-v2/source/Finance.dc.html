@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — L'argent</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#EAF1FD;color:#1747AE}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box}
+.card{background:#fff;border-radius:22px;border:1px solid #ECE6DC;padding:22px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:52px;padding:0 20px;border-radius:16px;border:0;font:inherit;font-weight:700;font-size:17px;cursor:pointer;text-decoration:none}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+h2{font-size:20px;margin:0;font-weight:700}
+.chip{min-height:50px;padding:0 20px;border-radius:999px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:16px;color:#1E2320;cursor:pointer}
+.chip.on{border-color:#1F5BD8;background:#1F5BD8;color:#fff}
+.blk{flex:1 1 170px;border-radius:18px;padding:16px 18px;display:flex;flex-direction:column;gap:4px;box-sizing:border-box}
+.op{display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;color:#8A918D;flex:0 0 auto;padding:0 2px}
+.row{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #F0EBE2}
+.av{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab on" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="display:flex;flex-direction:column;gap:22px">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px">
+      <h1>L'argent</h1>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <sc-for list="{{periods}}" as="p" hint-placeholder-count="3">
+          <button type="button" class="chip {{p.cls}}" onClick="{{p.pick}}">{{p.label}}</button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px">
+      <a href="Reglement.dc.html" class="card" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:#1E2320;min-height:76px;padding:16px;background:#F2ECFC;border-color:#E2D6F7"><svg class="ico" viewBox="0 0 24 24" style="width:28px;height:28px;color:#5530A3"><path d="M17 7 7 17M7 8v9h9"></path></svg><span style="font-weight:700;font-size:17px">Encaisser une dette</span></a>
+      <a href="PayerFournisseur.dc.html" class="card" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:#1E2320;min-height:76px;padding:16px;background:#EAF1FD;border-color:#D3E1FA"><svg class="ico" viewBox="0 0 24 24" style="width:28px;height:28px;color:#1747AE"><path d="M7 17 17 7M8 7h9v9"></path></svg><span style="font-weight:700;font-size:17px">Payer un fournisseur</span></a>
+      <a href="Depenses.dc.html" class="card" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:#1E2320;min-height:76px;padding:16px;background:#FDECEC;border-color:#F6D5D6"><svg class="ico" viewBox="0 0 24 24" style="width:28px;height:28px;color:#A51D24"><path d="M12 5v14M5 12h14"></path></svg><span style="font-weight:700;font-size:17px">Ajouter une dépense</span></a>
+      <a href="Caisse.dc.html" class="card" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:#1E2320;min-height:76px;padding:16px"><svg class="ico" viewBox="0 0 24 24" style="width:28px;height:28px;color:#3C4440"><path d="M4 6h16M4 12h16M4 18h16"></path></svg><span style="font-weight:700;font-size:17px">Entrées et sorties</span></a>
+    </div>
+
+    <section class="card" style="display:flex;flex-direction:column;gap:18px;padding:26px">
+      <div>
+        <div class="muted" style="font-size:18px;font-weight:600">{{whenTxt}}, vous avez</div>
+        <div style="display:flex;align-items:baseline;flex-wrap:wrap;gap:12px">
+          <span style="font-size:30px;font-weight:800;color:{{gainInk}}">{{verb}}</span>
+          <span class="num" style="font-size:52px;font-weight:800;line-height:1.1;color:{{gainInk}}">{{gainTxt}} F</span>
+        </div>
+        <sc-if value="{{loss}}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:6px;font-weight:700;font-size:17px;color:#9A3412">{{lossWhy}}</div>
+        </sc-if>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:stretch">
+        <div class="blk" style="background:#E6F4EC"><span style="font-weight:600">Vendu</span><span class="num" style="font-weight:800;font-size:22px;color:#024A2C">{{soldTxt}} F</span></div>
+        <div class="op" aria-hidden="true">−</div>
+        <div class="blk" style="background:#FFF0E3"><span style="font-weight:600">Prix d'achat des articles vendus</span><span class="num" style="font-weight:800;font-size:22px;color:#9A3412">{{costTxt}} F</span></div>
+        <div class="op" aria-hidden="true">−</div>
+        <div class="blk" style="background:#FDECEC"><span style="font-weight:600">Dépenses</span><span class="num" style="font-weight:800;font-size:22px;color:#A51D24">{{expTxt}} F</span></div>
+        <div class="op" aria-hidden="true">=</div>
+        <div class="blk" style="background:{{gainBg}};color:#fff"><span style="font-weight:600">{{gainLabel}}</span><span class="num" style="font-weight:800;font-size:22px">{{gainTxt}} F</span></div>
+      </div>
+    </section>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">
+      <div class="card" style="display:flex;align-items:center;gap:14px;background:#E6F4EC;border-color:#CFE9DA">
+        <div style="width:52px;height:52px;border-radius:16px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">
+          <svg class="ico" viewBox="0 0 24 24" style="width:26px;height:26px"><path d="M17 7 7 17M7 8v9h9"></path></svg>
+        </div>
+        <div><div style="font-weight:600">Entré dans la caisse</div><div class="num" style="font-size:28px;font-weight:800;color:#024A2C">{{inTxt}} F</div></div>
+      </div>
+      <div class="card" style="display:flex;align-items:center;gap:14px;background:#FFF0E3;border-color:#F8DCC4">
+        <div style="width:52px;height:52px;border-radius:16px;background:#C2410C;color:#fff;display:flex;align-items:center;justify-content:center;flex:none">
+          <svg class="ico" viewBox="0 0 24 24" style="width:26px;height:26px"><path d="M7 17 17 7M8 7h9v9"></path></svg>
+        </div>
+        <div><div style="font-weight:600">Sorti de la caisse</div><div class="num" style="font-size:28px;font-weight:800;color:#9A3412">{{outTxt}} F</div></div>
+      </div>
+      <div class="card" style="display:flex;align-items:center;gap:14px;background:#1F5BD8;border-color:#1F5BD8;color:#fff">
+        <div style="width:52px;height:52px;border-radius:16px;background:#fff;color:#1F5BD8;display:flex;align-items:center;justify-content:center;flex:none">
+          <svg class="ico" viewBox="0 0 24 24" style="width:26px;height:26px"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>
+        </div>
+        <div><div style="font-weight:600">Différence</div><div class="num" style="font-size:28px;font-weight:800">{{diffTxt}} F</div></div>
+      </div>
+    </div>
+
+    <section class="card">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px">
+        <h2>{{chartTitle}}</h2>
+        <div style="display:flex;gap:18px;font-weight:600">
+          <span style="display:flex;align-items:center;gap:8px"><span style="width:16px;height:16px;border-radius:5px;background:#117A3C"></span>Entré</span>
+          <span style="display:flex;align-items:center;gap:8px"><span style="width:16px;height:16px;border-radius:5px;background:#E8833A"></span>Sorti</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:18px;height:260px;margin-top:18px;border-bottom:2px solid #ECE6DC">
+        <sc-for list="{{groups}}" as="g" hint-placeholder-count="4">
+          <div style="flex:1;display:flex;align-items:flex-end;justify-content:center;gap:6px;height:100%">
+            <div style="flex:1;max-width:56px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%">
+              <span class="num" style="font-size:13px;font-weight:700;color:#024A2C;white-space:nowrap">{{g.inTxt}}</span>
+              <div style="width:100%;height:{{g.inH}};background:#117A3C;border-radius:10px 10px 3px 3px"></div>
+            </div>
+            <div style="flex:1;max-width:56px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%">
+              <span class="num" style="font-size:13px;font-weight:700;color:#9A3412;white-space:nowrap">{{g.outTxt}}</span>
+              <div style="width:100%;height:{{g.outH}};background:#E8833A;border-radius:10px 10px 3px 3px"></div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:18px;margin-top:8px">
+        <sc-for list="{{groups}}" as="g" hint-placeholder-count="4">
+          <div style="flex:1;text-align:center;font-weight:600;color:#3C4440">{{g.label}}</div>
+        </sc-for>
+      </div>
+    </section>
+
+    <div style="display:flex;flex-wrap:wrap;gap:16px">
+      <section class="card" style="flex:1 1 380px;min-width:0">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
+          <h2>Les clients vous doivent</h2>
+          <span class="num" style="font-weight:800;font-size:22px;color:#5530A3">54 500 F</span>
+        </div>
+        <div style="margin-top:8px">
+          <div class="row"><div class="av" style="background:#F2ECFC;color:#5530A3">MF</div><div style="flex:1;font-weight:700">Moussa Fall</div><span class="num" style="font-weight:800">25 000 F</span></div>
+          <div class="row"><div class="av" style="background:#F2ECFC;color:#5530A3">AS</div><div style="flex:1;font-weight:700">Aminata Sow</div><span class="num" style="font-weight:800">12 000 F</span></div>
+          <div class="row"><div class="av" style="background:#F2ECFC;color:#5530A3">MD</div><div style="flex:1;font-weight:700">Mariama Diallo</div><span class="num" style="font-weight:800">7 500 F</span></div>
+        </div>
+        <a class="btn" href="Reglement.dc.html" style="background:#6D3FC8;color:#fff;width:100%;box-sizing:border-box;margin-top:12px">Encaisser une dette</a>
+      </section>
+      <section class="card" style="flex:1 1 380px;min-width:0">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
+          <h2>Vous devez aux fournisseurs</h2>
+          <span class="num" style="font-weight:800;font-size:22px;color:#1747AE">185 000 F</span>
+        </div>
+        <div style="margin-top:8px">
+          <div class="row"><div class="av" style="background:#EAF1FD;color:#1747AE">GS</div><div style="flex:1"><div style="font-weight:700">Grossiste Sandaga</div><div class="muted">À payer avant le 10 octobre</div></div><span class="num" style="font-weight:800">120 000 F</span></div>
+          <div class="row"><div class="av" style="background:#EAF1FD;color:#1747AE">SD</div><div style="flex:1"><div style="font-weight:700">Sénégal Distribution</div><div class="muted">À payer avant le 18 octobre</div></div><span class="num" style="font-weight:800">65 000 F</span></div>
+        </div>
+        <a class="btn" href="PayerFournisseur.dc.html" style="background:#1F5BD8;color:#fff;width:100%;box-sizing:border-box;margin-top:12px">Payer un fournisseur</a>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1300}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { period: 'month' };
+  }
+  renderVals() {
+    const fmt = (n) => (n < 0 ? '−' : '') + String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const data = {
+      today: {
+        label: "Aujourd'hui", when: "Aujourd'hui", sold: 87500, cost: 63000, exp: 35000, cin: 77500, cout: 41000,
+        why: "À cause de la facture d'électricité payée ce matin (35 000 F).",
+        chartTitle: 'Entrées et sorties de la journée',
+        groups: [['Matin', 32500, 35000], ['Midi', 21000, 0], ['Après-midi', 15500, 6000], ['Soir', 8500, 0]]
+      },
+      week: {
+        label: 'Cette semaine', when: 'Cette semaine', sold: 568500, cost: 410000, exp: 52000, cin: 530000, cout: 385000,
+        chartTitle: 'Entrées et sorties par jour',
+        groups: [['Mer', 60000, 40000], ['Jeu', 70000, 120000], ['Ven', 95000, 30000], ['Sam', 118000, 85000], ['Dim', 42000, 0], ['Lun', 67500, 69000], ['Mar', 77500, 41000]]
+      },
+      month: {
+        label: 'Ce mois', when: 'Ce mois-ci', sold: 2340000, cost: 1690000, exp: 237500, cin: 2180000, cout: 1905000,
+        chartTitle: 'Entrées et sorties par semaine',
+        groups: [['Semaine 1', 520000, 610000], ['Semaine 2', 540000, 430000], ['Semaine 3', 590000, 480000], ['Semaine 4', 530000, 385000]]
+      }
+    };
+    const d = data[this.state.period];
+    const gain = d.sold - d.cost - d.exp;
+    const loss = gain < 0;
+    const max = d.groups.reduce((m, g) => Math.max(m, g[1], g[2]), 1);
+    const h = (v) => Math.max(v > 0 ? 4 : 0, Math.round((v / max) * 200)) + 'px';
+    const groups = d.groups.map((g) => ({ label: g[0], inTxt: fmt(g[1]), outTxt: g[2] ? fmt(g[2]) : '0', inH: h(g[1]), outH: h(g[2]) }));
+    const periods = ['today', 'week', 'month'].map((id) => ({
+      label: data[id].label, cls: this.state.period === id ? 'on' : '', pick: () => this.setState({ period: id })
+    }));
+    return {
+      periods: periods, whenTxt: d.when, loss: loss, lossWhy: d.why || '',
+      verb: loss ? 'perdu' : 'gagné', gainTxt: fmt(Math.abs(gain)),
+      gainInk: loss ? '#9A3412' : '#024A2C', gainBg: loss ? '#C2410C' : '#117A3C', gainLabel: loss ? 'Perdu' : 'Gagné',
+      soldTxt: fmt(d.sold), costTxt: fmt(d.cost), expTxt: fmt(d.exp),
+      inTxt: fmt(d.cin), outTxt: fmt(d.cout), diffTxt: (d.cin - d.cout >= 0 ? '+' : '') + fmt(d.cin - d.cout),
+      chartTitle: d.chartTitle, groups: groups
+    };
+  }
+}
+</script>
+</body>
+</html>

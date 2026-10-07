@@ -40,6 +40,8 @@ const nextConfig: NextConfig = {
   // répertoire de build (deploy/scripts/e2e.sh, ADR 0059). Vercel et `pnpm dev` : `.next`.
   distDir: process.env.COGES_NEXT_DIST_DIR || ".next",
   poweredByHeader: false,
+  // Le bouton « N » de développement ne doit pas apparaître sur les captures d'écran.
+  devIndicators: false,
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
   },

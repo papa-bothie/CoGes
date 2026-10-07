@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 
 import { AlertBanner, type AlertSeverity } from "@/components/alerts/alert-banner";
+import { OutboxLagBanner } from "@/components/dashboard/outbox-lag-banner";
 import { PeriodBarChart } from "@/components/charts/period-bar-chart";
 import { ErrorState } from "@/components/error-state";
 import { IntelligenceSummaryCard } from "@/components/forecast/intelligence-summary-card";
@@ -104,6 +105,8 @@ export function DashboardView() {
           data ? labels.dashboard.computedAt(formatDateTime(data.computed_at, timeZone)) : undefined
         }
       />
+
+      <OutboxLagBanner />
 
       {data && (data.active_alerts.length > 0 || data.stock_alert_count > 0) && (
         <section aria-label={labels.dashboard.alerts} className="space-y-2">

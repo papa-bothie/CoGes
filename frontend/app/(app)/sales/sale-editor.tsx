@@ -10,6 +10,7 @@ import { ErrorState } from "@/components/error-state";
 import { FieldError } from "@/components/field-error";
 import { Money } from "@/components/money";
 import { PageHeader } from "@/components/page-header";
+import { CustomerPicker, type PickedCustomer } from "@/components/sales/customer-picker";
 import { SearchCombobox } from "@/components/search-combobox";
 import { SaleStatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
@@ -43,7 +44,6 @@ import { SaleLineRow, type LineChange } from "./sale-line-row";
 
 type SaleDetail = Schemas["SaleDetail"];
 type Product = Schemas["ProductRead"];
-type Customer = Schemas["CustomerRead"];
 type PaymentMethod = Schemas["PaymentMethod"];
 type Mode = "full" | "partial" | "credit";
 
@@ -83,15 +83,6 @@ async function searchProducts(text: string): Promise<ProductHit[]> {
   return page.items.map((product) => ({ product, stock: byProduct.get(product.id) }));
 }
 
-async function searchCustomers(text: string): Promise<Customer[]> {
-  const page = await unwrap(
-    api.GET("/api/v1/customers", {
-      params: { query: { search: text || undefined, page_size: 8 } },
-    }),
-  );
-  return page.items;
-}
-
 /**
  * Saisie d'une vente. Le brouillon naît **côté serveur** au premier article, chaque
  * modification y est synchronisée, et les totaux affichés sont ceux qu'il renvoie : le
@@ -106,7 +97,7 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
   const showTax = me?.company.tax_enabled ?? true;
 
   const [saleId, setSaleId] = useState(initialId);
-  const [pendingCustomer, setPendingCustomer] = useState<Customer | null>(null);
+  const [pendingCustomer, setPendingCustomer] = useState<PickedCustomer | null>(null);
   const [lineErrors, setLineErrors] = useState<Record<string, string>>({});
   const [articleError, setArticleError] = useState<string | null>(null);
   const [settlementError, setSettlementError] = useState<string | null>(null);
@@ -198,7 +189,7 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
 
   const setCustomer = useMutation({
     mutationKey: ["sale-editor", "customer"],
-    mutationFn: (customer: Customer | null) =>
+    mutationFn: (customer: PickedCustomer | null) =>
       unwrap(
         api.PATCH("/api/v1/sales/{sale_id}", {
           params: { path: { sale_id: saleId! } },
@@ -208,7 +199,7 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
     onSuccess: (updated) => queryClient.setQueryData(queryKeys.sales.detail(updated.id), updated),
   });
 
-  const chooseCustomer = (customer: Customer | null) => {
+  const chooseCustomer = (customer: PickedCustomer | null) => {
     setSettlementError(null);
     if (saleId) setCustomer.mutate(customer);
     else setPendingCustomer(customer);
@@ -335,19 +326,10 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
                 </div>
               ) : (
                 <>
-                  <SearchCombobox
-                    label={labels.sales.customerSearch}
-                    queryKey={queryKeys.customers.search}
-                    search={searchCustomers}
-                    itemKey={(customer) => customer.id}
+                  <CustomerPicker
                     onSelect={chooseCustomer}
                     disabled={setCustomer.isPending}
-                    renderItem={(customer) => (
-                      <span className="flex justify-between gap-3">
-                        <span>{customer.name}</span>
-                        <span className="numeric text-muted-foreground">{customer.code}</span>
-                      </span>
-                    )}
+                    currency={currency}
                   />
                   <p className="mt-2 text-sm text-muted-foreground">{labels.sales.noCustomer}</p>
                 </>

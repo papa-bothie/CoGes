@@ -19,6 +19,7 @@ from app.core.idempotency import IdempotencyKey
 from app.core.repository import MAX_PAGE_SIZE
 from app.modules.sales import service
 from app.modules.sales.schemas import (
+    CustomerChoicePage,
     ReceiptRead,
     RefundCreate,
     SaleCancel,
@@ -65,6 +66,22 @@ def create_sale(
     """Ouvre un brouillon. Aucun effet de bord tant qu'il n'est pas confirmé."""
     sale = service.create_sale(tenant.session, tenant.ctx, payload)
     return service.build_detail(tenant.session, tenant.ctx, sale)
+
+
+@router.get("/customer-choices", response_model=CustomerChoicePage)
+def customer_choices(
+    tenant: Annotated[TenantSession, Depends(require_permission("sales:create"))],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = 50,
+    search: Annotated[str | None, Query(max_length=120)] = None,
+) -> CustomerChoicePage:
+    """Clients à choisir pour une vente : récents d'abord, puis alphabétique (ADR 0063).
+
+    Déclarée avant `/{sale_id}` : sinon ce chemin serait lu comme un identifiant.
+    """
+    return service.customer_choices(
+        tenant.session, tenant.ctx, page=page, page_size=page_size, search=search
+    )
 
 
 @router.get("", response_model=SalePage)

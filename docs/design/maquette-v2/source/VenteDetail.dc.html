@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Vente n° 1044</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#E6F4EC;color:#024A2C}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box}
+.card{background:#fff;border-radius:22px;border:1px solid #ECE6DC;padding:22px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:56px;padding:0 20px;border-radius:18px;border:0;font:inherit;font-weight:700;font-size:17px;cursor:pointer;text-decoration:none}
+.act{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:96px;flex:1 1 150px;border-radius:18px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:16px;color:#1E2320;cursor:pointer;text-decoration:none;text-align:center;padding:10px}
+.act:hover{border-color:#117A3C;color:#024A2C}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+h2{font-size:20px;margin:0;font-weight:700}
+.pill{display:inline-flex;align-items:center;justify-content:center;padding:8px 14px;border-radius:999px;font-weight:700;font-size:16px;white-space:nowrap}
+.line{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #F0EBE2}
+.sq{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;flex:none}
+.why{min-height:56px;padding:0 18px;border-radius:16px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:16px;color:#1E2320;cursor:pointer;flex:1 1 200px}
+.why.on{border-color:#A51D24;background:#FDECEC;color:#A51D24}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab on" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="display:flex;flex-direction:column;gap:20px">
+    <a href="Ventes.dc.html" style="display:inline-flex;align-items:center;gap:8px;font-weight:700;text-decoration:none;min-height:44px;align-self:flex-start">
+      <svg class="ico" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg>Toutes les ventes
+    </a>
+
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:16px">
+      <div style="flex:1 1 300px">
+        <h1 style="text-decoration:{{strike}}">Vente n° 1044</h1>
+        <div class="muted" style="font-size:18px">Aujourd'hui à 9 h 58 · servie par Fatou</div>
+      </div>
+      <span class="pill" style="background:{{badgeBg}};color:{{badgeInk}};font-size:18px;padding:10px 18px">{{badge}}</span>
+    </div>
+
+    <sc-if value="{{cancelled}}" hint-placeholder-val="{{ false }}">
+      <div style="padding:16px 18px;border-radius:18px;background:#F3EEE5;font-weight:700;font-size:17px">Vente annulée ({{reasonTxt}}). Les articles reviennent dans le stock.</div>
+    </sc-if>
+
+    <sc-if value="{{active}}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-wrap:wrap;gap:10px">
+        <a class="act" href="Recu.dc.html"><svg class="ico" viewBox="0 0 24 24" style="width:28px;height:28px"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"></path></svg>Imprimer le reçu</a>
+        <a class="act" href="Recu.dc.html"><svg class="ico" viewBox="0 0 24 24" style="width:28px;height:28px"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"></path></svg>Envoyer par WhatsApp</a>
+        <a class="act" href="Reglement.dc.html" style="border-color:#D5C6F5;background:#F2ECFC;color:#5530A3"><svg class="ico" viewBox="0 0 24 24" style="width:28px;height:28px"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20"></path></svg>Encaisser le reste</a>
+        <a class="act" href="Retour.dc.html"><svg class="ico" viewBox="0 0 24 24" style="width:28px;height:28px"><path d="M9 14 4 9l5-5"></path><path d="M4 9h11a5 5 0 0 1 0 10h-3"></path></svg>Retour d'articles</a>
+        <button type="button" class="act" onClick="{{askCancel}}" style="color:#A51D24;border-color:#F3C9CB"><svg class="ico" viewBox="0 0 24 24" style="width:28px;height:28px"><circle cx="12" cy="12" r="9"></circle><path d="M8 8l8 8M16 8l-8 8"></path></svg>Annuler la vente</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{asking}}" hint-placeholder-val="{{ false }}">
+      <section class="card" style="border:2px solid #F3C9CB;display:flex;flex-direction:column;gap:14px">
+        <h2 style="color:#A51D24">Pourquoi annuler cette vente ?</h2>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <sc-for list="{{reasons}}" as="r" hint-placeholder-count="4">
+            <button type="button" class="why {{r.cls}}" onClick="{{r.pick}}">{{r.label}}</button>
+          </sc-for>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <button type="button" class="btn" onClick="{{doCancel}}" disabled="{{noReason}}" style="background:{{cancelBg}};color:#fff;flex:1 1 220px">Oui, annuler la vente</button>
+          <button type="button" class="btn" onClick="{{keep}}" style="background:#fff;color:#1E2320;border:2px solid #E3DCD0;flex:1 1 220px">Non, garder la vente</button>
+        </div>
+      </section>
+    </sc-if>
+
+    <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+      <section class="card" style="flex:3 1 480px;min-width:0">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+          <div style="width:48px;height:48px;border-radius:50%;background:#6D3FC8;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700">MF</div>
+          <div style="flex:1"><div style="font-weight:700;font-size:18px">Moussa Fall</div><div class="muted num">76 220 15 90</div></div>
+          <a href="ClientFiche.dc.html" style="font-weight:700">Voir le client</a>
+        </div>
+        <sc-for list="{{lines}}" as="l" hint-placeholder-count="3">
+          <div class="line">
+            <div class="sq" style="background:{{l.color}}">{{l.initial}}</div>
+            <div style="flex:1;min-width:0"><div style="font-weight:700">{{l.name}}</div><div class="muted num">{{l.qty}} × {{l.priceTxt}} F</div></div>
+            <div class="num" style="font-weight:800;font-size:18px">{{l.totalTxt}} F</div>
+          </div>
+        </sc-for>
+      </section>
+
+      <section class="card" style="flex:2 1 320px;min-width:0;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:14px 16px;border-radius:16px;background:#E6F4EC">
+          <span style="font-weight:700;font-size:18px">Total</span><span class="num" style="font-weight:800;font-size:30px;color:#024A2C">25 000 F</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:18px;padding:0 4px"><span style="font-weight:600">Payé</span><span class="num" style="font-weight:800">15 000 F</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:18px;padding:0 4px;color:#9A3412"><span style="font-weight:700">Reste à payer</span><span class="num" style="font-weight:800">10 000 F</span></div>
+        <div style="border-top:1px solid #F0EBE2;padding-top:12px">
+          <div style="font-weight:700;margin-bottom:6px">Paiements reçus</div>
+          <div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0"><span>Aujourd'hui, 9 h 58 · Espèces</span><span class="num" style="font-weight:700">15 000 F</span></div>
+        </div>
+        <div style="border-top:1px solid #F0EBE2;padding-top:12px">
+          <div style="font-weight:700">À payer avant le</div>
+          <div class="num" style="font-size:18px">20 octobre</div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { mode: 'active', why: null };
+  }
+  renderVals() {
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const lines = [
+      { name: 'Riz brisé 25 kg', qty: 1, price: 15500, color: '#B45309' },
+      { name: 'Huile Dinor 1 L', qty: 5, price: 1400, color: '#CA8A04' },
+      { name: 'Bougies (paquet)', qty: 5, price: 500, color: '#4D7C0F' }
+    ].map((l) => Object.assign({}, l, { initial: l.name.charAt(0), priceTxt: fmt(l.price), totalTxt: fmt(l.qty * l.price) }));
+    const list = [['mistake', 'Erreur de saisie'], ['mind', 'Le client a changé d’avis'], ['double', 'Vente enregistrée deux fois'], ['other', 'Autre raison']];
+    const reasons = list.map(([id, label]) => ({ label: label, cls: s.why === id ? 'on' : '', pick: () => set({ why: id }) }));
+    const cancelled = s.mode === 'cancelled';
+    const found = list.find(([id]) => id === s.why);
+    return {
+      lines: lines, reasons: reasons,
+      active: s.mode === 'active', asking: s.mode === 'asking', cancelled: cancelled,
+      askCancel: () => set({ mode: 'asking' }), keep: () => set({ mode: 'active', why: null }),
+      doCancel: () => { if (s.why) set({ mode: 'cancelled' }); },
+      noReason: !s.why, cancelBg: s.why ? '#A51D24' : '#D9A9AB',
+      reasonTxt: found ? found[1].toLowerCase() : '',
+      badge: cancelled ? 'Annulée' : 'Reste 10 000 F',
+      badgeBg: cancelled ? '#F3EEE5' : '#FFF0E3', badgeInk: cancelled ? '#3C4440' : '#9A3412',
+      strike: cancelled ? 'line-through' : 'none'
+    };
+  }
+}
+</script>
+</body>
+</html>

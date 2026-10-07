@@ -106,7 +106,9 @@ def _add_line(
 
 
 def _stock_of(client: TestClient, token: str, product_id: str) -> Decimal:
-    response = client.get("/api/v1/inventory/stock?page_size=100", headers=auth_headers(token))
+    response = client.get(
+        "/api/v1/inventory/stock", params={"product_id": product_id}, headers=auth_headers(token)
+    )
     assert response.status_code == 200
     row = next(item for item in response.json()["items"] if item["product_id"] == product_id)
     return Decimal(row["qty_on_hand"])

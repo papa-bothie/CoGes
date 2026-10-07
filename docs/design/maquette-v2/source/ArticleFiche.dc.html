@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Riz brisé 25 kg</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#FFF0E3;color:#9A3412}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box}
+.card{background:#fff;border-radius:22px;border:1px solid #ECE6DC;padding:22px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:56px;padding:0 20px;border-radius:18px;border:0;font:inherit;font-weight:700;font-size:17px;cursor:pointer;text-decoration:none}
+.ghostbtn{background:#fff;color:#1E2320;border:2px solid #E3DCD0}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+h2{font-size:20px;margin:0;font-weight:700}
+.tile{border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:4px}
+.mv{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #F0EBE2}
+.dot{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;flex:none}
+input.in{width:100%;box-sizing:border-box;min-height:58px;border-radius:16px;border:2px solid #E3DCD0;padding:0 16px;font:inherit;font-size:22px;font-weight:700;background:#fff;color:#1E2320}
+input.in:focus{outline:3px solid #FCC9A3;border-color:#C2410C}
+.step{width:52px;height:52px;border-radius:14px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-size:24px;font-weight:700;cursor:pointer;color:#1E2320}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab on" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="display:flex;flex-direction:column;gap:20px">
+    <a href="Articles.dc.html" style="display:inline-flex;align-items:center;gap:8px;font-weight:700;text-decoration:none;min-height:44px;align-self:flex-start">
+      <svg class="ico" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"></path></svg>Tous les articles
+    </a>
+
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:16px">
+      <div style="width:72px;height:72px;border-radius:20px;background:#B45309;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:30px">R</div>
+      <div style="flex:1 1 240px">
+        <h1>Riz brisé 25 kg</h1>
+        <div class="muted" style="font-size:18px">Céréales · vendu par sac</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button type="button" class="btn ghostbtn" onClick="{{toggleEdit}}">Changer les prix</button>
+        <a class="btn ghostbtn" href="Stock.dc.html">Corriger le stock</a>
+        <a class="btn" href="Livraison.dc.html" style="background:#C2410C;color:#fff">Commander</a>
+      </div>
+    </div>
+
+    <sc-if value="{{editing}}" hint-placeholder-val="{{ false }}">
+      <section class="card" style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;border:2px solid #F8DCC4">
+        <div style="flex:1 1 200px"><label for="ps" style="display:block;font-weight:700;margin-bottom:6px">Prix de vente (F)</label><input id="ps" class="in num" inputmode="numeric" value="{{saleTxt}}" onChange="{{onSale}}"></div>
+        <div style="flex:1 1 200px"><label for="pb" style="display:block;font-weight:700;margin-bottom:6px">Prix d'achat (F)</label><input id="pb" class="in num" inputmode="numeric" value="{{buyTxt}}" onChange="{{onBuy}}"></div>
+        <button type="button" class="btn" onClick="{{toggleEdit}}" style="background:#C2410C;color:#fff;flex:0 0 auto">Enregistrer</button>
+      </section>
+    </sc-if>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+      <div class="tile" style="background:#FFF0E3"><span style="font-weight:600">En stock</span><span class="num" style="font-size:32px;font-weight:800;color:#9A3412">2 sacs</span><span style="color:#9A3412;font-weight:600">Alerte à 3 sacs</span></div>
+      <div class="tile" style="background:#E6F4EC"><span style="font-weight:600">Prix de vente</span><span class="num" style="font-size:32px;font-weight:800;color:#024A2C">{{saleFmt}} F</span><span class="muted">Acheté {{buyFmt}} F</span></div>
+      <div class="tile" style="background:{{gainBg}}"><span style="font-weight:600">Gagné par sac</span><span class="num" style="font-size:32px;font-weight:800;color:{{gainInk}}">{{gainFmt}} F</span><span class="muted">Sur le prix d'achat moyen</span></div>
+      <div class="tile" style="background:#EAF1FD"><span style="font-weight:600">Vendu ce mois</span><span class="num" style="font-size:32px;font-weight:800;color:#1747AE">18 sacs</span><span class="muted">Environ 1 sac par jour</span></div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+      <section class="card" style="flex:3 1 460px;min-width:0">
+        <h2>Ce qui s'est passé</h2>
+        <div style="margin-top:8px">
+          <sc-for list="{{moves}}" as="m" hint-placeholder-count="6">
+            <div class="mv">
+              <div class="dot" style="background:{{m.bg}};color:{{m.ink}}">{{m.sign}}</div>
+              <div style="flex:1;min-width:0"><div style="font-weight:700">{{m.what}}</div><div class="muted">{{m.when}}</div></div>
+              <div class="num" style="font-weight:800;font-size:18px;color:{{m.ink}}">{{m.qty}}</div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <section class="card" style="flex:2 1 320px;min-width:0;display:flex;flex-direction:column;gap:14px">
+        <h2>Étiquette</h2>
+        <div style="border:2px dashed #D8CFC1;border-radius:14px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:6px;background:#fff">
+          <div style="font-weight:700">Riz brisé 25 kg</div>
+          <div class="num" style="font-weight:800;font-size:30px">{{saleFmt}} F</div>
+          <div style="display:flex;align-items:stretch;height:56px;gap:0">
+            <sc-for list="{{bars}}" as="b" hint-placeholder-count="40">
+              <div style="width:{{b.w}};background:{{b.c}}"></div>
+            </sc-for>
+          </div>
+          <div class="num" style="font-size:14px;letter-spacing:0.12em">2 000012 000478</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-weight:700;flex:1 1 140px">Combien d'étiquettes ?</span>
+          <button type="button" class="step" onClick="{{lessLabels}}" aria-label="Une de moins">−</button>
+          <input class="in num" inputmode="numeric" value="{{labelsTxt}}" onChange="{{onLabels}}" aria-label="Nombre d'étiquettes" style="width:80px;text-align:center;min-height:52px">
+          <button type="button" class="step" onClick="{{moreLabels}}" aria-label="Une de plus">+</button>
+        </div>
+        <button type="button" class="btn" style="background:#C2410C;color:#fff">Imprimer {{labels}} étiquettes</button>
+        <button type="button" onClick="{{toggleMore}}" aria-expanded="{{more}}" style="min-height:48px;border:0;background:none;font:inherit;font-weight:700;color:#3C4440;cursor:pointer;text-align:left;padding:0">{{moreLabel}}</button>
+        <sc-if value="{{more}}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:14px;background:#F6F2EB">
+            <div style="display:flex;justify-content:space-between"><span class="muted">Référence</span><span class="num" style="font-weight:700">ART-0012</span></div>
+            <div style="display:flex;justify-content:space-between"><span class="muted">Code-barres</span><span class="num" style="font-weight:700">2000012000478</span></div>
+            <div style="display:flex;justify-content:space-between"><span class="muted">TVA</span><span style="font-weight:700">Aucune</span></div>
+            <div style="display:flex;justify-content:space-between"><span class="muted">Créé le</span><span style="font-weight:700">2 septembre 2026</span></div>
+          </div>
+        </sc-if>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { edit: false, sale: '15500', buy: '14000', labels: 10, more: false };
+  }
+  renderVals() {
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const sale = parseInt(s.sale, 10) || 0;
+    const buy = parseInt(s.buy, 10) || 0;
+    const gain = sale - buy;
+    const moves = [
+      ['−', 'Vendu à Awa Diop', "Aujourd'hui, 10 h 42", '−1 sac', 'out'],
+      ['−', 'Vendu à Moussa Fall', "Aujourd'hui, 9 h 58", '−1 sac', 'out'],
+      ['−', 'Abîmé', 'Hier, 18 h 20', '−1 sac', 'loss'],
+      ['+', 'Livraison de Grossiste Sandaga', 'Samedi 3 octobre', '+10 sacs', 'in'],
+      ['+', 'Rendu par Ibrahima Ba', 'Jeudi 1er octobre', '+1 sac', 'in'],
+      ['=', 'Correction : erreur de comptage', 'Mardi 29 septembre', '+2 sacs', 'fix']
+    ].map(([sign, what, when, qty, kind]) => ({
+      sign: sign, what: what, when: when, qty: qty,
+      bg: kind === 'in' ? '#E6F4EC' : kind === 'loss' ? '#FDECEC' : kind === 'fix' ? '#EAF1FD' : '#FFF0E3',
+      ink: kind === 'in' ? '#024A2C' : kind === 'loss' ? '#A51D24' : kind === 'fix' ? '#1747AE' : '#9A3412'
+    }));
+    const pattern = '1011000110101100111010011011001010110011101001101';
+    const bars = pattern.split('').map((c, i) => ({ w: (i % 3 === 0 ? 3 : 2) + 'px', c: c === '1' ? '#111' : '#fff' }));
+    const digits = (v) => String(v).replace(/\D/g, '').slice(0, 9);
+    return {
+      editing: s.edit, toggleEdit: () => set({ edit: !s.edit }),
+      saleTxt: s.sale, buyTxt: s.buy, onSale: (e) => set({ sale: digits(e.target.value) }), onBuy: (e) => set({ buy: digits(e.target.value) }),
+      saleFmt: fmt(sale), buyFmt: fmt(buy), gainFmt: (gain < 0 ? '−' : '') + fmt(Math.abs(gain)),
+      gainBg: gain > 0 ? '#E6F4EC' : '#FDECEC', gainInk: gain > 0 ? '#024A2C' : '#A51D24',
+      moves: moves, bars: bars,
+      labels: s.labels, labelsTxt: s.labels === 0 ? '' : s.labels,
+      onLabels: (e) => set({ labels: Math.min(500, parseInt(digits(e.target.value), 10) || 0) }),
+      moreLabels: () => set({ labels: s.labels + 1 }), lessLabels: () => set({ labels: Math.max(1, s.labels - 1) }),
+      more: s.more, toggleMore: () => set({ more: !s.more }), moreLabel: s.more ? 'Moins d’infos ▴' : 'Plus d’infos ▾'
+    };
+  }
+}
+</script>
+</body>
+</html>

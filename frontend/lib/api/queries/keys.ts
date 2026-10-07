@@ -5,6 +5,7 @@
  */
 export const queryKeys = {
   dashboard: ["dashboard"] as const,
+  systemOutbox: ["system", "outbox"] as const,
   sales: {
     all: ["sales"] as const,
     list: (params: Record<string, unknown>) => ["sales", "list", params] as const,
@@ -36,6 +37,8 @@ export const queryKeys = {
   customers: {
     all: ["customers"] as const,
     search: ["customers", "search"] as const,
+    // Sous `customers` : une fiche créée ou modifiée invalide aussi la liste de vente.
+    choices: (term: string) => ["customers", "choices", term] as const,
     list: (params: Record<string, unknown>) => ["customers", "list", params] as const,
     detail: (id: string) => ["customers", "detail", id] as const,
   },

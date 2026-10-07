@@ -2519,6 +2519,80 @@
         }
       }
     },
+    "/api/v1/sales/customer-choices": {
+      "get": {
+        "tags": [
+          "sales"
+        ],
+        "summary": "Customer Choices",
+        "description": "Clients à choisir pour une vente : récents d'abord, puis alphabétique (ADR 0063).\n\nDéclarée avant `/{sale_id}` : sinon ce chemin serait lu comme un identifiant.",
+        "operationId": "customer_choices_api_v1_sales_customer_choices_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerChoicePage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sales/{sale_id}": {
       "get": {
         "tags": [
@@ -5864,6 +5938,81 @@
       "CreditLimit-Output": {
         "$ref": "#/components/schemas/Amount-Output",
         "ge": "0"
+      },
+      "CustomerChoice": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "open_debt": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "recent": {
+            "type": "boolean",
+            "title": "Recent"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "phone",
+          "open_debt",
+          "recent"
+        ],
+        "title": "CustomerChoice",
+        "description": "Un client tel que la liste de « Nouvelle vente » le montre (ADR 0063)."
+      },
+      "CustomerChoicePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerChoice"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "CustomerChoicePage",
+        "description": "Page de la liste. La page 1 commence par les clients récents, puis tous les autres\npar ordre alphabétique ; `total` les compte tous, récents compris."
       },
       "CustomerCode": {
         "type": "string",
@@ -10229,6 +10378,16 @@
           "balance": {
             "$ref": "#/components/schemas/Amount-Output"
           },
+          "debt_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DebtStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "has_returns": {
             "type": "boolean",
             "title": "Has Returns"
@@ -10311,6 +10470,7 @@
           "total",
           "paid_total",
           "balance",
+          "debt_status",
           "has_returns",
           "returned_total",
           "cancel_reason",
@@ -10566,6 +10726,16 @@
           "balance": {
             "$ref": "#/components/schemas/Amount-Output"
           },
+          "debt_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DebtStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "has_returns": {
             "type": "boolean",
             "title": "Has Returns"
@@ -10624,6 +10794,7 @@
           "total",
           "paid_total",
           "balance",
+          "debt_status",
           "has_returns",
           "returned_total",
           "cancel_reason",

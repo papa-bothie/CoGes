@@ -2,7 +2,7 @@
 
 - **Date** : 2026-09-24
 - **Phase** : 06
-- **Statut** : acceptée
+- **Statut** : acceptée — amendée par 0062 (la compensation compte dans `paid_total`, qui veut dire « réglé »)
 - **Décideur** : utilisateur (via `AskUserQuestion`)
 
 ## Contexte

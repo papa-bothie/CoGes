@@ -27,6 +27,22 @@ pnpm e2e                                  # Playwright, sur la base dédiée cog
 
 Variables : voir `.env.example`. Captures de référence : `docs/design/captures/`.
 
+## Tester en local
+
+Depuis la racine, une seule commande lance l'API, le worker, le relais de l'outbox et le
+front, chacun préfixé de son nom dans le terminal (`Procfile.dev`, honcho) ; Ctrl+C arrête
+les quatre :
+
+```bash
+make up && make migrate   # PostgreSQL et Redis, puis le schéma
+make dev                  # api.1, worker.1, relay.1, front.1 → http://localhost:3000
+make dev API_PORT=8001    # si le port 8000 est déjà pris (le front suit)
+```
+
+Sans relais ni worker, une vente compte quand même dans le CA du jour (calculé en direct,
+ADR 0061) ; ce sont les jours passés, les alertes et les conseils qui attendent, et le
+tableau de bord du gérant l'annonce au bout de deux minutes.
+
 ## Parcours e2e : une base à part (ADR 0059)
 
 Les suites Playwright tournent sur **`coges_e2e`**, jamais sur `coges` (la base de

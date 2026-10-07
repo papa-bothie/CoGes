@@ -10,7 +10,7 @@ import { ErrorState } from "@/components/error-state";
 import { FieldError } from "@/components/field-error";
 import { Money } from "@/components/money";
 import { PageHeader } from "@/components/page-header";
-import { SaleStatusBadge } from "@/components/status/status-badge";
+import { SalePaymentBadge, SaleStatusBadge } from "@/components/status/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -80,7 +80,12 @@ export function SaleDetailView({ saleId }: { saleId: string }) {
       </Link>
       <PageHeader
         title={labels.sales.editTitle(data.sale_no)}
-        count={<SaleStatusBadge status={data.status} hasReturns={data.has_returns} />}
+        count={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <SaleStatusBadge status={data.status} hasReturns={data.has_returns} />
+            <SalePaymentBadge sale={data} currency={currency} />
+          </span>
+        }
         actions={
           <>
             {data.status === "draft" && (

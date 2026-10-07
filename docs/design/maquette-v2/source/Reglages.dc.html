@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Réglages</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#F3EEE5;color:#1E2320}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box}
+.card{background:#fff;border-radius:22px;border:1px solid #ECE6DC;padding:22px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:54px;padding:0 20px;border-radius:16px;border:0;font:inherit;font-weight:700;font-size:16px;cursor:pointer;text-decoration:none}
+.gb{background:#fff;color:#1E2320;border:2px solid #E3DCD0}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+h2{font-size:20px;margin:0;font-weight:700}
+.side{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:0 16px;border-radius:16px;border:0;background:transparent;font:inherit;font-weight:700;font-size:17px;color:#3C4440;cursor:pointer;text-align:left}
+.side:hover{background:#F3EEE5}
+.side.on{background:#1E2320;color:#fff}
+.lbl{display:block;font-weight:700;margin-bottom:6px}
+.in{width:100%;box-sizing:border-box;min-height:54px;border-radius:14px;border:2px solid #E3DCD0;padding:0 14px;font:inherit;font-size:17px;background:#fff;color:#1E2320}
+.in:focus{outline:3px solid #9BD3B6;border-color:#117A3C}
+.sw{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-top:1px solid #F0EBE2}
+.tog{width:64px;height:36px;border-radius:999px;border:0;cursor:pointer;position:relative;flex:none}
+.knob{position:absolute;top:4px;width:28px;height:28px;border-radius:50%;background:#fff}
+.chip{min-height:48px;padding:0 16px;border-radius:999px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:15px;color:#1E2320;cursor:pointer}
+.chip.on{border-color:#117A3C;background:#E6F4EC;color:#024A2C}
+.person{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:14px 0;border-top:1px solid #F0EBE2}
+.av{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;flex:none}
+.cell{display:flex;align-items:center;justify-content:center}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab on" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="display:flex;flex-direction:column;gap:20px">
+    <h1>Réglages</h1>
+    <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+      <nav aria-label="Rubriques des réglages" class="card" style="flex:1 1 240px;padding:10px;display:flex;flex-direction:column;gap:4px">
+        <sc-for list="{{sections}}" as="x" hint-placeholder-count="5">
+          <button type="button" class="side {{x.cls}}" onClick="{{x.pick}}">{{x.label}}</button>
+        </sc-for>
+      </nav>
+
+      <section class="card" style="flex:4 1 560px;min-width:0;display:flex;flex-direction:column;gap:16px">
+        <sc-if value="{{isShop}}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <h2>Ma boutique</h2>
+            <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center">
+              <div style="width:88px;height:88px;border-radius:20px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:30px">KF</div>
+              <button type="button" class="btn gb">Changer le logo (sur les reçus)</button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px">
+              <div><label class="lbl" for="sn">Nom de la boutique</label><input id="sn" class="in" value="Alimentation Keur Fatou"></div>
+              <div><label class="lbl" for="st">Téléphone</label><input id="st" class="in" value="77 123 45 67"></div>
+              <div><label class="lbl" for="sa">Adresse</label><input id="sa" class="in" value="Marché HLM 5, Dakar"></div>
+              <div><label class="lbl" for="sw">Numéro Wave pour être payé</label><input id="sw" class="in" value="77 123 45 67"></div>
+              <div><label class="lbl" for="sni">NINEA (facultatif)</label><input id="sni" class="in" value="0012345678 2V2"></div>
+              <div><label class="lbl" for="src">Registre du commerce (facultatif)</label><input id="src" class="in" value="SN-DKR-2024-A-1234"></div>
+            </div>
+            <div><label class="lbl" for="sm">Message en bas du reçu</label><input id="sm" class="in" value="Merci de votre visite !"></div>
+            <div>
+              <span class="lbl">Reçu imprimé par défaut</span>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <sc-for list="{{formats}}" as="f" hint-placeholder-count="2">
+                  <button type="button" class="chip {{f.cls}}" onClick="{{f.pick}}">{{f.label}}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <sc-for list="{{toggles}}" as="t" hint-placeholder-count="2">
+                <div class="sw">
+                  <div><div style="font-weight:700;font-size:17px">{{t.label}}</div><div class="muted">{{t.sub}}</div></div>
+                  <button type="button" class="tog" role="switch" aria-checked="{{t.on}}" aria-label="{{t.label}}" onClick="{{t.flip}}" style="background:{{t.bg}}"><span class="knob" style="left:{{t.left}}"></span></button>
+                </div>
+              </sc-for>
+            </div>
+            <div class="muted">Monnaie : franc CFA. Heure : Dakar.</div>
+            <button type="button" class="btn" style="background:#117A3C;color:#fff;align-self:flex-start">Enregistrer</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isPeople}}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+              <h2>Les personnes qui utilisent CoGes</h2>
+              <button type="button" class="btn" onClick="{{toggleAdd}}" style="background:#117A3C;color:#fff">+ Ajouter une personne</button>
+            </div>
+            <sc-if value="{{adding}}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:18px;background:#F6F2EB;margin-top:10px">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+                  <div><label class="lbl" for="pn">Nom</label><input id="pn" class="in" placeholder="Ex. Awa Ndiaye"></div>
+                  <div><label class="lbl" for="pp">Téléphone ou e-mail</label><input id="pp" class="in" placeholder="77 000 00 00"></div>
+                </div>
+                <span class="lbl" style="margin:0">Son rôle</span>
+                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                  <sc-for list="{{roles}}" as="r" hint-placeholder-count="3">
+                    <button type="button" class="chip {{r.cls}}" onClick="{{r.pick}}">{{r.label}}</button>
+                  </sc-for>
+                </div>
+                <div style="padding:12px 14px;border-radius:14px;background:#fff;font-weight:600">Mot de passe provisoire : <span style="font-weight:800;letter-spacing:0.06em">BAOBAB-4821</span> · à lui donner, il le changera à sa première connexion.</div>
+                <button type="button" class="btn" style="background:#117A3C;color:#fff;align-self:flex-start">Créer son accès</button>
+              </div>
+            </sc-if>
+            <sc-for list="{{people}}" as="p" hint-placeholder-count="3">
+              <div class="person" style="opacity:{{p.opacity}}">
+                <div class="av" style="background:{{p.avBg}};color:{{p.avInk}}">{{p.initials}}</div>
+                <div style="flex:1 1 200px;min-width:0"><div style="font-weight:700;font-size:17px">{{p.name}}</div><div class="muted">{{p.role}} · {{p.last}}</div></div>
+                <button type="button" class="btn gb" onClick="{{p.flip}}" disabled="{{p.locked}}">{{p.action}}</button>
+              </div>
+            </sc-for>
+            <div class="muted" style="margin-top:6px">Le dernier gérant ne peut pas être désactivé.</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isRights}}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <h2>Qui peut faire quoi</h2>
+            <div style="overflow-x:auto">
+              <div style="min-width:560px">
+                <div style="display:grid;grid-template-columns:minmax(0,3fr) repeat(3,minmax(0,1fr));gap:8px;padding:10px 0;font-weight:800;border-bottom:2px solid #ECE6DC">
+                  <span>Action</span><span class="cell">Gérant</span><span class="cell">Vendeur</span><span class="cell">Magasinier</span>
+                </div>
+                <sc-for list="{{rights}}" as="r" hint-placeholder-count="8">
+                  <div style="display:grid;grid-template-columns:minmax(0,3fr) repeat(3,minmax(0,1fr));gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #F0EBE2">
+                    <span style="font-weight:600">{{r.label}}</span>
+                    <sc-for list="{{r.cells}}" as="c" hint-placeholder-count="3">
+                      <span class="cell"><button type="button" onClick="{{c.flip}}" aria-label="{{c.aria}}" aria-pressed="{{c.on}}" disabled="{{c.locked}}" style="width:48px;height:48px;border-radius:14px;border:2px solid {{c.border}};background:{{c.bg}};color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg class="ico" viewBox="0 0 24 24" style="opacity:{{c.tick}}"><path d="M4 12.5 9.5 18 20 6"></path></svg></button></span>
+                    </sc-for>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isLog}}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <h2>Historique de ce qui a été fait</h2>
+            <sc-for list="{{log}}" as="l" hint-placeholder-count="6">
+              <div class="person">
+                <div class="av" style="background:#F3EEE5;color:#3C4440">{{l.initials}}</div>
+                <div style="flex:1;min-width:0"><div style="font-weight:700">{{l.what}}</div><div class="muted">{{l.when}}</div></div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{isData}}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <h2>Sortir ou ajouter des données</h2>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
+              <div style="padding:18px;border-radius:18px;background:#E6F4EC;display:flex;flex-direction:column;gap:10px">
+                <div style="font-weight:800;font-size:18px">Mes ventes en fichier Excel</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                  <sc-for list="{{periods}}" as="p" hint-placeholder-count="3">
+                    <button type="button" class="chip {{p.cls}}" onClick="{{p.pick}}">{{p.label}}</button>
+                  </sc-for>
+                </div>
+                <button type="button" class="btn" onClick="{{exportSales}}" style="background:#117A3C;color:#fff">Préparer le fichier</button>
+              </div>
+              <div style="padding:18px;border-radius:18px;background:#FFF0E3;display:flex;flex-direction:column;gap:10px">
+                <div style="font-weight:800;font-size:18px">Ajouter beaucoup d'articles d'un coup</div>
+                <div style="color:#3C4440">Remplissez notre modèle Excel, puis envoyez-le.</div>
+                <button type="button" class="btn gb">Télécharger le modèle</button>
+                <button type="button" class="btn" style="background:#C2410C;color:#fff">Envoyer mon fichier</button>
+              </div>
+              <div style="padding:18px;border-radius:18px;background:#F2ECFC;display:flex;flex-direction:column;gap:10px">
+                <div style="font-weight:800;font-size:18px">Mes listes</div>
+                <button type="button" class="btn gb">Articles (Excel)</button>
+                <button type="button" class="btn gb">Clients (Excel)</button>
+                <button type="button" class="btn gb">Fournisseurs (Excel)</button>
+              </div>
+            </div>
+            <h2 style="font-size:18px;margin-top:6px">Fichiers préparés</h2>
+            <sc-for list="{{exports}}" as="e" hint-placeholder-count="2">
+              <div class="person">
+                <div style="flex:1;min-width:0"><div style="font-weight:700">{{e.name}}</div><div class="muted">{{e.when}}</div></div>
+                <sc-if value="{{e.ready}}" hint-placeholder-val="{{ true }}"><button type="button" class="btn" style="background:#117A3C;color:#fff">Télécharger</button></sc-if>
+                <sc-if value="{{e.pending}}" hint-placeholder-val="{{ false }}"><span style="font-weight:700;color:#9A3412">En préparation…</span></sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      sec: 'shop', fmt: 'ticket', tax: false, tips: true, adding: false, role: 'seller', period: 'month', exported: false,
+      inactive: { awa: true },
+      rights: {
+        sell: [1, 1, 0], cancel: [1, 0, 0], stockfix: [1, 0, 1], receive: [1, 0, 1],
+        money: [1, 0, 0], debts: [1, 1, 0], prices: [1, 0, 0], people: [1, 0, 0]
+      }
+    };
+  }
+  renderVals() {
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const secs = [['shop', 'Ma boutique'], ['people', 'Personnes'], ['rights', 'Qui peut faire quoi'], ['log', 'Historique'], ['data', 'Fichiers Excel']];
+    const people = [
+      ['fatou', 'Fatou Diop', 'FD', 'Gérante', 'Connectée maintenant', true],
+      ['modou', 'Modou Sène', 'MS', 'Vendeur', 'Vu hier à 19 h'],
+      ['awa', 'Awa Ndiaye', 'AN', 'Vendeuse', 'Accès coupé le 30 septembre']
+    ].map(([id, name, initials, role, last, locked]) => {
+      const off = Boolean(s.inactive[id]);
+      return {
+        name: name, initials: initials, role: role, last: last, locked: Boolean(locked),
+        opacity: off ? 0.55 : 1, avBg: off ? '#F3EEE5' : '#E6F4EC', avInk: off ? '#3C4440' : '#024A2C',
+        action: locked ? 'Vous' : off ? 'Redonner l’accès' : 'Couper l’accès',
+        flip: () => { if (locked) return; const x = Object.assign({}, s.inactive); x[id] = !off; set({ inactive: x }); }
+      };
+    });
+    const rLabels = {
+      sell: 'Vendre', cancel: 'Annuler une vente', stockfix: 'Corriger le stock', receive: 'Recevoir une livraison',
+      money: 'Voir l’argent et les bénéfices', debts: 'Encaisser une dette', prices: 'Changer les prix', people: 'Gérer les personnes'
+    };
+    const roleNames = ['Gérant', 'Vendeur', 'Magasinier'];
+    const rights = Object.keys(rLabels).map((k) => ({
+      label: rLabels[k],
+      cells: s.rights[k].map((v, i) => ({
+        on: Boolean(v), locked: i === 0, tick: v ? 1 : 0,
+        bg: v ? (i === 0 ? '#5E9C82' : '#117A3C') : '#fff', border: v ? (i === 0 ? '#5E9C82' : '#117A3C') : '#D8CFC1',
+        aria: rLabels[k] + ' : ' + roleNames[i],
+        flip: () => { if (i === 0) return; const r = Object.assign({}, s.rights); r[k] = r[k].slice(); r[k][i] = r[k][i] ? 0 : 1; set({ rights: r }); }
+      }))
+    }));
+    const tog = (key, label, sub) => ({ label: label, sub: sub, on: s[key], bg: s[key] ? '#117A3C' : '#C9C2B6', left: s[key] ? '32px' : '4px', flip: () => { const p = {}; p[key] = !s[key]; set(p); } });
+    return {
+      sections: secs.map(([id, label]) => ({ label: label, cls: s.sec === id ? 'on' : '', pick: () => set({ sec: id }) })),
+      isShop: s.sec === 'shop', isPeople: s.sec === 'people', isRights: s.sec === 'rights', isLog: s.sec === 'log', isData: s.sec === 'data',
+      formats: [['ticket', 'Petit ticket'], ['a4', 'Facture A4']].map(([id, label]) => ({ label: label, cls: s.fmt === id ? 'on' : '', pick: () => set({ fmt: id }) })),
+      toggles: [tog('tax', 'Appliquer la TVA', 'Désactivé : aucun prix ne contient de TVA'), tog('tips', 'Recevoir des conseils', 'CoGes analyse vos ventes chaque nuit')],
+      people: people, adding: s.adding, toggleAdd: () => set({ adding: !s.adding }),
+      roles: [['manager', 'Gérant'], ['seller', 'Vendeur'], ['store', 'Magasinier']].map(([id, label]) => ({ label: label, cls: s.role === id ? 'on' : '', pick: () => set({ role: id }) })),
+      rights: rights,
+      log: [
+        ['MS', 'Modou a annulé la vente n° 1042 (enregistrée deux fois)', 'Hier, 17 h 12'],
+        ['FD', 'Fatou a changé le prix du riz : 15 000 F → 15 500 F', 'Hier, 9 h 05'],
+        ['FD', 'Fatou a corrigé le stock du riz : −1 sac (abîmé)', 'Hier, 18 h 20'],
+        ['FD', 'Fatou a coupé l’accès d’Awa Ndiaye', '30 septembre, 20 h 41'],
+        ['MS', 'Modou a encaissé 6 800 F d’Aminata Sow', "Aujourd'hui, 8 h 55"],
+        ['FD', 'Fatou a reçu une livraison de Grossiste Sandaga', '3 octobre, 11 h 30']
+      ].map(([initials, what, when]) => ({ initials: initials, what: what, when: when })),
+      periods: [['month', 'Ce mois'], ['last', 'Le mois dernier'], ['year', 'Cette année']].map(([id, label]) => ({ label: label, cls: s.period === id ? 'on' : '', pick: () => set({ period: id }) })),
+      exportSales: () => set({ exported: true }),
+      exports: (s.exported ? [{ name: 'Ventes de ' + ({ month: 'octobre 2026', last: 'septembre 2026', year: '2026' })[s.period], when: 'Demandé à l’instant', ready: false, pending: true }] : [])
+        .concat([{ name: 'Ventes de septembre 2026', when: 'Préparé le 1er octobre', ready: true, pending: false }])
+    };
+  }
+}
+</script>
+</body>
+</html>

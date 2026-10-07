@@ -47,13 +47,22 @@ def list_customers(
     page: int,
     page_size: int,
     search: str | None = None,
+    exclude_ids: Sequence[UUID] = (),
 ) -> tuple[Sequence[Customer], int]:
+    """Page de clients vivants. `exclude_ids` sert la liste de vente, qui montre les
+    clients récents en tête et ne doit pas les répéter ensuite (ADR 0063)."""
     repository = CustomerRepository(session, ctx)
     term = normalise_term(search)
     return (
-        repository.page_live(page=page, page_size=page_size, search=term),
-        repository.count_live(search=term),
+        repository.page_live(page=page, page_size=page_size, search=term, exclude_ids=exclude_ids),
+        repository.count_live(search=term, exclude_ids=exclude_ids),
     )
+
+
+def get_many(session: Session, ctx: TenantContext, customer_ids: Sequence[UUID]) -> list[Customer]:
+    """Clients vivants de ce lot, **dans l'ordre demandé**. Un client supprimé est absent."""
+    found = {c.id: c for c in CustomerRepository(session, ctx).live_by_ids(customer_ids)}
+    return [found[customer_id] for customer_id in customer_ids if customer_id in found]
 
 
 def get_customer(session: Session, ctx: TenantContext, customer_id: UUID) -> Customer:

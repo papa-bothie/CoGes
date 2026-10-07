@@ -1,8 +1,9 @@
 """Façade de services du module Dashboard.
 
-Compose et met en cache, ne calcule rien. Chaque chiffre vient de la façade du module
-qui le possède ; le seul travail propre à ce module est l'assemblage, la conversion
-dans le fuseau de l'entreprise et la gestion du cache court.
+Compose et met en cache. Chaque chiffre vient de la façade du module qui le possède
+(le jour en cours se lit en direct sur Sales, le passé sur les faits, ADR 0061) ; le
+seul travail propre à ce module est l'assemblage, la conversion dans le fuseau de
+l'entreprise et la gestion du cache court.
 
 Le cache est **transparent** : une réponse servie depuis Redis est identique à une
 réponse recalculée, à `cached` près. Redis absent ⇒ on recalcule et on sert (décision
@@ -40,7 +41,7 @@ from app.modules.notifications import service as notifications_service
 from app.modules.sales import service as sales_service
 
 #: Nom de la clé de cache. Le `company_id` est ajouté par `app.core.cache`.
-CACHE_KEY = "dashboard"
+CACHE_KEY = cache.DASHBOARD_KEY
 
 
 def invalidate(company_id: UUID) -> None:
@@ -81,30 +82,31 @@ def _compose(session: Session, ctx: TenantContext) -> Dashboard:
     month_from = today.replace(day=1)
     trend_from = today - timedelta(days=REVENUE_TREND_DAYS - 1)
 
-    # Une seule lecture de faits couvre la courbe, le jour et le mois : la série part
-    # du plus ancien des trois besoins, et les deux totaux s'en déduisent.
+    # Le passé vient des faits, **jusqu'à hier** ; le jour en cours se calcule en direct
+    # sur `sales` et `sale_items` (ADR 0061). Sans quoi le CA du jour attendrait le
+    # relais d'outbox et le worker, alors que le nombre de ventes, lui, bouge déjà.
     series_from = min(trend_from, month_from)
+    yesterday = today - timedelta(days=1)
     series = analytics_service.daily_revenue_and_margin(
-        session, ctx, period_from=series_from, period_to=today
+        session, ctx, period_from=series_from, period_to=yesterday
     )
 
-    revenue_today = Decimal("0")
-    revenue_month = Decimal("0")
-    margin_month = Decimal("0")
-    by_day: dict[date, Decimal] = {}
+    day_start = datetime.combine(today, time.min, tzinfo=zone)
+    day_end = datetime.combine(today, time.max, tzinfo=zone)
+    live = sales_service.revenue_totals(session, ctx, period_from=day_start, period_to=day_end)
+    revenue_today = live["net_revenue"]
+    margin_today = live["net_revenue"] - live["cogs_net"]
+    sales_today = int(live["sale_count"])
+
+    revenue_month = revenue_today
+    margin_month = margin_today
+    by_day: dict[date, Decimal] = {today: revenue_today}
     for day, net_revenue, margin in series:
         by_day[day] = net_revenue
-        if day == today:
-            revenue_today = net_revenue
         if day >= month_from:
             revenue_month += net_revenue
             margin_month += margin
 
-    day_start = datetime.combine(today, time.min, tzinfo=zone)
-    day_end = datetime.combine(today, time.max, tzinfo=zone)
-    sales_today = sales_service.confirmed_sale_count(
-        session, ctx, period_from=day_start, period_to=day_end
-    )
     debts = finance_service.open_debt_totals(session, ctx)
 
     return Dashboard(

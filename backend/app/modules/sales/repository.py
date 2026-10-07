@@ -57,6 +57,22 @@ class SaleRepository(TenantRepository[Sale]):
             filters.append(Sale.sale_no == sale_no)
         return filters
 
+    def recent_customer_ids(self, *, limit: int) -> list[UUID]:
+        """Clients des dernières ventes confirmées, du plus récent au plus ancien."""
+        last_sale = func.max(Sale.sold_at)
+        stmt = (
+            select(Sale.customer_id)
+            .where(
+                Sale.company_id == self.ctx.company_id,
+                Sale.status == "confirmed",
+                Sale.customer_id.is_not(None),
+            )
+            .group_by(Sale.customer_id)
+            .order_by(last_sale.desc(), Sale.customer_id)
+            .limit(limit)
+        )
+        return [row for row in self.session.execute(stmt).scalars().all() if row is not None]
+
     def page_filtered(
         self,
         *,

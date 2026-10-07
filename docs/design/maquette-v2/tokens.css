@@ -1,0 +1,65 @@
+/*
+ * CoGes — jetons de la maquette v2 (phase 15). Source unique des valeurs visuelles.
+ * Toute couleur, taille ou rayon utilisé dans le front doit venir d'ici (via le thème Tailwind).
+ * Les verts de marque sont pris dans le logo (logo/coges-logo-original.jpg).
+ */
+:root {
+  /* Marque (logo) */
+  --coges-vert-marque: #024A2C;   /* vert foncé du logo : textes sur teinte verte, wordmark */
+  --coges-vert-action: #117A3C;   /* boutons principaux, texte blanc dessus (contraste 5,4:1) */
+  --coges-vert-eclat: #1A9A4C;    /* vert clair du logo : graphiques, icônes de succès (jamais du texte) */
+
+  /* Fond et texte */
+  --coges-papier: #FBF8F3;        /* fond de page */
+  --coges-carte: #FFFFFF;         /* cartes */
+  --coges-bordure: #ECE6DC;       /* bordure des cartes */
+  --coges-bordure-champ: #E3DCD0; /* bordure des champs, puces, boutons secondaires */
+  --coges-filet: #F0EBE2;         /* séparateur entre lignes */
+  --coges-voile: #F3EEE5;         /* survol, fond neutre */
+  --coges-voile-2: #F6F2EB;       /* survol de ligne, encarts neutres */
+  --coges-encre: #1E2320;         /* texte principal */
+  --coges-encre-2: #3C4440;       /* texte secondaire fort, onglets inactifs */
+  --coges-sourdine: #5B625E;      /* texte secondaire (6:1 sur papier) */
+
+  /* Une couleur par rubrique : solide / teinte / encre sur teinte */
+  --coges-ventes: #117A3C;   --coges-ventes-teinte: #E6F4EC;   --coges-ventes-encre: #024A2C;
+  --coges-stock: #C2410C;    --coges-stock-teinte: #FFF0E3;    --coges-stock-encre: #9A3412;
+  --coges-argent: #1F5BD8;   --coges-argent-teinte: #EAF1FD;   --coges-argent-encre: #1747AE;
+  --coges-clients: #6D3FC8;  --coges-clients-teinte: #F2ECFC;  --coges-clients-encre: #5530A3;
+  --coges-depenses: #A51D24; --coges-depenses-teinte: #FDECEC; --coges-depenses-encre: #A51D24;
+  --coges-conseils: #0E7490; --coges-conseils-teinte: #E3F3F6; --coges-conseils-encre: #0B5566;
+
+  /* Graphiques */
+  --coges-barre-claire: #BFE3CF;  /* jours passés */
+  --coges-barre-sortie: #E8833A;  /* sorties de caisse */
+
+  /* Typographie : Figtree 400 à 800 ; reçus : JetBrains Mono */
+  --coges-police: 'Figtree', system-ui, sans-serif;
+  --coges-police-recu: 'JetBrains Mono', ui-monospace, monospace;
+  --coges-texte: 16px;          /* corps : jamais moins de 15 px */
+  --coges-libelle: 17px;        /* libellés de champ, gras 700 */
+  --coges-titre-page: 30px;     /* h1, gras 800 */
+  --coges-titre-carte: 20px;    /* h2, gras 700 */
+  --coges-chiffre: 28px;        /* chiffres de tuile 28 à 36 px, gras 800, chiffres tabulaires */
+  --coges-chiffre-heros: 52px;  /* « vous avez gagné … » */
+
+  /* Formes */
+  --coges-rayon-carte: 22px;
+  --coges-rayon-bouton: 18px;
+  --coges-rayon-champ: 16px;
+  --coges-rayon-puce: 999px;
+  --coges-bordure-epaisseur: 2px;   /* champs, puces, boutons secondaires */
+
+  /* Tailles tactiles */
+  --coges-cible-min: 48px;          /* tout élément cliquable */
+  --coges-bouton: 56px;             /* bouton standard */
+  --coges-bouton-principal: 68px;   /* « Encaisser », « Enregistrer » */
+  --coges-champ-montant: 64px;      /* champ montant, police 28 px gras */
+  --coges-touche-pave: 56px;        /* touches du pavé numérique */
+
+  /* Espacements */
+  --coges-page-max: 1180px;
+  --coges-marge-page: 24px;
+  --coges-espace-sections: 20px;
+  --coges-padding-carte: 22px;
+}

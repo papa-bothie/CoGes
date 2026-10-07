@@ -9,7 +9,7 @@ import { DataTable, type Column } from "@/components/data-table";
 import { ErrorState } from "@/components/error-state";
 import { Money } from "@/components/money";
 import { PageHeader } from "@/components/page-header";
-import { SaleStatusBadge } from "@/components/status/status-badge";
+import { SalePaymentBadge, SaleStatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -25,7 +25,6 @@ import { useTableParams } from "@/hooks/use-table-params";
 import { api, unwrap } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
-import { compareDecimal } from "@/lib/decimal";
 import { formatDate } from "@/lib/format";
 import { dayEndIso, dayStartIso } from "@/lib/format/zoned";
 import { labels } from "@/lib/labels";
@@ -85,25 +84,9 @@ export function SalesListView() {
       cell: (sale) => <Money value={sale.total} currency={currency} className="font-medium" />,
     },
     {
-      id: "paid",
-      header: labels.sales.columns.paid,
-      numeric: true,
-      cell: (sale) => <Money value={sale.paid_total} currency={currency} />,
-    },
-    {
-      id: "due",
-      header: labels.sales.columns.due,
-      numeric: true,
-      cell: (sale) =>
-        sale.status === "confirmed" ? (
-          <Money
-            value={sale.balance}
-            currency={currency}
-            className={compareDecimal(sale.balance, "0") === 1 ? "text-warning-ink" : undefined}
-          />
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        ),
+      id: "payment",
+      header: labels.sales.columns.payment,
+      cell: (sale) => <SalePaymentBadge sale={sale} currency={currency} />,
     },
     {
       id: "status",

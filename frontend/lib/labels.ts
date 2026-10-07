@@ -115,6 +115,7 @@ export const labels = {
         : "1 article sous le seuil d'alerte ou en rupture",
     seeStock: "Voir le stock",
     alertGroup: (title: string, count: number) => `${title} (${count})`,
+    outboxLag: "Certains chiffres se mettent à jour, patientez une minute.",
   },
   common: {
     close: "Fermer",
@@ -163,16 +164,28 @@ export const labels = {
       customer: "Client",
       date: "Date",
       total: "Total",
-      paid: "Payé",
-      due: "Reste dû",
+      payment: "Paiement",
       status: "Statut",
+    },
+    // Ce qui reste à payer, suivi par la dette de la vente (ADR 0062).
+    payment: {
+      paid: "Payé",
+      remaining: (amount: string) => `Reste ${amount}`,
+      writtenOff: "Dette abandonnée",
     },
     anonymous: "Client anonyme",
     // Éditeur
     editTitle: (no: string) => `Vente ${no}`,
     customer: "Client",
     customerSearch: "Rechercher un client (nom ou code)",
-    noCustomer: "Client anonyme (comptant)",
+    noCustomer: "Client de passage",
+    // Liste des clients de la vente (ADR 0063) : textes de la maquette v2.
+    customerPicker: {
+      walkInHint: "Pas besoin de nom",
+      owes: (amount: string) => `Doit ${amount}`,
+      newCustomer: "Nouveau client",
+      loadingMore: "Chargement des clients suivants…",
+    },
     removeCustomer: "Retirer le client",
     articles: "Articles",
     productSearch: "Ajouter un article (nom ou SKU)",

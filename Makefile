@@ -15,7 +15,7 @@ PNPM := pnpm --dir frontend
 API_PORT ?= 8000
 COGES_API_URL ?= http://localhost:$(API_PORT)
 
-.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format api worker relay seed-demo openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front
+.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format dev api worker relay seed-demo openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front
 
 help: ## Liste les cibles disponibles
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -56,6 +56,9 @@ lint: ## ruff (lint + format) puis mypy --strict sur app/
 format: ## Applique ruff format et les corrections automatiques
 	$(UV) ruff format .
 	$(UV) ruff check --fix .
+
+dev: ## API, worker, relais et front ensemble (honcho, Procfile.dev) ; Ctrl+C arrête tout
+	uv run --project backend honcho --procfile Procfile.dev --env /dev/null start
 
 api: ## Lance l'API en local sur http://localhost:8000 (API_PORT=… pour changer)
 	$(UV) uvicorn app.main:app --reload --port $(API_PORT)

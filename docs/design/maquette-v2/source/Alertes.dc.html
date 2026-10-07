@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>CoGes — Alertes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0;background:#FBF8F3;color:#1E2320;font-family:'Figtree',system-ui,sans-serif;font-size:16px;line-height:1.45}
+a{color:#117A3C}a:hover{color:#024A2C}
+.nav{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 24px;background:#FFFFFF;border-bottom:1px solid #ECE6DC}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:44px;height:44px;border-radius:14px;background:#117A3C;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+.tabs{display:flex;flex-wrap:wrap;gap:6px}
+.tab{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border-radius:14px;text-decoration:none;color:#3C4440;font-weight:600;font-size:16px}
+.tab:hover{background:#F3EEE5;color:#1E2320}
+.tab.on{background:#F3EEE5;color:#1E2320}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.wrap{max-width:900px;margin:0 auto;padding:24px 24px 48px;box-sizing:border-box}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:50px;padding:0 18px;border-radius:16px;border:0;font:inherit;font-weight:700;font-size:16px;cursor:pointer;text-decoration:none}
+.muted{color:#5B625E}
+h1{font-size:30px;margin:0;font-weight:800;letter-spacing:-0.01em}
+h2{font-size:18px;margin:0;font-weight:700;color:#3C4440}
+.chip{min-height:48px;padding:0 18px;border-radius:999px;border:2px solid #E3DCD0;background:#fff;font:inherit;font-weight:700;font-size:16px;color:#1E2320;cursor:pointer}
+.chip.on{border-color:#1E2320;background:#1E2320;color:#fff}
+.al{display:flex;gap:14px;align-items:flex-start;padding:16px;border-radius:20px;border:1px solid #ECE6DC}
+.disc{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex:none;color:#fff}
+</style>
+</helmet>
+<div>
+  <nav class="nav" aria-label="Menu principal">
+    <div class="brand">
+      <img src="../logo/coges-mark.png" alt="" style="width:40px;height:43px;flex:none">
+      <div><img src="../logo/coges-wordmark.png" alt="CoGes" style="height:24px;width:102px;display:block"><div class="muted" style="font-size:15px">Alimentation Keur Fatou</div></div>
+    </div>
+    <div class="tabs">
+      <a class="tab" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Accueil</a>
+      <a class="tab" href="Vente.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"></circle><circle cx="18" cy="20" r="1.5"></circle><path d="M2 3h3l2.6 12.4a1 1 0 0 0 1 .8h9.7a1 1 0 0 0 1-.8L21 7H6"></path></svg>Vendre</a>
+      <a class="tab" href="Articles.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg>Stock</a>
+      <a class="tab" href="Clients.dc.html"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"></circle><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.5"></path></svg>Clients</a>
+      <a class="tab" href="Finance.dc.html"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="3"></rect><path d="M2 10h20M16 15h2"></path></svg>Argent</a>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <a class="tab" href="Conseils.dc.html"><svg class="ico" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.4 1 1.1 1 1.8V16h5v-.3c0-.7.4-1.4 1-1.8A6 6 0 0 0 12 3z"></path></svg>Conseils</a>
+      <a class="tab on" href="Alertes.dc.html" aria-label="Alertes, 3 non lues" style="position:relative;padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4"></path></svg><span style="position:absolute;top:4px;right:2px;min-width:20px;height:20px;border-radius:999px;background:#C2410C;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">3</span></a>
+      <a class="tab" href="Reglages.dc.html" aria-label="Réglages" style="padding:0 12px"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg></a>
+    </div>
+  </nav>
+
+  <main class="wrap" style="display:flex;flex-direction:column;gap:18px">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px">
+      <div>
+        <h1>Alertes</h1>
+        <div class="muted" style="font-size:18px">{{unreadTxt}}</div>
+      </div>
+      <button type="button" class="btn" onClick="{{readAll}}" style="background:#fff;color:#1E2320;border:2px solid #E3DCD0">Tout marquer comme lu</button>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <sc-for list="{{filters}}" as="f" hint-placeholder-count="2">
+        <button type="button" class="chip {{f.cls}}" onClick="{{f.pick}}">{{f.label}}</button>
+      </sc-for>
+    </div>
+
+    <sc-for list="{{groups}}" as="g" hint-placeholder-count="2">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <h2>{{g.day}}</h2>
+        <sc-for list="{{g.items}}" as="a" hint-placeholder-count="3">
+          <div class="al" style="background:{{a.bg}}">
+            <div class="disc" style="background:{{a.color}}"><svg class="ico" viewBox="0 0 24 24" style="width:24px;height:24px"><path d="{{a.icon}}"></path></svg></div>
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <sc-if value="{{a.unread}}" hint-placeholder-val="{{ true }}"><span aria-label="Non lue" style="width:10px;height:10px;border-radius:50%;background:{{a.color}};flex:none"></span></sc-if>
+                <span style="font-weight:{{a.weight}};font-size:18px">{{a.title}}</span>
+              </div>
+              <div style="color:#3C4440">{{a.body}} · <span class="muted">{{a.time}}</span></div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px">
+                <a class="btn" href="{{a.href}}" style="background:{{a.color}};color:#fff">{{a.action}}</a>
+                <button type="button" class="btn" onClick="{{a.toggle}}" style="background:#fff;color:#1E2320;border:2px solid #E3DCD0">{{a.toggleLabel}}</button>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-for>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { f: 'all', read: { e: true } };
+  }
+  renderVals() {
+    const s = this.state;
+    const set = (p) => this.setState(p);
+    const list = [
+      { id: 'a', d: 0, color: '#C2410C', icon: 'M12 3 2 21h20zM12 10v5M12 18h.01', title: 'Riz brisé : plus que 2 sacs', body: 'Il passe sous votre seuil de 3 sacs', time: '10 h 42', action: 'Commander', href: 'Livraison.dc.html' },
+      { id: 'b', d: 0, color: '#A51D24', icon: 'M5 12h14', title: 'Lait en poudre épuisé', body: 'Vous ne pouvez plus le vendre', time: '9 h 30', action: 'Commander', href: 'Livraison.dc.html' },
+      { id: 'c', d: 0, color: '#1F5BD8', icon: 'M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', title: 'Grossiste Sandaga à payer dans 4 jours', body: '120 000 F avant le 10 octobre', time: '8 h 00', action: 'Payer', href: 'PayerFournisseur.dc.html' },
+      { id: 'd', d: 1, color: '#6D3FC8', icon: 'M9 8a4 4 0 1 0 0-.01M2 21c0-4 3-6 7-6s7 2 7 6', title: 'Moussa Fall n’a pas payé à temps', body: '15 000 F attendus depuis le 4 octobre', time: '18 h 00', action: 'Encaisser', href: 'Reglement.dc.html' },
+      { id: 'e', d: 1, color: '#3C4440', icon: 'M6 6l12 12M18 6 6 18', title: 'Vente n° 1042 annulée par Modou', body: 'Raison : vente enregistrée deux fois', time: '17 h 12', action: 'Voir la vente', href: 'VenteDetail.dc.html' }
+    ];
+    const unread = list.filter((a) => !s.read[a.id]).length;
+    const keep = list.filter((a) => s.f === 'all' || !s.read[a.id]);
+    const groups = [[0, "Aujourd'hui"], [1, 'Hier']].map(([d, day]) => ({
+      day: day, items: keep.filter((a) => a.d === d).map((a) => {
+        const r = Boolean(s.read[a.id]);
+        return Object.assign({}, a, {
+          unread: !r, weight: r ? 600 : 800, bg: r ? '#FFFFFF' : '#FFFBF5',
+          toggleLabel: r ? 'Marquer non lue' : 'Marquer comme lue',
+          toggle: () => { const x = Object.assign({}, s.read); x[a.id] = !r; set({ read: x }); }
+        });
+      })
+    })).filter((g) => g.items.length > 0);
+    return {
+      unreadTxt: unread === 0 ? 'Tout est lu' : unread + (unread > 1 ? ' alertes non lues' : ' alerte non lue'),
+      readAll: () => { const x = {}; list.forEach((a) => { x[a.id] = true; }); set({ read: x }); },
+      filters: [['all', 'Toutes'], ['unread', 'Non lues']].map(([id, label]) => ({ label: label, cls: s.f === id ? 'on' : '', pick: () => set({ f: id }) })),
+      groups: groups
+    };
+  }
+}
+</script>
+</body>
+</html>
