@@ -314,7 +314,10 @@ def test_a_return_can_offset_the_customer_debt(
     assert after["debt"]["balance"] == "8260.00"
     assert after["debt"]["amount_paid"] == "3540.00"
     assert after["debt"]["status"] == "partially_paid"
-    assert after["paid_total"] == "0.00", "rien n'a été encaissé : `paid_total` ne bouge pas"
+    # `paid_total` veut dire « réglé » (ADR 0062) : la compensation en fait partie, et
+    # le reste dû de la vente est celui de sa dette. L'argent, lui, n'a pas bougé.
+    assert after["paid_total"] == "3540.00"
+    assert after["balance"] == after["debt"]["balance"] == "8260.00"
 
     # Aucune écriture de trésorerie : les deux paiements portent `offset`, et c'est
     # à ce seul critère que les états des phases 07 et 08 les excluront.

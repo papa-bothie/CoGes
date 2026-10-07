@@ -11,7 +11,7 @@ Ce que ce module n'écrit **jamais** en Python :
   `sale_recompute_totals` à chaque écriture sur `sale_items` ;
 * `sales.total`, `sale_items.net_amount`, `tax_amount`, `line_total` — colonnes
   générées. L'égalité comptable est **produite** par la base (T24) ;
-* `sales.paid_total` — maintenu par `sale_paid_rollup` depuis `payments` ;
+* `sales.paid_total` — maintenu par `sale_paid_rollup` et `pa_sale_rollup` (ADR 0062) ;
 * le stock — il passe par la façade Inventory, qui seule compose un mouvement.
 
 Sales est en haut des dépendances : il lit Products, Customers, Companies,
@@ -42,6 +42,7 @@ from app.modules.finance import service as finance_service
 from app.modules.finance.schemas import (
     OFFSET_METHOD,
     DebtRead,
+    DebtStatus,
     RefundLinkRead,
 )
 from app.modules.inventory import service as inventory_service
@@ -564,6 +565,10 @@ def cancel_sale(
     déjà retournée se corrige par un retour, pas en effaçant la trace. La règle
     est celle du § 5.2, telle quelle (ADR 0023).
     """
+    # La dette avant la vente : c'est l'ordre d'un règlement, que le trigger
+    # `pa_sale_rollup` prolonge jusqu'à la vente (ADR 0062). L'ordre inverse
+    # s'interbloquerait avec un règlement simultané.
+    finance_service.lock_sale_debt(session, ctx, sale_id)
     repository = SaleRepository(session, ctx)
     sale = repository.get_for_update(sale_id)
     if sale is None:
@@ -696,7 +701,11 @@ def _audited(sale: Sale) -> dict[str, Any]:
 
 
 def build_read(
-    sale: Sale, *, returned_total: Decimal | None, customer_name: str | None
+    sale: Sale,
+    *,
+    returned_total: Decimal | None,
+    customer_name: str | None,
+    debt_status: DebtStatus | None,
 ) -> SaleRead:
     """En-tête d'une vente, tel que la liste l'affiche.
 
@@ -718,6 +727,7 @@ def build_read(
         total=sale.total,
         paid_total=sale.paid_total,
         balance=sale.total - sale.paid_total,
+        debt_status=debt_status,
         has_returns=returned_total is not None,
         returned_total=Decimal("0") if returned_total is None else returned_total,
         cancel_reason=sale.cancel_reason,
@@ -732,15 +742,19 @@ def build_page(
     sales: Sequence[Sale],
     returned_totals: dict[UUID, Decimal],
 ) -> list[SaleRead]:
-    """En-têtes d'une page de ventes, avec le nom des clients lus en un seul appel."""
+    """En-têtes d'une page de ventes : noms des clients et statuts des dettes, un appel chacun."""
     names = customers_service.names_by_ids(
         session, ctx, [sale.customer_id for sale in sales if sale.customer_id is not None]
+    )
+    debt_statuses = finance_service.debt_statuses_for_sales(
+        session, ctx, [sale.id for sale in sales]
     )
     return [
         build_read(
             sale,
             returned_total=returned_totals.get(sale.id),
             customer_name=None if sale.customer_id is None else names.get(sale.customer_id),
+            debt_status=debt_statuses.get(sale.id),
         )
         for sale in sales
     ]

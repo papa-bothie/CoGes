@@ -3396,6 +3396,7 @@ export interface components {
       total: components["schemas"]["Amount-Output"];
       paid_total: components["schemas"]["Amount-Output"];
       balance: components["schemas"]["Amount-Output"];
+      debt_status: components["schemas"]["DebtStatus"] | null;
       /** Has Returns */
       has_returns: boolean;
       returned_total: components["schemas"]["Amount-Output"];
@@ -3504,6 +3505,7 @@ export interface components {
       total: components["schemas"]["Amount-Output"];
       paid_total: components["schemas"]["Amount-Output"];
       balance: components["schemas"]["Amount-Output"];
+      debt_status: components["schemas"]["DebtStatus"] | null;
       /** Has Returns */
       has_returns: boolean;
       returned_total: components["schemas"]["Amount-Output"];

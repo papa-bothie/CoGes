@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 from app.core.money import Amount, Quantity, Rate, UnitCost
 from app.modules.finance.schemas import (
     DebtRead,
+    DebtStatus,
     PaymentMethod,
     PaymentRead,
     RefundLinkRead,
@@ -170,8 +171,12 @@ class SaleRead(BaseModel):
     tax_total: Amount
     total: Amount
     paid_total: Amount
-    #: Solde restant dû. Dérivé, pas stocké : `total - paid_total`.
+    #: Solde restant dû. Dérivé, pas stocké : `total - paid_total`. `paid_total` compte
+    #: l'encaissé direct **et** ce qui a été lettré sur la dette de la vente (ADR 0062).
     balance: Amount
+    #: Statut de la dette née de la vente, ou `None` si elle n'en a pas. Distingue une
+    #: dette abandonnée, dont le solde n'est plus réclamé, d'un reste à payer (ADR 0062).
+    debt_status: DebtStatus | None
     #: La vente a au moins un retour. Dérivé : ce n'est pas un statut de la base.
     has_returns: bool
     #: Total remboursable de ses retours. Dérivé lui aussi : « retournée » n'est pas

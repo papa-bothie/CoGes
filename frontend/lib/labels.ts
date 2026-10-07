@@ -164,9 +164,14 @@ export const labels = {
       customer: "Client",
       date: "Date",
       total: "Total",
-      paid: "Payé",
-      due: "Reste dû",
+      payment: "Paiement",
       status: "Statut",
+    },
+    // Ce qui reste à payer, suivi par la dette de la vente (ADR 0062).
+    payment: {
+      paid: "Payé",
+      remaining: (amount: string) => `Reste ${amount}`,
+      writtenOff: "Dette abandonnée",
     },
     anonymous: "Client anonyme",
     // Éditeur

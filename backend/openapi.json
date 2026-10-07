@@ -10229,6 +10229,16 @@
           "balance": {
             "$ref": "#/components/schemas/Amount-Output"
           },
+          "debt_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DebtStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "has_returns": {
             "type": "boolean",
             "title": "Has Returns"
@@ -10311,6 +10321,7 @@
           "total",
           "paid_total",
           "balance",
+          "debt_status",
           "has_returns",
           "returned_total",
           "cancel_reason",
@@ -10566,6 +10577,16 @@
           "balance": {
             "$ref": "#/components/schemas/Amount-Output"
           },
+          "debt_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DebtStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "has_returns": {
             "type": "boolean",
             "title": "Has Returns"
@@ -10624,6 +10645,7 @@
           "total",
           "paid_total",
           "balance",
+          "debt_status",
           "has_returns",
           "returned_total",
           "cancel_reason",

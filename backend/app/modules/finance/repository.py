@@ -239,6 +239,23 @@ class DebtRepository(TenantRepository[Debt]):
         stmt = self._select().where(Debt.sale_id == sale_id)
         return self.session.execute(stmt).scalar_one_or_none()
 
+    def lock_for_sale(self, sale_id: UUID) -> None:
+        """Verrouille la dette de cette vente, quel que soit son statut.
+
+        Un règlement verrouille la dette, puis le trigger `pa_sale_rollup` la vente :
+        qui touche aux deux doit les prendre dans cet ordre (ADR 0062).
+        """
+        self.session.execute(self._select().where(Debt.sale_id == sale_id).with_for_update())
+
+    def statuses_by_sale_ids(self, sale_ids: Sequence[UUID]) -> dict[UUID, str]:
+        """Statut de la dette de chaque vente qui en porte une, en une requête."""
+        if not sale_ids:
+            return {}
+        stmt = select(Debt.sale_id, Debt.status).where(
+            Debt.company_id == self.ctx.company_id, Debt.sale_id.in_(sale_ids)
+        )
+        return {sale_id: status for sale_id, status in self.session.execute(stmt).all()}
+
     def get_open_for_sale_for_update(self, sale_id: UUID) -> Debt | None:
         """La dette encore ouverte de cette vente, verrouillée pour la transaction.
 
