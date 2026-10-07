@@ -1,0 +1,489 @@
+{
+  "10": [
+    {
+      "file": "10-corriger-stock.png",
+      "width": 1280,
+      "percent": 9.021881727664155
+    },
+    {
+      "file": "10-corriger-stock-390.png",
+      "width": 390,
+      "percent": 9.673961589995534
+    }
+  ],
+  "11": [
+    {
+      "file": "11-recevoir-livraison.png",
+      "width": 1280,
+      "percent": 7.888628472222223
+    },
+    {
+      "file": "11-recevoir-livraison-390.png",
+      "width": 390,
+      "percent": 10.221153846153847
+    }
+  ],
+  "12": [
+    {
+      "file": "12-rayons.png",
+      "width": 1280,
+      "percent": 5.270543981481481
+    },
+    {
+      "file": "12-rayons-390.png",
+      "width": 390,
+      "percent": 10.332356356799204
+    }
+  ],
+  "13": [
+    {
+      "file": "13-clients-fournisseurs.png",
+      "width": 1280,
+      "percent": 7.352777777777778
+    },
+    {
+      "file": "13-clients-fournisseurs-390.png",
+      "width": 390,
+      "percent": 8.029919220918122
+    }
+  ],
+  "14": [
+    {
+      "file": "14-fiche-client.png",
+      "width": 1280,
+      "percent": 8.54989759513742
+    },
+    {
+      "file": "14-fiche-client-390.png",
+      "width": 390,
+      "percent": 6.241539712884572
+    }
+  ],
+  "15": [
+    {
+      "file": "15-ajouter-personne.png",
+      "width": 1280,
+      "percent": 5.718229166666667
+    },
+    {
+      "file": "15-ajouter-personne-390.png",
+      "width": 390,
+      "percent": 10.334310681844313
+    }
+  ],
+  "16": [
+    {
+      "file": "16-fiche-fournisseur.png",
+      "width": 1280,
+      "percent": 9.509809027777779
+    },
+    {
+      "file": "16-fiche-fournisseur-390.png",
+      "width": 390,
+      "percent": 5.590582587670532
+    }
+  ],
+  "17": [
+    {
+      "file": "17-argent.png",
+      "width": 1280,
+      "percent": 14.19392523364486
+    },
+    {
+      "file": "17-argent-390.png",
+      "width": 390,
+      "percent": 13.222113429238533
+    }
+  ],
+  "18": [
+    {
+      "file": "18-encaisser-dette.png",
+      "width": 1280,
+      "percent": 6.278604566305254
+    },
+    {
+      "file": "18-encaisser-dette-390.png",
+      "width": 390,
+      "percent": 8.892312702767025
+    }
+  ],
+  "19": [
+    {
+      "file": "19-payer-fournisseur.png",
+      "width": 1280,
+      "percent": 6.606388754826255
+    },
+    {
+      "file": "19-payer-fournisseur-390.png",
+      "width": 390,
+      "percent": 9.543166313808516
+    }
+  ],
+  "20": [
+    {
+      "file": "20-depenses.png",
+      "width": 1280,
+      "percent": 6.178660358565737
+    },
+    {
+      "file": "20-depenses-390.png",
+      "width": 390,
+      "percent": 7.133134961553192
+    }
+  ],
+  "21": [
+    {
+      "file": "21-entrees-sorties.png",
+      "width": 1280,
+      "percent": 5.195141622922135
+    },
+    {
+      "file": "21-entrees-sorties-390.png",
+      "width": 390,
+      "percent": 7.940237025288571
+    }
+  ],
+  "22": [
+    {
+      "file": "22-conseils.png",
+      "width": 1280,
+      "percent": 8.41516881555944
+    },
+    {
+      "file": "22-conseils-390.png",
+      "width": 390,
+      "percent": 12.890723214497498
+    }
+  ],
+  "23": [
+    {
+      "file": "23-alertes.png",
+      "width": 1280,
+      "percent": 4.631773068669528
+    },
+    {
+      "file": "23-alertes-390.png",
+      "width": 390,
+      "percent": 8.612888942559273
+    }
+  ],
+  "24": [
+    {
+      "file": "24-reglages-boutique.png",
+      "width": 1280,
+      "percent": 7.111549165120594
+    },
+    {
+      "file": "24-reglages-boutique-390.png",
+      "width": 390,
+      "percent": 8.455383123181377
+    }
+  ],
+  "25": [
+    {
+      "file": "25-connexion.png",
+      "width": 1280,
+      "percent": 7.031336805555556
+    },
+    {
+      "file": "25-connexion-390.png",
+      "width": 390,
+      "percent": 13.561965811965813
+    }
+  ],
+  "26": [
+    {
+      "file": "26-telephone-390.png",
+      "width": 390,
+      "percent": 9.744497926316107
+    }
+  ],
+  "01": [
+    {
+      "file": "01-accueil.png",
+      "width": 1280,
+      "percent": 9.510583550670642
+    },
+    {
+      "file": "01-accueil-390.png",
+      "width": 390,
+      "percent": 9.34657276294287
+    }
+  ],
+  "02": [
+    {
+      "file": "02-nouvelle-vente.png",
+      "width": 1280,
+      "percent": 9.945076856148493
+    },
+    {
+      "file": "02-nouvelle-vente-390.png",
+      "width": 390,
+      "percent": 9.50091173093807
+    }
+  ],
+  "02b": [
+    {
+      "file": "02b-nouvelle-vente-une-partie.png",
+      "width": 1280,
+      "percent": 9.524619807121661
+    },
+    {
+      "file": "02b-nouvelle-vente-une-partie-390.png",
+      "width": 390,
+      "percent": 10.564330008629513
+    }
+  ],
+  "02c": [
+    {
+      "file": "02c-nouvelle-vente-rendu-monnaie.png",
+      "width": 1280,
+      "percent": 11.202380952380953
+    },
+    {
+      "file": "02c-nouvelle-vente-rendu-monnaie-390.png",
+      "width": 390,
+      "percent": 11.022848365926611
+    }
+  ],
+  "02d": [
+    {
+      "file": "02d-nouvelle-vente-succes.png",
+      "width": 1280,
+      "percent": 9.44257216775599
+    },
+    {
+      "file": "02d-nouvelle-vente-succes-390.png",
+      "width": 390,
+      "percent": 10.495262313444131
+    }
+  ],
+  "03": [
+    {
+      "file": "03-liste-des-ventes.png",
+      "width": 1280,
+      "percent": 5.9628688023743015
+    },
+    {
+      "file": "03-liste-des-ventes-390.png",
+      "width": 390,
+      "percent": 8.51753863791697
+    }
+  ],
+  "04": [
+    {
+      "file": "04-detail-vente.png",
+      "width": 1280,
+      "percent": 5.723524305555556
+    },
+    {
+      "file": "04-detail-vente-390.png",
+      "width": 390,
+      "percent": 4.649297399093755
+    }
+  ],
+  "04b": [
+    {
+      "file": "04b-detail-vente-annulation.png",
+      "width": 1280,
+      "percent": 11.443780637254902
+    },
+    {
+      "file": "04b-detail-vente-annulation-390.png",
+      "width": 390,
+      "percent": 13.028267812901106
+    }
+  ],
+  "05": [
+    {
+      "file": "05-recu-ticket.png",
+      "width": 1280,
+      "percent": 14.1140625
+    },
+    {
+      "file": "05-recu-ticket-390.png",
+      "width": 390,
+      "percent": 12.455939984324264
+    }
+  ],
+  "05b": [
+    {
+      "file": "05b-recu-facture-a4.png",
+      "width": 1280,
+      "percent": 20.762796336206897
+    },
+    {
+      "file": "05b-recu-facture-a4-390.png",
+      "width": 390,
+      "percent": 14.773073610282914
+    }
+  ],
+  "06": [
+    {
+      "file": "06-retour-articles.png",
+      "width": 1280,
+      "percent": 6.069997030878859
+    },
+    {
+      "file": "06-retour-articles-390.png",
+      "width": 390,
+      "percent": 8.181078691423519
+    }
+  ],
+  "07": [
+    {
+      "file": "07-liste-articles.png",
+      "width": 1280,
+      "percent": 6.521233974358974
+    },
+    {
+      "file": "07-liste-articles-390.png",
+      "width": 390,
+      "percent": 10.307855626326964
+    }
+  ],
+  "08": [
+    {
+      "file": "08-fiche-article.png",
+      "width": 1280,
+      "percent": 8.070336687306503
+    },
+    {
+      "file": "08-fiche-article-390.png",
+      "width": 390,
+      "percent": 7.778752778752779
+    }
+  ],
+  "09": [
+    {
+      "file": "09-nouvel-article.png",
+      "width": 1280,
+      "percent": 7.731097027972028
+    },
+    {
+      "file": "09-nouvel-article-390.png",
+      "width": 390,
+      "percent": 8.706311945748565
+    }
+  ],
+  "14b": [
+    {
+      "file": "14b-fiche-client-rappel.png",
+      "width": 1280,
+      "percent": 11.621330205811137
+    },
+    {
+      "file": "14b-fiche-client-rappel-390.png",
+      "width": 390,
+      "percent": 13.9429413498379
+    }
+  ],
+  "17b": [
+    {
+      "file": "17b-argent-journee-en-perte.png",
+      "width": 1280,
+      "percent": 13.373588841623036
+    },
+    {
+      "file": "17b-argent-journee-en-perte-390.png",
+      "width": 390,
+      "percent": 15.505724883083374
+    }
+  ],
+  "18b": [
+    {
+      "file": "18b-encaisser-dette-montant-libre.png",
+      "width": 1280,
+      "percent": 10.282722581317765
+    },
+    {
+      "file": "18b-encaisser-dette-montant-libre-390.png",
+      "width": 390,
+      "percent": 12.661776629167933
+    }
+  ],
+  "21b": [
+    {
+      "file": "21b-entrees-sorties-annulation.png",
+      "width": 1280,
+      "percent": 9.310145191507077
+    },
+    {
+      "file": "21b-entrees-sorties-annulation-390.png",
+      "width": 390,
+      "percent": 10.412929688695707
+    }
+  ],
+  "22b": [
+    {
+      "file": "22b-meilleurs-articles.png",
+      "width": 1280,
+      "percent": 12.164607162309368
+    },
+    {
+      "file": "22b-meilleurs-articles-390.png",
+      "width": 390,
+      "percent": 12.145581691036236
+    }
+  ],
+  "22c": [
+    {
+      "file": "22c-previsions.png",
+      "width": 1280,
+      "percent": 9.863749319172113
+    },
+    {
+      "file": "22c-previsions-390.png",
+      "width": 390,
+      "percent": 11.695085112170538
+    }
+  ],
+  "24b": [
+    {
+      "file": "24b-reglages-personnes.png",
+      "width": 1280,
+      "percent": 9.249302151416122
+    },
+    {
+      "file": "24b-reglages-personnes-390.png",
+      "width": 390,
+      "percent": 11.878273241909605
+    }
+  ],
+  "24c": [
+    {
+      "file": "24c-reglages-droits.png",
+      "width": 1280,
+      "percent": 10.412496595860567
+    },
+    {
+      "file": "24c-reglages-droits-390.png",
+      "width": 390,
+      "percent": 10.090969636424182
+    }
+  ],
+  "24d": [
+    {
+      "file": "24d-reglages-historique.png",
+      "width": 1280,
+      "percent": 8.773148148148149
+    },
+    {
+      "file": "24d-reglages-historique-390.png",
+      "width": 390,
+      "percent": 10.710047528229346
+    }
+  ],
+  "24e": [
+    {
+      "file": "24e-reglages-fichiers-excel.png",
+      "width": 1280,
+      "percent": 11.038262527233115
+    },
+    {
+      "file": "24e-reglages-fichiers-excel-390.png",
+      "width": 390,
+      "percent": 14.918708126255295
+    }
+  ]
+}
