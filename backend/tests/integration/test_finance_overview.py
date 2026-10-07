@@ -291,6 +291,13 @@ def test_a_compensation_never_appears_in_the_treasury(
     assert written >= 2
 
 
+#: Un paiement annulé et sa contre-écriture sortent tous deux de la trésorerie (ADR 0038).
+_LIVE_CASH = (
+    "p.reversal_of_payment_id IS NULL AND NOT EXISTS (SELECT 1 FROM payments r"
+    " WHERE r.company_id = p.company_id AND r.reversal_of_payment_id = p.id)"
+)
+
+
 def test_the_treasury_matches_the_sum_of_real_payments(
     api_client: TestClient,
     alpha_token: str,
@@ -314,15 +321,17 @@ def test_the_treasury_matches_the_sum_of_real_payments(
     expected_in = read_scalar_in_tenant(
         session_factory,
         company_alpha.company_id,
-        "SELECT coalesce(sum(amount), 0) FROM payments "
-        " WHERE method <> 'offset' AND direction = 'inflow' AND paid_at::date = :day",
+        "SELECT coalesce(sum(amount), 0) FROM payments p "
+        " WHERE method <> 'offset' AND direction = 'inflow' AND paid_at::date = :day"
+        f" AND {_LIVE_CASH}",
         {"day": today},
     )
     expected_out = read_scalar_in_tenant(
         session_factory,
         company_alpha.company_id,
-        "SELECT coalesce(sum(amount), 0) FROM payments "
-        " WHERE method <> 'offset' AND direction = 'outflow' AND paid_at::date = :day",
+        "SELECT coalesce(sum(amount), 0) FROM payments p "
+        " WHERE method <> 'offset' AND direction = 'outflow' AND paid_at::date = :day"
+        f" AND {_LIVE_CASH}",
         {"day": today},
     )
     assert Decimal(body["cash_in"]) == expected_in

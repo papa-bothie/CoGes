@@ -14,6 +14,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 
+from app.core import cache
 from app.core.events.types import EventType
 from app.core.tenancy import TenantContext
 
@@ -39,6 +40,11 @@ def emit(
     """Écrit un événement dans l'outbox, dans la transaction courante.
 
     Ne publie rien : `published_at` reste NULL jusqu'au passage du relais.
+
+    Chaque type d'événement vide aussi le tableau de bord côté worker
+    (`app/workers/subscriptions.py`). L'API le fait elle-même, **après COMMIT**, pour
+    que la lecture suivante voie l'écriture sans dépendre du relais (ADR 0061) ;
+    le worker reste le filet.
     """
     if not isinstance(event_type, EventType):  # pragma: no cover - garde-fou de typage
         raise ValueError(f"Type d'événement hors liste : {event_type!r}")
@@ -53,4 +59,5 @@ def emit(
             "payload": json.dumps(payload, ensure_ascii=False, default=str),
         },
     )
+    cache.invalidate_after_commit(session, ctx.company_id, cache.DASHBOARD_KEY)
     return int(result.scalar_one())

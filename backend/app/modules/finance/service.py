@@ -25,6 +25,7 @@ from uuid import UUID
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import cache
 from app.core.audit import AuditAction, audit_critical
 from app.core.errors import (
     BusinessRuleError,
@@ -1029,6 +1030,9 @@ def write_off_debt(
         after={**_audited_debt(debt), "reason": reason},
         ip_address=ip_address,
     )
+    # Sans événement, le worker ne viderait pas le tableau de bord : les créances
+    # ouvertes y resteraient jusqu'au TTL (ADR 0061).
+    cache.invalidate_after_commit(session, ctx.company_id, cache.DASHBOARD_KEY)
     return debt
 
 

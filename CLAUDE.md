@@ -138,6 +138,7 @@ Toutes les cibles s'exécutent depuis la **racine** du dépôt et délèguent au
 ```bash
 cp .env.example .env         # une fois, puis remplacer les valeurs
 make install                 # uv sync + installation des hooks pre-commit
+make dev                     # API + worker + relais + front ensemble (honcho, Procfile.dev)
 make up / make down          # PostgreSQL 16 + Redis 7 en local (docker compose, --wait)
 make logs / make psql        # journaux des services / psql en coges_app sur coges
 make migrate                 # alembic upgrade head (rôle propriétaire, jamais au boot de l'API)

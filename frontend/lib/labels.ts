@@ -115,6 +115,7 @@ export const labels = {
         : "1 article sous le seuil d'alerte ou en rupture",
     seeStock: "Voir le stock",
     alertGroup: (title: string, count: number) => `${title} (${count})`,
+    outboxLag: "Certains chiffres se mettent à jour, patientez une minute.",
   },
   common: {
     close: "Fermer",

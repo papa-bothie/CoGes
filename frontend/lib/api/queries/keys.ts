@@ -5,6 +5,7 @@
  */
 export const queryKeys = {
   dashboard: ["dashboard"] as const,
+  systemOutbox: ["system", "outbox"] as const,
   sales: {
     all: ["sales"] as const,
     list: (params: Record<string, unknown>) => ["sales", "list", params] as const,

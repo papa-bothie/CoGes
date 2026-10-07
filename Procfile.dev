@@ -1,0 +1,6 @@
+# `make dev` : les quatre processus de CoGes en local, chacun préfixé de son nom.
+# Sans `relay` ni `worker`, les agrégats et les alertes prennent du retard (ADR 0061).
+api: make --no-print-directory api
+worker: make --no-print-directory worker
+relay: make --no-print-directory relay
+front: make --no-print-directory front-dev

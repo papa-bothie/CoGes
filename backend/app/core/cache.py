@@ -25,10 +25,17 @@ from typing import Any, cast
 from uuid import UUID
 
 import redis
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.tenancy import on_commit
 
 logger = logging.getLogger(__name__)
+
+#: Clé du tableau de bord. Ici et non dans `modules/dashboard` : les modules qui
+#: écrivent (ventes, finance, dépenses) la vident après COMMIT et ne peuvent pas
+#: importer un module de restitution, qui est au-dessus d'eux (ADR 0061).
+DASHBOARD_KEY = "dashboard"
 
 #: Préfixe commun, pour qu'un `FLUSHDB` ciblé ou un audit de clés reste possible.
 NAMESPACE = "coges"
@@ -110,3 +117,12 @@ def invalidate(company_id: UUID, *names: str) -> None:
         client.delete(*(key(company_id, name) for name in names))
     except Exception:  # pragma: no cover - dépend d'un service externe
         logger.warning("Invalidation du cache échouée ; le TTL rattrapera", exc_info=True)
+
+
+def invalidate_after_commit(session: Session, company_id: UUID, *names: str) -> None:
+    """Vide les clés `names` de l'entreprise une fois la transaction validée.
+
+    L'invalidation par le worker reste le filet ; celle-ci rend l'écriture visible
+    dès la lecture suivante, sans attendre ni le relais ni le TTL (ADR 0061).
+    """
+    on_commit(session, lambda: invalidate(company_id, *names))

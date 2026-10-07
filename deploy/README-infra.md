@@ -125,6 +125,12 @@ docker compose --env-file deploy/.env.preprod -f deploy/docker-compose.worker.ym
 docker compose --env-file deploy/.env.preprod -f deploy/docker-compose.worker.yml logs -f relay
 ```
 
+**Le relais et le worker de cette zone doivent tourner.** Sans eux, le CA du jour reste
+juste (calculé en direct, ADR 0061), mais les jours passés du tableau de bord, la courbe,
+les analyses, les alertes et les conseils prennent du retard ; au-delà de deux minutes
+d'attente dans l'outbox, le tableau de bord du gérant affiche « Certains chiffres se
+mettent à jour, patientez une minute. »
+
 Machine éteinte : les événements s'accumulent dans `business_events` et partent au
 redémarrage (au moins une fois, T40) ; les exports restent `pending`, et le balayage
 nocturne les renfile. L'API sur Vercel continue de servir.
