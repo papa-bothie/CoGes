@@ -316,6 +316,7 @@ Remplace dans `lib/labels.ts`, les en-têtes de tableaux, les exports et les not
 | Motif | Pourquoi ? |
 | Mouvement de stock manuel | Corriger le stock |
 | Échéance | À payer avant le |
+| Client anonyme (liste des ventes, reçu) | Client de passage (même mot que le choix du client, B3) |
 
 Supprime tous les sous-titres explicatifs qui décrivent un calcul, par exemple « Prix de vente − coût moyen
 pondéré », « Mouvements réels de caisse, compensations… » ou « À l'instant, toutes périodes confondues ». Une
