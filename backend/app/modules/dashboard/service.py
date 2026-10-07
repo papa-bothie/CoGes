@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
-from app.core import cache
+from app.core import cache, clock
 from app.core.config import get_settings
 from app.core.money import amount as to_amount
 from app.core.tenancy import TenantContext
@@ -78,7 +78,7 @@ def dashboard(session: Session, ctx: TenantContext, *, use_cache: bool = True) -
 def _compose(session: Session, ctx: TenantContext) -> Dashboard:
     """Assemble la réponse. Une seule transaction, uniquement des lectures indexées."""
     zone = ZoneInfo(companies_service.get_timezone(session, ctx))
-    today = datetime.now(zone).date()
+    today = clock.now_in(zone.key).date()
     month_from = today.replace(day=1)
     trend_from = today - timedelta(days=REVENUE_TREND_DAYS - 1)
 
@@ -124,7 +124,7 @@ def _compose(session: Session, ctx: TenantContext) -> Dashboard:
         revenue_trend=_trend(by_day, trend_from, today),
         recent_sales=_recent_sales(session, ctx),
         active_alerts=_active_alerts(session, ctx),
-        computed_at=datetime.now(zone),
+        computed_at=clock.now_in(zone.key),
     )
 
 

@@ -17,6 +17,7 @@
 /.next/
 # Build du front des parcours e2e (deploy/scripts/e2e.sh)
 /.next-e2e/
+/.next-maquette/
 /out/
 
 # production

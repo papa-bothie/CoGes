@@ -45,25 +45,25 @@ export function PeriodBarChart({
           margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
           barCategoryGap="20%"
         >
-          <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="3 3" />
+          <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 3" />
           <XAxis
             dataKey="label"
             tickLine={false}
             axisLine={false}
-            tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+            tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
             minTickGap={24}
           />
           <YAxis
             tickLine={false}
             axisLine={false}
             width="auto"
-            tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+            tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
             tickFormatter={formatAxis}
           />
-          <Tooltip cursor={{ fill: "hsl(var(--muted))" }} content={ChartTooltip} />
+          <Tooltip cursor={{ fill: "var(--color-muted)" }} content={ChartTooltip} />
           <Bar
             dataKey="y"
-            fill="hsl(var(--chart-1))"
+            fill="var(--color-chart-1)"
             radius={[3, 3, 0, 0]}
             maxBarSize={28}
             isAnimationActive={false}

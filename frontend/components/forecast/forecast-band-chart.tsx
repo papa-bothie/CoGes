@@ -44,38 +44,38 @@ export function ForecastBandChart({
     <div role="img" aria-label={label} style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={[...data]} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-          <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="3 3" />
+          <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 3" />
           <XAxis
             dataKey="label"
             tickLine={false}
             axisLine={false}
-            tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+            tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
             minTickGap={16}
           />
           <YAxis
             tickLine={false}
             axisLine={false}
             width="auto"
-            tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+            tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
             tickFormatter={(value: number) => axisFormatter.format(value)}
           />
           <Tooltip
-            cursor={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
+            cursor={{ stroke: "var(--color-muted-foreground)", strokeWidth: 1 }}
             content={BandTooltip}
           />
           <Area
             dataKey="band"
             stroke="none"
-            fill="hsl(var(--chart-1))"
+            fill="var(--color-chart-1)"
             fillOpacity={0.12}
             isAnimationActive={false}
           />
           <Line
             dataKey="y"
-            stroke="hsl(var(--chart-1))"
+            stroke="var(--color-chart-1)"
             strokeWidth={2}
             dot={false}
-            activeDot={{ r: 4, strokeWidth: 2, stroke: "hsl(var(--card))" }}
+            activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--color-card)" }}
             isAnimationActive={false}
           />
         </ComposedChart>

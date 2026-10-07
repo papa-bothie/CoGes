@@ -78,3 +78,19 @@ make front-e2e     # = make e2e-reset, puis la suite complète
   l'autre. `E2E_BASE_URL=<url>` vise un front déjà déployé (aucun serveur lancé).
 - Cibles tactiles : `e2e/touch-targets.spec.ts` émule une tablette (`hasTouch`, 1024 × 768)
   et mesure toutes les cibles de Nouvelle vente, Stock et Ventes (44 × 44 px au moins).
+
+## Maquette v2 : composants et comparaison (phase 15, ADR 0064 et 0065)
+
+- **`/dev/composants`** (développement seulement, sans connexion) : tous les composants de
+  `components/kit/` et leurs états, avec le sélecteur de thème. En production, la page
+  répond 404.
+- **`make seed-maquette`** crée l'entreprise **`maquette`** (« Alimentation Keur Fatou »,
+  `gerant@maquette.example.com`, `demo-coges-2026`) dans la base locale ; `make e2e-reset`
+  la crée aussi dans `coges_e2e`. Pour la voir le mardi 6 octobre 2026 à 10 h 45 :
+  `COGES_FROZEN_NOW=2026-10-06T10:45:00+00:00 make api`.
+- **`make maquette-check`** compare chaque écran livré à sa capture (`pixelmatch`, 2 % de
+  pixels différents au plus) avec ses propres serveurs : API **:8101** à l'heure figée
+  (`deploy/scripts/e2e.sh maquette-api`, Redis n° 2) et front **:3101** (`.next-maquette`).
+  Résultats : `docs/design/captures/phase-15/comparaison.md` et une image maquette | front |
+  différences par écran. `MAQUETTE_ALL=1` mesure aussi les écrans pas encore refaits, sans
+  échouer. Un écran est rendu bloquant en l'ajoutant à `DONE` dans `e2e/maquette.spec.ts`.

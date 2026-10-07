@@ -107,9 +107,9 @@ function ReceiptSheet({
     <article
       aria-label={labels.receipt.title(receipt.sale_no)}
       className={cn(
-        "mx-auto bg-white text-black shadow-sm ring-1 ring-border print:shadow-none print:ring-0",
+        "mx-auto bg-recu-papier text-recu-encre shadow-sm ring-1 ring-border print:shadow-none print:ring-0",
         ticket
-          ? "w-[80mm] px-4 py-5 font-mono text-[12px] leading-snug print:w-auto print:p-0"
+          ? "w-[80mm] px-4 py-5 font-receipt text-[12px] leading-snug print:w-auto print:p-0"
           : "w-[210mm] max-w-full px-12 py-10 text-sm print:w-auto print:p-0",
       )}
     >
@@ -135,14 +135,14 @@ function ReceiptSheet({
       </header>
 
       {receipt.status === "cancelled" && (
-        <p className="my-3 border-2 border-black py-1 text-center font-bold tracking-widest">
+        <p className="my-3 border-2 border-recu-encre py-1 text-center font-bold tracking-widest">
           {labels.receipt.cancelled}
         </p>
       )}
 
       <table className={cn("w-full border-collapse", ticket ? "mt-3" : "mt-8")}>
         <thead>
-          <tr className="border-y border-black text-left">
+          <tr className="border-y border-recu-encre text-left">
             <th className="py-1 font-semibold">{labels.sales.lineColumns.product}</th>
             {!ticket && (
               <th className="py-1 text-right font-semibold">{labels.sales.lineColumns.qty}</th>
@@ -189,7 +189,12 @@ function ReceiptSheet({
         </tbody>
       </table>
 
-      <dl className={cn("mt-3 space-y-0.5 border-t border-black pt-2", !ticket && "ml-auto w-72")}>
+      <dl
+        className={cn(
+          "mt-3 space-y-0.5 border-t border-recu-encre pt-2",
+          !ticket && "ml-auto w-72",
+        )}
+      >
         <Line label={labels.sales.subtotal} value={money(receipt.subtotal)} />
         <Line label={labels.sales.discounts} value={money(receipt.discount_total)} />
         {showTax && <Line label={labels.sales.taxes} value={money(receipt.tax_total)} />}

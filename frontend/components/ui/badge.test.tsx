@@ -8,7 +8,7 @@ describe("Badge de statut", () => {
   it("reste teinté, jamais plein comme un bouton primaire", () => {
     render(<Badge variant="info">Confirmée</Badge>);
     const badge = screen.getByText("Confirmée");
-    expect(badge.className).toContain("bg-primary/10");
+    expect(badge.className).toContain("bg-ventes-teinte");
     expect(badge.className).not.toContain(buttonVariants({ variant: "default" }).split(" ")[0]);
     expect(badge.className).not.toMatch(/\bbg-primary\b(?!\/)/);
   });

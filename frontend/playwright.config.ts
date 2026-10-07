@@ -13,6 +13,8 @@ const E2E_FRONT = "http://localhost:3100";
 
 export default defineConfig({
   testDir: "./e2e",
+  // La comparaison à la maquette a ses propres serveurs, à l'heure figée.
+  testIgnore: "maquette.spec.ts",
   fullyParallel: false,
   workers: 1,
   retries: 0,

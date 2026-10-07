@@ -18,7 +18,7 @@ const badgeVariants = cva(
         // Statuts : fond teinté et bordure fine, jamais pleins comme un bouton
         // (défaut du prototype, docs/design/prototype-reference.md § 5).
         neutral: "border-border bg-muted/60 text-muted-foreground",
-        info: "border-primary/25 bg-primary/10 text-primary",
+        info: "border-ventes/25 bg-ventes-teinte text-ventes-encre",
         success: "border-success/30 bg-success/10 text-success-ink dark:text-success-ink",
         warning: "border-warning/30 bg-warning/10 text-warning-ink",
         danger: "border-destructive/30 bg-destructive/10 text-danger-ink",

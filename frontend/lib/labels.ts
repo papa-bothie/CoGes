@@ -6,7 +6,7 @@
 export const labels = {
   app: {
     name: "CoGes",
-    tagline: "Gestion commerciale",
+    tagline: "Votre entreprise sous contrôle",
     version: (v: string) => `Version ${v}`,
     skipToContent: "Aller au contenu",
   },
@@ -1013,5 +1013,42 @@ export const labels = {
   emptyPage: {
     title: "Bientôt disponible",
     body: "Cet écran sera construit dans une prochaine phase.",
+  },
+  /** Composants de la maquette v2 (components/kit/, ADR 0064). */
+  kit: {
+    currencyShort: "F",
+    numericPad: "Pavé numérique",
+    eraseDigit: "Effacer le dernier chiffre",
+    decrease: (name: string) => `Retirer un ${name}`,
+    increase: (name: string) => `Ajouter un ${name}`,
+    quantity: "Quantité",
+    unitDefault: "article",
+    walkIn: "Client de passage",
+    walkInHint: "Pas besoin de nom",
+    status: {
+      paid: "Payé",
+      remaining: (amount: string) => `Reste ${amount}`,
+      returned: (amount: string) => `Retour : ${amount}`,
+      cancelled: "Annulée",
+      writtenOff: "Dette abandonnée",
+    },
+    nav: {
+      home: "Accueil",
+      sell: "Vendre",
+      stock: "Stock",
+      clients: "Clients",
+      money: "Argent",
+      advice: "Conseils",
+      alerts: "Alertes",
+      mainMenu: "Menu principal",
+      unread: (count: number) =>
+        `${count} alerte${count > 1 ? "s" : ""} non lue${count > 1 ? "s" : ""}`,
+    },
+    theme: { toLight: "Passer en mode clair", toDark: "Passer en mode sombre" },
+    chartToday: "Aujourd'hui",
+    showcase: {
+      title: "Composants de la maquette",
+      subtitle: "Vitrine de développement : chaque composant et ses états.",
+    },
   },
 } as const;

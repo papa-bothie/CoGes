@@ -26,7 +26,7 @@ from uuid import UUID
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import cache
+from app.core import cache, clock
 from app.core.audit import AuditAction, audit_critical
 from app.core.errors import (
     BusinessRuleError,
@@ -1266,7 +1266,7 @@ def list_debts(
     `customer_id` / `supplier_id` servent les fiches client et fournisseur (ADR 0050).
     """
     repository = DebtRepository(session, ctx)
-    overdue_on = datetime.now(UTC).date() if overdue else None
+    overdue_on = clock.today_utc() if overdue else None
     filters: dict[str, Any] = {
         "party_type": party_type,
         "status": status,
@@ -1418,7 +1418,7 @@ def debts_due(
     défaut ; le paramètre existe pour que les tests puissent fixer la date sans geler
     l'horloge du processus.
     """
-    reference = on or datetime.now(UTC).date()
+    reference = on or clock.today_utc()
     return DebtRepository(session, ctx).due_on_or_before(
         reference, limit=limit or DUE_DEBT_SCAN_LIMIT
     )

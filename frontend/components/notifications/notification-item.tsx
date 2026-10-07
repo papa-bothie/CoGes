@@ -28,7 +28,7 @@ const ICONS: Record<AppNotification["type"], { icon: LucideIcon; tone: string }>
   stock_out: { icon: PackageX, tone: "bg-destructive/10 text-danger-ink" },
   debt_due: { icon: Clock, tone: "bg-muted text-muted-foreground" },
   sale_cancelled: { icon: Receipt, tone: "bg-muted text-muted-foreground" },
-  forecast_alert: { icon: LineChart, tone: "bg-primary/10 text-primary" },
+  forecast_alert: { icon: LineChart, tone: "bg-ventes-teinte text-ventes-encre" },
   insight_critical: { icon: Sparkles, tone: "bg-destructive/10 text-danger-ink" },
 };
 

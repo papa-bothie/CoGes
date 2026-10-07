@@ -23,8 +23,8 @@ export type CashFlowPoint = {
 };
 
 const SERIES = [
-  { key: "inflow", color: "hsl(var(--chart-2))" },
-  { key: "outflow", color: "hsl(var(--chart-1))" },
+  { key: "inflow", color: "var(--color-chart-1)" },
+  { key: "outflow", color: "var(--color-barre-sortie)" },
 ] as const;
 
 /**
@@ -63,23 +63,23 @@ export function CashFlowChart({
             barGap={2}
             barCategoryGap="20%"
           >
-            <CartesianGrid vertical={false} stroke="hsl(var(--border))" strokeDasharray="3 3" />
+            <CartesianGrid vertical={false} stroke="var(--color-border)" strokeDasharray="3 3" />
             <XAxis
               dataKey="label"
               tickLine={false}
               axisLine={false}
-              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+              tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
               minTickGap={24}
             />
             <YAxis
               tickLine={false}
               axisLine={false}
               width="auto"
-              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+              tick={{ fill: "var(--color-muted-foreground)", fontSize: 12 }}
               tickFormatter={formatAxis}
             />
             <Tooltip
-              cursor={{ fill: "hsl(var(--muted))", opacity: 0.5 }}
+              cursor={{ fill: "var(--color-muted)", opacity: 0.5 }}
               content={(props: TooltipContentProps) => (
                 <FlowTooltip {...props} seriesLabels={seriesLabels} />
               )}

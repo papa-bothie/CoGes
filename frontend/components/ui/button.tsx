@@ -18,6 +18,15 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive/10 text-danger-ink hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
+        // Maquette v2 (ADR 0064) : bouton bordé, et un bouton plein par rubrique.
+        secondaire:
+          "border-2 border-input bg-card text-foreground hover:bg-voile aria-expanded:bg-voile",
+        ventes: "bg-ventes text-primary-foreground hover:bg-ventes/90",
+        stock: "bg-stock text-primary-foreground hover:bg-stock/90",
+        argent: "bg-argent text-primary-foreground hover:bg-argent/90",
+        clients: "bg-clients text-primary-foreground hover:bg-clients/90",
+        depenses: "bg-depenses text-primary-foreground hover:bg-depenses/90",
+        conseils: "bg-conseils text-primary-foreground hover:bg-conseils/90",
       },
       size: {
         default:
@@ -31,6 +40,11 @@ const buttonVariants = cva(
         "icon-sm":
           "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
         "icon-lg": "size-9",
+        // Maquette v2 : « Encaisser », « Enregistrer » (68 px) et bouton standard (56 px).
+        principal:
+          "min-h-bouton-principal gap-2.5 rounded-bouton px-[22px] text-xl font-extrabold [&_svg:not([class*='size-'])]:size-6",
+        standard:
+          "min-h-bouton gap-2.5 rounded-bouton px-5 text-libelle font-bold [&_svg:not([class*='size-'])]:size-5",
       },
     },
     defaultVariants: {

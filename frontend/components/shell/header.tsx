@@ -110,7 +110,7 @@ export function Header({ me }: { me: Me }) {
             <p className="text-xs text-muted-foreground">{roleLabel(me)}</p>
           </div>
           <Avatar className="size-9">
-            <AvatarFallback className="bg-primary/10 font-semibold text-primary">
+            <AvatarFallback className="bg-ventes-teinte font-semibold text-ventes-encre">
               {initial(me.user.full_name)}
             </AvatarFallback>
           </Avatar>
