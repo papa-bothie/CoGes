@@ -5,7 +5,9 @@ import { SalePaymentBadge } from "./status-badge";
 
 describe("SalePaymentBadge", () => {
   it("dit « Payé » quand plus rien n'est dû", () => {
-    render(<SalePaymentBadge sale={{ status: "confirmed", balance: "0.00", debt_status: "paid" }} />);
+    render(
+      <SalePaymentBadge sale={{ status: "confirmed", balance: "0.00", debt_status: "paid" }} />,
+    );
     expect(screen.getByText("Payé")).toHaveAttribute("data-variant", "success");
   });
 

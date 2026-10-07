@@ -68,6 +68,8 @@ from app.modules.sales.repository import (
     SaleRevenueRepository,
 )
 from app.modules.sales.schemas import (
+    CustomerChoice,
+    CustomerChoicePage,
     ReceiptCompany,
     ReceiptCustomer,
     ReceiptLine,
@@ -225,6 +227,62 @@ def get_sale(session: Session, ctx: TenantContext, sale_id: UUID) -> Sale:
     if sale is None:
         raise NotFoundError("Vente introuvable.")
     return sale
+
+
+#: Clients récents en tête de la liste de vente (ADR 0063).
+RECENT_CUSTOMERS = 5
+
+
+def customer_choices(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    page: int,
+    page_size: int,
+    search: str | None = None,
+) -> CustomerChoicePage:
+    """Liste des clients de « Nouvelle vente » (ADR 0063).
+
+    Sans recherche : la page 1 commence par les clients des dernières ventes, puis tous
+    les autres par ordre alphabétique, sans doublon. Avec une recherche : l'ordre de
+    pertinence de l'ADR 0050. Chaque ligne dit ce que le client doit encore.
+    """
+    term = search.strip() if search else None
+    recent: list[Any] = []
+    if not term:
+        recent = customers_service.get_many(
+            session,
+            ctx,
+            SaleRepository(session, ctx).recent_customer_ids(limit=RECENT_CUSTOMERS),
+        )
+    others, others_total = customers_service.list_customers(
+        session,
+        ctx,
+        page=page,
+        page_size=page_size,
+        search=term or None,
+        exclude_ids=[customer.id for customer in recent],
+    )
+    shown = [*(recent if page == 1 else []), *others]
+    debts = finance_service.open_balances_by_customer(
+        session, ctx, [customer.id for customer in shown]
+    )
+    recent_ids = {customer.id for customer in recent}
+    return CustomerChoicePage(
+        items=[
+            CustomerChoice(
+                id=customer.id,
+                name=customer.name,
+                phone=customer.phone,
+                open_debt=debts.get(customer.id, Decimal("0")),
+                recent=customer.id in recent_ids,
+            )
+            for customer in shown
+        ],
+        page=page,
+        page_size=page_size,
+        total=others_total + len(recent),
+    )
 
 
 def list_sales(

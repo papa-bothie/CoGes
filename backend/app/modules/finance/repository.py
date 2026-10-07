@@ -282,6 +282,28 @@ class DebtRepository(TenantRepository[Debt]):
         )
         return Decimal(self.session.execute(stmt).scalar_one())
 
+    def open_balances_by_customer(self, customer_ids: Sequence[UUID]) -> dict[UUID, Decimal]:
+        """Encours de chaque client du lot, même définition qu'`open_balance_for_customer`.
+
+        Un client sans dette ouverte est absent du résultat.
+        """
+        if not customer_ids:
+            return {}
+        stmt = (
+            select(Debt.customer_id, func.sum(Debt.balance))
+            .where(
+                Debt.company_id == self.ctx.company_id,
+                Debt.customer_id.in_(list(customer_ids)),
+                Debt.status.in_(OPEN_STATUSES),
+            )
+            .group_by(Debt.customer_id)
+        )
+        return {
+            customer_id: Decimal(balance)
+            for customer_id, balance in self.session.execute(stmt).all()
+            if customer_id is not None
+        }
+
     def get_for_update(self, debt_id: UUID) -> Debt | None:
         """Dette du tenant, verrouillée pour la durée de la transaction.
 

@@ -20,7 +20,7 @@ import { queryKeys } from "@/lib/api/queries/keys";
 import { formatDate } from "@/lib/format";
 import { labels } from "@/lib/labels";
 
-import { CustomerFormDialog } from "../customer-form-dialog";
+import { CustomerFormDialog } from "@/components/customers/customer-form-dialog";
 
 export function CustomerDetailView({ customerId }: { customerId: string }) {
   const { timeZone, currency } = useCompanyLocale();

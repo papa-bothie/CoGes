@@ -93,3 +93,46 @@ def test_the_debt_filter_ignores_a_foreign_customer(
         f"/api/v1/debts?customer_id={foreign}", headers=auth_headers(beta_token)
     )
     assert seen_by_beta.json()["total"] == 1
+
+
+def test_the_sale_customer_list_never_shows_another_company(
+    api_client: TestClient, alpha_token: str, beta_token: str
+) -> None:
+    """`GET /sales/customer-choices` (ADR 0063) : ni en liste, ni en recherche, ni sa dette."""
+    product_id = _stocked_product(api_client, beta_token)
+    foreign = _customer_with_debt(api_client, beta_token, product_id)
+    name = api_client.get(f"/api/v1/customers/{foreign}", headers=auth_headers(beta_token)).json()[
+        "name"
+    ]
+
+    listed = api_client.get(
+        "/api/v1/sales/customer-choices",
+        headers=auth_headers(alpha_token),
+        params={"page_size": 100},
+    ).json()
+    pages = [listed]
+    for page in range(2, -(-listed["total"] // 100) + 1):
+        pages.append(
+            api_client.get(
+                "/api/v1/sales/customer-choices",
+                headers=auth_headers(alpha_token),
+                params={"page_size": 100, "page": page},
+            ).json()
+        )
+    assert foreign not in {item["id"] for body in pages for item in body["items"]}
+
+    searched = api_client.get(
+        "/api/v1/sales/customer-choices",
+        headers=auth_headers(alpha_token),
+        params={"search": name},
+    ).json()
+    assert foreign not in {item["id"] for item in searched["items"]}
+
+    # Le propriétaire, lui, le voit avec sa dette : le test ne passe pas à vide.
+    own = api_client.get(
+        "/api/v1/sales/customer-choices",
+        headers=auth_headers(beta_token),
+        params={"search": name},
+    ).json()
+    mine = [item for item in own["items"] if item["id"] == foreign]
+    assert mine and mine[0]["open_debt"] != "0.00"

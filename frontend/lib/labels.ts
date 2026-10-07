@@ -178,7 +178,14 @@ export const labels = {
     editTitle: (no: string) => `Vente ${no}`,
     customer: "Client",
     customerSearch: "Rechercher un client (nom ou code)",
-    noCustomer: "Client anonyme (comptant)",
+    noCustomer: "Client de passage",
+    // Liste des clients de la vente (ADR 0063) : textes de la maquette v2.
+    customerPicker: {
+      walkInHint: "Pas besoin de nom",
+      owes: (amount: string) => `Doit ${amount}`,
+      newCustomer: "Nouveau client",
+      loadingMore: "Chargement des clients suivants…",
+    },
     removeCustomer: "Retirer le client",
     articles: "Articles",
     productSearch: "Ajouter un article (nom ou SKU)",

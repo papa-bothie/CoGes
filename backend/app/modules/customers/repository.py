@@ -21,10 +21,17 @@ class CustomerRepository(TenantRepository[Customer]):
     def _live(self) -> Select[tuple[Customer]]:
         return self._select().where(Customer.deleted_at.is_(None))
 
-    def _filters(self, *, search: str | None) -> list[ColumnElement[bool]]:
-        if search is None:
-            return []
-        return [or_(name_matches(Customer.name, search), code_matches((Customer.code,), search))]
+    def _filters(
+        self, *, search: str | None, exclude_ids: Sequence[UUID] = ()
+    ) -> list[ColumnElement[bool]]:
+        filters: list[ColumnElement[bool]] = []
+        if search is not None:
+            filters.append(
+                or_(name_matches(Customer.name, search), code_matches((Customer.code,), search))
+            )
+        if exclude_ids:
+            filters.append(Customer.id.not_in(list(exclude_ids)))
+        return filters
 
     def get_live(self, customer_id: UUID) -> Customer | None:
         return self.session.execute(
@@ -43,21 +50,33 @@ class CustomerRepository(TenantRepository[Customer]):
         """Homonyme de code vivant (`customers_code_uq` est partielle)."""
         return self.session.execute(self._live().where(Customer.code == code)).scalar_one_or_none()
 
-    def count_live(self, *, search: str | None = None) -> int:
+    def live_by_ids(self, customer_ids: Sequence[UUID]) -> Sequence[Customer]:
+        """Clients vivants d'un lot d'identifiants, dans un ordre quelconque."""
+        if not customer_ids:
+            return []
+        stmt = self._live().where(Customer.id.in_(list(customer_ids)))
+        return self.session.execute(stmt).scalars().all()
+
+    def count_live(self, *, search: str | None = None, exclude_ids: Sequence[UUID] = ()) -> int:
         stmt = (
             select(func.count())
             .select_from(Customer)
             .where(Customer.company_id == self.ctx.company_id, Customer.deleted_at.is_(None))
-            .where(*self._filters(search=search))
+            .where(*self._filters(search=search, exclude_ids=exclude_ids))
         )
         return int(self.session.execute(stmt).scalar_one())
 
     def page_live(
-        self, *, page: int, page_size: int, search: str | None = None
+        self,
+        *,
+        page: int,
+        page_size: int,
+        search: str | None = None,
+        exclude_ids: Sequence[UUID] = (),
     ) -> Sequence[Customer]:
         stmt = (
             self._live()
-            .where(*self._filters(search=search))
+            .where(*self._filters(search=search, exclude_ids=exclude_ids))
             .order_by(*relevance_order(Customer.name, (Customer.code,), search))
             .limit(page_size)
             .offset((page - 1) * page_size)

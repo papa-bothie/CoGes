@@ -195,6 +195,32 @@ class SaleDetail(SaleRead):
     debt: DebtRead | None
 
 
+class CustomerChoice(BaseModel):
+    """Un client tel que la liste de « Nouvelle vente » le montre (ADR 0063)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    name: str
+    phone: str | None
+    #: Ce qu'il doit encore : somme de ses dettes ouvertes, `0` s'il ne doit rien.
+    open_debt: Amount
+    #: Parmi ses derniers acheteurs : la liste les montre en tête.
+    recent: bool
+
+
+class CustomerChoicePage(BaseModel):
+    """Page de la liste. La page 1 commence par les clients récents, puis tous les autres
+    par ordre alphabétique ; `total` les compte tous, récents compris."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[CustomerChoice]
+    page: int
+    page_size: int
+    total: int
+
+
 class SalePage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

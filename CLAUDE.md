@@ -205,6 +205,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 12 Front : opérations | `12-front-operations.md` | 11 | e2e vente | ✅ 81 Vitest, 16 e2e locaux (vente, survente, retour, ajustement, produits, clients, fournisseurs) ; captures `docs/design/captures/phase-12/` |
 | 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ✅ 92 Vitest, 26 e2e locaux (dont paiement réparti, métrique, insight écarté, vendeur sans paramètres) ; 674 tests backend ; captures `docs/design/captures/phase-13/` |
 | 14 Finition visuelle (Impeccable) | `14-polish-impeccable.md` | 13 | audit Impeccable | ✅ audit 13/20 → 18/20, axe 241 → 0 violation (clair + sombre), 96 Vitest, 30 e2e ; `docs/design/DESIGN.md` ; captures `docs/design/captures/phase-14/` |
+| 15 Simplicité d'abord | `15-refonte-simplicite.md` | 14 | bugs B1–B3, test du commerçant, axe, captures | 🟨 lot 0 (bugs B1–B3) sur `fix/phase15-bugs` ; lots F, 1, 2, 3 à faire |
 
 ## 9. Journal des décisions
 
@@ -270,12 +271,15 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0058 | 2026-10-01 | **Front déployé avec l'API** à chaque push sur `main` (production Vercel de `coges-web`, adresse stable publique `https://coges-app.vercel.app`), après le test de fumée de l'API ; fumée du front à travers sa réécriture ; garde-fou 2 étendu à `coges-web` | `docs/decisions/0058-deploiement-automatique-du-front.md` |
 | 0059 | 2026-10-01 | **Cibles tactiles 44 px** sur `pointer: coarse` (composants partagés, ordinateur inchangé) ; **e2e sur `coges_e2e`** (`make e2e-reset`, API :8100 sans limite de débit, front :3100, hôtes non locaux refusés) ; **gravité des alertes** dérivée par le serveur (`severity`), bandeaux orange ou rouge, jamais neutres | `docs/decisions/0059-cibles-tactiles-base-e2e-et-gravite-des-alertes.md` |
 | 0060 | 2026-10-02 | **Démo réaliste** : `seed-demo` remplacé par une épicerie de Dakar (46 articles, 15 clients, 90 jours, crédit, règlements, retours, réassorts), `--existing-slug` remplit une entreprise existante par connexion du gérant (`demo-front` en préprod) ; **entreprise `e2e` à part** pour les parcours qui écrivent ; dates serveur (encaissements de confirmation, sorties de stock) concentrées sur le jour du remplissage, assumé | `docs/decisions/0060-demo-realiste-et-entreprise-e2e.md` |
+| 0061 | 2026-10-07 | **Le jour en cours est calculé en direct** (amende 0034) : CA, marge et ventes du jour lus sur `sales`, le passé sur les faits ; `tenancy.on_commit` vide le tableau de bord après COMMIT (depuis `outbox.emit`) ; bandeau si l'outbox attend > 2 min ; `make dev` (honcho) | `docs/decisions/0061-le-jour-en-cours-est-calcule-en-direct.md` |
+| 0062 | 2026-10-07 | **Le reste dû d'une vente suit sa dette** (révision 0014, amende 0024) : `paid_total` = encaissé direct + lettrages vivants sur la dette, compensation comprise ; trigger `pa_sale_rollup` ; verrou dette puis vente ; `debt_status` sur les ventes, badge « Payé » / « Reste X » / « Dette abandonnée » | `docs/decisions/0062-ce-qui-reste-du-sur-une-vente-suit-sa-dette.md` |
+| 0063 | 2026-10-07 | **Liste de clients pour la vente** : `GET /sales/customer-choices` (récents puis alphabétique, téléphone, dette ouverte, pages de 50) ; Popover en portail, « Nouveau client » ; les ADR du prompt de phase 15 décalés d'un rang | `docs/decisions/0063-liste-de-clients-pour-la-vente.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**
 (signalé, hors V1 technique).
 
-> **Backend V1 terminé (code)** — 23 groupes, 99 opérations sous `/api/v1` (`auth/me` en phase 11 ; lectures ajoutées en phase 12, ADR 0050 ; `audit-logs` et lectures de pilotage en phase 13, ADR 0053). Contrat :
+> **Backend V1 terminé (code)** — 23 groupes, 100 opérations sous `/api/v1` (`auth/me` en phase 11 ; lectures ajoutées en phase 12, ADR 0050 ; `audit-logs` et lectures de pilotage en phase 13, ADR 0053). Contrat :
 > `backend/openapi.json` (versionné, vérifié en CI, `make openapi`) ; servi hors production sur
 > `/api/v1/openapi.json`, documentation interactive `/api/v1/docs`.
 > Plateforme `health` · `auth` (login, refresh, logout, me) · `companies/me` · `users` · `roles`,

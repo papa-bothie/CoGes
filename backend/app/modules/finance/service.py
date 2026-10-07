@@ -355,6 +355,13 @@ def debt_statuses_for_sales(
     return {sale_id: cast(DebtStatus, status) for sale_id, status in statuses.items()}
 
 
+def open_balances_by_customer(
+    session: Session, ctx: TenantContext, customer_ids: Sequence[UUID]
+) -> dict[UUID, Decimal]:
+    """Ce que doit chaque client du lot (dettes ouvertes), pour la liste de vente."""
+    return DebtRepository(session, ctx).open_balances_by_customer(customer_ids)
+
+
 def has_settled_payment(session: Session, ctx: TenantContext, sale_id: UUID) -> bool:
     """La vente porte-t-elle un encaissement non remboursé ?
 
