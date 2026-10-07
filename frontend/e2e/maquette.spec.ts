@@ -17,6 +17,12 @@ import { loginThroughUi, managerApi, type Credentials } from "./fixtures";
  * en rouge) et `comparaison.md`. Seuil : 2 % de pixels différents, sauf écran listé dans
  * `docs/design/maquette-v2/ecarts.md` (`ALLOWED`).
  *
+ * Les pixels ne suffisent pas : pour chaque écran livré, chaque texte visible de la page de
+ * référence (`html/NN-nom.html`, ouverte dans le navigateur) doit se trouver mot pour mot sur
+ * la page, espaces mis à part. Seule exception : un montant que `ecarts.md` note
+ * « maquette : X F ». Un texte manquant fait échouer le test. Les états (02b, 04b…) n'ont pas
+ * de page HTML : seuls leurs pixels sont comparés.
+ *
  * Un écran pas encore refait est marqué `test.fixme` avec son lot. `MAQUETTE_ALL=1` les
  * compare quand même, sans échouer, pour mesurer le point de départ.
  *
@@ -117,7 +123,49 @@ function triptych(reference: PNG, actual: PNG, diff: PNG): PNG {
   return out;
 }
 
-type Result = { file: string; width: number; percent: number };
+type Result = { file: string; width: number; percent: number; missing?: string[] };
+
+/** Espaces (insécables, fines, retours à la ligne) ramenées à une seule. */
+function squash(value: string): string {
+  return value.replace(/[\s\u00a0\u202f]+/g, " ").trim();
+}
+
+/** Montants de la maquette écartés dans ecarts.md : « (maquette : 47 500 F) ». */
+function allowedAmounts(): string[] {
+  const text = readFileSync(join(MOCKUP, "ecarts.md"), "utf8");
+  return [...text.matchAll(/maquette\s*:\s*(\d{1,3}(?:[\s\u00a0\u202f]\d{3})*)\s*F\b/g)].map(
+    (match) => squash(match[1] ?? ""),
+  );
+}
+
+/** « 47 500 F » dans un texte, mais pas « 147 500 F ». */
+const AMOUNTS = allowedAmounts().map((amount) => new RegExp(`(?<!\\d)(?<!\\d )${amount} F`));
+
+/**
+ * Textes visibles de la page de référence, un par bloc (`innerText`), sans doublon. La
+ * page est statique et non responsive : mêmes textes à toutes les largeurs.
+ */
+async function referenceTexts(page: Page, row: Row): Promise<string[] | null> {
+  const file = join(MOCKUP, "html", `${row.capture}.html`);
+  if (!existsSync(file)) return null;
+  const reference = await page.context().newPage();
+  try {
+    await reference.setViewportSize({ width: 1280, height: 900 });
+    await reference.goto(`file://${file}`);
+    const text = await reference.locator("body").innerText();
+    return [...new Set(text.split("\n").map(squash).filter(Boolean))];
+  } finally {
+    await reference.close();
+  }
+}
+
+/** Textes de la référence absents de la page, hors montants écartés. */
+async function missingTexts(page: Page, expected: string[]): Promise<string[]> {
+  const actual = squash(await page.locator("body").innerText());
+  return expected.filter(
+    (text) => !actual.includes(text) && !AMOUNTS.some((amount) => amount.test(text)),
+  );
+}
 
 /**
  * Résultats gardés sur disque : Playwright relance son processus après un échec, et un
@@ -169,16 +217,23 @@ async function compare(page: Page, row: Row, width: number): Promise<Result | nu
   return { file, width, percent: (different / (w * h)) * 100 };
 }
 
+/** Textes vérifiés à la largeur de la référence : 1280 px, ou 390 px pour un écran de téléphone. */
+function textWidth(measured: Result[]): number | undefined {
+  return measured[0]?.width;
+}
+
 function writeReport() {
   const results = readResults();
   const lines = [
     "# Comparaison du front à la maquette v2",
     "",
     "Écrit par `frontend/e2e/maquette.spec.ts` (`make maquette-check`). Pourcentage de pixels",
-    `différents à 1280 et à 390 px ; seuil ${THRESHOLD} %. Images : maquette | front | différences.`,
+    `différents à 1280 et à 390 px ; seuil ${THRESHOLD} %. Textes manquants : textes visibles de`,
+    "`html/NN-nom.html` absents de la page (aucun toléré sur un écran livré ; « — » : état sans",
+    "page HTML). Images : maquette | front | différences.",
     "",
-    "| N° | Écran | Lot | 1280 px | 390 px | Images |",
-    "|---|---|---|---|---|---|",
+    "| N° | Écran | Lot | 1280 px | 390 px | Textes manquants | Images |",
+    "|---|---|---|---|---|---|---|",
   ];
   for (const row of ROWS) {
     const done = results[row.no];
@@ -188,8 +243,10 @@ function writeReport() {
     };
     const images = done?.map((result) => `[${result.width}](comparaison/${result.file})`).join(" ");
     const status = DONE.has(row.no) ? "" : " (à faire)";
+    const missing = done?.find((result) => result.missing)?.missing;
+    const texts = missing === undefined ? "—" : String(missing.length);
     lines.push(
-      `| ${row.no} | ${row.name}${status} | ${row.lot} | ${cell(1280)} | ${cell(390)} | ${images ?? ""} |`,
+      `| ${row.no} | ${row.name}${status} | ${row.lot} | ${cell(1280)} | ${cell(390)} | ${texts} | ${images ?? ""} |`,
     );
   }
   writeFileSync(join(OUT, "..", "comparaison.md"), `${lines.join("\n")}\n`);
@@ -217,13 +274,22 @@ test.describe("maquette v2", () => {
       await page.goto(route);
       await STATES[row.no]?.(page);
 
+      const expected = await referenceTexts(page, row);
       const measured: Result[] = [];
       for (const width of [1280, 390]) {
         const result = await compare(page, row, width);
-        if (result) measured.push(result);
+        if (!result) continue;
+        if (expected && width === textWidth([...measured, result])) {
+          result.missing = await missingTexts(page, expected);
+        }
+        measured.push(result);
       }
       saveResult(row.no, measured);
 
+      if (DONE.has(row.no)) {
+        const missing = measured.flatMap((result) => result.missing ?? []);
+        expect(missing, `${row.no} : textes de la maquette absents de la page`).toEqual([]);
+      }
       if (DONE.has(row.no) && !ALLOWED.has(row.no)) {
         for (const result of measured) {
           expect(

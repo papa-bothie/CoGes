@@ -167,7 +167,7 @@ make front-check             # types à jour, lint, typecheck, Vitest, build (ce
 make front-e2e               # e2e-reset puis Playwright sur coges_e2e (API :8100 et front :3100 lancés seuls), axe AA bloquant
 make e2e-reset / e2e-api / e2e-front   # base e2e recréée (migrations + seed) / API e2e sans limite de débit / front e2e
 CAPTURES_STAGE=apres make front-e2e   # + captures clair/sombre de la phase 14 (docs/design/captures/phase-14/<étape>/)
-COGES_FROZEN_NOW=2026-10-06T10:45:00+00:00 make api   # « aujourd'hui » figé pour les lectures (jamais en production)
+COGES_FROZEN_NOW=2026-10-06T10:45:00+00:00 make api   # « aujourd'hui » figé pour les lectures (local et CI seulement)
 make api API_PORT=8001       # si le port 8000 est déjà pris ; front : COGES_API_URL=http://localhost:8001
 ```
 
@@ -278,7 +278,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0062 | 2026-10-07 | **Le reste dû d'une vente suit sa dette** (révision 0014, amende 0024) : `paid_total` = encaissé direct + lettrages vivants sur la dette, compensation comprise ; trigger `pa_sale_rollup` ; verrou dette puis vente ; `debt_status` sur les ventes, badge « Payé » / « Reste X » / « Dette abandonnée » | `docs/decisions/0062-ce-qui-reste-du-sur-une-vente-suit-sa-dette.md` |
 | 0063 | 2026-10-07 | **Liste de clients pour la vente** : `GET /sales/customer-choices` (récents puis alphabétique, téléphone, dette ouverte, pages de 50) ; Popover en portail, « Nouveau client » ; les ADR du prompt de phase 15 décalés d'un rang | `docs/decisions/0063-liste-de-clients-pour-la-vente.md` |
 | 0064 | 2026-10-07 | **Thème de la maquette v2** : jetons `--coges-*` puis rôles dans `globals.css`, classes de rubrique, `text-sm` à 15 px, Figtree et JetBrains Mono hébergées, logo officiel, kit `components/kit/` et vitrine `/dev/composants` (404 en production), « 87 500 F », aucune couleur en dur (test), sombre dérivé ; couleur d'article tirée du nom | `docs/decisions/0064-theme-de-la-maquette-v2.md` |
-| 0065 | 2026-10-07 | **Heure figée et seed de la maquette** : `COGES_FROZEN_NOW` pour les lectures métier (`core/clock.py`, refusé en production), `make seed-maquette` cohérent au plus près (accueil exact), `make maquette-check` (pixelmatch, 2 %, serveurs :8101/:3101 à part) | `docs/decisions/0065-heure-figee-et-seed-de-la-maquette.md` |
+| 0065 | 2026-10-07 | **Heure figée et seed de la maquette** : `COGES_FROZEN_NOW` pour les lectures métier (`core/clock.py`, accepté en `local` et `ci` seulement), seed recalé sur l'heure figée (`restamp`, rôle propriétaire), `make seed-maquette` cohérent au plus près (accueil exact), `make maquette-check` (pixelmatch, 2 %, serveurs :8101/:3101 à part) | `docs/decisions/0065-heure-figee-et-seed-de-la-maquette.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**

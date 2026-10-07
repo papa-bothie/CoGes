@@ -135,7 +135,7 @@ class Settings(BaseSettings):
     # --- Heure figée (ADR 0065) ---
     # Pour comparer le front à la maquette v2 au pixel près : « aujourd'hui » devient ce
     # moment (`2026-10-06T10:45:00+00:00`) dans les lectures métier (`app/core/clock.py`).
-    # Jamais en production : refusé au démarrage.
+    # Seulement en `local` et en `ci` : refusé au démarrage partout ailleurs.
     frozen_now: AwareDatetime | None = None
 
     @field_validator("jwt_secret")
@@ -149,10 +149,13 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def _no_frozen_clock_in_production(self) -> "Settings":
-        """Refuse au démarrage une heure figée en production (ADR 0065)."""
-        if self.env == "production" and self.frozen_now is not None:
-            raise ValueError("COGES_FROZEN_NOW est interdit en production.")
+    def _frozen_clock_only_in_local_and_ci(self) -> "Settings":
+        """Refuse au démarrage une heure figée hors `local` et `ci` (ADR 0065)."""
+        if self.frozen_now is not None and self.env not in ("local", "ci"):
+            raise ValueError(
+                "COGES_FROZEN_NOW n'est accepté qu'en local et en CI "
+                f"(COGES_ENV vaut « {self.env} »)."
+            )
         return self
 
     @property

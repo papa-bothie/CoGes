@@ -12,14 +12,17 @@ les personnes, les articles (nom, rayon, prix, stock, seuil), les clients et fou
 du mois. Chaque chiffre qui diffère d'une capture est listé dans
 `docs/design/maquette-v2/ecarts.md`.
 
-Comme `app.seed`, tout passe par les **façades de service**. Mêmes limites assumées
-(ADR 0060) : ce que le serveur date lui-même (sorties de stock, encaissements faits à la
-confirmation, livraisons, création des dettes) porte la date du remplissage.
+Comme `app.seed`, tout passe par les **façades de service**. Ce que le serveur date
+lui-même (sorties de stock, encaissements faits à la confirmation, livraisons, création
+des dettes, journal d'audit, outbox…) porte d'abord l'heure du remplissage (ADR 0060) ;
+`restamp` le recale ensuite, en propriétaire et pour cette seule entreprise, sur l'heure
+de son opération d'origine, jamais après `FROZEN_NOW` (ADR 0065).
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import random
 import sys
 from collections import Counter, defaultdict
@@ -29,9 +32,13 @@ from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import sessionmaker
 
 from app.cli import create_company
+from app.core.config import get_settings
 from app.core.tenancy import TenantContext, tenant_transaction
 from app.modules.analytics import service as analytics_service
 from app.modules.categories import service as categories_service
@@ -87,6 +94,16 @@ TODAY_TOTAL = 87500
 TODAY_COUNT = 14
 
 ZERO = Decimal("0")
+
+#: Ce qui précède la première vente : l'entreprise, les comptes, les rayons, les articles
+#: et leurs prix, les clients et les fournisseurs (heure du recalage, voir `restamp`).
+OPENING = datetime(2026, 9, 1, 6, 30, tzinfo=UTC)
+#: Livraison du Grossiste Sandaga (maquettes 11 et 16), payée en partie à 11 h 30.
+DELIVERY_AT = datetime(2026, 10, 3, 11, 0, tzinfo=UTC)
+#: Dette de Sénégal Distribution : due le 18 octobre, à 30 jours (maquette 13).
+SENDIS_DEBT_AT = datetime(2026, 9, 18, 10, 0, tzinfo=UTC)
+#: Une vente annulée l'est quelques minutes après avoir été encaissée.
+CANCEL_DELAY = timedelta(minutes=3)
 
 
 @dataclass(frozen=True)
@@ -409,13 +426,18 @@ class Shop:
     sold: Counter[str] = field(default_factory=Counter)
     received: Counter[str] = field(default_factory=Counter)
     sales: int = 0
+    #: Moments d'origine des lignes que `restamp` ne peut pas déduire d'une autre :
+    #: mouvements de la livraison et dettes fournisseurs, par identifiant.
+    moments: dict[UUID, datetime] = field(default_factory=dict)
 
 
-def seed(*, slug: str = SLUG, password: str = PASSWORD) -> UUID:
-    """Crée l'entreprise de la maquette, la remplit et renvoie son identifiant.
+def seed(*, slug: str = SLUG, password: str = PASSWORD, owner_engine: Engine | None = None) -> UUID:
+    """Crée l'entreprise de la maquette, la remplit, recale ses horodatages et renvoie son
+    identifiant.
 
     Le plan des ventes se calcule **avant** toute écriture : un plan impossible ne laisse
-    pas d'entreprise à moitié remplie.
+    pas d'entreprise à moitié remplie. Le recalage se fait sous le rôle propriétaire
+    (`owner_engine`, sinon `COGES_DATABASE_URL_OWNER`).
     """
     plan = _plan(random.Random(SEED))
     try:
@@ -431,7 +453,13 @@ def seed(*, slug: str = SLUG, password: str = PASSWORD) -> UUID:
     except IntegrityError as exc:
         raise SystemExit(f"Une entreprise porte déjà le slug « {slug} ».") from exc
     manager = TenantContext(user_id=UUID(manager_id), company_id=UUID(company_id))
-    _fill(manager, plan, slug=slug, password=password)
+    shop = _fill(manager, plan, slug=slug, password=password)
+    engine = owner_engine or create_engine(get_settings().require_owner_url(), future=True)
+    try:
+        restamp(engine, manager.company_id, shop.moments)
+    finally:
+        if owner_engine is None:
+            engine.dispose()
     return manager.company_id
 
 
@@ -441,7 +469,7 @@ def _with_permissions(ctx: TenantContext, user_id: UUID) -> TenantContext:
     return TenantContext(user_id=user_id, company_id=ctx.company_id, permissions=frozenset(codes))
 
 
-def _fill(manager: TenantContext, plan: list[PlannedSale], *, slug: str, password: str) -> None:
+def _fill(manager: TenantContext, plan: list[PlannedSale], *, slug: str, password: str) -> Shop:
     manager = _with_permissions(manager, manager.user_id)
     with tenant_transaction(manager) as session:
         role_id = rbac_service.system_role_id(session, manager, SALESPERSON)
@@ -480,14 +508,15 @@ def _fill(manager: TenantContext, plan: list[PlannedSale], *, slug: str, passwor
             ).id
 
     _catalogue(shop, plan)
-    # Les mouvements de stock portent la date du remplissage (ADR 0060) : la livraison du
-    # 3 octobre passe avant les ventes, pour qu'aucune ne manque de riz en chemin.
+    # Les mouvements de stock portent la date du remplissage jusqu'au recalage : la
+    # livraison du 3 octobre passe avant les ventes, pour qu'aucune ne manque de riz.
     _delivery(shop)
     _history(shop, plan)
     _suppliers(shop)
     _expenses(shop)
     _rebuild_facts(manager)
     print(f"  ventes         {shop.sales}")
+    return shop
 
 
 def _plan(
@@ -659,7 +688,7 @@ def _delivery(shop: Shop) -> None:
     ctx = shop.manager
     with tenant_transaction(ctx) as session:
         for key, qty, cost in (("riz", 10, 14000), ("huile", 24, 1150)):
-            inventory_service.record_movement(
+            movement = inventory_service.record_movement(
                 session,
                 ctx,
                 MovementCreate(
@@ -672,6 +701,7 @@ def _delivery(shop: Shop) -> None:
                 ),
                 idempotency_key=uuid4(),
             )
+            shop.moments[movement.id] = DELIVERY_AT
         debt = finance_service.create_debt(
             session,
             ctx,
@@ -682,6 +712,7 @@ def _delivery(shop: Shop) -> None:
                 due_date=date(2026, 10, 10),
             ),
         )
+        shop.moments[debt.id] = DELIVERY_AT
         finance_service.record_payment(
             session,
             ctx,
@@ -700,7 +731,7 @@ def _suppliers(shop: Shop) -> None:
     payées de septembre (fiche 16) sont des décaissements."""
     ctx = shop.manager
     with tenant_transaction(ctx) as session:
-        finance_service.create_debt(
+        debt = finance_service.create_debt(
             session,
             ctx,
             DebtCreate(
@@ -710,6 +741,7 @@ def _suppliers(shop: Shop) -> None:
                 due_date=date(2026, 10, 18),
             ),
         )
+        shop.moments[debt.id] = SENDIS_DEBT_AT
         for paid_at, amount, method, note in (
             (_at(date(2026, 9, 7), 10, 0), 60000, "cash", "Livraison du 07/09 : 5 sacs de riz"),
             (_at(date(2026, 9, 25), 10, 0), 85000, "mobile_money", "Livraison du 22/09"),
@@ -762,6 +794,312 @@ def _rebuild_facts(manager: TenantContext) -> None:
     days = [FIRST_DAY + timedelta(days=offset) for offset in range((TODAY - FIRST_DAY).days + 1)]
     with tenant_transaction(ctx, session_factory=get_analytics_session_factory()) as session:
         analytics_service.rebuild_days(session, ctx, days=days)
+
+
+# --- Recalage des horodatages ---------------------------------------------------------
+
+#: Tables dont `restamp` réécrit une date. Leurs triggers utilisateur (journal
+#: append-only, `updated_at` automatique, recalcul des soldes) sont coupés le temps de la
+#: transaction : on ne change que des dates, jamais un montant ni une quantité.
+RESTAMPED_TABLES = (
+    "companies",
+    "users",
+    "roles",
+    "user_roles",
+    "categories",
+    "products",
+    "product_prices",
+    "product_stock",
+    "customers",
+    "suppliers",
+    "sales",
+    "sale_items",
+    "payments",
+    "payment_allocations",
+    "debts",
+    "inventory_movements",
+    "expense_categories",
+    "expenses",
+    "audit_logs",
+    "business_events",
+    "daily_sales_facts",
+)
+
+#: Dans l'ordre : chaque requête s'appuie sur les dates déjà recalées par les précédentes.
+#: Une requête par chaîne, `UPDATE` en tête de ligne (test d'architecture des `SET`).
+_RESTAMP_SQL = (
+    # Ce qui précède la première vente.
+    """
+    UPDATE companies SET created_at = :opening, updated_at = :opening WHERE id = :co;
+    """,
+    """
+    UPDATE users SET created_at = :opening, updated_at = :opening WHERE company_id = :co;
+    """,
+    """
+    UPDATE roles SET created_at = :opening, updated_at = :opening WHERE company_id = :co;
+    """,
+    """
+    UPDATE user_roles SET granted_at = :opening WHERE company_id = :co;
+    """,
+    """
+    UPDATE categories SET created_at = :opening, updated_at = :opening WHERE company_id = :co;
+    """,
+    """
+    UPDATE products SET created_at = :opening, updated_at = :opening WHERE company_id = :co;
+    """,
+    """
+    UPDATE product_prices SET valid_from = :opening, created_at = :opening
+    WHERE company_id = :co;
+    """,
+    """
+    UPDATE customers SET created_at = :opening, updated_at = :opening WHERE company_id = :co;
+    """,
+    """
+    UPDATE suppliers SET created_at = :opening, updated_at = :opening WHERE company_id = :co;
+    """,
+    """
+    UPDATE expense_categories SET created_at = :opening WHERE company_id = :co;
+    """,
+    # Ventes : saisies, confirmées et (pour l'une) annulées à l'heure de la vente.
+    """
+    UPDATE sales SET created_at = sold_at, confirmed_at = sold_at,
+        cancelled_at = CASE WHEN cancelled_at IS NULL THEN NULL ELSE sold_at + :delay END
+    WHERE company_id = :co;
+    """,
+    """
+    UPDATE sale_items si SET created_at = s.sold_at
+    FROM sales s
+    WHERE si.company_id = :co AND s.company_id = :co AND s.id = si.sale_id;
+    """,
+    # Paiements : l'encaissement de la confirmation à l'heure de la vente, la
+    # contre-écriture à l'heure de l'annulation, le reste à son `paid_at`.
+    """
+    UPDATE payments p SET paid_at = s.sold_at
+    FROM sales s
+    WHERE p.company_id = :co AND s.company_id = :co AND s.id = p.sale_id
+        AND p.reversal_of_payment_id IS NULL;
+    """,
+    """
+    UPDATE payments r SET paid_at = s.cancelled_at
+    FROM payments o, sales s
+    WHERE r.company_id = :co AND o.company_id = :co AND s.company_id = :co
+        AND o.id = r.reversal_of_payment_id AND s.id = o.sale_id;
+    """,
+    """
+    UPDATE payments SET created_at = paid_at WHERE company_id = :co;
+    """,
+    """
+    UPDATE payment_allocations a SET created_at = p.paid_at
+    FROM payments p
+    WHERE a.company_id = :co AND p.company_id = :co AND p.id = a.payment_id;
+    """,
+    # Dettes : ouvertes avec leur vente (ou à leur moment noté), soldées au dernier
+    # règlement lettré.
+    """
+    UPDATE debts d SET created_at = s.sold_at
+    FROM sales s
+    WHERE d.company_id = :co AND s.company_id = :co AND s.id = d.sale_id;
+    """,
+    """
+    UPDATE debts SET created_at = CAST(m.value AS timestamptz)
+    FROM jsonb_each_text(CAST(:moments AS jsonb)) m
+    WHERE company_id = :co AND id = CAST(m.key AS uuid);
+    """,
+    """
+    UPDATE debts d SET
+        closed_at = CASE
+            WHEN d.closed_at IS NULL THEN NULL
+            ELSE COALESCE(last.paid_at, d.created_at)
+        END,
+        updated_at = GREATEST(d.created_at, last.paid_at)
+    FROM debts d2
+    LEFT JOIN LATERAL (
+        SELECT max(p.paid_at) AS paid_at
+        FROM payment_allocations a
+        JOIN payments p ON p.id = a.payment_id AND p.company_id = :co
+        WHERE a.company_id = :co AND a.debt_id = d2.id
+    ) last ON true
+    WHERE d.company_id = :co AND d2.company_id = :co AND d2.id = d.id;
+    """,
+    """
+    UPDATE sales s SET updated_at = GREATEST(s.sold_at, s.cancelled_at, d.updated_at)
+    FROM sales s2
+    LEFT JOIN debts d ON d.sale_id = s2.id AND d.company_id = :co
+    WHERE s.company_id = :co AND s2.company_id = :co AND s2.id = s.id;
+    """,
+    # Stock : sortie à l'heure de la vente, retour d'une annulation à l'heure de
+    # l'annulation, livraison à son heure notée, stock d'ouverture inchangé.
+    """
+    UPDATE inventory_movements m SET occurred_at = CASE
+            WHEN m.type = 'customer_return_in' THEN COALESCE(s.cancelled_at, s.sold_at)
+            ELSE s.sold_at
+        END
+    FROM sale_items si, sales s
+    WHERE m.company_id = :co AND si.company_id = :co AND s.company_id = :co
+        AND m.ref_type = 'sale_item' AND si.id = m.ref_id AND s.id = si.sale_id;
+    """,
+    """
+    UPDATE inventory_movements SET occurred_at = CAST(m.value AS timestamptz)
+    FROM jsonb_each_text(CAST(:moments AS jsonb)) m
+    WHERE company_id = :co AND id = CAST(m.key AS uuid);
+    """,
+    """
+    UPDATE inventory_movements SET created_at = occurred_at WHERE company_id = :co;
+    """,
+    """
+    UPDATE product_stock ps SET recomputed_at = :opening, last_movement_at = (
+        SELECT max(m.occurred_at) FROM inventory_movements m
+        WHERE m.company_id = :co AND m.product_id = ps.product_id
+    )
+    WHERE ps.company_id = :co;
+    """,
+    # Dépenses : enregistrées à l'heure de leur paiement, sinon le jour de la dépense.
+    """
+    UPDATE expenses e SET created_at = COALESCE(
+        (
+            SELECT min(p.paid_at) FROM payments p
+            WHERE p.company_id = :co AND p.expense_id = e.id
+        ),
+        CAST(e.spent_at AS timestamp) AT TIME ZONE 'UTC' + interval '9 hours'
+    )
+    WHERE e.company_id = :co;
+    """,
+    """
+    UPDATE expenses SET updated_at = created_at WHERE company_id = :co;
+    """,
+    # Journal d'audit : l'heure de l'opération qu'il trace.
+    """
+    UPDATE audit_logs l SET occurred_at = s.sold_at
+    FROM sales s
+    WHERE l.company_id = :co AND s.company_id = :co
+        AND l.entity_table = 'sales' AND l.action = 'confirm' AND s.id = l.entity_id;
+    """,
+    """
+    UPDATE audit_logs l SET occurred_at = s.cancelled_at
+    FROM sales s
+    WHERE l.company_id = :co AND s.company_id = :co
+        AND l.entity_table = 'sales' AND l.action = 'cancel' AND s.id = l.entity_id;
+    """,
+    """
+    UPDATE audit_logs l SET occurred_at = p.paid_at
+    FROM payments p
+    WHERE l.company_id = :co AND p.company_id = :co
+        AND l.entity_table = 'payments' AND l.action = 'insert' AND p.id = l.entity_id;
+    """,
+    """
+    UPDATE audit_logs l SET occurred_at = r.paid_at
+    FROM payments r
+    WHERE l.company_id = :co AND r.company_id = :co
+        AND l.entity_table = 'payments' AND l.action = 'cancel'
+        AND r.reversal_of_payment_id IS NOT NULL
+        AND l.entity_id IN (r.id, r.reversal_of_payment_id);
+    """,
+    """
+    UPDATE audit_logs l SET occurred_at = d.created_at
+    FROM debts d
+    WHERE l.company_id = :co AND d.company_id = :co
+        AND l.entity_table = 'debts' AND d.id = l.entity_id;
+    """,
+    """
+    UPDATE audit_logs l SET occurred_at = e.created_at
+    FROM expenses e
+    WHERE l.company_id = :co AND e.company_id = :co
+        AND l.entity_table = 'expenses' AND e.id = l.entity_id;
+    """,
+    """
+    UPDATE audit_logs SET occurred_at = :opening
+    WHERE company_id = :co
+        AND entity_table IN ('product_prices', 'users', 'user_roles', 'roles');
+    """,
+    # Outbox : l'heure de l'événement qu'elle porte.
+    """
+    UPDATE business_events b SET occurred_at = s.sold_at
+    FROM sales s
+    WHERE b.company_id = :co AND s.company_id = :co
+        AND b.event_type = 'sale.confirmed' AND s.id = b.aggregate_id;
+    """,
+    """
+    UPDATE business_events b SET occurred_at = s.cancelled_at
+    FROM sales s
+    WHERE b.company_id = :co AND s.company_id = :co
+        AND b.event_type = 'sale.cancelled' AND s.id = b.aggregate_id;
+    """,
+    """
+    UPDATE business_events b SET occurred_at = p.paid_at
+    FROM payments p
+    WHERE b.company_id = :co AND p.company_id = :co
+        AND b.event_type = 'payment.received' AND p.id = b.aggregate_id;
+    """,
+    """
+    UPDATE business_events b SET occurred_at = r.paid_at
+    FROM payments r
+    WHERE b.company_id = :co AND r.company_id = :co
+        AND b.event_type = 'payment.cancelled'
+        AND r.id = CAST(b.payload ->> 'cancellation_id' AS uuid);
+    """,
+    """
+    UPDATE business_events b SET occurred_at = d.created_at
+    FROM debts d
+    WHERE b.company_id = :co AND d.company_id = :co
+        AND b.event_type = 'debt.created' AND d.id = b.aggregate_id;
+    """,
+    """
+    UPDATE business_events b SET occurred_at = d.closed_at,
+        payload = jsonb_set(b.payload, '{closed_at}', to_jsonb(d.closed_at))
+    FROM debts d
+    WHERE b.company_id = :co AND d.company_id = :co
+        AND b.event_type = 'debt.settled' AND d.id = b.aggregate_id;
+    """,
+    """
+    UPDATE business_events b SET occurred_at = e.created_at
+    FROM expenses e
+    WHERE b.company_id = :co AND e.company_id = :co
+        AND b.event_type = 'expense.created' AND e.id = b.aggregate_id;
+    """,
+    """
+    UPDATE business_events b SET occurred_at = m.occurred_at
+    FROM inventory_movements m
+    WHERE b.company_id = :co AND m.company_id = :co
+        AND b.event_type = 'stock.updated'
+        AND m.id = CAST(b.payload ->> 'movement_id' AS uuid);
+    """,
+    # Faits analytiques : construits au moment de la capture.
+    """
+    UPDATE daily_sales_facts SET built_at = :frozen WHERE company_id = :co;
+    """,
+)
+
+
+def restamp(engine: Engine, company_id: UUID, moments: dict[UUID, datetime]) -> None:
+    """Recale sur l'heure de leur opération les dates que le serveur a posées pendant le
+    remplissage, pour la seule entreprise `company_id` (ADR 0065).
+
+    Le serveur date lui-même l'encaissement d'une confirmation, une sortie de stock, une
+    dette, une ligne d'audit… à l'heure du remplissage, le 7 octobre ou plus tard : la
+    caisse du 6 octobre en serait vide. Chaque ligne reprend ici l'heure de sa vente, de
+    sa livraison, de son annulation, sans jamais dépasser `FROZEN_NOW`.
+
+    Ce n'est pas un chemin de l'application : il s'exécute sous le **rôle propriétaire**,
+    dans une seule transaction ouverte par `tenant_transaction` (la RLS FORCE s'applique au
+    propriétaire aussi), chaque requête filtrée sur `company_id`. Les triggers
+    utilisateur des tables touchées sont coupés puis rétablis dans cette transaction.
+    """
+    params = {
+        "co": company_id,
+        "opening": OPENING,
+        "frozen": FROZEN_NOW,
+        "delay": CANCEL_DELAY,
+        "moments": json.dumps({str(key): value.isoformat() for key, value in moments.items()}),
+    }
+    owner = sessionmaker(bind=engine, expire_on_commit=False, future=True)
+    ctx = TenantContext.bootstrap(company_id)
+    with tenant_transaction(ctx, session_factory=owner) as session:
+        for table in RESTAMPED_TABLES:
+            session.execute(text(f"ALTER TABLE {table} DISABLE TRIGGER USER"))
+        for statement in _RESTAMP_SQL:
+            session.execute(text(statement), params)
+        for table in RESTAMPED_TABLES:
+            session.execute(text(f"ALTER TABLE {table} ENABLE TRIGGER USER"))
 
 
 def main(argv: list[str] | None = None) -> int:

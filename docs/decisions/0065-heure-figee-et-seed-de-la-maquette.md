@@ -27,14 +27,16 @@ Pour l'heure : figer toute l'horloge (base comprise) ou seulement les **lectures
 ## Décision
 - **`COGES_FROZEN_NOW`** (date avec fuseau) : `app/core/clock.py` le renvoie comme
   « maintenant » pour les **lectures** métier (tableau de bord, périodes, retards des dettes,
-  fraîcheur des recommandations). Refusé au démarrage si `COGES_ENV=production`. Gardent
+  fraîcheur des recommandations). Accepté seulement si `COGES_ENV` vaut `local` ou `ci` :
+  refusé au démarrage en `staging` comme en `production` (correction du 07/10). Gardent
   l'heure réelle : jetons, sessions, limites de débit, idempotence, expirations, horodatages
   écrits par la base, et les gardes d'antidatage (ADR 0015), qui refuseraient sinon chaque
   mouvement après 48 h.
 - **`make seed-maquette`** (`app/seed_maquette.py`) crée l'entreprise à part `maquette`
   (`coges` en local ; `coges_e2e` à chaque `make e2e-reset`), par les façades comme
   `seed-demo`. Le plan des 1 046 ventes est calculé avant toute écriture ; la dernière porte
-  le n° 1046 comme dans la maquette. Exacts : 87 500 F et 14 ventes aujourd'hui, le graphique
+  le n° 1046 comme dans la maquette. En fin de remplissage, `restamp` recale les dates que
+  le serveur a posées lui-même (voir « Conséquences »). Exacts : 87 500 F et 14 ventes aujourd'hui, le graphique
   des 7 jours (568 500 F), les clients qui doivent 54 500 F (5 dettes reconstituées), les
   fournisseurs à qui l'on doit 185 000 F, les dépenses du mois (237 500 F), les stocks et
   seuils des articles, les personnes (Fatou Diop, Modou Sène, Awa Ndiaye au compte coupé).
@@ -46,9 +48,27 @@ Pour l'heure : figer toute l'horloge (base comprise) ou seulement les **lectures
   encore refaits en `test.fixme` avec leur lot ; `MAQUETTE_ALL=1` les mesure sans échouer.
 
 ## Conséquences
-- Limite connue (ADR 0060) : ce que le serveur date lui-même porte la date du remplissage —
-  encaissements faits à la confirmation, sorties de stock, livraisons, création des dettes.
-  À l'heure figée, ces encaissements sont « après » le 6 octobre : « Dans la caisse » et
-  « Entrées et sorties de caisse » ne peuvent pas égaler la maquette sans décision (lot 3a
-  ou 3d).
+- **Dates du remplissage recalées** (correction du 07/10, levée de la limite de l'ADR 0060
+  pour `maquette` seulement). Le serveur date lui-même encaissements de confirmation,
+  sorties de stock, livraisons, dettes, `created_at` des clients et articles, audit, outbox,
+  à l'heure du remplissage. `restamp(engine, company_id, moments)`, à la fin de
+  `app/seed_maquette.py`, les ramène à l'heure de leur opération d'origine : la vente
+  (encaissement, sortie de stock, dette, lignes, audit, événement), l'annulation (vente
+  + 3 min : contre-écriture, retour en stock), la livraison du 3 octobre à 11 h, la dette de
+  Sénégal Distribution le 18 septembre, le dernier règlement lettré (dette soldée), et le
+  1er septembre à 6 h 30 pour ce qui précède la première vente (entreprise, comptes, rayons,
+  articles, prix, clients, fournisseurs). Rien ne dépasse le 6 octobre 10 h 45.
+  - Exécuté sous le **rôle propriétaire** (`COGES_DATABASE_URL_OWNER`), jamais par l'API ;
+    une seule transaction, contexte tenant posé (la RLS FORCE s'applique au propriétaire),
+    chaque requête filtrée sur `company_id`.
+  - Les triggers utilisateur des tables touchées (journal append-only, `updated_at`,
+    recalcul des soldes) sont coupés puis rétablis **dans** cette transaction : seules des
+    dates changent, jamais un montant ni une quantité. `ALTER TABLE` y pose un verrou
+    exclusif : à lancer sur une base locale ou e2e, pas sous charge.
+  - `tests/integration/test_seed_maquette.py` sème l'entreprise entière (≈ 1 min 30 de plus
+    dans `make test`) et vérifie qu'aucune colonne de date de ses tables ne dépasse
+    `COGES_FROZEN_NOW` (échéances et expirations exceptées), que chaque encaissement, sortie
+    de stock et dette d'une vente porte son heure, et que les triggers sont rétablis.
+  - « Dans la caisse » et « Entrées et sorties de caisse » peuvent donc égaler la maquette
+    au lot 3a/3d. Une entreprise réelle (`seed-demo`, ADR 0060) garde la limite.
 - Les écarts de données sont listés dans `docs/design/maquette-v2/ecarts.md`.

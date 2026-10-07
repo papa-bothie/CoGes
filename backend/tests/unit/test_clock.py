@@ -45,8 +45,20 @@ def test_frozen_time_needs_a_time_zone(monkeypatch: pytest.MonkeyPatch) -> None:
         Settings(_env_file=None)
 
 
-def test_frozen_time_is_refused_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("env", ["staging", "production"])
+def test_frozen_time_is_refused_outside_local_and_ci(
+    monkeypatch: pytest.MonkeyPatch, env: str
+) -> None:
     monkeypatch.setenv("COGES_FROZEN_NOW", FROZEN)
-    monkeypatch.setenv("COGES_ENV", "production")
-    with pytest.raises(ValidationError, match="COGES_FROZEN_NOW est interdit en production"):
+    monkeypatch.setenv("COGES_ENV", env)
+    with pytest.raises(
+        ValidationError, match="COGES_FROZEN_NOW n'est accepté qu'en local et en CI"
+    ):
         Settings(_env_file=None)
+
+
+@pytest.mark.parametrize("env", ["local", "ci"])
+def test_frozen_time_is_accepted_in_local_and_ci(monkeypatch: pytest.MonkeyPatch, env: str) -> None:
+    monkeypatch.setenv("COGES_FROZEN_NOW", FROZEN)
+    monkeypatch.setenv("COGES_ENV", env)
+    assert Settings(_env_file=None).frozen_now is not None
