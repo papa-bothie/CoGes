@@ -39,3 +39,7 @@ celerybeat.pid
 
 # Lien local de la CLI Vercel (ids du projet, jamais de secret à versionner)
 .vercel/
+
+# Images de comparaison à la maquette (make maquette-check, ~30 Mo) : régénérées à la demande ;
+# une PR du lot 3 ajoute celles des écrans qu'elle touche (git add -f).
+docs/design/captures/phase-15/comparaison/*.png

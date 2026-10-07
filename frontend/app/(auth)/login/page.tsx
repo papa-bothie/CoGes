@@ -1,7 +1,7 @@
-import { Store } from "lucide-react";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
+import { BrandLogo } from "@/components/brand/brand";
 import { Card } from "@/components/ui/card";
 import { labels } from "@/lib/labels";
 
@@ -13,14 +13,8 @@ export default function LoginPage() {
   return (
     <main className="grid min-h-dvh place-items-center p-4">
       <div className="w-full max-w-sm space-y-6">
-        <div className="flex items-center justify-center gap-2.5">
-          <div className="grid size-10 place-items-center rounded-lg bg-primary text-primary-foreground">
-            <Store className="size-5" aria-hidden />
-          </div>
-          <div>
-            <p className="text-xl leading-tight font-bold">{labels.app.name}</p>
-            <p className="text-xs text-muted-foreground">{labels.app.tagline}</p>
-          </div>
+        <div className="flex justify-center">
+          <BrandLogo />
         </div>
         <Card className="gap-5 px-6 py-6">
           <div>

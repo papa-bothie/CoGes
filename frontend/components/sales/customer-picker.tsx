@@ -253,7 +253,7 @@ function CustomerRow({ choice, currency }: { choice: Choice | null; currency?: s
         aria-hidden
         className={cn(
           "flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
-          choice ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+          choice ? "bg-ventes-teinte text-ventes-encre" : "bg-muted text-muted-foreground",
         )}
       >
         {choice ? initials(choice.name) : "·"}

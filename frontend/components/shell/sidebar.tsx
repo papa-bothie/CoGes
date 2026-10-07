@@ -1,8 +1,8 @@
 "use client";
 
-import { Store } from "lucide-react";
 import Link from "next/link";
 
+import { BrandHeader } from "@/components/brand/brand";
 import { labels } from "@/lib/labels";
 import { isActive, NAV_ITEMS } from "@/lib/navigation";
 import { filterByPermission } from "@/lib/permissions";
@@ -28,16 +28,8 @@ export function SidebarContent({
   const items = filterByPermission(NAV_ITEMS, permissions);
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2.5 px-3 pt-5 pb-4">
-        <div className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground">
-          <Store className="size-5" aria-hidden />
-        </div>
-        <div className="min-w-0">
-          <p className="text-lg leading-tight font-bold">{labels.app.name}</p>
-          <p className="truncate text-xs text-muted-foreground" title={companyName}>
-            {companyName}
-          </p>
-        </div>
+      <div className="px-3 pt-5 pb-4">
+        <BrandHeader companyName={companyName} />
       </div>
 
       <nav aria-label={labels.nav.mainNavigation} className="flex-1 overflow-y-auto px-2 py-2">

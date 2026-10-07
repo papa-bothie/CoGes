@@ -7,85 +7,181 @@
 @custom-variant comfortable (&:where([data-density="comfortable"] *));
 
 /*
- * Tokens du prototype Bolt, repris à l'identique (docs/design/prototype-reference.md § 1).
- * Format shadcn « triplet HSL » : les utilitaires Tailwind les enveloppent dans hsl().
+ * Jetons de la maquette v2 (docs/design/maquette-v2/tokens.css, ADR 0064). Toute couleur du
+ * front vient d'ici : un test d'architecture refuse les couleurs en dur ailleurs
+ * (lib/no-hardcoded-colors.test.ts).
+ *
+ * Deux couches :
+ * - les **jetons de la maquette** (`--coges-*`), repris valeur pour valeur ;
+ * - les **rôles** utilisés par les composants (`--background`, `--primary`, `--success-ink`…),
+ *   qui pointent vers eux. Les écrans existants changent ainsi de couleur sans être réécrits.
+ *
+ * Le sombre n'est pas dans la maquette : il est dérivé des mêmes jetons (fond vert-noir chaud,
+ * teintes de rubrique assombries, encres éclaircies) et soumis à l'accord du propriétaire.
  */
 :root {
-  --background: 210 20% 98%;
-  --foreground: 215 28% 17%;
-  --card: 0 0% 100%;
-  --card-foreground: 215 28% 17%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 215 28% 17%;
-  --primary: 199 89% 28%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 210 16% 95%;
-  --secondary-foreground: 215 28% 17%;
-  --muted: 210 16% 93%;
-  --muted-foreground: 215 16% 42%;
-  --accent: 152 63% 40%;
-  --accent-foreground: 0 0% 100%;
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 0 0% 100%;
-  --warning: 32 95% 50%;
-  --warning-foreground: 215 28% 17%;
-  --success: 142 71% 45%;
-  --success-foreground: 215 28% 17%;
+  /* Marque (logo) */
+  --coges-vert-marque: #024a2c;
+  --coges-vert-action: #117a3c;
+  --coges-vert-eclat: #1a9a4c;
+
+  /* Fond et texte */
+  --coges-papier: #fbf8f3;
+  --coges-carte: #ffffff;
+  --coges-bordure: #ece6dc;
+  --coges-bordure-champ: #e3dcd0;
+  --coges-filet: #f0ebe2;
+  --coges-voile: #f3eee5;
+  --coges-voile-2: #f6f2eb;
+  --coges-encre: #1e2320;
+  --coges-encre-2: #3c4440;
+  --coges-sourdine: #5b625e;
+  --coges-sur-action: #ffffff;
+
+  /* Une couleur par rubrique : solide / teinte / encre sur teinte */
+  --coges-ventes: #117a3c;
+  --coges-ventes-teinte: #e6f4ec;
+  --coges-ventes-encre: #024a2c;
+  --coges-stock: #c2410c;
+  --coges-stock-teinte: #fff0e3;
+  --coges-stock-encre: #9a3412;
+  --coges-argent: #1f5bd8;
+  --coges-argent-teinte: #eaf1fd;
+  --coges-argent-encre: #1747ae;
+  --coges-clients: #6d3fc8;
+  --coges-clients-teinte: #f2ecfc;
+  --coges-clients-encre: #5530a3;
+  --coges-depenses: #a51d24;
+  --coges-depenses-teinte: #fdecec;
+  --coges-depenses-encre: #a51d24;
+  --coges-conseils: #0e7490;
+  --coges-conseils-teinte: #e3f3f6;
+  --coges-conseils-encre: #0b5566;
+
+  /* Graphiques */
+  --coges-barre-claire: #bfe3cf;
+  --coges-barre-sortie: #e8833a;
+
   /*
-   * Encres d'état : couleur d'un TEXTE qui dit un état (badge, montant dû, écart). Les jetons
-   * --success / --warning / --destructive restent pour les fonds, pastilles et graphiques ;
-   * trop clairs pour du texte (2,0 à 4,3:1). Encres ≥ 4,5:1 sur carte, fond et teinte à 10 %.
+   * Relevés dans les pages de la maquette (html/), absents de tokens.css : anneau de focus de
+   * chaque rubrique et couleurs des carrés d'article.
    */
-  --success-ink: 145 63% 28%;
-  --warning-ink: 26 90% 33%;
-  --danger-ink: 0 74% 40%;
-  --border: 214 20% 88%;
-  --input: 214 20% 88%;
-  --ring: 199 89% 28%;
-  --chart-1: 199 89% 28%;
-  --chart-2: 152 63% 40%;
-  --chart-3: 32 95% 50%;
-  --chart-4: 0 72% 51%;
-  --chart-5: 259 84% 56%;
-  --radius: 0.5rem;
+  --coges-ventes-anneau: #9bd3b6;
+  --coges-stock-anneau: #fcc9a3;
+  --coges-argent-anneau: #a9c4f2;
+  --coges-clients-anneau: #d5c6f5;
+  --coges-depenses-anneau: #f3c9cb;
+  --coges-conseils-anneau: #a6d8e3;
+  --coges-article-1: #b45309;
+  --coges-article-2: #ca8a04;
+  --coges-article-3: #0e7490;
+  --coges-article-4: #1f5bd8;
+  --coges-article-5: #7c2d12;
+  --coges-article-6: #6d3fc8;
+  --coges-article-7: #be185d;
+  --coges-article-8: #b91c1c;
+  --coges-article-9: #a16207;
+  --coges-article-10: #c2410c;
+  --coges-article-11: #0369a1;
+  --coges-article-12: #4d7c0f;
+
+  /* Hors maquette : blanc fixe (pastille d'interrupteur), reçu imprimé (toujours noir sur blanc),
+     voile derrière une fenêtre */
+  --coges-blanc: #ffffff;
+  --coges-recu-papier: #ffffff;
+  --coges-recu-encre: #111111;
+  --coges-ombre: #000000;
+
+  /* Rôles des composants */
+  --background: var(--coges-papier);
+  --foreground: var(--coges-encre);
+  --card: var(--coges-carte);
+  --card-foreground: var(--coges-encre);
+  --popover: var(--coges-carte);
+  --popover-foreground: var(--coges-encre);
+  --primary: var(--coges-vert-action);
+  --primary-foreground: var(--coges-sur-action);
+  --secondary: var(--coges-voile);
+  --secondary-foreground: var(--coges-encre-2);
+  --muted: var(--coges-voile-2);
+  --muted-foreground: var(--coges-sourdine);
+  --accent: var(--coges-ventes-teinte);
+  --accent-foreground: var(--coges-ventes-encre);
+  --destructive: var(--coges-depenses);
+  --destructive-foreground: var(--coges-sur-action);
+  --warning: var(--coges-stock);
+  --warning-foreground: var(--coges-sur-action);
+  --success: var(--coges-vert-eclat);
+  --success-foreground: var(--coges-sur-action);
+  /*
+   * Encres d'état (ADR 0056) : tout texte d'état. --success / --warning / --destructive
+   * restent pour les fonds, pastilles et graphiques.
+   */
+  --success-ink: var(--coges-ventes-encre);
+  --warning-ink: var(--coges-stock-encre);
+  --danger-ink: var(--coges-depenses-encre);
+  --border: var(--coges-bordure);
+  --input: var(--coges-bordure-champ);
+  --ring: var(--coges-vert-action);
+  --chart-1: var(--coges-vert-eclat);
+  --chart-2: var(--coges-argent);
+  --chart-3: var(--coges-stock);
+  --chart-4: var(--coges-depenses);
+  --chart-5: var(--coges-clients);
+  --radius: 1rem;
 }
 
 .dark {
-  --background: 215 28% 10%;
-  --foreground: 210 20% 92%;
-  --card: 215 28% 13%;
-  --card-foreground: 210 20% 92%;
-  --popover: 215 28% 13%;
-  --popover-foreground: 210 20% 92%;
-  --primary: 199 89% 48%;
-  --primary-foreground: 215 28% 10%;
-  --secondary: 215 28% 18%;
-  --secondary-foreground: 210 20% 92%;
-  --muted: 215 28% 18%;
-  --muted-foreground: 215 16% 60%;
-  --accent: 152 63% 50%;
-  --accent-foreground: 215 28% 10%;
-  --destructive: 0 72% 51%;
-  --warning: 32 95% 55%;
-  --warning-foreground: 215 28% 10%;
-  --success: 142 71% 50%;
-  --success-foreground: 215 28% 10%;
-  --success-ink: 142 60% 60%;
-  --warning-ink: 35 95% 62%;
-  --danger-ink: 0 90% 72%;
-  --border: 215 28% 22%;
-  --input: 215 28% 22%;
-  --ring: 199 89% 48%;
-  --chart-1: 199 89% 48%;
-  --chart-2: 152 63% 50%;
-  --chart-3: 32 95% 55%;
-  --chart-4: 0 72% 55%;
-  --chart-5: 259 84% 66%;
+  --coges-vert-marque: #8fdcae;
+  --coges-vert-action: #34b36a;
+  --coges-vert-eclat: #3fc078;
+
+  --coges-papier: #111612;
+  --coges-carte: #19201b;
+  --coges-bordure: #29322c;
+  --coges-bordure-champ: #36403a;
+  --coges-filet: #222a24;
+  --coges-voile: #232b25;
+  --coges-voile-2: #1e2620;
+  --coges-encre: #eef1ec;
+  --coges-encre-2: #cdd3cd;
+  --coges-sourdine: #a3aca5;
+  --coges-sur-action: #08140c;
+
+  --coges-ventes: #34b36a;
+  --coges-ventes-teinte: #15301f;
+  --coges-ventes-encre: #8fdcae;
+  --coges-stock: #f07a3a;
+  --coges-stock-teinte: #3a2316;
+  --coges-stock-encre: #fdba8c;
+  --coges-argent: #6b97f0;
+  --coges-argent-teinte: #182744;
+  --coges-argent-encre: #adc6fa;
+  --coges-clients: #a283ec;
+  --coges-clients-teinte: #271e40;
+  --coges-clients-encre: #d0bdf8;
+  --coges-depenses: #e85d63;
+  --coges-depenses-teinte: #3b1a1d;
+  --coges-depenses-encre: #f6a9ad;
+  --coges-conseils: #34aecb;
+  --coges-conseils-teinte: #12303a;
+  --coges-conseils-encre: #96d9e9;
+
+  --coges-barre-claire: #2b4d38;
+  --coges-barre-sortie: #e8833a;
+
+  --coges-ventes-anneau: #2f7a4f;
+  --coges-stock-anneau: #8a4a26;
+  --coges-argent-anneau: #3b5a96;
+  --coges-clients-anneau: #5b4a8f;
+  --coges-depenses-anneau: #8a3b3f;
+  --coges-conseils-anneau: #2b6f80;
 }
 
 @theme inline {
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-figtree), system-ui, sans-serif;
   --font-heading: var(--font-sans);
+  --font-receipt: var(--font-jetbrains-mono), ui-monospace, monospace;
 
   /*
    * Échelle typographique par rôle (docs/design/DESIGN.md § Typography). Le texte courant
@@ -108,47 +204,142 @@
   --text-figure-sm--line-height: 1.75rem;
   --text-figure-sm--font-weight: 700;
 
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-warning: hsl(var(--warning));
-  --color-warning-foreground: hsl(var(--warning-foreground));
-  --color-success: hsl(var(--success));
-  --color-success-foreground: hsl(var(--success-foreground));
-  --color-success-ink: hsl(var(--success-ink));
-  --color-warning-ink: hsl(var(--warning-ink));
-  --color-danger-ink: hsl(var(--danger-ink));
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-chart-1: hsl(var(--chart-1));
-  --color-chart-2: hsl(var(--chart-2));
-  --color-chart-3: hsl(var(--chart-3));
-  --color-chart-4: hsl(var(--chart-4));
-  --color-chart-5: hsl(var(--chart-5));
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-ink: var(--success-ink);
+  --color-warning-ink: var(--warning-ink);
+  --color-danger-ink: var(--danger-ink);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
 
   /* La barre latérale reprend la carte (fond blanc, bordure droite, actif primary). */
-  --color-sidebar: hsl(var(--card));
-  --color-sidebar-foreground: hsl(var(--card-foreground));
-  --color-sidebar-primary: hsl(var(--primary));
-  --color-sidebar-primary-foreground: hsl(var(--primary-foreground));
-  --color-sidebar-accent: hsl(var(--secondary));
-  --color-sidebar-accent-foreground: hsl(var(--secondary-foreground));
-  --color-sidebar-border: hsl(var(--border));
-  --color-sidebar-ring: hsl(var(--ring));
+  /* Rubriques de la maquette : `bg-ventes`, `bg-ventes-teinte`, `text-ventes-encre`… */
+  --color-marque: var(--coges-vert-marque);
+  --color-eclat: var(--coges-vert-eclat);
+  --color-papier: var(--coges-papier);
+  --color-filet: var(--coges-filet);
+  --color-voile: var(--coges-voile);
+  --color-encre-2: var(--coges-encre-2);
+  --color-ventes: var(--coges-ventes);
+  --color-ventes-teinte: var(--coges-ventes-teinte);
+  --color-ventes-encre: var(--coges-ventes-encre);
+  --color-stock: var(--coges-stock);
+  --color-stock-teinte: var(--coges-stock-teinte);
+  --color-stock-encre: var(--coges-stock-encre);
+  --color-argent: var(--coges-argent);
+  --color-argent-teinte: var(--coges-argent-teinte);
+  --color-argent-encre: var(--coges-argent-encre);
+  --color-clients: var(--coges-clients);
+  --color-clients-teinte: var(--coges-clients-teinte);
+  --color-clients-encre: var(--coges-clients-encre);
+  --color-depenses: var(--coges-depenses);
+  --color-depenses-teinte: var(--coges-depenses-teinte);
+  --color-depenses-encre: var(--coges-depenses-encre);
+  --color-conseils: var(--coges-conseils);
+  --color-conseils-teinte: var(--coges-conseils-teinte);
+  --color-conseils-encre: var(--coges-conseils-encre);
+  --color-barre-claire: var(--coges-barre-claire);
+  --color-barre-sortie: var(--coges-barre-sortie);
+  --color-ventes-anneau: var(--coges-ventes-anneau);
+  --color-stock-anneau: var(--coges-stock-anneau);
+  --color-argent-anneau: var(--coges-argent-anneau);
+  --color-clients-anneau: var(--coges-clients-anneau);
+  --color-depenses-anneau: var(--coges-depenses-anneau);
+  --color-conseils-anneau: var(--coges-conseils-anneau);
+  --color-article-1: var(--coges-article-1);
+  --color-article-2: var(--coges-article-2);
+  --color-article-3: var(--coges-article-3);
+  --color-article-4: var(--coges-article-4);
+  --color-article-5: var(--coges-article-5);
+  --color-article-6: var(--coges-article-6);
+  --color-article-7: var(--coges-article-7);
+  --color-article-8: var(--coges-article-8);
+  --color-article-9: var(--coges-article-9);
+  --color-article-10: var(--coges-article-10);
+  --color-article-11: var(--coges-article-11);
+  --color-article-12: var(--coges-article-12);
+  --color-blanc: var(--coges-blanc);
+  --color-recu-papier: var(--coges-recu-papier);
+  --color-recu-encre: var(--coges-recu-encre);
+  --color-ombre: var(--coges-ombre);
+
+  /* Formes et tailles de la maquette : `rounded-carte`, `h-bouton-principal`, `max-w-page`… */
+  --radius-carte: 22px;
+  --radius-bouton: 18px;
+  --radius-champ: 16px;
+  --radius-tuile: 20px;
+  --radius-touche: 14px;
+  --radius-mini: 12px;
+  --spacing-cible: 48px;
+  --spacing-bouton: 56px;
+  --spacing-bouton-principal: 68px;
+  --spacing-champ-montant: 64px;
+  --spacing-touche: 56px;
+  --spacing-marge-page: 24px;
+  --spacing-sections: 20px;
+  --spacing-carte: 22px;
+  --container-page: 1180px;
+
+  /*
+   * Textes de la maquette. Le corps ne descend jamais sous 15 px : `text-sm` passe de 14 à
+   * 15 px pour tous les écrans existants.
+   */
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.375rem;
+  --text-mini: 0.8125rem;
+  --text-mini--line-height: 1rem;
+  --text-petit: 0.875rem;
+  --text-petit--line-height: 1.25rem;
+  --text-corps: 1rem;
+  --text-corps--line-height: 1.5rem;
+  --text-libelle: 1.0625rem;
+  --text-libelle--line-height: 1.5rem;
+  --text-libelle--font-weight: 700;
+  --text-titre-page: 1.875rem;
+  --text-titre-page--line-height: 2.25rem;
+  --text-titre-page--font-weight: 800;
+  --text-titre-carte: 1.25rem;
+  --text-titre-carte--line-height: 1.75rem;
+  --text-titre-carte--font-weight: 700;
+  --text-chiffre: 1.75rem;
+  --text-chiffre--line-height: 2.25rem;
+  --text-chiffre--font-weight: 800;
+  --text-chiffre-heros: 3.25rem;
+  --text-chiffre-heros--line-height: 3.75rem;
+  --text-chiffre-heros--font-weight: 800;
+
+  --color-sidebar: var(--card);
+  --color-sidebar-foreground: var(--card-foreground);
+  --color-sidebar-primary: var(--primary);
+  --color-sidebar-primary-foreground: var(--primary-foreground);
+  --color-sidebar-accent: var(--secondary);
+  --color-sidebar-accent-foreground: var(--secondary-foreground);
+  --color-sidebar-border: var(--border);
+  --color-sidebar-ring: var(--ring);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
