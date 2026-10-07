@@ -13,8 +13,10 @@
   lots 1, 2, 3. Ne passe pas au lot suivant tant que la CI du précédent n'est pas verte.
 - Chaque décision structurante a son ADR (numéros à partir de **0061**). Toute question de produit passe par
   `AskUserQuestion`, jamais par une supposition.
-  *Note du lot 0 : 0063 a servi à la liste de clients de la vente (B3) ; les ADR nommés plus bas
-  sont décalés d'un rang (« Références et codes-barres générés » = 0064, etc.).*
+  *Note des lots 0 et F : 0063 a servi à la liste de clients de la vente (B3), 0064 au thème
+  de la maquette v2 et 0065 à l'heure figée et au seed de la maquette ; les ADR nommés plus bas
+  sont décalés de trois rangs (« Références et codes-barres générés » = 0066, « Raisons de
+  correction en liste fermée » = 0067, refonte visuelle = 0068).*
 - **Invariants à ne jamais casser :** RLS FORCE et rôles séparés, Idempotency-Key sur les écritures
   financières, annulation par contre-écriture, outbox, garde du dernier gérant.
 - Aucun service payant sans mon accord explicite. Ne commite jamais `.env` ni `.env.bak`.

@@ -1,427 +1,276 @@
 ---
 name: CoGes
-description: Gestion commerciale pour PME ouest-africaines — vente, stock, argent, décision.
+description: Gestion commerciale pour PME ouest-africaines — vente, stock, argent, décision. Simple, chaleureux, coloré (maquette v2).
 colors:
-  bleu-petrole: "hsl(199 89% 28%)"
-  bleu-petrole-nuit: "hsl(199 89% 48%)"
-  vert-encaisse: "hsl(152 63% 40%)"
-  vert-succes: "hsl(142 71% 45%)"
-  orange-alerte: "hsl(32 95% 50%)"
-  rouge-danger: "hsl(0 72% 51%)"
-  violet-serie: "hsl(259 84% 56%)"
-  papier: "hsl(210 20% 98%)"
-  feuille: "hsl(0 0% 100%)"
-  encre: "hsl(215 28% 17%)"
-  gris-regle: "hsl(214 20% 88%)"
-  gris-voile: "hsl(210 16% 95%)"
-  gris-sourdine: "hsl(210 16% 93%)"
-  gris-annotation: "hsl(215 16% 42%)"
-  encre-succes: "hsl(145 63% 28%)"
-  encre-alerte: "hsl(26 90% 33%)"
-  encre-danger: "hsl(0 74% 40%)"
-  encre-succes-nuit: "hsl(142 60% 60%)"
-  encre-alerte-nuit: "hsl(35 95% 62%)"
-  encre-danger-nuit: "hsl(0 90% 72%)"
-  nuit: "hsl(215 28% 10%)"
-  nuit-feuille: "hsl(215 28% 13%)"
-  nuit-voile: "hsl(215 28% 18%)"
-  nuit-regle: "hsl(215 28% 22%)"
-  nuit-encre: "hsl(210 20% 92%)"
-  nuit-annotation: "hsl(215 16% 60%)"
+  vert-marque: "#024A2C"
+  vert-action: "#117A3C"
+  vert-eclat: "#1A9A4C"
+  papier: "#FBF8F3"
+  carte: "#FFFFFF"
+  bordure: "#ECE6DC"
+  bordure-champ: "#E3DCD0"
+  filet: "#F0EBE2"
+  voile: "#F3EEE5"
+  voile-2: "#F6F2EB"
+  encre: "#1E2320"
+  encre-2: "#3C4440"
+  sourdine: "#5B625E"
+  ventes: "#117A3C"
+  ventes-teinte: "#E6F4EC"
+  ventes-encre: "#024A2C"
+  stock: "#C2410C"
+  stock-teinte: "#FFF0E3"
+  stock-encre: "#9A3412"
+  argent: "#1F5BD8"
+  argent-teinte: "#EAF1FD"
+  argent-encre: "#1747AE"
+  clients: "#6D3FC8"
+  clients-teinte: "#F2ECFC"
+  clients-encre: "#5530A3"
+  depenses: "#A51D24"
+  depenses-teinte: "#FDECEC"
+  depenses-encre: "#A51D24"
+  conseils: "#0E7490"
+  conseils-teinte: "#E3F3F6"
+  conseils-encre: "#0B5566"
+  barre-claire: "#BFE3CF"
+  barre-sortie: "#E8833A"
 typography:
-  page-title:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "1.5rem"
-    fontWeight: 700
-    lineHeight: 1.33
-    letterSpacing: "-0.02em"
-  figure:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "1.5rem"
-    fontWeight: 700
-    lineHeight: 1.33
+  titre-page:
+    fontFamily: "Figtree, system-ui, sans-serif"
+    fontSize: "30px"
+    fontWeight: 800
     letterSpacing: "-0.01em"
-    fontFeature: "tnum"
-  figure-sm:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "1.25rem"
+  titre-carte:
+    fontFamily: "Figtree, system-ui, sans-serif"
+    fontSize: "20px"
     fontWeight: 700
-    lineHeight: 1.4
-    fontFeature: "tnum"
-  heading:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "1rem"
-    fontWeight: 600
-    lineHeight: 1.5
-  body:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "0.875rem"
+  libelle:
+    fontFamily: "Figtree, system-ui, sans-serif"
+    fontSize: "17px"
+    fontWeight: 700
+  corps:
+    fontFamily: "Figtree, system-ui, sans-serif"
+    fontSize: "16px"
     fontWeight: 400
-    lineHeight: 1.43
-  label:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "0.75rem"
-    fontWeight: 500
-    lineHeight: 1.33
-  micro:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "0.6875rem"
-    fontWeight: 600
     lineHeight: 1.45
+  chiffre:
+    fontFamily: "Figtree, system-ui, sans-serif"
+    fontSize: "28px à 36px"
+    fontWeight: 800
     fontFeature: "tnum"
+  chiffre-heros:
+    fontFamily: "Figtree, system-ui, sans-serif"
+    fontSize: "52px"
+    fontWeight: 800
+    fontFeature: "tnum"
+  recu:
+    fontFamily: "JetBrains Mono, ui-monospace, monospace"
+    fontSize: "13px"
 rounded:
-  sm: "4px"
-  md: "6px"
-  lg: "8px"
-  xl: "12px"
+  carte: "22px"
+  tuile: "20px"
+  bouton: "18px"
+  champ: "16px"
+  touche: "14px"
+  mini: "12px"
+  puce: "999px"
 spacing:
-  xs: "4px"
-  sm: "8px"
-  md: "16px"
-  lg: "20px"
-  xl: "24px"
+  cible: "48px"
+  bouton: "56px"
+  champ-montant: "64px"
+  bouton-principal: "68px"
+  touche: "56px"
+  page-max: "1180px"
+  marge-page: "24px"
+  sections: "20px"
+  carte: "22px"
 components:
-  button-primary:
-    backgroundColor: "{colors.bleu-petrole}"
-    textColor: "{colors.feuille}"
-    rounded: "{rounded.md}"
-    padding: "0 12px"
-    height: "36px"
-  button-outline:
-    backgroundColor: "{colors.papier}"
+  button-principal:
+    backgroundColor: "{colors.vert-action}"
+    textColor: "#FFFFFF"
+    rounded: "{rounded.bouton}"
+    height: "68px"
+    typography: "20px, 800"
+  button-standard:
+    backgroundColor: "{colors.vert-action}"
+    textColor: "#FFFFFF"
+    rounded: "{rounded.bouton}"
+    height: "56px"
+    typography: "{typography.libelle}"
+  button-secondaire:
+    backgroundColor: "{colors.carte}"
     textColor: "{colors.encre}"
-    rounded: "{rounded.md}"
-    padding: "0 12px"
-    height: "36px"
-  button-ghost:
-    textColor: "{colors.encre}"
-    rounded: "{rounded.md}"
-    height: "36px"
-  input:
-    textColor: "{colors.encre}"
-    rounded: "{rounded.lg}"
-    padding: "4px 10px"
-    height: "32px"
+    border: "2px {colors.bordure-champ}"
+    rounded: "{rounded.bouton}"
+    height: "56px"
   card:
-    backgroundColor: "{colors.feuille}"
-    textColor: "{colors.encre}"
-    rounded: "{rounded.xl}"
-    padding: "16px"
-  badge-status:
-    backgroundColor: "{colors.gris-sourdine}"
-    textColor: "{colors.gris-annotation}"
-    rounded: "{rounded.md}"
-    padding: "2px 8px"
-    height: "20px"
-  nav-item-active:
-    backgroundColor: "{colors.bleu-petrole}"
-    textColor: "{colors.feuille}"
-    rounded: "{rounded.lg}"
-    padding: "8px 12px"
-  table-head:
-    textColor: "{colors.gris-annotation}"
-    typography: "{typography.label}"
-    height: "40px"
-    padding: "0 8px"
+    backgroundColor: "{colors.carte}"
+    border: "1px {colors.bordure}"
+    rounded: "{rounded.carte}"
+    padding: "22px"
+  stat-tile:
+    backgroundColor: "{colors.<rubrique>-teinte}"
+    rounded: "{rounded.carte}"
+    padding: "22px"
+    minHeight: "170px"
+  chip:
+    border: "2px {colors.bordure-champ}"
+    rounded: "{rounded.puce}"
+    height: "48px"
+  field:
+    border: "2px {colors.bordure-champ}"
+    rounded: "{rounded.champ}"
+    height: "56px"
+    focus: "outline 3px <rubrique>-anneau, bordure <rubrique>"
+  amount-field:
+    height: "64px"
+    typography: "28px, 800"
+  status-pill:
+    rounded: "{rounded.puce}"
+    padding: "6px 12px"
+    typography: "15px, 700"
 ---
 
 <!--
-  État de référence relevé le 30/09/2026 avant la phase 14 ; typographie mise à jour par la
-  passe 3 (typeset), mise en page par la passe 4 (layout),
-  couleurs par la passe 5 (colorize),
-  textes et épuration par la passe 6 (clarify, distill),
-  mouvement par la passe 7 (animate), finition par la passe 8 (polish). Chaque passe
-  Impeccable qui change un token met ce fichier à jour. Source normative des valeurs :
-  frontend/app/globals.css (triplets HSL shadcn) ; ce fichier les décrit.
+  Système de la maquette v2 (phase 15, lot F, ADR 0064). Source normative des valeurs :
+  docs/design/maquette-v2/tokens.css, reprise dans frontend/app/globals.css (jetons
+  `--coges-*` puis rôles des composants). Ce fichier les décrit. Le système de la phase 14
+  (bleu pétrole, Inter) est remplacé ; son histoire reste dans l'ADR 0056 et les audits
+  docs/design/audit-phase-14-*.md.
 -->
 
-# Design System: CoGes
+# Design System: CoGes (maquette v2)
 
 ## Overview
 
-**Creative North Star: "Le Registre de comptoir"**
+CoGes s'adresse à un commerçant qui n'a pas fait d'études : **chaque écran se comprend sans
+lire, chaque action se fait en quelques touches**. Le style validé par le propriétaire du
+produit est **chaleureux et coloré** : fond papier crème, cartes blanches très arrondies,
+grands chiffres gras, une couleur par rubrique, et de grosses cibles tactiles.
 
-CoGes se lit comme un livre de caisse moderne tenu au comptoir d'une boutique. Chaque écran est
-un registre : des lignes calmes, des chiffres nets et alignés en colonne, un en-tête qui dit où
-l'on est et combien d'éléments on regarde. Rien n'y est décoratif. Le bleu pétrole marque l'action
-et l'endroit où l'on se trouve ; les autres couleurs n'apparaissent que pour dire un état (réglé,
-en retard, en rupture, annulé).
-
-La densité est celle d'un outil ouvert toute la journée sur un écran modeste : texte courant à
-14 px, tableaux serrés, cartes plates cernées d'un filet. La profondeur n'est donnée qu'aux
-éléments qui flottent au-dessus du registre (menus, panneaux, dialogues). Le mode sombre est un
-registre de nuit : mêmes rôles, fonds bleu nuit, bleu pétrole éclairci.
-
-**Key Characteristics:**
-- Chiffres tabulaires, jamais coupés, alignés à droite dans les tableaux.
-- Une seule couleur d'action (bleu pétrole) ; couleurs d'état réservées à leur sens.
-- Surfaces plates, filets fins (1 px), ombres seulement sur ce qui flotte.
-- Coins doucement arrondis, plus ronds à mesure que l'objet grandit (6 → 8 → 12 px).
-- Pile shadcn/ui (Radix) + Tailwind 4 ; icônes lucide à traits fins.
+La référence est la maquette de `docs/design/maquette-v2/` (26 écrans, captures à 1280 et
+390 px). Les textes sont repris mot pour mot, les valeurs viennent de `tokens.css`. Toute
+différence voulue est notée dans `docs/design/maquette-v2/ecarts.md`, et
+`make maquette-check` mesure l'écart de chaque écran livré (2 % de pixels au plus).
 
 ## Colors
 
-Une palette froide et retenue : un bleu pétrole profond sur des gris-bleus très clairs, et quatre
-couleurs d'état vives réservées à la signalisation.
+### Marque
+Les verts viennent du logo : **vert de marque** `#024A2C` (textes sur teinte verte, nom
+« CoGes »), **vert d'action** `#117A3C` (boutons principaux, texte blanc dessus, 5,4:1),
+**vert éclat** `#1A9A4C` (graphiques et icônes de succès, jamais du texte).
 
-### Primary
-- **Bleu pétrole** (`bleu-petrole`, #085F87) : boutons principaux, élément de navigation actif,
-  anneau de focus, première série des graphiques, liens. En sombre : **Bleu pétrole de nuit**
-  (`bleu-petrole-nuit`, #0DA2E7), texte bleu nuit dessus.
+### Une couleur par rubrique
+Chaque rubrique a un trio **plein / teinte / encre** : le plein pour un bouton ou un disque
+d'icône, la teinte pour une tuile ou un encart, l'encre pour le texte posé sur la teinte.
 
-### Secondary
-- **Vert encaissé** (`vert-encaisse`, #26A66A ; nuit #2FD085) : jeton `accent` du prototype,
-  deuxième série des graphiques (encaissements, positif).
+| Rubrique | Plein | Teinte | Encre |
+|---|---|---|---|
+| Ventes | `#117A3C` | `#E6F4EC` | `#024A2C` |
+| Stock | `#C2410C` | `#FFF0E3` | `#9A3412` |
+| Argent | `#1F5BD8` | `#EAF1FD` | `#1747AE` |
+| Clients | `#6D3FC8` | `#F2ECFC` | `#5530A3` |
+| Dépenses | `#A51D24` | `#FDECEC` | `#A51D24` |
+| Conseils | `#0E7490` | `#E3F3F6` | `#0B5566` |
 
-### Tertiary (couleurs d'état)
-- **Vert succès** (`vert-succes`, #21C45D ; nuit #25DA67) : réglé, stock sain, opération réussie.
-- **Orange alerte** (`orange-alerte`, #F98806 ; nuit #F9941F) : seuil bas, partiellement réglé,
-  retournée, avertissement.
-- **Rouge danger** (`rouge-danger`, #DC2828, identique en nuit depuis la passe 5) : rupture,
-  annulée, en retard, erreur, action destructrice.
-- **Violet série** (`violet-serie`, #6C31ED ; nuit #8E5FF1) : cinquième série de graphique
-  uniquement.
+Classes Tailwind : `bg-ventes`, `bg-ventes-teinte`, `text-ventes-encre`, et ainsi de suite.
+L'anneau de focus d'un champ prend la couleur claire de sa rubrique (`outline-ventes-anneau`),
+relevée dans les pages de la maquette.
 
-### Encres d'état (passe 5)
-Les couleurs d'état ci-dessus sont des **fonds** (pastille, teinte de badge, barre de
-graphique) : comme texte, elles ne lisaient qu'à 2,0–4,3:1. Tout texte qui dit un état utilise
-son **encre** (`text-success-ink`, `text-warning-ink`, `text-danger-ink`), ≥ 4,5:1 sur carte,
-fond de page et teinte à 10 % :
-- **Encre succès** (`encre-succes`, #1A7440 ; nuit #5CD689).
-- **Encre alerte** (`encre-alerte`, #A04A08 ; nuit #FAAD42).
-- **Encre danger** (`encre-danger`, #B11B1B ; nuit #F87777).
-Sur un fond plein vert ou orange, le texte est en encre foncée (`*-foreground`), pas en blanc.
+### Fond et texte
+Papier `#FBF8F3` (page), carte `#FFFFFF`, bordure `#ECE6DC`, bordure de champ `#E3DCD0`,
+filet `#F0EBE2`, voile `#F3EEE5` (survol, fond neutre). Encre `#1E2320`, encre secondaire
+`#3C4440`, sourdine `#5B625E` (6:1 sur papier).
 
-### Neutral
-- **Papier** (`papier`, #F9FAFB) : fond de page. **Feuille** (`feuille`, #FFFFFF) : cartes,
-  barre latérale, menus.
-- **Encre** (`encre`, #1F2937) : texte courant et titres.
-- **Gris annotation** (`gris-annotation`, #5A687C, foncé à la passe 5 : 4,8:1 sur gris
-  sourdine) : libellés secondaires, compteurs, légendes, onglets inactifs, en-têtes de tableau.
-- **Gris règle** (`gris-regle`, #DAE0E7) : bordures, filets de tableau, contour des champs.
-- **Gris voile** (`gris-voile`, #F0F2F4) et **gris sourdine** (`gris-sourdine`, #EAEDF0) :
-  survol, boutons secondaires, fonds de badges neutres.
-- Nuit : fond `nuit` (#121821), cartes `nuit-feuille` (#18202A), survols `nuit-voile`
-  (#212C3B), filets `nuit-regle` (#283548), texte `nuit-encre` (#E7EBEF), annotations
-  `nuit-annotation` (#8996A9).
+### Carrés d'article
+Douze couleurs pleines relevées dans la maquette (`bg-article-1` à `bg-article-12`), lettre
+blanche. La couleur d'un article est **tirée de son nom** (ADR 0064) : aucune colonne en base.
+
+### Rôles des composants
+Les composants shadcn lisent des rôles (`background`, `primary`, `muted-foreground`,
+`success-ink`…) qui pointent vers ces jetons dans `globals.css`. Les encres d'état de
+l'ADR 0056 sont les encres de rubrique : succès = ventes, alerte = stock, danger = dépenses.
+
+### Mode sombre (dérivé, soumis à l'accord du propriétaire)
+La maquette n'en a pas : il est dérivé des mêmes jetons. Fond vert-noir chaud `#111612`,
+cartes `#19201B`, teintes de rubrique assombries (`#15301F` pour ventes…), encres éclaircies
+(`#8FDCAE`…), pleins éclaircis avec texte sombre dessus. Le logo y prend la silhouette du vert
+de marque éclairci. Contraste AA vérifié par axe, en clair et en sombre.
 
 ### Named Rules
-**La règle du Sens unique.** Vert, orange et rouge disent un état, jamais une décoration ni une
-catégorie. Une icône de carte KPI n'a pas à être rouge si rien n'est en danger. Un seuil bas est
-**orange** partout (badge, bandeau du tableau de bord) ; une rupture est **rouge**. Le survol d'un
-menu est gris, jamais vert (le vert encaissé n'est pas une couleur d'interface).
-
-**La règle du Signal unique.** Un état se dit une fois par ligne : le badge suffit, la ligne du
-tableau n'est pas teintée en plus. Une recommandation lue reste lisible : son statut est un
-badge, pas une opacité réduite.
-
-**Exception de domaine.** Les quantités signées d'un journal de stock (+5, −2) gardent l'encre
-verte ou rouge : c'est la convention comptable des entrées et sorties, le signe la double.
-
-**La règle de l'Encre.** Une couleur d'état écrite est toujours une encre ; un jeton d'état nu
-(`text-warning`) n'apparaît jamais dans le code.
-
-**La règle du Badge discret.** Un badge de statut est teinté (fond à 10 %, filet à 25-30 %, texte
-en encre d'état) ; seul un bouton est plein.
+- **Aucune couleur en dur.** Tout vient du thème ; un test d'architecture
+  (`lib/no-hardcoded-colors.test.ts`) refuse `#hex`, `rgb()`, `hsl()` et les palettes Tailwind
+  dans `app/` et `components/`.
+- **Le vert éclat n'écrit jamais.** Il colore les barres et les icônes, pas le texte.
+- **Une rubrique, une couleur.** Un élément prend la couleur de la rubrique où il vit.
 
 ## Typography
 
-**Display Font:** aucune (pas de titre d'affichage)
-**Body Font:** Inter variable, avec son **axe optique** (`opsz`, chargé par `next/font`) : les titres
-et grands chiffres prennent automatiquement le dessin « display », plus serré ; repli
-`ui-sans-serif, system-ui`.
-**Label/Mono Font:** Inter, chiffres tabulaires (`tnum`) pour montants, quantités et dates
-
-**Character:** Une seule famille, neutre et très lisible aux petites tailles ; la hiérarchie tient
-au poids, à la taille et au ton (encre / gris d'annotation), pas au contraste de familles.
+**Figtree** (variable, graisses 400 à 800), chiffres tabulaires pour les montants.
+**JetBrains Mono** pour le reçu imprimé. Les deux sont hébergées dans `frontend/app/fonts/`
+(licence OFL) : le fichier de `next/font/google` n'a pas de table `prep`, et Chrome sous Linux
+élargit alors certaines lettres.
 
 ### Hierarchy
-Rôles déclarés en tokens `@theme` (`frontend/app/globals.css`) : une classe porte taille,
-interligne, graisse et interlettrage.
-- **Page title** (`text-page-title` : 700, 24 px, 1.33, -0,02 em) : titre `h1` de chaque page.
-- **Figure** (`text-figure` : 700, 24 px, -0,01 em, `tnum`) : valeur d'une carte KPI, chiffre clé
-  du panneau d'Intelligence.
-- **Figure small** (`text-figure-sm` : 700, 20 px, `tnum`) : total d'une vente, d'un retour,
-  prix courant d'un produit, compteurs du résumé d'Intelligence.
-- **Heading** (`text-heading` : 600, 16 px, 1.5) : titre de carte, de dialogue, de panneau,
-  d'état vide.
-- **Body** (400, 14 px, 1.43, `text-sm`) : texte courant, cellules de tableau, boutons (500), y
-  compris les petits boutons. 16 px en densité confortable (passe 4).
-- **Label** (500, 12 px, `text-xs`) : **en-têtes de tableau** (gris d'annotation), badges,
-  indications sous une valeur.
-- **Micro** (`text-2xs` : 11 px, 600, `tnum`) : seulement le compteur de la cloche. Le reçu
-  imprimé garde ses tailles propres (ticket 80 mm).
-
-### Named Rules
-**La règle du Chiffre aligné.** Tout montant ou quantité passe par l'utilitaire `numeric`
-(`tabular-nums` + `nowrap`) ou le composant `Money` : `1 234 567 FCFA` ne se coupe jamais. Toute
-cellule de tableau est en chiffres tabulaires par défaut (`TableCell`).
-
-**La règle de l'Espace visible.** Le séparateur des milliers reste l'espace fine insécable
-(`1 234 567 FCFA`), mais `Money` et les chiffres en grand corps l'élargissent à l'écran
-(`spacedGroups`, interlettrage de 0,12 em) : Inter la dessine si étroite que « 13 000 » se lisait
-« 13000 ». Le texte, lui, ne change pas.
-
-**La règle du Même chiffre, même taille.** Un rôle de chiffre n'a qu'une taille : `figure` pour
-un indicateur, `figure-sm` pour un total. Pas de `text-xl font-bold` isolé.
+- **Titre de page** (`text-titre-page`) : 30 px, gras 800.
+- **Titre de carte** (`text-titre-carte`) : 20 px, gras 700.
+- **Libellé de champ** (`text-libelle`) : 17 px, gras 700.
+- **Corps** (`text-corps`) : 16 px. **Jamais moins de 15 px** pour un texte courant :
+  `text-sm` vaut 15 px dans tout le front.
+- **Chiffre de tuile** : 28 à 36 px, gras 800, tabulaire. **Chiffre héros** (« Vous avez
+  gagné ») : 52 px.
+- **Montants** : « 87 500 F » (`formatAmount`), espace insécable entre les milliers.
 
 ## Layout
 
-Coquille à deux colonnes : barre latérale fixe (≈ 208 px, feuille, filet droit) et zone de
-contenu sur fond papier, en-tête de 56 px en haut. Sous le seuil `lg` (1024 px : tablette en
-portrait, petit écran), la barre latérale devient un panneau (`Sheet`) ouvert par un bouton menu,
-et l'en-tête affiche alors le nom de l'entreprise.
-
-**En-tête = fil d'Ariane.** L'en-tête ne répète pas le titre de la page : il montre la section
-(« Ventes ») et, sur une sous-page, la section en lien suivie du titre déclaré par `PageHeader`
-(« Ventes › Nouvelle vente », `components/shell/page-title.tsx`). À droite : cloche, densité,
-thème, utilisateur, déconnexion.
-
-Chaque page suit le même registre : `PageHeader` (titre `h1` + compteur à gauche, action
-principale à droite), puis une barre de recherche et de filtres, puis un tableau dans une carte.
-Le tableau de bord range ses KPI en grille (2 colonnes dès `sm`, 3 dès `xl`), puis la synthèse
-d'Intelligence, le graphique et les dernières ventes : à 1366 × 768, KPI et synthèse tiennent
-dans le premier écran.
-
-**Nouvelle vente.** Dès `xl` (1280 px), deux colonnes : saisie à gauche, Totaux / Règlement /
-actions collés à droite. En dessous, Totaux et Règlement passent côte à côte sous les articles,
-et les actions deviennent une **barre fixée en bas** (total + « Enregistrer en brouillon » +
-« Confirmer la vente ») : la confirmation reste toujours à portée sur tablette.
-
-**Colonnes d'appoint.** Une colonne de `DataTable` marquée `secondary` disparaît sous `lg`
-(Stock : Catégorie, Dernier mouvement) pour que les colonnes utiles tiennent en portrait.
-
-**Densité.** Réglage du navigateur (`lib/density.ts`, `localStorage`), **compacte** par défaut.
-*Confortable* (`data-density="comfortable"` sur `<html>`, variante Tailwind `comfortable:`) passe
-les tableaux à 16 px, lignes de 12 px de marge verticale, en-têtes de 48 px. Posé avant
-l'affichage par un script de `<head>`, sans clignotement.
-
-Rythme d'espacement sur la base Tailwind de 4 px : 4 / 8 / 16 / 20 / 24 px. Cartes : 16 px de
-marge intérieure (KPI compris). Tableaux : en-têtes de 40 px en rôle *label* (12 px, gris
-d'annotation), cellules à 8 px de marge.
-
-## Elevation & Depth
-
-Système plat. Les cartes sont posées à plat et cernées d'un filet de 1 px (`ring-1 ring-border`),
-sans ombre. La profondeur est réservée à ce qui flotte au-dessus du registre.
-
-### Shadow Vocabulary
-- **Flottant bas** (`shadow-md`) : menus déroulants, listes de sélection.
-- **Flottant haut** (`shadow-lg`) : dialogues et panneaux latéraux, sur un voile noir à 25 %
-  (50 % en sombre), **sans flou** : le flou d'arrière-plan coûtait cher sur un PC d'entrée de
-  gamme et n'apportait rien. Barre d'actions de la vente sur tablette : même ombre, elle flotte.
-- **Champ** (`shadow-sm` / `0 1px 2px rgb(0 0 0 / .05)`) : certains déclencheurs de sélection.
-
-### Named Rules
-**La règle du Plat par défaut.** Une surface posée n'a pas d'ombre ; une ombre signifie « ceci
-flotte et se ferme ».
-
-## Motion
-
-Discret, au service de l'état : aucun moment mis en scène dans un outil ouvert toute la journée.
-- **Retour d'action** (≈ 150 ms, `transition`) : couleur, fond, filet, ombre au survol ;
-  enfoncement de 1 px au clic d'un bouton. Jamais `transition-all`.
-- **Menus, listes, info-bulles, dialogues** : fondu + léger zoom (95 %) en 100 ms.
-- **Panneaux latéraux** : glissement de 10 % de leur largeur, entrée 200 ms, sortie 150 ms
-  (sortir plus vite qu'entrer), décélération `cubic-bezier(0.16, 1, 0.3, 1)`.
-- **Graphiques** : pas d'animation d'apparition, les valeurs s'affichent directement.
-
-### Named Rules
-**La règle du Mouvement réduit.** Avec `prefers-reduced-motion`, rien ne glisse ni ne zoome
-(variables `--tw-enter-*` / `--tw-exit-*` neutralisées dans `globals.css`) mais les fondus restent :
-une apparition doit rester perceptible. Les squelettes cessent de pulser ; les indicateurs de
-chargement qui tournent restent, ils disent qu'une action est en cours.
+Page de 1180 px au plus, marge de 24 px (16 px sur téléphone), 20 px entre sections, cartes
+de 22 px de marge intérieure. Au-dessus de 768 px, **barre du haut** (logo, onglets de
+rubrique, alertes, thème) ; au-dessous, **barre basse** de cinq entrées (Accueil, Vendre,
+Stock, Clients, Argent). Les écrans adoptent cette navigation au lot 3a ; d'ici là, la barre
+latérale de la phase 14 reste, avec le logo officiel.
 
 ## Shapes
 
-Coins doucement arrondis, dérivés d'un rayon de base de 8 px (`--radius: .5rem`) : 6 px pour les
-boutons et badges, 8 px pour les champs, l'élément de navigation et les pastilles d'icône, 12 px
-pour les cartes. Bordures de 1 px partout, jamais plus épaisses. Aucune forme libre, aucune
-découpe : le rectangle arrondi est la seule silhouette.
+Cartes 22 px, tuiles 20 px, boutons 18 px, champs 16 px, touches et carrés 14 px, petits
+champs 12 px, puces et pastilles en pilule. Bordure de 2 px sur les champs, puces et boutons
+secondaires ; 1 px sur les cartes.
 
 ## Components
 
-### Buttons
-Précis et retenus.
-- **Shape:** coins doux (6 px), hauteur 36 px, texte 14 px / 500, icône 16 px.
-- **Primary:** fond bleu pétrole, texte blanc ; survol à 80 % d'opacité.
-- **Hover / Focus:** anneau de focus de 3 px en bleu pétrole à 50 %, bordure `ring`.
-- **Outline / Secondary / Ghost:** filet gris règle sur papier ; voile gris ; transparent qui se
-  voile au survol.
-- **Destructive:** teinté (rouge à 10 %, texte rouge), plein seulement dans la confirmation.
+Tous dans `frontend/components/kit/`, montrés par `/dev/composants` (développement seulement).
 
-### Chips (badges de statut)
-- **Style:** hauteur 20 px, coins 6 px, texte 12 px / 500, fond teinté + filet fin de la couleur
-  d'état (`neutral`, `info`, `success`, `warning`, `danger`), jamais plein.
-- **State:** Brouillon (neutre), Confirmée (info), Annulée (danger), Retournée (alerte) ; Actif,
-  Seuil bas, Rupture ; À régler, Partiellement réglé, Réglé.
-
-### Sélecteur segmenté
-`SegmentedControl` (`components/ui/segmented-control.tsx`) pour tout choix exclusif entre
-quelques valeurs : mode de règlement, sens d'un mouvement, format du reçu, filtre « Toutes / Non
-lues ». Rôle `radiogroup` (jamais des onglets sans panneau), fond gris sourdine, option choisie
-sur feuille avec ombre douce ; un seul arrêt de tabulation, flèches, Début et Fin.
-
-### Cards / Containers
-- **Corner Style:** 12 px.
-- **Background:** feuille (nuit-feuille en sombre).
-- **Shadow Strategy:** aucune (voir Elevation & Depth).
-- **Border:** filet de 1 px gris règle.
-- **Internal Padding:** 16 px (12 px en taille `sm`, 20 px pour les KPI).
-
-### Inputs / Fields
-- **Style:** hauteur 32 px, coins 8 px, filet gris règle, fond transparent, texte 16 px sur
-  mobile et 14 px dès `md`.
-- **Focus:** anneau de 3 px en bleu pétrole à 50 %.
-- **Error / Disabled:** filet et anneau rouges (`aria-invalid`) + message `FieldError` sous le
-  champ ; désactivé à 50 % d'opacité.
-
-### Navigation
-- **Style:** liste verticale, éléments de 36 px, icône 16 px + libellé 14 px / 500, coins 8 px.
-- **Default / hover / active:** gris annotation ; voile gris et encre au survol ; plein bleu
-  pétrole et texte blanc quand actif (`aria-current="page"`).
-- **Tablette et mobile (< 1024 px):** même contenu dans un `Sheet` à gauche.
-
-### Carte KPI (signature)
-Libellé en gris annotation précédé d'une icône de 16 px (grise ; orange ou rouge seulement pour
-un état d'alerte ou de danger), valeur en Figure, indication en Label ; 16 px de marge, environ
-110 px de haut. Pas de pastille d'icône : elle prenait 50 px sans rien dire. La valeur arrive
-formatée par l'API.
-
-### Carte de recommandation (signature)
-Carte d'Intelligence cliquable, filet fin, **sans bordure latérale colorée** : la sévérité est
-dite par son badge. Badge de type **seulement si le titre ne le dit pas déjà** (« Écoulement
-lent — Stylo » n'a pas besoin du badge « Écoulement lent »), badge de statut si elle n'est plus
-nouvelle, titre, lignes **Métrique (· valeur) / Date de calcul / Confiance**. « Données
-insuffisantes » n'y est dit qu'une fois. Le détail (modèle et version, incertitude, éléments du
-calcul) s'ouvre dans un panneau latéral dont l'**action principale** est l'étape suivante
-(« Prendre en compte », puis « Marquer résolu ») ; les autres restent en contour.
-
-### Synthèse d'Intelligence (tableau de bord)
-Quatre compteurs posés sur la carte, séparés par l'espace : pas de cases encadrées dans la
-carte.
-
-### Graphiques
-Une barre par période (`PeriodBarChart`) pour un total journalier, hebdomadaire ou mensuel :
-chaque valeur est distincte, une courbe lissée en inventait entre deux points. Série principale
-`chart-1` (bleu pétrole), grille horizontale en pointillés gris règle, axes en gris annotation,
-info-bulle sur feuille. Les flux de trésorerie : vert encaissé (entrées), bleu pétrole (sorties)
-— une sortie de caisse n'est pas un danger. Axe des valeurs à **largeur automatique** : une
-graduation n'est jamais rognée (« 800 k FCFA » ne doit pas se lire « 300 k »).
+- **Boutons** (`Button`, tailles `principal` 68 px et `standard` 56 px, variante
+  `secondaire` bordée, et une variante pleine par rubrique).
+- **Tuile chiffrée** (`StatTile`) : teinte de rubrique, disque d'icône plein, libellé, grand
+  chiffre, précision à l'encre ; version compacte pour le téléphone.
+- **Carte** (`KitCard`) : titre h2 et action à droite.
+- **Puce** (`Chip`) : choisie en teinte ou en plein ; `aria-pressed`.
+- **Grand choix exclusif** (`ChoiceGroup`) : groupe radio de grosses cases (64 px).
+- **Champ montant + pavé numérique** (`AmountField`, `NumericPad`, `AmountShortcuts`) : le
+  montant se **tape librement**, le pavé et les raccourcis ne sont que des raccourcis.
+- **Champ quantité** (`QuantityStepper`) : − champ +, saisie libre, virgule acceptée.
+- **Pastille d'état** (`StatusPill`) : Payé, Reste X F, Retour : X F, Annulée, Dette
+  abandonnée.
+- **Ligne de liste** (`ListRow`), **avatar à initiales** (`Avatar`), **carré d'article**
+  (`ProductSquare`).
+- **Tuiles de choix avec icône** (`ChoiceTiles`) : raisons, catégories de dépense.
+- **Bandeau** (`Banner`), **écran de succès** (`SuccessScreen`), **message d'aide**
+  (`FieldHint`).
+- **Barres des 7 jours** (`DayBars`) : valeur au-dessus, jour en cours en vert plein.
+- **Interrupteur** (`ToggleSwitch`) : 64 × 36 px.
+- **Barres de navigation** (`TopBar`, `BottomNav`) et **logo** (`components/brand/`).
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** passer chaque montant par `Money` ou `numeric` : chiffres tabulaires, `1 234 567 FCFA`
-  sans décimales, alignés à droite.
-- **Do** modifier l'apparence par les tokens de `globals.css` et les composants partagés
-  (`components/ui`, `components/*`), jamais page par page.
-- **Do** réserver les ombres aux éléments flottants (menus, dialogues, panneaux).
-- **Do** nommer la métrique, la date de calcul, le modèle et sa version, l'incertitude sur toute
-  recommandation.
+- Reprendre les textes de la maquette mot pour mot, sans abréviation.
+- Garder toute cible cliquable à 48 px au moins.
+- Laisser taper tout nombre librement.
+- Noter dans `ecarts.md` toute différence voulue, avec l'accord du propriétaire.
 
 ### Don't:
-- **Don't** remplir un badge de statut comme un bouton (défaut du prototype).
-- **Don't** couper un montant sur deux lignes (« 1 000 » puis « FCFA »).
-- **Don't** employer vert, orange ou rouge hors de leur sens d'état.
-- **Don't** afficher de sélecteur d'entreprise ni de bandeau « Mode démonstration ».
+- Écrire une couleur, un rayon ou une taille hors du thème.
+- Expliquer une formule en texte : elle se montre.
+- Utiliser le vert éclat pour du texte.
+- Afficher un carré vert avec un « C » : le logo officiel le remplace partout.

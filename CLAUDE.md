@@ -154,6 +154,8 @@ make api                     # uvicorn → http://localhost:8000/api/v1/health
 make worker                  # celery worker + beat
 make relay                   # relais de l'outbox (rôle coges_relay, processus séparé)
 make seed-demo               # épicerie de démo `demo` : 46 articles, 15 clients, 90 jours (≈ 1 200 ventes)
+make seed-maquette           # entreprise `maquette` de la maquette v2 (Keur Fatou, 6 octobre 2026 à 10 h 45)
+make maquette-check          # compare le front à la maquette v2 (pixelmatch, 2 %) ; MAQUETTE_ALL=1 : tous les écrans
 uv run --directory backend python -m app.seed --existing-slug <slug> --password …   # remplit une entreprise existante sans vente
 uv run --directory backend python -m app.cli create-company --help   # créer une entreprise
 uv run --directory backend python -m app.cli rebuild-stock --company-id <uuid>   # recalcul stock/CMP
@@ -165,6 +167,7 @@ make front-check             # types à jour, lint, typecheck, Vitest, build (ce
 make front-e2e               # e2e-reset puis Playwright sur coges_e2e (API :8100 et front :3100 lancés seuls), axe AA bloquant
 make e2e-reset / e2e-api / e2e-front   # base e2e recréée (migrations + seed) / API e2e sans limite de débit / front e2e
 CAPTURES_STAGE=apres make front-e2e   # + captures clair/sombre de la phase 14 (docs/design/captures/phase-14/<étape>/)
+COGES_FROZEN_NOW=2026-10-06T10:45:00+00:00 make api   # « aujourd'hui » figé pour les lectures (jamais en production)
 make api API_PORT=8001       # si le port 8000 est déjà pris ; front : COGES_API_URL=http://localhost:8001
 ```
 
@@ -205,7 +208,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 12 Front : opérations | `12-front-operations.md` | 11 | e2e vente | ✅ 81 Vitest, 16 e2e locaux (vente, survente, retour, ajustement, produits, clients, fournisseurs) ; captures `docs/design/captures/phase-12/` |
 | 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ✅ 92 Vitest, 26 e2e locaux (dont paiement réparti, métrique, insight écarté, vendeur sans paramètres) ; 674 tests backend ; captures `docs/design/captures/phase-13/` |
 | 14 Finition visuelle (Impeccable) | `14-polish-impeccable.md` | 13 | audit Impeccable | ✅ audit 13/20 → 18/20, axe 241 → 0 violation (clair + sombre), 96 Vitest, 30 e2e ; `docs/design/DESIGN.md` ; captures `docs/design/captures/phase-14/` |
-| 15 Simplicité d'abord | `15-refonte-simplicite.md` | 14 | bugs B1–B3, test du commerçant, axe, captures | 🟨 lot 0 (bugs B1–B3) sur `fix/phase15-bugs` ; lots F, 1, 2, 3 à faire |
+| 15 Simplicité d'abord | `15-refonte-simplicite.md` | 14 | bugs B1–B3, test du commerçant, axe, captures | 🟨 lot 0 fusionné (PR n° 8) ; lot F (thème v2, kit, `/dev/composants`, seed `maquette`, `maquette-check`) sur `feat/phase15-foundations` ; lots 1, 2, 3 à faire |
 
 ## 9. Journal des décisions
 
@@ -274,6 +277,8 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0061 | 2026-10-07 | **Le jour en cours est calculé en direct** (amende 0034) : CA, marge et ventes du jour lus sur `sales`, le passé sur les faits ; `tenancy.on_commit` vide le tableau de bord après COMMIT (depuis `outbox.emit`) ; bandeau si l'outbox attend > 2 min ; `make dev` (honcho) | `docs/decisions/0061-le-jour-en-cours-est-calcule-en-direct.md` |
 | 0062 | 2026-10-07 | **Le reste dû d'une vente suit sa dette** (révision 0014, amende 0024) : `paid_total` = encaissé direct + lettrages vivants sur la dette, compensation comprise ; trigger `pa_sale_rollup` ; verrou dette puis vente ; `debt_status` sur les ventes, badge « Payé » / « Reste X » / « Dette abandonnée » | `docs/decisions/0062-ce-qui-reste-du-sur-une-vente-suit-sa-dette.md` |
 | 0063 | 2026-10-07 | **Liste de clients pour la vente** : `GET /sales/customer-choices` (récents puis alphabétique, téléphone, dette ouverte, pages de 50) ; Popover en portail, « Nouveau client » ; les ADR du prompt de phase 15 décalés d'un rang | `docs/decisions/0063-liste-de-clients-pour-la-vente.md` |
+| 0064 | 2026-10-07 | **Thème de la maquette v2** : jetons `--coges-*` puis rôles dans `globals.css`, classes de rubrique, `text-sm` à 15 px, Figtree et JetBrains Mono hébergées, logo officiel, kit `components/kit/` et vitrine `/dev/composants` (404 en production), « 87 500 F », aucune couleur en dur (test), sombre dérivé ; couleur d'article tirée du nom | `docs/decisions/0064-theme-de-la-maquette-v2.md` |
+| 0065 | 2026-10-07 | **Heure figée et seed de la maquette** : `COGES_FROZEN_NOW` pour les lectures métier (`core/clock.py`, refusé en production), `make seed-maquette` cohérent au plus près (accueil exact), `make maquette-check` (pixelmatch, 2 %, serveurs :8101/:3101 à part) | `docs/decisions/0065-heure-figee-et-seed-de-la-maquette.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**
