@@ -15,7 +15,7 @@ PNPM := pnpm --dir frontend
 API_PORT ?= 8000
 COGES_API_URL ?= http://localhost:$(API_PORT)
 
-.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format dev api worker relay seed-demo openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front
+.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format dev api worker relay seed-demo seed-maquette maquette-check openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front
 
 help: ## Liste les cibles disponibles
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -72,6 +72,9 @@ relay: ## Lance le relais de l'outbox (rôle coges_relay, processus séparé)
 seed-demo: ## Épicerie de démonstration `demo` : 46 articles, 15 clients, 90 jours (≈ 1 200 ventes)
 	$(UV) python -m app.seed
 
+seed-maquette: ## Données de la maquette v2 `maquette` (Keur Fatou, 6 octobre 2026 à 10 h 45)
+	$(UV) python -m app.seed_maquette
+
 openapi: ## Régénère backend/openapi.json (source des types du frontend)
 	$(UV) python -m app.cli export-openapi
 
@@ -102,6 +105,9 @@ front-check: ## Types à jour, lint, typecheck, tests unitaires, build
 
 front-e2e: e2e-reset ## Parcours Playwright sur la base dédiée coges_e2e (recréée avant la suite)
 	$(PNPM) e2e
+
+maquette-check: ## Compare le front à la maquette v2 (seuil 2 %) ; MAQUETTE_ALL=1 : tous les écrans
+	$(PNPM) exec playwright test --config playwright.maquette.config.ts
 
 e2e-reset: ## Recrée coges_e2e : migrations, démo `demo` et entreprise `e2e` vide (jamais coges ni Neon)
 	deploy/scripts/e2e.sh reset

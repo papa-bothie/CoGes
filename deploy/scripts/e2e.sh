@@ -5,6 +5,9 @@
 #   deploy/scripts/e2e.sh reset   # recrée coges_e2e : migrations, démo (`demo`) et entreprise `e2e` vide
 #   deploy/scripts/e2e.sh api     # API sur :8100, branchée sur coges_e2e, débit non limité
 #   deploy/scripts/e2e.sh front   # front sur :3100, branché sur l'API e2e (build séparé)
+#   deploy/scripts/e2e.sh maquette        # ajoute l'entreprise `maquette` (seed de la maquette v2)
+#   deploy/scripts/e2e.sh maquette-api    # API sur :8101, heure figée au 6 octobre 2026 10 h 45
+#   deploy/scripts/e2e.sh maquette-front  # front sur :3101, branché sur l'API de la maquette
 #
 # Les DSN viennent du .env local (exporté par le Makefile, ou lu ici) ; seul le nom de la
 # base change. Un DSN dont l'hôte n'est pas local fait tout échouer avant la moindre
@@ -28,6 +31,10 @@ fi
 E2E_DB=coges_e2e
 E2E_API_PORT="${E2E_API_PORT:-8100}"
 E2E_FRONT_PORT="${E2E_FRONT_PORT:-3100}"
+MAQUETTE_API_PORT="${MAQUETTE_API_PORT:-8101}"
+MAQUETTE_FRONT_PORT="${MAQUETTE_FRONT_PORT:-3101}"
+# Le moment des captures de la maquette v2 (ADR 0065), repris de app/seed_maquette.py.
+MAQUETTE_NOW="2026-10-06T10:45:00+00:00"
 
 die() {
   echo "e2e : $*" >&2
@@ -84,6 +91,27 @@ SQL
     uv run --directory backend python -m app.cli create-company --name "Parcours e2e" \
       --slug e2e --manager-email gerant@e2e.example.com --manager-name "Gérant des parcours" \
       --password demo-coges-2026
+    # L'épicerie de la maquette v2, à part : la démo et `e2e` ne changent pas (ADR 0065).
+    uv run --directory backend python -m app.seed_maquette
+    ;;
+  maquette)
+    shift
+    uv run --directory backend python -m app.seed_maquette "$@"
+    ;;
+  maquette-api)
+    # Une API à part, à l'heure figée : les autres parcours gardent l'heure réelle.
+    export COGES_RATE_LIMIT_IP_PER_MINUTE=0
+    export COGES_RATE_LIMIT_TENANT_PER_MINUTE=0
+    export COGES_RATE_LIMIT_LOGIN_PER_MINUTE=0
+    export COGES_FROZEN_NOW="$MAQUETTE_NOW"
+    # Le cache du tableau de bord ne doit pas mêler l'heure figée et l'heure réelle.
+    export COGES_REDIS_URL="${COGES_REDIS_URL%/*}/2"
+    exec uv run --directory backend uvicorn app.main:app --port "$MAQUETTE_API_PORT"
+    ;;
+  maquette-front)
+    cd frontend
+    COGES_NEXT_DIST_DIR=.next-maquette COGES_API_URL="http://localhost:$MAQUETTE_API_PORT" \
+      exec pnpm exec next dev --port "$MAQUETTE_FRONT_PORT"
     ;;
   api)
     # Limite à 0 = désactivée (app/core/rate_limit.py) : une suite enchaîne des dizaines de
@@ -101,6 +129,6 @@ SQL
       exec pnpm exec next dev --port "$E2E_FRONT_PORT"
     ;;
   *)
-    die "usage : $0 reset|api|front"
+    die "usage : $0 reset|api|front|maquette|maquette-api|maquette-front"
     ;;
 esac

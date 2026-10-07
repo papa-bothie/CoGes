@@ -9,13 +9,14 @@ numpy, ni pandas, ni statsmodels.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.money import serialize
 from app.core.tenancy import TenantContext
 from app.modules.companies import service as companies_service
@@ -128,7 +129,7 @@ def list_insights(
     """Insights vivants (ou du statut demandé), non périmés, les plus récents d'abord."""
     if not is_enabled(session, ctx):
         return InsightPage(enabled=False, items=[], page=page, page_size=page_size, total=0)
-    moment = now or datetime.now(UTC)
+    moment = now or clock.now()
     filters = {
         "status": status.value if status else None,
         "severity": severity.value if severity else None,
@@ -182,7 +183,7 @@ def list_forecasts(
             InsightRepository(session, ctx).live_for_entity(
                 insight_type=InsightType.INSUFFICIENT_HISTORY.value,
                 entity_id=product_id,
-                now=now or datetime.now(UTC),
+                now=now or clock.now(),
             )
             is not None
         )
@@ -210,7 +211,7 @@ def summary(
             forecast_products=0,
             insufficient_data_products=0,
         )
-    moment = now or datetime.now(UTC)
+    moment = now or clock.now()
     forecasts = ForecastRepository(session, ctx)
     insights = InsightRepository(session, ctx)
     as_of = forecasts.latest_as_of()

@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+from app.core import clock
 from app.core.errors import ValidationFailedError
 from app.core.money import amount as to_amount
 from app.core.money import quantity as to_quantity
@@ -216,7 +217,7 @@ def day_of(session: Session, ctx: TenantContext, *, sold_at: datetime) -> date:
 def today_in_company(session: Session, ctx: TenantContext) -> date:
     """Date du jour dans le fuseau de l'entreprise."""
     timezone = companies_service.get_timezone(session, ctx)
-    return datetime.now(ZoneInfo(timezone)).date()
+    return clock.today_in(timezone)
 
 
 def period_bounds(

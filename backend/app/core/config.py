@@ -16,7 +16,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import AwareDatetime, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # backend/app/core/config.py -> backend/app/core -> backend/app -> backend -> racine
@@ -132,6 +132,12 @@ class Settings(BaseSettings):
     sentry_dsn: SecretStr | None = None
     sentry_traces_sample_rate: float = Field(default=0.0, ge=0, le=1)
 
+    # --- Heure figée (ADR 0065) ---
+    # Pour comparer le front à la maquette v2 au pixel près : « aujourd'hui » devient ce
+    # moment (`2026-10-06T10:45:00+00:00`) dans les lectures métier (`app/core/clock.py`).
+    # Jamais en production : refusé au démarrage.
+    frozen_now: AwareDatetime | None = None
+
     @field_validator("jwt_secret")
     @classmethod
     def _secret_is_long_enough(cls, value: SecretStr) -> SecretStr:
@@ -141,6 +147,13 @@ class Settings(BaseSettings):
                 f"COGES_JWT_SECRET doit faire au moins {MIN_JWT_SECRET_LENGTH} caractères."
             )
         return value
+
+    @model_validator(mode="after")
+    def _no_frozen_clock_in_production(self) -> "Settings":
+        """Refuse au démarrage une heure figée en production (ADR 0065)."""
+        if self.env == "production" and self.frozen_now is not None:
+            raise ValueError("COGES_FROZEN_NOW est interdit en production.")
+        return self
 
     @property
     def cors_origin_list(self) -> list[str]:
