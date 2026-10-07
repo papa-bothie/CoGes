@@ -11,6 +11,9 @@ const CURRENCY_DIGITS: Record<string, number> = { XOF: 0, XAF: 0, GNF: 0 };
 
 const CURRENCY_LABELS: Record<string, string> = { XOF: "FCFA", XAF: "FCFA" };
 
+/** Libellé court de la maquette v2 : « 87 500 F » (ADR 0064). */
+const SHORT_CURRENCY_LABELS: Record<string, string> = { XOF: "F", XAF: "F" };
+
 const NBSP = " ";
 
 const integerFormatter = new Intl.NumberFormat("fr-FR", { useGrouping: true });
@@ -86,4 +89,16 @@ export function formatAxisAmount(value: number, currency = "XOF"): string {
   if (abs >= 1_000_000) return compact(1_000_000, "M");
   if (abs >= 1_000) return compact(1_000, "k");
   return `${integerFormatter.format(Math.round(value))}${NBSP}${unit}`;
+}
+
+/**
+ * Montant au format de la maquette v2 : `formatAmount("87500.00")` → « 87 500 F ». Mêmes
+ * règles que `formatMoney` (aucun `float`, « — » si illisible), libellé court.
+ */
+export function formatAmount(value: string | null | undefined, currency = "XOF"): string {
+  // Espace insécable pleine entre les milliers, comme la maquette (« 87 500 F ») : l'espace
+  // fine de `formatMoney` se lit mal en gras et en grand corps.
+  const amount = formatMoney(value, currency, { withCurrency: false }).replace(/\u202f/g, NBSP);
+  if (amount === "—") return amount;
+  return `${amount}${NBSP}${SHORT_CURRENCY_LABELS[currency] ?? currency}`;
 }

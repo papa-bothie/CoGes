@@ -14,6 +14,11 @@ export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const hasSession = request.cookies.get(SESSION_MARKER)?.value === "1";
   const onLogin = pathname === "/login";
+  // Vitrine des composants (`/dev/composants`) : sans connexion, en développement seulement.
+  // En production, la page elle-même répond 404.
+  if (process.env.NODE_ENV !== "production" && pathname.startsWith("/dev/")) {
+    return NextResponse.next();
+  }
 
   if (!hasSession && !onLogin) {
     const url = new URL("/login", request.url);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatAxisAmount, formatMoney } from "./money";
+import { formatAmount, formatAxisAmount, formatMoney } from "./money";
 
 const NNBSP = " "; // séparateur de milliers fr-FR (espace fine insécable)
 const NBSP = " ";
@@ -46,5 +46,17 @@ describe("formatAxisAmount", () => {
     expect(formatAxisAmount(40000)).toBe(`40${NBSP}k${NBSP}FCFA`);
     expect(formatAxisAmount(1_250_000)).toBe(`1,3${NBSP}M${NBSP}FCFA`);
     expect(formatAxisAmount(0)).toBe(`0${NBSP}FCFA`);
+  });
+});
+
+describe("formatAmount (maquette v2)", () => {
+  it("écrit le libellé court F, sans décimales pour XOF", () => {
+    expect(formatAmount("87500.00")).toBe("87\u00a0500\u00a0F");
+    expect(formatAmount("1234567.50")).toBe("1\u00a0234\u00a0568\u00a0F");
+  });
+
+  it("garde « — » pour une valeur absente ou illisible", () => {
+    expect(formatAmount(null)).toBe("—");
+    expect(formatAmount("abc")).toBe("—");
   });
 });
