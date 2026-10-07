@@ -101,7 +101,9 @@ def test_the_acceptance_scenario_end_to_end(
     second_sale = _credit_sale(api_client, alpha_token, product_id, customer_id, "2")
 
     debts = api_client.get(
-        "/api/v1/debts?party_type=customer&status=open&page_size=100", headers=headers
+        "/api/v1/debts",
+        params={"party_type": "customer", "status": "open", "customer_id": customer_id},
+        headers=headers,
     )
     assert debts.status_code == 200, debts.text
     by_sale = {item["sale_id"]: item for item in debts.json()["items"]}

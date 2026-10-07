@@ -185,7 +185,7 @@ def test_debts_can_be_filtered_by_party_status_and_due_date(
     overdue_id = str(overdue.json()["id"])
 
     listed = api_client.get(
-        "/api/v1/debts?party_type=supplier&overdue=true&page_size=100",
+        f"/api/v1/debts?party_type=supplier&supplier_id={supplier_id}&overdue=true",
         headers=auth_headers(alpha_token),
     )
     assert listed.status_code == 200, listed.text

@@ -133,7 +133,9 @@ def _confirmed_sale(
 
 
 def _stock_of(client: TestClient, token: str, product_id: str) -> Any:
-    response = client.get("/api/v1/inventory/stock?page_size=100", headers=auth_headers(token))
+    response = client.get(
+        "/api/v1/inventory/stock", params={"product_id": product_id}, headers=auth_headers(token)
+    )
     assert response.status_code == 200
     return next(item for item in response.json()["items"] if item["product_id"] == product_id)
 
