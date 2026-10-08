@@ -9,11 +9,25 @@ import { SCREENS, settle } from "./screens";
  * défini : `CAPTURES_STAGE=avant pnpm e2e captures-phase-15`. Lot 0 : les écrans touchés
  * par les bugs B1 à B3. `CAPTURES_LOT=F` : le thème change partout, donc tous les écrans,
  * plus la connexion, dans le sous-dossier `lot-f/`. `CAPTURES_LOT=1` : les formulaires du lot 1
- * (article, personne, stock, paiements), dialogues ouverts, dans `lot-1/`.
+ * (article, personne, stock, paiements), dialogues ouverts, dans `lot-1/`. `CAPTURES_LOT=2` :
+ * les écrans dont les mots changent (chiffres, stock, argent, Intelligence), dans `lot-2/`.
  */
 const STAGE = process.env.CAPTURES_STAGE;
 const LOT = process.env.CAPTURES_LOT ?? "0";
 const LOT_0 = ["tableau-de-bord", "ventes", "vente-detail", "nouvelle-vente"];
+const LOT_2 = [
+  "tableau-de-bord",
+  "ventes",
+  "vente-detail",
+  "stock",
+  "produit-detail",
+  "finance",
+  "analytics",
+  "intelligence",
+  "intelligence-panneau",
+];
+/** Lot 2 : les onglets de « L'argent » dont les colonnes changent de nom. */
+const LOT_2_TABS = ["payments", "debts", "expenses"];
 const FOLDER = LOT === "0" ? "" : `/lot-${LOT.toLowerCase()}`;
 
 /** Lot 1 : chaque formulaire touché, ouvert depuis son écran. Les libellés changent avec
@@ -127,11 +141,20 @@ test.describe("captures de la phase 15", () => {
       test("écrans du lot", async ({ page, request }) => {
         test.skip(LOT === "1", "lot 1 : formulaires seulement");
         test.setTimeout(400_000);
-        const screens = LOT === "0" ? SCREENS.filter((s) => LOT_0.includes(s.name)) : SCREENS;
+        const chosen = LOT === "0" ? LOT_0 : LOT === "2" ? LOT_2 : null;
+        const screens = chosen ? SCREENS.filter((s) => chosen.includes(s.name)) : SCREENS;
         for (const screen of screens) {
           await screen.open(page, request);
           await settle(page);
           await shoot(page, screen.name);
+        }
+        if (LOT === "2") {
+          for (const tab of LOT_2_TABS) {
+            await page.goto(`/finance?tab=${tab}`);
+            await settle(page);
+            await shoot(page, `finance-${tab}`);
+          }
+          return;
         }
 
         // B3 : la liste des clients ouverte, là où elle était rognée.
