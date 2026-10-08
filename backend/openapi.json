@@ -11369,6 +11369,9 @@
             "type": "string",
             "title": "Name"
           },
+          "unit": {
+            "$ref": "#/components/schemas/ProductUnit"
+          },
           "category_id": {
             "anyOf": [
               {
@@ -11433,6 +11436,7 @@
           "product_id",
           "sku",
           "name",
+          "unit",
           "category_id",
           "category_name",
           "qty_on_hand",

@@ -20,7 +20,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.core.money import Amount, Quantity, UnitCost
-from app.modules.products.schemas import ProductCreate, ProductRead
+from app.modules.products.schemas import ProductCreate, ProductRead, ProductUnit
 
 NOTE_MAX_LENGTH = 500
 
@@ -191,6 +191,8 @@ class StockLine(BaseModel):
     product_id: UUID
     sku: str
     name: str
+    #: L'unité de l'article (« Plus que 2 sacs », phase 15 lot 1) : ajout de lecture.
+    unit: ProductUnit
     category_id: UUID | None
     category_name: str | None
     qty_on_hand: Quantity

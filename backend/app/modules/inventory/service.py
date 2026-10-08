@@ -244,6 +244,7 @@ def get_stock(
                 product_id=row.product_id,
                 sku=summary.sku,
                 name=summary.name,
+                unit=summary.unit,
                 category_id=summary.category_id,
                 category_name=(
                     None if summary.category_id is None else category_names.get(summary.category_id)

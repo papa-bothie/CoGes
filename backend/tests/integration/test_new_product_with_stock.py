@@ -124,3 +124,10 @@ def test_a_salesperson_cannot_create_a_product(
     )
     response = api_client.post(NEW_PRODUCT, headers=auth_headers(salesperson), json=_payload())
     assert response.status_code == 403
+
+
+def test_the_stock_line_carries_the_unit(api_client: TestClient, alpha_token: str) -> None:
+    """« Plus que 2 sacs » : l'écran de correction lit l'unité sur la ligne de stock."""
+    response = api_client.post(NEW_PRODUCT, headers=auth_headers(alpha_token), json=_payload())
+    [line] = _stock(api_client, alpha_token, response.json()["product"]["id"])
+    assert line["unit"] == "sac"

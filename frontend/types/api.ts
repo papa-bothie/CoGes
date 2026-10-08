@@ -3810,6 +3810,7 @@ export interface components {
       sku: string;
       /** Name */
       name: string;
+      unit: components["schemas"]["ProductUnit"];
       /** Category Id */
       category_id: string | null;
       /** Category Name */
