@@ -13,15 +13,6 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -38,21 +29,20 @@ import { errorMessage } from "@/lib/api/errors";
 import { useIdempotencyKey } from "@/lib/api/idempotency";
 import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
-import { compareDecimal, parseDecimalInput, toInputDecimal } from "@/lib/decimal";
+import { Chip } from "@/components/kit/chip";
+import { PaymentAmount } from "@/components/kit/payment-amount";
+import { MAIN_METHODS } from "@/components/kit/payment-method-chips";
+import { compareDecimal } from "@/lib/decimal";
 import { formatDate, formatDateTime, formatQty } from "@/lib/format";
 import { labels } from "@/lib/labels";
+import { debtPaymentCheck, debtShortcuts, wholeUnits } from "@/lib/payment-amount";
 
 type SaleReturn = Schemas["SaleReturnDetail"];
 type SaleDetail = Schemas["SaleDetail"];
 type RefundMethod = Schemas["RefundCreate"]["method"];
 
-const CASH_METHODS: readonly RefundMethod[] = [
-  "cash",
-  "mobile_money",
-  "bank_transfer",
-  "card",
-  "cheque",
-];
+/** Les moyens de la maquette 06 (« Espèces, Wave ou Orange Money »), en puces. */
+const CASH_METHODS: readonly RefundMethod[] = MAIN_METHODS;
 
 const STATUS_VARIANTS = {
   none_due: "neutral",
@@ -255,10 +245,12 @@ function RefundForm({
 }) {
   const queryClient = useQueryClient();
   const idempotency = useIdempotencyKey();
-  const [amount, setAmount] = useState(toInputDecimal(saleReturn.refund_due));
+  const { currency } = useCompanyLocale();
+  const [amount, setAmount] = useState(wholeUnits(saleReturn.refund_due).toString());
   const [method, setMethod] = useState<RefundMethod>("cash");
-  const [reference, setReference] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const due = wholeUnits(saleReturn.refund_due);
+  const check = debtPaymentCheck(amount, due, "remboursement", currency);
 
   // La compensation n'a de sens que si la vente porte une dette encore ouverte (ADR 0024).
   const canOffset =
@@ -273,15 +265,14 @@ function RefundForm({
       unwrap(
         api.POST("/api/v1/sale-returns/{return_id}/refunds", {
           params: { path: { return_id: saleReturn.id } },
-          body: { amount: value, method, reference: reference.trim() || null },
+          body: { amount: value, method },
           headers: idempotency.headers,
         }),
       ),
     onSuccess: (updated) => {
       idempotency.renew();
       queryClient.setQueryData(queryKeys.saleReturns.detail(updated.id), updated);
-      setAmount(toInputDecimal(updated.refund_due));
-      setReference("");
+      setAmount(wholeUnits(updated.refund_due).toString());
       for (const key of [queryKeys.sales.all, queryKeys.dashboard, queryKeys.debts.all]) {
         void queryClient.invalidateQueries({ queryKey: key });
       }
@@ -298,59 +289,42 @@ function RefundForm({
       </CardHeader>
       <CardContent>
         <form
-          className="space-y-4"
+          className="space-y-5"
           onSubmit={(event) => {
             event.preventDefault();
-            const value = parseDecimalInput(amount);
-            if (value === null || compareDecimal(value, "0") !== 1) {
-              setError(labels.sales.invalidNumber);
-              return;
-            }
+            if (!check.ok) return;
             setError(null);
-            refund.mutate(value);
+            refund.mutate(amount);
           }}
         >
-          <div className="space-y-1.5">
-            <Label htmlFor="refund-amount">{labels.returns.amount}</Label>
-            <Input
-              id="refund-amount"
-              inputMode="decimal"
-              value={amount}
-              aria-invalid={Boolean(error)}
-              aria-describedby={error ? "refund-error" : undefined}
-              onChange={(event) => setAmount(event.target.value)}
-              className="h-9 text-right numeric"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="refund-method">{labels.returns.method}</Label>
-            <Select value={method} onValueChange={(value) => setMethod(value as RefundMethod)}>
-              <SelectTrigger id="refund-method" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {methods.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {labels.paymentMethods[value]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {method !== "offset" && (
-            <div className="space-y-1.5">
-              <Label htmlFor="refund-reference">{labels.returns.reference}</Label>
-              <Input
-                id="refund-reference"
-                value={reference}
-                onChange={(event) => setReference(event.target.value)}
-                className="h-9"
-              />
+          <PaymentAmount
+            id="refund-amount"
+            label={labels.payment.remboursement.amount}
+            value={amount}
+            onChange={setAmount}
+            shortcuts={debtShortcuts(due, currency)}
+            check={check}
+            rubrique="argent"
+          />
+          <div className="space-y-2">
+            <p className="text-libelle">{labels.payment.how}</p>
+            <div role="group" aria-label={labels.payment.how} className="flex flex-wrap gap-2.5">
+              {methods.map((value) => (
+                <Chip
+                  key={value}
+                  rubrique="argent"
+                  tone="plein"
+                  selected={method === value}
+                  onClick={() => setMethod(value)}
+                >
+                  {value === "offset" ? labels.payment.deduct : labels.paymentMethods[value]}
+                </Chip>
+              ))}
             </div>
-          )}
+          </div>
           <FieldError id="refund-error" message={error} />
           <div className="flex flex-col gap-2">
-            <Button type="submit" disabled={refund.isPending}>
+            <Button type="submit" variant="argent" disabled={!check.ok || refund.isPending}>
               {refund.isPending && <Loader2 className="animate-spin" aria-hidden />}
               {labels.returns.refundSubmit}
             </Button>

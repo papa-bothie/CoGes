@@ -38,11 +38,16 @@ test("un paiement réparti solde deux dettes du même client", async ({ page, re
   await row.getByRole("button", { name: "Régler" }).click();
 
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByText(`Règlement — ${customer.name}`)).toBeVisible();
-  await dialog.getByLabel("Montant versé").fill("5000");
-  await dialog.getByRole("button", { name: "Répartir" }).click();
-  await dialog.getByRole("button", { name: "Enregistrer le règlement" }).click();
-  await expect(page.getByText("Règlement enregistré.")).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Encaisser une dette" })).toBeVisible();
+  await expect(dialog.getByText(customer.name)).toBeVisible();
+  // Montant au pavé numérique (tablette sans clavier) ; il couvre les dettes les plus
+  // anciennes d'abord (lot 1).
+  await dialog.getByRole("button", { name: "5", exact: true }).click();
+  await dialog.getByRole("button", { name: "000", exact: true }).click();
+  await expect(dialog.getByLabel("Combien il paie ?")).toHaveValue("5000");
+  await expect(dialog.getByText("Il ne devra plus rien")).toBeVisible();
+  await dialog.getByRole("button", { name: "Encaisser" }).click();
+  await expect(page.getByText("Dette encaissée.")).toBeVisible();
 
   // Soldes relus sur le serveur : les deux dettes sont soldées par un seul versement.
   const after = await client.get(`/debts?customer_id=${customer.id}`);

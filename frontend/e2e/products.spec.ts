@@ -14,7 +14,9 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 }
 
-test("catégories, création d'un produit, changement de prix, ajustement", async ({ page }) => {
+test("catégories, création d'un article, changement de prix, correction du stock", async ({
+  page,
+}) => {
   const marker = crypto.randomUUID().slice(0, 6);
   const parent = `Rayon ${marker}`;
   const child = `Sous-rayon ${marker}`;
@@ -40,17 +42,18 @@ test("catégories, création d'un produit, changement de prix, ajustement", asyn
   await page.getByRole("dialog").getByRole("button", { name: "Fermer", exact: true }).click();
   await shot(page, "categories");
 
-  // Création d'un produit dans la sous-catégorie.
+  // Création d'un article dans la sous-catégorie, avec son stock (lot 1 : formulaire court).
   await page.goto("/products/new");
-  await page.getByLabel("Nom", { exact: true }).fill(name);
-  await page.getByLabel("SKU", { exact: true }).fill(`SAV-${marker}`);
-  await page.getByRole("combobox", { name: "Catégorie" }).click();
-  await page.getByRole("option", { name: child }).click();
-  await page.getByLabel("Seuil d'alerte (facultatif)").fill("5");
-  await page.getByLabel("Prix de vente").fill("750");
-  await page.getByLabel("Prix d'achat (facultatif)").fill("500");
+  await page.getByLabel("Nom de l'article").fill(name);
+  await page.getByLabel("Prix de vente (F)").fill("750");
+  await page.getByLabel("Prix d'achat (F)").fill("500");
+  await expect(page.getByText(/Vous gagnez 250\sF sur chaque pièce/)).toBeVisible();
+  await page.getByRole("button", { name: child, exact: true }).click();
+  const [stockField, warnField] = await page.getByLabel(`Quantité : ${name}`).all();
+  await stockField!.fill("12");
+  await warnField!.fill("5");
   await shot(page, "produit-formulaire");
-  await page.getByRole("button", { name: "Créer le produit" }).click();
+  await page.getByRole("button", { name: "Enregistrer l'article" }).click();
 
   await expect(page).toHaveURL(/\/products\/[0-9a-f-]+$/);
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
@@ -64,26 +67,57 @@ test("catégories, création d'un produit, changement de prix, ajustement", asyn
   const history = page.getByRole("list").filter({ hasText: "Actuel" });
   await expect(history.getByRole("listitem")).toHaveCount(2);
 
-  // Ajustement depuis la fiche : l'article est déjà choisi.
-  await page.getByRole("button", { name: "Ajuster le stock" }).click();
+  await expect(page.getByText(/^12 pièces$/)).toBeVisible();
+
+  // Correction depuis la fiche : l'article est déjà choisi, la raison en tuile.
+  await page.getByRole("button", { name: "Corriger le stock" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText(name)).toBeVisible();
-  await dialog.getByRole("radio", { name: "Entrée (+)" }).click();
-  await dialog.getByLabel("Quantité").fill("12");
-  await dialog.getByLabel(/Coût unitaire/).fill("500");
-  await dialog.getByLabel("Motif (obligatoire)").fill("Stock trouvé à l'inventaire");
-  await dialog.getByRole("button", { name: "Enregistrer le mouvement" }).click();
-  await expect(page.getByText("Mouvement enregistré.")).toBeVisible();
-  await expect(page.getByText(/^12 pièces$/)).toBeVisible();
+  await dialog.getByRole("radio", { name: "Plus" }).click();
+  await dialog.getByLabel(`Quantité : ${name}`).fill("2");
+  await expect(dialog.getByRole("status")).toContainText("14 pièces");
+  await dialog.getByRole("radio", { name: "Retrouvé" }).click();
+  await dialog.getByRole("button", { name: "Valider la correction" }).click();
+  await expect(page.getByText("Stock corrigé.")).toBeVisible();
+  await expect(page.getByText(/^14 pièces$/)).toBeVisible();
   await shot(page, "fiche-produit");
 
   // Liste : recherche, stock et statut de la page.
   await page.goto("/products");
   await page.getByRole("searchbox").fill(name);
   const row = page.getByRole("row").filter({ hasText: name });
-  await expect(row).toContainText("12 pièces");
+  await expect(row).toContainText("14 pièces");
   await expect(row).toContainText("Disponible");
   await page.getByRole("searchbox").fill("");
   await expect(page.getByText(/^\d+ produits?$/)).toBeVisible();
   await shot(page, "produits");
+});
+
+test("créer un article en moins de 8 touches", async ({ page }) => {
+  const name = `Riz ${crypto.randomUUID().slice(0, 6)}`;
+  await login(page);
+  await page.goto("/products/new");
+  await expect(page.getByRole("heading", { level: 1, name: "Nouvel article" })).toBeVisible();
+
+  // Chaque saisie ou toucher compte pour un.
+  let touches = 0;
+  const touch = async (action: Promise<void>) => {
+    touches += 1;
+    await action;
+  };
+  await touch(page.getByLabel("Nom de l'article").fill(name));
+  await touch(page.getByLabel("Prix de vente (F)").fill("15500"));
+  await touch(page.getByLabel("Prix d'achat (F)").fill("14000"));
+  await touch(page.getByRole("button", { name: "Sac", exact: true }).click());
+  await touch(page.getByLabel(`Quantité : ${name}`).first().fill("10"));
+  await touch(page.getByRole("button", { name: "Enregistrer l'article" }).click());
+  expect(touches).toBeLessThan(8);
+
+  // Référence et code-barres générés par le serveur (ADR 0066).
+  await expect(page).toHaveURL(/\/products\/[0-9a-f-]+$/);
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  await expect(page.getByText(/^10 sacs$/)).toBeVisible();
+  await page.getByText("Plus d'infos").click();
+  await expect(page.getByText(/^ART-\d{4,}$/)).toBeVisible();
+  await expect(page.getByText(/^2\d{12}$/)).toBeVisible();
 });

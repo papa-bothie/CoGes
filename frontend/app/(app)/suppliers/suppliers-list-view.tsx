@@ -16,7 +16,7 @@ import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
 import { labels } from "@/lib/labels";
 
-import { SupplierFormDialog } from "./supplier-form-dialog";
+import { PersonFormDialog } from "@/components/people/person-form-dialog";
 
 type Supplier = Schemas["SupplierRead"];
 
@@ -37,11 +37,6 @@ export function SuppliersListView() {
 
   const columns: Column<Supplier>[] = [
     {
-      id: "code",
-      header: labels.suppliers.columns.code,
-      cell: (supplier) => <span className="numeric">{supplier.code ?? "—"}</span>,
-    },
-    {
       id: "name",
       header: labels.suppliers.columns.name,
       cell: (supplier) => <span className="font-medium">{supplier.name}</span>,
@@ -50,17 +45,6 @@ export function SuppliersListView() {
       id: "phone",
       header: labels.suppliers.columns.phone,
       cell: (supplier) => <span className="numeric">{supplier.phone ?? "—"}</span>,
-    },
-    {
-      id: "terms",
-      header: labels.suppliers.columns.terms,
-      numeric: true,
-      cell: (supplier) =>
-        supplier.payment_terms_days === null ? (
-          <span className="text-muted-foreground">{labels.suppliers.noTerms}</span>
-        ) : (
-          labels.suppliers.termsDays(supplier.payment_terms_days)
-        ),
     },
   ];
 
@@ -73,7 +57,7 @@ export function SuppliersListView() {
           <Can permission="suppliers:create">
             <Button onClick={() => setCreating(true)}>
               <Plus aria-hidden />
-              {labels.suppliers.add}
+              {labels.people.add}
             </Button>
           </Can>
         }
@@ -100,10 +84,15 @@ export function SuppliersListView() {
           }}
         />
       )}
-      <SupplierFormDialog
+      <PersonFormDialog
         open={creating}
         onOpenChange={setCreating}
-        onSaved={(supplier) => router.push(`/suppliers/${supplier.id}`)}
+        initialKind="supplier"
+        onSaved={(saved) =>
+          router.push(
+            `/${saved.kind === "customer" ? "customers" : "suppliers"}/${saved.person.id}`,
+          )
+        }
       />
     </>
   );

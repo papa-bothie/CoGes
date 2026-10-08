@@ -205,7 +205,6 @@ function CompanyForm({ company }: { company: Company }) {
             <div className="space-y-1.5">
               <Label htmlFor="company-slug">{t.slug}</Label>
               <Input id="company-slug" value={company.slug} readOnly disabled className="h-9" />
-              <p className="text-xs text-muted-foreground">{t.slugHint}</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="company-currency">{t.currency}</Label>
@@ -216,7 +215,6 @@ function CompanyForm({ company }: { company: Company }) {
                 disabled
                 className="h-9"
               />
-              <p className="text-xs text-muted-foreground">{t.currencyHint}</p>
             </div>
           </div>
           <div className="space-y-1.5">
@@ -237,7 +235,6 @@ function CompanyForm({ company }: { company: Company }) {
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">{t.timezoneHint}</p>
           </div>
         </CardContent>
       </Card>
@@ -279,7 +276,6 @@ function CompanyForm({ company }: { company: Company }) {
               className="h-9 w-40 text-right numeric"
             />
             <FieldError message={errors.reorder} />
-            <p className="text-xs text-muted-foreground">{t.reorderHint}</p>
           </div>
         </CardContent>
       </Card>

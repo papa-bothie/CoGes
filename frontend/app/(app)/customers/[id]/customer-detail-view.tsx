@@ -20,7 +20,7 @@ import { queryKeys } from "@/lib/api/queries/keys";
 import { formatDate } from "@/lib/format";
 import { labels } from "@/lib/labels";
 
-import { CustomerFormDialog } from "@/components/customers/customer-form-dialog";
+import { PersonFormDialog } from "@/components/people/person-form-dialog";
 
 export function CustomerDetailView({ customerId }: { customerId: string }) {
   const { timeZone, currency } = useCompanyLocale();
@@ -52,7 +52,6 @@ export function CustomerDetailView({ customerId }: { customerId: string }) {
       </Link>
       <PageHeader
         title={data.name}
-        count={data.code && <span className="numeric">{data.code}</span>}
         actions={
           <Can permission="customers:update">
             <Button variant="outline" onClick={() => setEditing(true)}>
@@ -79,25 +78,35 @@ export function CustomerDetailView({ customerId }: { customerId: string }) {
             <CardTitle>{labels.customers.contact}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <Row label={labels.customers.creditLimit}>
-              {data.credit_limit ? (
-                <Money value={data.credit_limit} currency={currency} className="font-semibold" />
-              ) : (
-                labels.customers.noLimit
-              )}
-            </Row>
             <Row label={labels.customers.phone}>
               <span className="numeric">{data.phone ?? "—"}</span>
             </Row>
-            <Row label={labels.customers.email}>{data.email ?? "—"}</Row>
             <Row label={labels.customers.since}>
               <span className="numeric">{formatDate(data.created_at, timeZone)}</span>
             </Row>
+            {/* Plus saisi depuis le lot 1 ; une limite posée avant reste visible, elle s'applique. */}
+            {data.credit_limit && (
+              <Row label={labels.customers.creditLimit}>
+                <Money value={data.credit_limit} currency={currency} className="font-semibold" />
+              </Row>
+            )}
+            <details className="pt-2">
+              <summary className="min-h-cible cursor-pointer content-center font-bold">
+                {labels.people.moreInfo}
+              </summary>
+              <Row label={labels.customers.email}>{data.email ?? "—"}</Row>
+            </details>
           </CardContent>
         </Card>
       </div>
 
-      <CustomerFormDialog customer={data} open={editing} onOpenChange={setEditing} />
+      <PersonFormDialog
+        key={String(editing)}
+        kind="customer"
+        person={data}
+        open={editing}
+        onOpenChange={setEditing}
+      />
     </>
   );
 }

@@ -58,8 +58,9 @@ test("brouillon, confirmation avec paiement partiel, puis reçu", async ({ page,
   await page.reload();
   await expect(page.getByRole("textbox", { name: `Quantité de ${product.name}` })).toHaveValue("3");
 
-  await page.getByRole("radio", { name: "Partiel" }).click();
-  await page.getByLabel("Montant encaissé").fill("1000");
+  await page.getByRole("radio", { name: "Une partie" }).click();
+  await page.getByLabel("Il donne maintenant").fill("1000");
+  await expect(page.getByText(/Il restera 2\s000\sF à payer/)).toBeVisible();
   await page.getByRole("button", { name: "Confirmer la vente" }).click();
 
   await expect(page).toHaveURL(/\/sales\/[0-9a-f-]+$/);
@@ -117,9 +118,9 @@ test("une vente au-delà du stock est bloquée avec le bon message", async ({ pa
   await expect(confirm).toBeEnabled();
   await client.post("/inventory/movements", {
     product_id: product.id,
-    type: "loss",
+    // Une perte porte sa raison en liste fermée (ADR 0067).
+    reason_code: "damaged",
     qty_delta: "-1",
-    note: "Casse constatée pendant la vente (e2e)",
   });
   await confirm.click();
   await expect(page.getByText("Stock insuffisant — 1 disponible(s)")).toBeVisible();
@@ -154,10 +155,10 @@ test("retour partiel puis remboursement", async ({ page, request }) => {
   await expect(due).toContainText(amount("1 000"));
 
   // Remboursement en deux fois : 400 puis le reste.
-  await page.getByLabel("Montant", { exact: true }).fill("400");
+  await page.getByLabel("Combien vous rendez ?").fill("400");
   await page.getByRole("button", { name: "Enregistrer le règlement" }).click();
   await expect(page.getByText("Partiellement réglé", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Montant", { exact: true })).toHaveValue("600");
+  await expect(page.getByLabel("Combien vous rendez ?")).toHaveValue("600");
   await page.getByRole("button", { name: "Enregistrer le règlement" }).click();
   await expect(page.getByText("Réglé", { exact: true })).toBeVisible();
   await page.screenshot({

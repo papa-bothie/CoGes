@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { FieldError } from "@/components/field-error";
 import { SearchCombobox } from "@/components/search-combobox";
 import { Button } from "@/components/ui/button";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   Dialog,
   DialogContent,
@@ -45,17 +44,14 @@ type Supplier = Schemas["SupplierRead"];
 
 export type MovementProduct = { id: string; name: string; sku: string };
 
-const TYPES: readonly ManualType[] = [
-  "purchase_in",
-  "initial",
-  "adjustment",
-  "loss",
-  "supplier_return_out",
-];
-/** Sens imposé par le type ; l'ajustement laisse choisir (règles du schéma d'entrée). */
-const OUTFLOWS = new Set<ManualType>(["loss", "supplier_return_out"]);
+/**
+ * Entrées et retours au fournisseur. Les corrections (ajustement, perte) ont leur écran,
+ * « Corriger le stock », avec une raison en liste fermée (ADR 0067).
+ */
+const TYPES: readonly ManualType[] = ["purchase_in", "initial", "supplier_return_out"];
+/** Sens imposé par le type (règles du schéma d'entrée). */
+const OUTFLOWS = new Set<ManualType>(["supplier_return_out"]);
 const COST_REQUIRED = new Set<ManualType>(["initial", "purchase_in"]);
-const NOTE_REQUIRED = new Set<ManualType>(["adjustment", "loss"]);
 const WITH_SUPPLIER = new Set<ManualType>(["purchase_in", "supplier_return_out"]);
 
 type Errors = Partial<Record<"product" | "qty" | "unitCost" | "note" | "form", string>>;
@@ -79,9 +75,9 @@ async function searchSuppliers(text: string): Promise<Supplier[]> {
 }
 
 /**
- * Mouvement manuel (réservé au gérant). Le front guide — sens imposé par le type, coût et
- * motif demandés quand la règle les exige — mais c'est le serveur qui tranche, et ses refus
- * (stock insuffisant, antidatage, stock initial déjà saisi…) s'affichent ici.
+ * Entrée ou retour au fournisseur (réservé au gérant). Le front guide — sens imposé par le
+ * type, coût demandé quand la règle l'exige — mais c'est le serveur qui tranche, et ses
+ * refus (stock insuffisant, antidatage, stock initial déjà saisi…) s'affichent ici.
  */
 export function MovementDialog({
   open,
@@ -99,7 +95,6 @@ export function MovementDialog({
   const idempotency = useIdempotencyKey();
   const [picked, setPicked] = useState<MovementProduct | null>(null);
   const [type, setType] = useState<ManualType>(defaultType);
-  const [direction, setDirection] = useState<"in" | "out">("out");
   const [qty, setQty] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [supplier, setSupplier] = useState<Supplier | null>(null);
@@ -111,15 +106,13 @@ export function MovementDialog({
   const stock = useStockFor(product ? [product.id] : []);
   const current = product ? stock.data?.get(product.id) : undefined;
 
-  const outflow = type === "adjustment" ? direction === "out" : OUTFLOWS.has(type);
+  const outflow = OUTFLOWS.has(type);
   const showCost = !outflow;
   const costRequired = COST_REQUIRED.has(type);
-  const noteRequired = NOTE_REQUIRED.has(type);
 
   const reset = () => {
     setPicked(null);
     setType(defaultType);
-    setDirection("out");
     setQty("");
     setUnitCost("");
     setSupplier(null);
@@ -168,7 +161,6 @@ export function MovementDialog({
     if (showCost && unitCost.trim() && parsedCost === null)
       next.unitCost = labels.sales.invalidNumber;
     if (showCost && costRequired && !unitCost.trim()) next.unitCost = labels.validation.required;
-    if (noteRequired && !note.trim()) next.note = labels.validation.required;
     setErrors(next);
     if (Object.keys(next).length > 0 || !product || parsedQty === null) return;
 
@@ -263,22 +255,6 @@ export function MovementDialog({
                 </SelectContent>
               </Select>
             </div>
-            {type === "adjustment" && (
-              <div className="space-y-1.5">
-                <Label id="direction-label">{labels.stock.form.direction}</Label>
-                <SegmentedControl
-                  aria-labelledby="direction-label"
-                  value={direction}
-                  onValueChange={setDirection}
-                  options={[
-                    { value: "in", label: labels.stock.form.increase },
-                    { value: "out", label: labels.stock.form.decrease },
-                  ]}
-                  className="grid w-full"
-                  itemClassName="px-2"
-                />
-              </div>
-            )}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -342,9 +318,7 @@ export function MovementDialog({
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="movement-note">
-              {noteRequired ? labels.stock.form.noteRequired : labels.stock.form.note}
-            </Label>
+            <Label htmlFor="movement-note">{labels.stock.form.note}</Label>
             <Textarea
               id="movement-note"
               value={note}

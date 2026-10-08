@@ -12,25 +12,22 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 }
 
-test("fiche fournisseur : délai de paiement, charges et dettes", async ({ page, request }) => {
+test("ajouter un fournisseur ; sa fiche montre charges et dettes", async ({ page, request }) => {
   const client = await managerApi(request);
   const marker = crypto.randomUUID().slice(0, 6);
   const name = `Grossiste ${marker}`;
   await login(page);
 
   await page.goto("/suppliers");
-  await page.getByRole("button", { name: "Nouveau fournisseur" }).click();
+  await page.getByRole("button", { name: "Ajouter une personne" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Nom", { exact: true }).fill(name);
-  // Hors bornes : refusé avant tout envoi, près du champ.
-  await dialog.getByLabel("Délai de paiement en jours (facultatif)").fill("400");
-  await dialog.getByRole("button", { name: "Enregistrer" }).click();
-  await expect(dialog.getByText("Un nombre entier de jours, de 0 à 365.")).toBeVisible();
-  await dialog.getByLabel("Délai de paiement en jours (facultatif)").fill("30");
-  await dialog.getByRole("button", { name: "Enregistrer" }).click();
+  // La liste des fournisseurs ouvre le formulaire sur « Un fournisseur » ; plus de délai.
+  await expect(dialog.getByRole("radio", { name: "Un fournisseur" })).toBeChecked();
+  await dialog.getByLabel("Nom du fournisseur").fill(name);
+  await dialog.getByRole("button", { name: "Enregistrer le fournisseur" }).click();
 
   await expect(page).toHaveURL(/\/suppliers\/[0-9a-f-]+$/);
-  await expect(page.getByText("30 jours")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
   const supplierId = page.url().split("/").pop()!;
 
   // Une charge et une dette rattachées, saisies par l'API.
@@ -66,7 +63,7 @@ test("fiche fournisseur : délai de paiement, charges et dettes", async ({ page,
 
   await page.goto("/suppliers");
   await expect(page.getByText(/\d+ fournisseurs?/)).toBeVisible();
-  await expect(page.getByRole("row").filter({ hasText: name })).toContainText("30 jours");
+  await expect(page.getByRole("row").filter({ hasText: name })).toBeVisible();
   await page.screenshot({
     path: `${CAPTURES}/fournisseurs.png`,
     fullPage: true,

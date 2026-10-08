@@ -69,10 +69,9 @@ test("B2 — une dette encaissée fait passer la vente à « Payé »", async ({
     .getByRole("button", { name: "Régler" })
     .click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Montant versé").fill("2000");
-  await dialog.getByRole("button", { name: "Répartir" }).click();
-  await dialog.getByRole("button", { name: "Enregistrer le règlement" }).click();
-  await expect(page.getByText("Règlement enregistré.")).toBeVisible();
+  await dialog.getByLabel("Combien il paie ?").fill("2000");
+  await dialog.getByRole("button", { name: "Encaisser" }).click();
+  await expect(page.getByText("Dette encaissée.")).toBeVisible();
 
   await page.goto(`/sales?search=${encodeURIComponent(sale.sale_no)}`);
   const row = page.getByRole("row", { name: new RegExp(customer.name) });

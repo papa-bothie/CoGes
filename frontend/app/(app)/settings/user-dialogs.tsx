@@ -169,7 +169,6 @@ export function CreateUserDialog({
               onChange={(event) => setPassword(event.target.value)}
               className="h-9"
             />
-            <p className="text-xs text-muted-foreground">{t.passwordHint}</p>
             <FieldError message={errors.password} />
           </div>
           <RoleChoices roles={roles} selected={selected} onChange={setSelected} />

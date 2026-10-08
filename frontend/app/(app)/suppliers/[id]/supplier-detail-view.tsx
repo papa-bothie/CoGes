@@ -27,7 +27,7 @@ import { queryKeys } from "@/lib/api/queries/keys";
 import { formatDate } from "@/lib/format";
 import { labels } from "@/lib/labels";
 
-import { SupplierFormDialog } from "../supplier-form-dialog";
+import { PersonFormDialog } from "@/components/people/person-form-dialog";
 
 export function SupplierDetailView({ supplierId }: { supplierId: string }) {
   const { timeZone } = useCompanyLocale();
@@ -59,7 +59,6 @@ export function SupplierDetailView({ supplierId }: { supplierId: string }) {
       </Link>
       <PageHeader
         title={data.name}
-        count={data.code && <span className="numeric">{data.code}</span>}
         actions={
           <Can permission="suppliers:update">
             <Button variant="outline" onClick={() => setEditing(true)}>
@@ -88,24 +87,31 @@ export function SupplierDetailView({ supplierId }: { supplierId: string }) {
             <CardTitle>{labels.suppliers.contact}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <Row label={labels.suppliers.terms}>
-              <span className="font-semibold">
-                {data.payment_terms_days === null
-                  ? labels.suppliers.noTerms
-                  : labels.suppliers.termsDays(data.payment_terms_days)}
-              </span>
-            </Row>
             <Row label={labels.suppliers.phone}>
               <span className="numeric">{data.phone ?? "—"}</span>
             </Row>
             <Row label={labels.suppliers.since}>
               <span className="numeric">{formatDate(data.created_at, timeZone)}</span>
             </Row>
+            {/* Plus saisi depuis le lot 1 ; un délai posé avant reste visible. */}
+            {data.payment_terms_days !== null && (
+              <Row label={labels.suppliers.terms}>
+                <span className="font-semibold">
+                  {labels.suppliers.termsDays(data.payment_terms_days)}
+                </span>
+              </Row>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      <SupplierFormDialog supplier={data} open={editing} onOpenChange={setEditing} />
+      <PersonFormDialog
+        key={String(editing)}
+        kind="supplier"
+        person={data}
+        open={editing}
+        onOpenChange={setEditing}
+      />
     </>
   );
 }

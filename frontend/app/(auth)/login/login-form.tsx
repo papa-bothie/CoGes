@@ -115,7 +115,6 @@ export function LoginForm() {
       <Field
         id="company_slug"
         label={labels.login.companySlug}
-        hint={labels.login.companySlugHint}
         error={errors.company_slug?.message}
       >
         <Input
@@ -124,7 +123,7 @@ export function LoginForm() {
           autoCapitalize="none"
           spellCheck={false}
           aria-invalid={Boolean(errors.company_slug)}
-          aria-describedby="company_slug-hint company_slug-error"
+          aria-describedby="company_slug-error"
           {...register("company_slug")}
         />
       </Field>
@@ -161,13 +160,11 @@ export function LoginForm() {
 function Field({
   id,
   label,
-  hint,
   error,
   children,
 }: {
   id: string;
   label: string;
-  hint?: string;
   error?: string;
   children: React.ReactNode;
 }) {
@@ -175,11 +172,6 @@ function Field({
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
       {children}
-      {hint && !error && (
-        <p id={`${id}-hint`} className="text-xs text-muted-foreground">
-          {hint}
-        </p>
-      )}
       {error && (
         <p id={`${id}-error`} className="text-xs text-danger-ink">
           {error}
