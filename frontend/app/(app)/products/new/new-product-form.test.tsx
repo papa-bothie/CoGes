@@ -78,7 +78,7 @@ describe("Nouvel article", { timeout: 15_000 }, () => {
         category_id: "cereales",
         barcode: null,
         is_stock_tracked: true,
-        default_tax_rate: "0",
+        default_tax_rate: null,
         opening_qty: "12",
         reorder_point: "3",
       },

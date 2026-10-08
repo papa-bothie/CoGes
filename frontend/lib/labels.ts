@@ -963,6 +963,8 @@ export const labels = {
       off: "désactivé",
       none: "aucun",
       invalidThreshold: "Un nombre positif, trois décimales au plus.",
+      defaultTax: "TVA des nouveaux articles (%)",
+      invalidTax: "Un taux de 0 à moins de 100 %.",
     },
     users: {
       count: (count: number) => `${count} utilisateur${count > 1 ? "s" : ""}`,

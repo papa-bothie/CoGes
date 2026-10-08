@@ -133,7 +133,8 @@ class ProductCreate(BaseModel):
     barcode: Barcode | None = None
     category_id: UUID | None = None
     is_stock_tracked: bool = True
-    default_tax_rate: TaxRate = Decimal("0")
+    #: Omis ou nul : le taux par défaut de l'entreprise, 0 sans réglage (ADR 0066).
+    default_tax_rate: TaxRate | None = None
     reorder_point: ReorderPoint | None = None
     unit_price: SellingPrice
     cost_price: CostPrice | None = None

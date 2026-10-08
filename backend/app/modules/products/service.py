@@ -257,6 +257,7 @@ def _add_with_codes(
     repository: ProductRepository,
     payload: ProductCreate,
     reorder_point: Decimal | None,
+    tax_rate: Decimal,
 ) -> Product:
     """Ajoute la fiche avec sa référence et son code-barres, attribués s'ils manquent.
 
@@ -278,7 +279,7 @@ def _add_with_codes(
                 name=payload.name,
                 unit=payload.unit,
                 is_stock_tracked=payload.is_stock_tracked,
-                default_tax_rate=payload.default_tax_rate,
+                default_tax_rate=tax_rate,
                 reorder_point=reorder_point,
                 is_active=True,
             )
@@ -326,7 +327,11 @@ def create_product(
     if reorder_point is None and payload.is_stock_tracked:
         reorder_point = companies_service.default_reorder_point(session, ctx)
 
-    product = _add_with_codes(session, ctx, repository, payload, reorder_point)
+    tax_rate = payload.default_tax_rate
+    if tax_rate is None:
+        tax_rate = companies_service.default_tax_rate(session, ctx)
+
+    product = _add_with_codes(session, ctx, repository, payload, reorder_point, tax_rate)
 
     price = ProductPriceRepository(session, ctx).add(
         ProductPrice(

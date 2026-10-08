@@ -15,6 +15,29 @@ BOOLEAN_SETTINGS = ("tax_enabled", "intelligence_enabled")
 DEFAULT_REORDER_POINT = "default_reorder_point"
 #: Même borne que `products.reorder_point` : `numeric(14,3)`.
 _MAX_REORDER = Decimal("99999999999.999")
+#: Taux de TVA appliqué à un article créé sans taux (ADR 0066, complément).
+DEFAULT_TAX_RATE = "default_tax_rate"
+
+
+def _checked_tax_rate(value: Any) -> str | None:
+    if value is None:
+        return None
+    # Chaîne décimale seulement, comme `products.default_tax_rate` (`numeric(6,4)`).
+    if not isinstance(value, str):
+        raise ValueError('Le taux par défaut s\'envoie en chaîne décimale, par exemple "0.18".')
+    try:
+        rate = Decimal(value)
+    except InvalidOperation as exc:
+        raise ValueError("Taux par défaut illisible.") from exc
+    exponent = rate.as_tuple().exponent
+    if (
+        not rate.is_finite()
+        or rate < 0
+        or rate >= 1
+        or (isinstance(exponent, int) and exponent < -4)
+    ):
+        raise ValueError("Taux par défaut : de 0 à moins de 1, quatre décimales au plus.")
+    return str(rate)
 
 
 def _checked_reorder_point(value: Any) -> str | None:
@@ -72,6 +95,8 @@ class CompanyUpdate(BaseModel):
         for key in BOOLEAN_SETTINGS:
             if key in self.settings and not isinstance(self.settings[key], bool):
                 raise ValueError(f"`{key}` doit valoir true ou false.")
+        if DEFAULT_TAX_RATE in self.settings:
+            self.settings[DEFAULT_TAX_RATE] = _checked_tax_rate(self.settings[DEFAULT_TAX_RATE])
         if DEFAULT_REORDER_POINT in self.settings:
             self.settings[DEFAULT_REORDER_POINT] = _checked_reorder_point(
                 self.settings[DEFAULT_REORDER_POINT]

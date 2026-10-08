@@ -42,9 +42,11 @@ Pour le stock d'ouverture :
   dans la même transaction. Il exige `products:create` **et** `inventory:create` (le gérant).
   Une quantité positive exige le prix d'achat, qui valorise le stock d'ouverture. La
   réponse porte l'article et le mouvement (`null` si la quantité est nulle).
-- **TVA à la création** : le formulaire ne la demande plus ; le produit garde le taux par
-  défaut du schéma (0). Aucun réglage d'entreprise ne porte de taux par défaut en V1 : le
-  gérant le change sur la fiche, dans « Plus d'infos ».
+- **TVA à la création** (choix du 2026-10-08) : le formulaire ne la demande plus.
+  `ProductCreate.default_tax_rate` omis ou nul prend le **taux par défaut de l'entreprise**,
+  nouveau réglage `settings.default_tax_rate` (chaîne décimale, de 0 à moins de 1, quatre
+  décimales au plus, vérifié comme `default_reorder_point`), 0 sans réglage. Un taux
+  envoyé, même 0, n'est jamais remplacé. Réglages → « TVA des nouveaux articles (%) ».
 - **Étiquette** : « Imprimer l'étiquette » sur la fiche article ouvre une page imprimable
   (code-barres EAN-13 dessiné en SVG par le front, nom, prix), sans service externe.
 
@@ -54,4 +56,7 @@ Pour le stock d'ouverture :
 - Tests : `test_product_codes.py` (compteur, EAN-13 valide et unique, par entreprise,
   création simultanée), `test_new_product_with_stock.py` (une transaction, prix d'achat
   exigé, 404 sur un rayon d'une autre entreprise, 403 pour un vendeur).
-- La photo d'article n'existe pas : question posée en fin de lot.
+- **Pas de photo d'article en V1** (choix du 2026-10-08) : il faudrait un stockage de
+  fichiers, peut-être payant. Le carré à initiale colorée en tient lieu ; noté dans
+  `ecarts.md`.
+- Tests : `test_default_tax_rate.py` (réglage appliqué, taux envoyé gardé, refus).

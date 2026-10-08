@@ -2738,8 +2738,7 @@ export interface components {
        * @default true
        */
       is_stock_tracked: boolean;
-      /** @default 0 */
-      default_tax_rate: components["schemas"]["TaxRate-Input"];
+      default_tax_rate?: components["schemas"]["TaxRate-Input"] | null;
       reorder_point?: components["schemas"]["ReorderPoint-Input"] | null;
       unit_price: components["schemas"]["SellingPrice-Input"];
       cost_price?: components["schemas"]["CostPrice-Input"] | null;
@@ -3029,8 +3028,7 @@ export interface components {
        * @default true
        */
       is_stock_tracked: boolean;
-      /** @default 0 */
-      default_tax_rate: components["schemas"]["TaxRate-Input"];
+      default_tax_rate?: components["schemas"]["TaxRate-Input"] | null;
       reorder_point?: components["schemas"]["ReorderPoint-Input"] | null;
       unit_price: components["schemas"]["SellingPrice-Input"];
       cost_price?: components["schemas"]["CostPrice-Input"] | null;

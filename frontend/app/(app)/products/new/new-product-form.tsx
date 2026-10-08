@@ -56,7 +56,7 @@ export function marginLine(
 
 /**
  * Nouvel article (lot 1, maquette 09) : seulement ce que le commerçant sait. La référence
- * et le code-barres sont générés par le serveur (ADR 0066), la TVA est celle par défaut, le
+ * et le code-barres sont générés par le serveur (ADR 0066), la TVA est celle des réglages, le
  * stock toujours suivi. L'article et son stock d'ouverture naissent ensemble
  * (`POST /inventory/products`).
  */
@@ -127,9 +127,10 @@ export function NewProductForm() {
       cost_price: typedAmount(cost) > 0n ? cost : null,
       category_id: categoryId,
       barcode,
-      // Toujours suivi, TVA par défaut (0) : la fiche les change dans « Plus d'infos ».
+      // Toujours suivi ; TVA nulle = celle des réglages de l'entreprise (ADR 0066). La
+      // fiche les change dans « Plus d'infos ».
       is_stock_tracked: true,
-      default_tax_rate: "0",
+      default_tax_rate: null,
       opening_qty: opening,
       reorder_point: warnAt.trim() ? parseDecimalInput(warnAt) : null,
     });

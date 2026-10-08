@@ -8456,8 +8456,14 @@
             "default": true
           },
           "default_tax_rate": {
-            "$ref": "#/components/schemas/TaxRate-Input",
-            "default": "0"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxRate-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "reorder_point": {
             "anyOf": [
@@ -9245,8 +9251,14 @@
             "default": true
           },
           "default_tax_rate": {
-            "$ref": "#/components/schemas/TaxRate-Input",
-            "default": "0"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxRate-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "reorder_point": {
             "anyOf": [
