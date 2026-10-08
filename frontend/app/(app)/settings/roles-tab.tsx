@@ -334,7 +334,6 @@ function CreateRoleDialog({
               onChange={(event) => setName(event.target.value)}
               className="h-9"
             />
-            <p className="text-xs text-muted-foreground">{t.nameHint}</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="role-description">{t.description}</Label>

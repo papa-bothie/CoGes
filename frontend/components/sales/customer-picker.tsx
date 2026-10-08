@@ -4,7 +4,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { Loader2, Plus, Search } from "lucide-react";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 
-import { CustomerFormDialog } from "@/components/customers/customer-form-dialog";
+import { PersonFormDialog } from "@/components/people/person-form-dialog";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -235,10 +235,11 @@ export function CustomerPicker({
           </div>
         </PopoverContent>
       </Popover>
-      <CustomerFormDialog
+      <PersonFormDialog
+        kind="customer"
         open={creating}
         onOpenChange={setCreating}
-        onSaved={(customer) => onSelect({ id: customer.id, name: customer.name })}
+        onSaved={(saved) => onSelect({ id: saved.person.id, name: saved.person.name })}
       />
     </>
   );

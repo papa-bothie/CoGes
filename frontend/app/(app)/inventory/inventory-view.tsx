@@ -1,9 +1,11 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { ClipboardCheck, PackagePlus, Truck } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { MovementDialog } from "@/components/inventory/movement-dialog";
+import { StockCorrectionDialog } from "@/components/inventory/stock-correction-dialog";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -20,7 +22,8 @@ type Tab = "current" | "journal";
 export function InventoryView() {
   const table = useTableParams();
   const tab: Tab = table.get("tab") === "journal" ? "journal" : "current";
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [receiving, setReceiving] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
   const [total, setTotal] = useState<number | null>(null);
 
   return (
@@ -30,10 +33,24 @@ export function InventoryView() {
         count={total === null ? undefined : labels.stock.count(total)}
         actions={
           <Can permission="inventory:create">
-            <Button onClick={() => setDialogOpen(true)}>
-              <Plus aria-hidden />
-              {labels.stock.newMovement}
-            </Button>
+            <div className="flex flex-wrap gap-2.5">
+              <Can permission="products:create">
+                <Button variant="secondaire" asChild>
+                  <Link href="/products/new">
+                    <PackagePlus aria-hidden />
+                    {labels.stock.newProduct}
+                  </Link>
+                </Button>
+              </Can>
+              <Button variant="secondaire" onClick={() => setReceiving(true)}>
+                <Truck aria-hidden />
+                {labels.stock.receive}
+              </Button>
+              <Button variant="stock" onClick={() => setCorrecting(true)}>
+                <ClipboardCheck aria-hidden />
+                {labels.stock.correction.open}
+              </Button>
+            </div>
           </Can>
         }
       />
@@ -55,7 +72,8 @@ export function InventoryView() {
           {tab === "journal" && <MovementJournal />}
         </TabsContent>
       </Tabs>
-      <MovementDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      <MovementDialog open={receiving} onOpenChange={setReceiving} defaultType="purchase_in" />
+      <StockCorrectionDialog open={correcting} onOpenChange={setCorrecting} />
     </>
   );
 }

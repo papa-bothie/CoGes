@@ -12,7 +12,7 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 }
 
-test("ajustement de stock avec motif obligatoire, puis correction", async ({ page, request }) => {
+test("corriger le stock avec une raison en tuile, puis l'annuler", async ({ page, request }) => {
   const client = await managerApi(request);
   const product = await stockedProduct(client, { stock: "10" });
   await login(page);
@@ -25,33 +25,28 @@ test("ajustement de stock avec motif obligatoire, puis correction", async ({ pag
   await expect(page.getByText(/\d+ articles? suivis?/)).toBeVisible({ timeout: 30_000 });
   await page.screenshot({ path: `${CAPTURES}/stock.png`, fullPage: true, animations: "disabled" });
 
-  await page.getByRole("button", { name: "Nouveau mouvement" }).click();
+  await page.getByRole("button", { name: "Corriger le stock" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog
-    .getByRole("combobox", { name: "Rechercher un article (nom ou SKU)" })
-    .fill(product.name);
-  await page.getByRole("option", { name: new RegExp(product.name) }).click();
-  await expect(dialog.getByText("Stock actuel : 10")).toBeVisible();
+  await dialog.getByLabel("Chercher un article").fill(product.name);
+  await dialog.getByRole("button", { name: new RegExp(product.name) }).click();
+  await expect(dialog.getByText("Le logiciel compte")).toContainText("10 pièces");
 
-  await dialog.getByRole("combobox", { name: "Type de mouvement" }).click();
-  await page.getByRole("option", { name: "Ajustement" }).click();
-  await dialog.getByRole("radio", { name: "Sortie (−)" }).click();
-  await dialog.getByLabel("Quantité").fill("3");
-
-  // Sans motif : refus avant tout envoi, près du champ.
-  await dialog.getByRole("button", { name: "Enregistrer le mouvement" }).click();
-  await expect(dialog.getByText("Ce champ est obligatoire.")).toBeVisible();
+  await dialog.getByRole("radio", { name: "Moins" }).click();
+  await dialog.getByLabel(`Quantité : ${product.name}`).fill("3");
+  await expect(dialog.getByRole("status")).toContainText("Après : 7 pièces");
+  // Sans raison, le bouton reste grisé : on ne tape jamais de motif.
+  const submit = dialog.getByRole("button", { name: "Valider la correction" });
+  await expect(submit).toBeDisabled();
   await page.screenshot({ path: `${CAPTURES}/mouvement-motif.png`, animations: "disabled" });
-
-  await dialog.getByLabel("Motif (obligatoire)").fill("Inventaire du 30/09 : 3 unités manquantes");
-  await dialog.getByRole("button", { name: "Enregistrer le mouvement" }).click();
-  await expect(page.getByText("Mouvement enregistré.")).toBeVisible();
+  await dialog.getByRole("radio", { name: "Erreur de comptage" }).click();
+  await submit.click();
+  await expect(page.getByText("Stock corrigé.")).toBeVisible();
   await expect(dialog).toBeHidden();
 
   const stock = await client.get(`/inventory/stock?product_id=${product.id}`);
   expect(stock.items[0].qty_on_hand).toBe("7.000");
 
-  // Journal filtré sur l'article : l'ajustement et son motif.
+  // Journal filtré sur l'article : l'ajustement et sa raison en toutes lettres.
   await page.getByRole("tab", { name: "Journal des mouvements" }).click();
   await page.getByRole("combobox", { name: "Filtrer par article" }).fill(product.name);
   await page.getByRole("option", { name: new RegExp(product.name) }).click();
@@ -59,7 +54,7 @@ test("ajustement de stock avec motif obligatoire, puis correction", async ({ pag
   await expect(page.getByText(/^2 éléments$/)).toBeVisible();
   const adjustment = page.getByRole("row").filter({ hasText: "Ajustement" });
   await expect(adjustment).toContainText("-3");
-  await expect(adjustment).toContainText("3 unités manquantes");
+  await expect(adjustment).toContainText("Erreur de comptage");
   await page.screenshot({
     path: `${CAPTURES}/journal.png`,
     fullPage: true,

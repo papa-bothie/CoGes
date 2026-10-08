@@ -76,6 +76,11 @@ _UNITS = {
     "metres": "metre",
     "paquet": "paquet",
     "paquets": "paquet",
+    "sac": "sac",
+    "sacs": "sac",
+    "bouteille": "bouteille",
+    "bouteilles": "bouteille",
+    "btl": "bouteille",
 }
 
 

@@ -602,6 +602,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/inventory/products": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create Product With Stock
+     * @description Crée un article et son stock d'ouverture dans la même transaction (ADR 0066).
+     *
+     *     Sans référence ni code-barres, le serveur attribue `ART-0001` et un EAN-13 interne.
+     *     Une quantité positive exige le prix d'achat, qui valorise le mouvement `initial`.
+     */
+    post: operations["create_product_with_stock_api_v1_inventory_products_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/inventory/movements/{movement_id}/reverse": {
     parameters: {
       query?: never;
@@ -2621,12 +2644,13 @@ export interface components {
        * Format: uuid
        */
       product_id: string;
-      type: components["schemas"]["ManualMovementType"];
+      type?: components["schemas"]["ManualMovementType"] | null;
       qty_delta: components["schemas"]["Quantity-Input"];
       unit_cost?: components["schemas"]["MovementUnitCost"] | null;
       /** Supplier Id */
       supplier_id?: string | null;
       note?: components["schemas"]["MovementNote"] | null;
+      reason_code?: components["schemas"]["StockReason"] | null;
       /** Occurred At */
       occurred_at?: string | null;
     };
@@ -2670,6 +2694,7 @@ export interface components {
       supplier_id: string | null;
       /** Note */
       note: string | null;
+      reason_code: components["schemas"]["StockReason"] | null;
       /**
        * Occurred At
        * Format: date-time
@@ -2693,6 +2718,38 @@ export interface components {
       | "adjustment"
       | "loss";
     MovementUnitCost: components["schemas"]["UnitCost-Input"];
+    /**
+     * NewProductCreate
+     * @description Un article et ce qu'on en a déjà (ADR 0066) : « Combien en avez-vous ? ».
+     *
+     *     Inventory compose la façade de Products : l'article et son mouvement `initial`
+     *     naissent dans la même transaction. Le stock d'ouverture est valorisé au prix d'achat.
+     */
+    NewProductCreate: {
+      sku?: components["schemas"]["Sku"] | null;
+      name: components["schemas"]["ProductName"];
+      /** @default piece */
+      unit: components["schemas"]["ProductUnit"];
+      barcode?: components["schemas"]["Barcode"] | null;
+      /** Category Id */
+      category_id?: string | null;
+      /**
+       * Is Stock Tracked
+       * @default true
+       */
+      is_stock_tracked: boolean;
+      default_tax_rate?: components["schemas"]["TaxRate-Input"] | null;
+      reorder_point?: components["schemas"]["ReorderPoint-Input"] | null;
+      unit_price: components["schemas"]["SellingPrice-Input"];
+      cost_price?: components["schemas"]["CostPrice-Input"] | null;
+      /** @default 0 */
+      opening_qty: components["schemas"]["Quantity-Input"];
+    };
+    /** NewProductRead */
+    NewProductRead: {
+      product: components["schemas"]["ProductRead"];
+      opening_movement: components["schemas"]["MovementRead"] | null;
+    };
     /**
      * NotificationPage
      * @description Page de fil d'alertes, les plus récentes d'abord.
@@ -2883,7 +2940,8 @@ export interface components {
       reversal_of_payment_id?: string | null;
     };
     /** @enum {string} */
-    PaymentMethod: "cash" | "mobile_money" | "bank_transfer" | "card" | "cheque";
+    PaymentMethod:
+      "cash" | "mobile_money" | "wave" | "orange_money" | "bank_transfer" | "card" | "cheque";
     /** PaymentPage */
     PaymentPage: {
       /** Items */
@@ -2958,7 +3016,7 @@ export interface components {
      *     Sales n'aurait rien à figer sur sa ligne (ADR 0011).
      */
     ProductCreate: {
-      sku: components["schemas"]["Sku"];
+      sku?: components["schemas"]["Sku"] | null;
       name: components["schemas"]["ProductName"];
       /** @default piece */
       unit: components["schemas"]["ProductUnit"];
@@ -2970,8 +3028,7 @@ export interface components {
        * @default true
        */
       is_stock_tracked: boolean;
-      /** @default 0 */
-      default_tax_rate: components["schemas"]["TaxRate-Input"];
+      default_tax_rate?: components["schemas"]["TaxRate-Input"] | null;
       reorder_point?: components["schemas"]["ReorderPoint-Input"] | null;
       unit_price: components["schemas"]["SellingPrice-Input"];
       cost_price?: components["schemas"]["CostPrice-Input"] | null;
@@ -3140,7 +3197,7 @@ export interface components {
       cost_price: components["schemas"]["CostPrice-Output"] | null;
     };
     /** @enum {string} */
-    ProductUnit: "piece" | "kg" | "litre" | "carton" | "metre" | "paquet";
+    ProductUnit: "piece" | "kg" | "litre" | "carton" | "metre" | "paquet" | "sac" | "bouteille";
     /**
      * ProductUpdate
      * @description Modification de la fiche. **Jamais** du prix : il a son propre endpoint.
@@ -3751,6 +3808,7 @@ export interface components {
       sku: string;
       /** Name */
       name: string;
+      unit: components["schemas"]["ProductUnit"];
       /** Category Id */
       category_id: string | null;
       /** Category Name */
@@ -3774,6 +3832,15 @@ export interface components {
       /** Total */
       total: number;
     };
+    /** @enum {string} */
+    StockReason:
+      | "damaged"
+      | "expired"
+      | "lost_or_stolen"
+      | "home_use"
+      | "count_error"
+      | "found"
+      | "supplier_gift";
     /** @enum {string} */
     StockStatus: "ok" | "low" | "out";
     StoredPaymentMethod: components["schemas"]["PaymentMethod"] | "offset";
@@ -5434,6 +5501,39 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["MovementRead"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  create_product_with_stock_api_v1_inventory_products_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["NewProductCreate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NewProductRead"];
         };
       };
       /** @description Validation Error */

@@ -128,7 +128,7 @@ def test_the_sku_is_upper_cased(api_client: TestClient, alpha_token: str) -> Non
 
 
 def test_an_unknown_unit_is_refused(api_client: TestClient, alpha_token: str) -> None:
-    """`unit` est limité aux 6 valeurs du CHECK du § 8.3."""
+    """`unit` est limité aux valeurs du CHECK : les 6 du § 8.3, plus sac et bouteille (0015)."""
     marker = _marker()
     response = api_client.post(
         "/api/v1/products",
@@ -136,7 +136,7 @@ def test_an_unknown_unit_is_refused(api_client: TestClient, alpha_token: str) ->
         json={
             "sku": f"SKU-{marker}",
             "name": "Unité inventée",
-            "unit": "sac",
+            "unit": "tonneau",
             "unit_price": "100.00",
         },
     )

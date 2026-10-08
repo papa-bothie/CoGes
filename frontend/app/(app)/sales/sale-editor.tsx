@@ -7,6 +7,10 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ErrorState } from "@/components/error-state";
+import { AmountField, AmountShortcuts } from "@/components/kit/amount-field";
+import { ChoiceGroup } from "@/components/kit/choice-group";
+import { PaymentAmount } from "@/components/kit/payment-amount";
+import { PaymentMethodChips } from "@/components/kit/payment-method-chips";
 import { FieldError } from "@/components/field-error";
 import { Money } from "@/components/money";
 import { PageHeader } from "@/components/page-header";
@@ -14,17 +18,9 @@ import { CustomerPicker, type PickedCustomer } from "@/components/sales/customer
 import { SearchCombobox } from "@/components/search-combobox";
 import { SaleStatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useCompanyLocale, useMe } from "@/hooks/use-me";
@@ -34,10 +30,19 @@ import { useIdempotencyKey } from "@/lib/api/idempotency";
 import { queryKeys } from "@/lib/api/queries/keys";
 import { useStockFor, type StockLine } from "@/lib/api/queries/stock";
 import type { Schemas } from "@/lib/api/schema";
-import { compareDecimal, parseDecimalInput } from "@/lib/decimal";
+import { compareDecimal } from "@/lib/decimal";
 import { formatMoney, formatQty } from "@/lib/format";
 import { dayEndIso } from "@/lib/format/zoned";
+import { formatAmount } from "@/lib/format/money";
 import { labels } from "@/lib/labels";
+import {
+  billShortcuts,
+  changeDue,
+  partPaymentCheck,
+  partShortcuts,
+  typedAmount,
+  wholeUnits,
+} from "@/lib/payment-amount";
 import { cn } from "@/lib/utils";
 
 import { SaleLineRow, type LineChange } from "./sale-line-row";
@@ -47,13 +52,6 @@ type Product = Schemas["ProductRead"];
 type PaymentMethod = Schemas["PaymentMethod"];
 type Mode = "full" | "partial" | "credit";
 
-const METHODS: readonly PaymentMethod[] = [
-  "cash",
-  "mobile_money",
-  "bank_transfer",
-  "card",
-  "cheque",
-];
 const MODES: readonly Mode[] = ["full", "partial", "credit"];
 
 /** Refus de la confirmation qui concernent le règlement plutôt qu'une ligne. */
@@ -104,6 +102,7 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("full");
   const [paidInput, setPaidInput] = useState("");
+  const [given, setGiven] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [dueDate, setDueDate] = useState("");
   const idempotency = useIdempotencyKey();
@@ -214,11 +213,16 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
     return short;
   }, [items, stock.data]);
 
+  const total = wholeUnits(data?.total);
+  // « Une partie » : de 1 F jusqu'au total exclu, message en direct (lot 1).
+  const partCheck = partPaymentCheck(paidInput, total, currency);
+  const change = changeDue(typedAmount(given), total);
+
   const paidAmount = (): string | null => {
     if (!data) return null;
     if (mode === "full") return data.total;
     if (mode === "credit") return "0";
-    return parseDecimalInput(paidInput);
+    return partCheck.ok ? paidInput : null;
   };
 
   const confirm = useMutation({
@@ -289,7 +293,12 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
   const customerId = saleId ? data?.customer_id : pendingCustomer?.id;
   const busy = mutating || sale.isFetching;
   const canConfirm =
-    Boolean(data) && items.length > 0 && shortProducts.size === 0 && !busy && !confirm.isPending;
+    Boolean(data) &&
+    items.length > 0 &&
+    shortProducts.size === 0 &&
+    !busy &&
+    !confirm.isPending &&
+    (mode !== "partial" || partCheck.ok);
 
   return (
     <>
@@ -485,53 +494,56 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
               <CardTitle>{labels.sales.settlement}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <SegmentedControl
-                aria-label={labels.sales.settlement}
+              <ChoiceGroup
+                label={labels.sales.customerPays}
                 value={mode}
                 onValueChange={(value) => {
                   setMode(value);
+                  setPaidInput("");
+                  setGiven("");
                   setSettlementError(null);
                 }}
-                options={MODES.map((value) => ({
+                choices={MODES.map((value) => ({
                   value,
                   label: labels.sales.settlementModes[value],
                 }))}
-                className="grid w-full"
-                itemClassName="px-2 py-1.5"
+                className="grid grid-cols-3"
               />
 
-              {mode === "partial" && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="paid-amount">{labels.sales.paidAmount}</Label>
-                  <Input
-                    id="paid-amount"
-                    inputMode="decimal"
-                    value={paidInput}
-                    onChange={(event) => setPaidInput(event.target.value)}
-                    className="h-9 text-right numeric"
+              {mode !== "credit" && <PaymentMethodChips value={method} onChange={setMethod} />}
+
+              {mode === "full" && method === "cash" && data && (
+                <div className="space-y-2.5">
+                  <p className="text-libelle">{labels.payment.customerGives}</p>
+                  <AmountShortcuts shortcuts={billShortcuts(total, currency)} onPick={setGiven} />
+                  <AmountField
+                    label={labels.payment.otherGiven}
+                    value={given}
+                    onChange={setGiven}
                   />
+                  {change !== null && (
+                    <p
+                      role="status"
+                      className="flex items-baseline justify-between rounded-champ bg-argent-teinte px-4 py-3 text-argent-encre"
+                    >
+                      <span className="text-libelle">{labels.payment.change}</span>
+                      <span className="text-chiffre numeric">
+                        {formatAmount(change.toString(), currency)}
+                      </span>
+                    </p>
+                  )}
                 </div>
               )}
 
-              {mode !== "credit" && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="payment-method">{labels.sales.method}</Label>
-                  <Select
-                    value={method}
-                    onValueChange={(value) => setMethod(value as PaymentMethod)}
-                  >
-                    <SelectTrigger id="payment-method" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {METHODS.map((value) => (
-                        <SelectItem key={value} value={value}>
-                          {labels.paymentMethods[value]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              {mode === "partial" && (
+                <PaymentAmount
+                  id="paid-amount"
+                  label={labels.payment.givesNow}
+                  value={paidInput}
+                  onChange={setPaidInput}
+                  shortcuts={partShortcuts(total, currency)}
+                  check={partCheck}
+                />
               )}
 
               {mode !== "full" && (

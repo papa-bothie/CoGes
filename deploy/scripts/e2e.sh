@@ -62,6 +62,20 @@ redis=${COGES_REDIS_URL:-redis://localhost:6379/0}
 [[ "$redis" =~ /[0-9]+$ ]] && redis=${redis%/*}
 export COGES_REDIS_URL="$redis/1"
 
+# Front Next en mode développement, arrêté avec ses enfants. `pnpm exec next dev` laissait
+# un `next-server` orphelin qui gardait la sortie ouverte : Playwright attendait sa
+# fermeture sans fin à la fin de la suite. Ici, le script attend `next` et, au signal de
+# Playwright, termine `next` et ses processus enfants.
+run_front() {
+  local dist=$1 api_port=$2 port=$3
+  cd frontend
+  COGES_NEXT_DIST_DIR=$dist COGES_API_URL="http://localhost:$api_port" \
+    ./node_modules/.bin/next dev --port "$port" &
+  local next_pid=$!
+  trap 'pkill -TERM -P "$next_pid" 2>/dev/null; kill -TERM "$next_pid" 2>/dev/null' TERM INT EXIT
+  wait "$next_pid"
+}
+
 case "${1:-}" in
   reset)
     echo "e2e : recréation de la base $E2E_DB"
@@ -109,9 +123,7 @@ SQL
     exec uv run --directory backend uvicorn app.main:app --port "$MAQUETTE_API_PORT"
     ;;
   maquette-front)
-    cd frontend
-    COGES_NEXT_DIST_DIR=.next-maquette COGES_API_URL="http://localhost:$MAQUETTE_API_PORT" \
-      exec pnpm exec next dev --port "$MAQUETTE_FRONT_PORT"
+    run_front .next-maquette "$MAQUETTE_API_PORT" "$MAQUETTE_FRONT_PORT"
     ;;
   api)
     # Limite à 0 = désactivée (app/core/rate_limit.py) : une suite enchaîne des dizaines de
@@ -124,9 +136,7 @@ SQL
   front)
     # Répertoire de build distinct : le front de développement (:3000, .next) continue de
     # tourner à côté sans conflit.
-    cd frontend
-    COGES_NEXT_DIST_DIR=.next-e2e COGES_API_URL="http://localhost:$E2E_API_PORT" \
-      exec pnpm exec next dev --port "$E2E_FRONT_PORT"
+    run_front .next-e2e "$E2E_API_PORT" "$E2E_FRONT_PORT"
     ;;
   *)
     die "usage : $0 reset|api|front|maquette|maquette-api|maquette-front"

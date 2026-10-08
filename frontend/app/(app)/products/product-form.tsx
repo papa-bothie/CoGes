@@ -11,7 +11,7 @@ import { z } from "zod";
 
 import { FieldError } from "@/components/field-error";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -38,7 +38,16 @@ import { labels } from "@/lib/labels";
 type Product = Schemas["ProductRead"];
 type Unit = Schemas["ProductUnit"];
 
-const UNITS: readonly Unit[] = ["piece", "kg", "litre", "carton", "metre", "paquet"];
+const UNITS: readonly Unit[] = [
+  "piece",
+  "sac",
+  "kg",
+  "litre",
+  "carton",
+  "paquet",
+  "bouteille",
+  "metre",
+];
 const NONE = "none";
 
 const decimal = (message: string) =>
@@ -61,8 +70,6 @@ const schema = z.object({
     return rate !== null && compareDecimal(rate, "1") === -1;
   }, labels.sales.invalidNumber),
   reorder_point: optionalDecimal(labels.sales.invalidNumber),
-  unit_price: z.string(),
-  cost_price: optionalDecimal(labels.sales.invalidNumber),
 });
 type Values = z.infer<typeof schema>;
 
@@ -73,16 +80,16 @@ const FIELD_CODES: Record<string, keyof Values> = {
 };
 
 /**
- * Création et modification d'un produit. Le prix n'est saisi qu'à la création : ensuite,
- * il se change depuis la fiche, chaque changement étant historisé (ADR 0011).
+ * Modification d'un article. La création a son formulaire court (`new/new-product-form`,
+ * lot 1) ; le prix se change depuis la fiche, chaque changement étant historisé (ADR 0011).
+ * Référence, code-barres, TVA, suivi et état attendent dans « Plus d'infos », fermé.
  */
-export function ProductForm({ product }: { product?: Product }) {
+export function ProductForm({ product }: { product: Product }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const categories = useCategories();
   const tree = useMemo(() => flattenTree(categories.data ?? []), [categories.data]);
   const [formError, setFormError] = useState<string | null>(null);
-  const creating = !product;
 
   const {
     register,
@@ -91,26 +98,17 @@ export function ProductForm({ product }: { product?: Product }) {
     setError,
     formState: { errors },
   } = useForm<Values>({
-    resolver: zodResolver(
-      creating
-        ? schema.refine((values) => parseDecimalInput(values.unit_price) !== null, {
-            path: ["unit_price"],
-            message: labels.validation.required,
-          })
-        : schema,
-    ),
+    resolver: zodResolver(schema),
     defaultValues: {
-      name: product?.name ?? "",
-      sku: product?.sku ?? "",
-      barcode: product?.barcode ?? "",
-      category_id: product?.category_id ?? NONE,
-      unit: product?.unit ?? "piece",
-      is_stock_tracked: product?.is_stock_tracked ?? true,
-      is_active: product?.is_active ?? true,
-      tax_percent: product ? rateToPercent(product.default_tax_rate) : "18",
-      reorder_point: product?.reorder_point ? toInputDecimal(product.reorder_point) : "",
-      unit_price: "",
-      cost_price: "",
+      name: product.name,
+      sku: product.sku,
+      barcode: product.barcode ?? "",
+      category_id: product.category_id ?? NONE,
+      unit: product.unit,
+      is_stock_tracked: product.is_stock_tracked,
+      is_active: product.is_active,
+      tax_percent: rateToPercent(product.default_tax_rate),
+      reorder_point: product.reorder_point ? toInputDecimal(product.reorder_point) : "",
     },
   });
 
@@ -127,17 +125,6 @@ export function ProductForm({ product }: { product?: Product }) {
         default_tax_rate: percentToRate(values.tax_percent) ?? "0",
         reorder_point: values.reorder_point.trim() ? parseDecimalInput(values.reorder_point) : null,
       };
-      if (!product) {
-        return unwrap(
-          api.POST("/api/v1/products", {
-            body: {
-              ...common,
-              unit_price: parseDecimalInput(values.unit_price) ?? "0",
-              cost_price: values.cost_price.trim() ? parseDecimalInput(values.cost_price) : null,
-            },
-          }),
-        );
-      }
       return unwrap(
         api.PATCH("/api/v1/products/{product_id}", {
           params: { path: { product_id: product.id } },
@@ -150,7 +137,7 @@ export function ProductForm({ product }: { product?: Product }) {
       for (const key of [queryKeys.products.all, queryKeys.stock.all]) {
         void queryClient.invalidateQueries({ queryKey: key });
       }
-      toast.success(creating ? labels.products.created : labels.products.saved);
+      toast.success(labels.products.saved);
       router.push(`/products/${saved.id}`);
     },
     onError: (error) => {
@@ -185,12 +172,6 @@ export function ProductForm({ product }: { product?: Product }) {
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Field id="name" label={labels.products.name} error={errors.name?.message} wide>
             <Input id="name" aria-invalid={Boolean(errors.name)} {...register("name")} />
-          </Field>
-          <Field id="sku" label={labels.products.sku} error={errors.sku?.message}>
-            <Input id="sku" aria-invalid={Boolean(errors.sku)} {...register("sku")} />
-          </Field>
-          <Field id="barcode" label={labels.products.barcode} error={errors.barcode?.message}>
-            <Input id="barcode" aria-invalid={Boolean(errors.barcode)} {...register("barcode")} />
           </Field>
           <Field id="category" label={labels.products.category}>
             <Controller
@@ -233,15 +214,6 @@ export function ProductForm({ product }: { product?: Product }) {
               )}
             />
           </Field>
-          <Field id="tax" label={labels.products.taxPercent} error={errors.tax_percent?.message}>
-            <Input
-              id="tax"
-              inputMode="decimal"
-              aria-invalid={Boolean(errors.tax_percent)}
-              className="text-right numeric"
-              {...register("tax_percent")}
-            />
-          </Field>
           <Field
             id="reorder"
             label={labels.products.reorderLabel}
@@ -255,54 +227,57 @@ export function ProductForm({ product }: { product?: Product }) {
               {...register("reorder_point")}
             />
           </Field>
-          <label className="flex items-center gap-2 text-sm sm:col-span-2">
-            <input
-              type="checkbox"
-              className="size-4 accent-primary"
-              {...register("is_stock_tracked")}
-            />
-            {labels.products.trackedLabel}
-          </label>
-          {!creating && (
-            <label className="flex items-center gap-2 text-sm sm:col-span-2">
-              <input type="checkbox" className="size-4 accent-primary" {...register("is_active")} />
-              {labels.products.activeLabel}
-            </label>
-          )}
+          <details
+            className="rounded-champ border-2 border-input px-4 py-3 sm:col-span-2"
+            open={Boolean(errors.sku || errors.barcode || errors.tax_percent) || undefined}
+          >
+            <summary className="min-h-cible cursor-pointer content-center text-libelle">
+              {labels.products.moreInfo}
+            </summary>
+            <div className="grid gap-4 pt-3 sm:grid-cols-2">
+              <Field id="sku" label={labels.products.sku} error={errors.sku?.message}>
+                <Input id="sku" aria-invalid={Boolean(errors.sku)} {...register("sku")} />
+              </Field>
+              <Field id="barcode" label={labels.products.barcode} error={errors.barcode?.message}>
+                <Input
+                  id="barcode"
+                  aria-invalid={Boolean(errors.barcode)}
+                  {...register("barcode")}
+                />
+              </Field>
+              <Field
+                id="tax"
+                label={labels.products.taxPercent}
+                error={errors.tax_percent?.message}
+              >
+                <Input
+                  id="tax"
+                  inputMode="decimal"
+                  aria-invalid={Boolean(errors.tax_percent)}
+                  className="text-right numeric"
+                  {...register("tax_percent")}
+                />
+              </Field>
+              <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  {...register("is_stock_tracked")}
+                />
+                {labels.products.trackedLabel}
+              </label>
+              <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  {...register("is_active")}
+                />
+                {labels.products.activeLabel}
+              </label>
+            </div>
+          </details>
         </CardContent>
       </Card>
-
-      {creating && (
-        <Card>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <CardDescription className="sm:col-span-2">
-              {labels.products.priceOnCreate}
-            </CardDescription>
-            <Field id="price" label={labels.products.unitPrice} error={errors.unit_price?.message}>
-              <Input
-                id="price"
-                inputMode="decimal"
-                aria-invalid={Boolean(errors.unit_price)}
-                className="text-right numeric"
-                {...register("unit_price")}
-              />
-            </Field>
-            <Field
-              id="cost"
-              label={labels.products.costPriceLabel}
-              error={errors.cost_price?.message}
-            >
-              <Input
-                id="cost"
-                inputMode="decimal"
-                aria-invalid={Boolean(errors.cost_price)}
-                className="text-right numeric"
-                {...register("cost_price")}
-              />
-            </Field>
-          </CardContent>
-        </Card>
-      )}
 
       <div className="flex flex-wrap items-center justify-end gap-3">
         <FieldError message={formError} />
@@ -311,7 +286,7 @@ export function ProductForm({ product }: { product?: Product }) {
         </Button>
         <Button type="submit" disabled={save.isPending}>
           {save.isPending && <Loader2 className="animate-spin" aria-hidden />}
-          {creating ? labels.products.create : labels.products.save}
+          {labels.products.save}
         </Button>
       </div>
     </form>

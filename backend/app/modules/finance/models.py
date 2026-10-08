@@ -24,6 +24,9 @@ PAY_METHOD = PG_ENUM(
     # Révision 0008 : marque d'une écriture **sans flux de caisse** (compensation
     # d'une dette par un retour), et non un sixième moyen de payer (ADR 0024).
     "offset",
+    # Révision 0015 : l'opérateur de mobile money (ADR 0068).
+    "wave",
+    "orange_money",
     name="pay_method",
     create_type=False,
 )

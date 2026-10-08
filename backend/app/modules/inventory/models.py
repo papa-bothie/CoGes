@@ -36,6 +36,19 @@ MOVEMENT_TYPE = PG_ENUM(
     create_type=False,
 )
 
+#: Raison d'une correction de stock (révision 0015, ADR 0067).
+STOCK_REASON = PG_ENUM(
+    "damaged",
+    "expired",
+    "lost_or_stolen",
+    "home_use",
+    "count_error",
+    "found",
+    "supplier_gift",
+    name="stock_reason",
+    create_type=False,
+)
+
 
 class InventoryMovement(IdentifiedTenantBase):
     """Une ligne du journal de stock. Écrite une fois, jamais modifiée."""
@@ -55,6 +68,7 @@ class InventoryMovement(IdentifiedTenantBase):
     )
     supplier_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reason_code: Mapped[str | None] = mapped_column(STOCK_REASON, nullable=True)
     #: Date **métier** du mouvement, qui fixe l'ordre canonique du recalcul (§ 5.7).
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
     created_by: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)

@@ -178,7 +178,12 @@ export function MovementJournal() {
       header: labels.stock.journal.note,
       className: "max-w-64",
       cell: (movement) => (
-        <span className="line-clamp-2 text-sm text-muted-foreground">{movement.note ?? "—"}</span>
+        <span className="line-clamp-2 text-sm text-muted-foreground">
+          {/* La raison en toutes lettres (ADR 0067) ; le motif écrit des mouvements d'avant. */}
+          {movement.reason_code
+            ? labels.stock.reasons[movement.reason_code]
+            : (movement.note ?? "—")}
+        </span>
       ),
     },
     {

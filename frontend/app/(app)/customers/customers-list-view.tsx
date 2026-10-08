@@ -7,10 +7,8 @@ import { useState } from "react";
 
 import { DataTable, type Column } from "@/components/data-table";
 import { ErrorState } from "@/components/error-state";
-import { Money } from "@/components/money";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { useCompanyLocale } from "@/hooks/use-me";
 import { Can } from "@/hooks/use-permission";
 import { useTableParams } from "@/hooks/use-table-params";
 import { api, unwrap } from "@/lib/api/client";
@@ -18,14 +16,13 @@ import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
 import { labels } from "@/lib/labels";
 
-import { CustomerFormDialog } from "@/components/customers/customer-form-dialog";
+import { PersonFormDialog } from "@/components/people/person-form-dialog";
 
 type Customer = Schemas["CustomerRead"];
 
 export function CustomersListView() {
   const router = useRouter();
   const table = useTableParams();
-  const { currency } = useCompanyLocale();
   const [creating, setCreating] = useState(false);
   const params = {
     page: table.page,
@@ -39,11 +36,6 @@ export function CustomersListView() {
   });
 
   const columns: Column<Customer>[] = [
-    {
-      id: "code",
-      header: labels.customers.columns.code,
-      cell: (customer) => <span className="numeric">{customer.code ?? "—"}</span>,
-    },
     {
       id: "name",
       header: labels.customers.columns.name,
@@ -59,17 +51,6 @@ export function CustomersListView() {
       header: labels.customers.columns.email,
       cell: (customer) => customer.email ?? <span className="text-muted-foreground">—</span>,
     },
-    {
-      id: "limit",
-      header: labels.customers.columns.creditLimit,
-      numeric: true,
-      cell: (customer) =>
-        customer.credit_limit ? (
-          <Money value={customer.credit_limit} currency={currency} />
-        ) : (
-          <span className="text-muted-foreground">{labels.customers.noLimit}</span>
-        ),
-    },
   ];
 
   return (
@@ -81,7 +62,7 @@ export function CustomersListView() {
           <Can permission="customers:create">
             <Button onClick={() => setCreating(true)}>
               <Plus aria-hidden />
-              {labels.customers.add}
+              {labels.people.add}
             </Button>
           </Can>
         }
@@ -108,10 +89,15 @@ export function CustomersListView() {
           }}
         />
       )}
-      <CustomerFormDialog
+      <PersonFormDialog
         open={creating}
         onOpenChange={setCreating}
-        onSaved={(customer) => router.push(`/customers/${customer.id}`)}
+        initialKind="customer"
+        onSaved={(saved) =>
+          router.push(
+            `/${saved.kind === "customer" ? "customers" : "suppliers"}/${saved.person.id}`,
+          )
+        }
       />
     </>
   );

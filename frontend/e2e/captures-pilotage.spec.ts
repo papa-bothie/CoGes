@@ -49,9 +49,7 @@ test.describe("captures du pilotage", () => {
         // règlement réparti part des créances clients encore ouvertes.
         await page.goto("/finance?tab=debts&party=customer&status=open");
         await page.getByRole("button", { name: "Régler" }).first().click();
-        await page.getByRole("button", { name: "Répartir" }).waitFor();
-        await page.getByLabel("Montant versé").fill("30000");
-        await page.getByRole("button", { name: "Répartir" }).click();
+        await page.getByLabel("Combien il paie ?").fill("30000");
         await shoot(page, "finance-reglement-reparti");
         await page.keyboard.press("Escape");
       }

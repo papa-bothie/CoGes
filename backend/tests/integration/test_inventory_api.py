@@ -104,22 +104,6 @@ def test_sale_flow_types_are_not_reachable_from_the_api(
     assert response.json()["error"]["code"] == "validation_failed"
 
 
-@pytest.mark.parametrize("movement_type", ["adjustment", "loss"])
-def test_adjustment_and_loss_require_a_reason(
-    api_client: TestClient, alpha_token: str, movement_type: str
-) -> None:
-    """Sans motif écrit, pas d'écriture de stock hors flux métier."""
-    product_id = _make_product(api_client, alpha_token)
-    assert _record(api_client, alpha_token, product_id).status_code == 201
-
-    response = _record(
-        api_client, alpha_token, product_id, type=movement_type, qty_delta="-5", unit_cost=None
-    )
-    assert response.status_code == 422
-    fields = response.json()["error"]["details"]["fields"]
-    assert any("motif" in field["message"] for field in fields), fields
-
-
 def test_an_outflow_cannot_carry_a_cost(api_client: TestClient, alpha_token: str) -> None:
     """Le coût d'une sortie est le CMP : il se constate, il ne se saisit pas."""
     product_id = _make_product(api_client, alpha_token)
@@ -130,6 +114,7 @@ def test_an_outflow_cannot_carry_a_cost(api_client: TestClient, alpha_token: str
         alpha_token,
         product_id,
         type="loss",
+        reason_code="damaged",
         qty_delta="-5",
         unit_cost="999",
         note="tentative",
@@ -189,7 +174,14 @@ def test_insufficient_stock_names_the_available_quantity(
     assert _record(api_client, alpha_token, product_id, qty_delta="5").status_code == 201
 
     response = _record(
-        api_client, alpha_token, product_id, type="loss", qty_delta="-6", unit_cost=None, note="x"
+        api_client,
+        alpha_token,
+        product_id,
+        type="loss",
+        reason_code="damaged",
+        qty_delta="-6",
+        unit_cost=None,
+        note="x",
     )
     assert response.status_code == 409
     body = response.json()["error"]
@@ -259,6 +251,7 @@ def test_a_positive_adjustment_defaults_to_the_current_average(
         alpha_token,
         product_id,
         type="adjustment",
+        reason_code="count_error",
         qty_delta="10",
         unit_cost=None,
         note="inventaire : 10 de plus",
@@ -281,6 +274,7 @@ def test_a_positive_adjustment_without_any_average_demands_a_cost(
         alpha_token,
         product_id,
         type="adjustment",
+        reason_code="count_error",
         qty_delta="10",
         unit_cost=None,
         note="trouvé sans historique",
@@ -317,6 +311,7 @@ def test_the_response_shows_what_the_triggers_wrote(
         alpha_token,
         product_id,
         type="loss",
+        reason_code="damaged",
         qty_delta="-10",
         unit_cost=None,
         note="casse",
@@ -346,6 +341,7 @@ def test_reverse_restores_the_stock_and_refuses_the_second_call(
         alpha_token,
         product_id,
         type="loss",
+        reason_code="damaged",
         qty_delta="-10",
         unit_cost=None,
         note="casse",
@@ -450,6 +446,7 @@ def test_stock_view_joins_the_product_sheet_and_computes_the_status(
             alpha_token,
             product_id,
             type="loss",
+            reason_code="damaged",
             qty_delta="-85",
             unit_cost=None,
             note="sinistre",
@@ -464,6 +461,7 @@ def test_stock_view_joins_the_product_sheet_and_computes_the_status(
             alpha_token,
             product_id,
             type="loss",
+            reason_code="damaged",
             qty_delta="-15",
             unit_cost=None,
             note="sinistre",
@@ -485,6 +483,7 @@ def test_the_journal_is_filterable_by_product_and_type(
             alpha_token,
             product_id,
             type="loss",
+            reason_code="damaged",
             qty_delta="-1",
             unit_cost=None,
             note="casse",
@@ -525,6 +524,7 @@ def test_an_adjustment_writes_a_critical_audit_entry_and_an_event(
         alpha_token,
         product_id,
         type="adjustment",
+        reason_code="count_error",
         qty_delta="-4",
         unit_cost=None,
         note="inventaire annuel",

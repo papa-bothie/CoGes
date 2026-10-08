@@ -122,8 +122,8 @@ class Article:
 #: Les articles des maquettes 02 et 07. Prix, stocks et seuils de la maquette ; coûts de
 #: la livraison (maquette 11) quand elle les donne, sinon une marge d'épicerie (~20 %).
 ARTICLES: tuple[Article, ...] = (
-    Article("riz", "Riz brisé 25 kg", "Céréales", "piece", 15500, 14000, 2, 3, 3),
-    Article("huile", "Huile Dinor 1 L", "Huiles", "piece", 1400, 1150, 4, 5, 9),
+    Article("riz", "Riz brisé 25 kg", "Céréales", "sac", 15500, 14000, 2, 3, 3),
+    Article("huile", "Huile Dinor 1 L", "Huiles", "bouteille", 1400, 1150, 4, 5, 9),
     Article("sucre", "Sucre en morceaux 1 kg", "Épicerie", "paquet", 900, 700, 3, 5, 8),
     Article("laitp", "Lait en poudre 500 g", "Épicerie", "piece", 3200, 2600, 0, 4, 1),
     Article("lait", "Lait Vitalait 400 g", "Épicerie", "piece", 2600, 2000, 18, 6, 6),
@@ -178,15 +178,15 @@ EXPENSE_CATEGORIES: tuple[tuple[str, str], ...] = (
 
 #: Dépenses du mois (maquette 20) : 237 500 F, comme « Ce mois » de L'argent (17).
 EXPENSES: tuple[tuple[str, str, int, datetime, str], ...] = (
-    ("Loyer", "Loyer d'octobre", 120000, datetime(2026, 10, 1, 9, 0, tzinfo=UTC), "mobile_money"),
-    ("Eau", "Facture d'eau", 12500, datetime(2026, 10, 1, 9, 30, tzinfo=UTC), "mobile_money"),
+    ("Loyer", "Loyer d'octobre", 120000, datetime(2026, 10, 1, 9, 0, tzinfo=UTC), "wave"),
+    ("Eau", "Facture d'eau", 12500, datetime(2026, 10, 1, 9, 30, tzinfo=UTC), "wave"),
     ("Salaires", "Salaire de Modou", 50000, datetime(2026, 10, 2, 18, 0, tzinfo=UTC), "cash"),
     (
         "Téléphone et internet",
         "Crédit internet",
         5000,
         datetime(2026, 10, 2, 12, 0, tzinfo=UTC),
-        "mobile_money",
+        "orange_money",
     ),
     ("Transport", "Transport", 15000, datetime(2026, 10, 3, 11, 0, tzinfo=UTC), "cash"),
     (
@@ -251,7 +251,7 @@ NAMED_SALES: tuple[NamedSale, ...] = (
         _at(date(2026, 9, 24), 10, 15),
         {"riz": 1, "huile": 5, "sucre": 5, "savon": 10},
         15000,
-        method="mobile_money",
+        method="wave",
     ),
     NamedSale(
         "aminata",
@@ -280,7 +280,7 @@ NAMED_SALES: tuple[NamedSale, ...] = (
         _at(TODAY, 9, 20),
         {"riz": 2, "savon": 10, "bougie": 2},
         35000,
-        method="mobile_money",
+        method="orange_money",
     ),
     # Détaillée par les maquettes 04 et 05 : 1 riz, 5 huiles, 5 bougies.
     NamedSale("moussa", _at(TODAY, 9, 58), {"riz": 1, "huile": 5, "bougie": 5}, 15000),
@@ -290,7 +290,7 @@ NAMED_SALES: tuple[NamedSale, ...] = (
         _at(TODAY, 10, 42),
         {"lait": 2, "cafe": 3, "huile": 2, "savon": 5},
         12500,
-        method="mobile_money",
+        method="wave",
     ),
 )
 
@@ -744,7 +744,7 @@ def _suppliers(shop: Shop) -> None:
         shop.moments[debt.id] = SENDIS_DEBT_AT
         for paid_at, amount, method, note in (
             (_at(date(2026, 9, 7), 10, 0), 60000, "cash", "Livraison du 07/09 : 5 sacs de riz"),
-            (_at(date(2026, 9, 25), 10, 0), 85000, "mobile_money", "Livraison du 22/09"),
+            (_at(date(2026, 9, 25), 10, 0), 85000, "wave", "Livraison du 22/09"),
         ):
             finance_service.record_payment(
                 session,

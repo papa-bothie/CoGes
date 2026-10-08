@@ -8,12 +8,71 @@ import { SCREENS, settle } from "./screens";
  * (docs/design/captures/phase-15/<CAPTURES_STAGE>/). Ne tourne que si `CAPTURES_STAGE` est
  * défini : `CAPTURES_STAGE=avant pnpm e2e captures-phase-15`. Lot 0 : les écrans touchés
  * par les bugs B1 à B3. `CAPTURES_LOT=F` : le thème change partout, donc tous les écrans,
- * plus la connexion, dans le sous-dossier `lot-f/`.
+ * plus la connexion, dans le sous-dossier `lot-f/`. `CAPTURES_LOT=1` : les formulaires du lot 1
+ * (article, personne, stock, paiements), dialogues ouverts, dans `lot-1/`.
  */
 const STAGE = process.env.CAPTURES_STAGE;
 const LOT = process.env.CAPTURES_LOT ?? "0";
 const LOT_0 = ["tableau-de-bord", "ventes", "vente-detail", "nouvelle-vente"];
 const FOLDER = LOT === "0" ? "" : `/lot-${LOT.toLowerCase()}`;
+
+/** Lot 1 : chaque formulaire touché, ouvert depuis son écran. Les libellés changent avec
+ * le lot : chaque état cherche l'ancien libellé puis le nouveau. */
+const LOT_1: { name: string; open: (page: Page) => Promise<void> }[] = [
+  { name: "article-nouveau", open: (page) => page.goto("/products/new").then(() => undefined) },
+  { name: "articles", open: (page) => page.goto("/products").then(() => undefined) },
+  { name: "clients", open: (page) => page.goto("/customers").then(() => undefined) },
+  { name: "fournisseurs", open: (page) => page.goto("/suppliers").then(() => undefined) },
+  {
+    name: "client-nouveau",
+    open: async (page) => {
+      await page.goto("/customers");
+      await settle(page);
+      await page.getByRole("button", { name: /Nouveau client|Ajouter une personne/ }).click();
+    },
+  },
+  {
+    name: "fournisseur-nouveau",
+    open: async (page) => {
+      await page.goto("/suppliers");
+      await settle(page);
+      await page.getByRole("button", { name: /Nouveau fournisseur|Ajouter une personne/ }).click();
+    },
+  },
+  { name: "stock", open: (page) => page.goto("/inventory").then(() => undefined) },
+  {
+    name: "stock-corriger",
+    open: async (page) => {
+      await page.goto("/inventory");
+      await settle(page);
+      await page.getByRole("button", { name: /Nouveau mouvement|Corriger le stock/ }).click();
+    },
+  },
+  {
+    name: "dette-regler",
+    open: async (page) => {
+      await page.goto("/finance?tab=debts&party=customer&status=open");
+      await settle(page);
+      await page.getByRole("button", { name: "Régler" }).first().click();
+    },
+  },
+  {
+    name: "paiement-nouveau",
+    open: async (page) => {
+      await page.goto("/finance?tab=payments");
+      await settle(page);
+      await page.getByRole("button", { name: /Nouveau paiement/ }).click();
+    },
+  },
+  {
+    name: "depense-nouvelle",
+    open: async (page) => {
+      await page.goto("/finance?tab=expenses");
+      await settle(page);
+      await page.getByRole("button", { name: /Nouvelle dépense/ }).click();
+    },
+  },
+];
 
 test.describe("captures de la phase 15", () => {
   test.skip(!STAGE, "CAPTURES_STAGE non défini");
@@ -54,7 +113,19 @@ test.describe("captures de la phase 15", () => {
         await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
       });
 
+      test("formulaires du lot 1", async ({ page }) => {
+        test.skip(LOT !== "1", "lot 1 seulement");
+        test.setTimeout(400_000);
+        for (const screen of LOT_1) {
+          await screen.open(page);
+          await settle(page);
+          await shoot(page, screen.name);
+          await page.keyboard.press("Escape");
+        }
+      });
+
       test("écrans du lot", async ({ page, request }) => {
+        test.skip(LOT === "1", "lot 1 : formulaires seulement");
         test.setTimeout(400_000);
         const screens = LOT === "0" ? SCREENS.filter((s) => LOT_0.includes(s.name)) : SCREENS;
         for (const screen of screens) {

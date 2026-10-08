@@ -33,7 +33,13 @@ import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
-import { parseDecimalInput, toInputDecimal } from "@/lib/decimal";
+import {
+  compareDecimal,
+  parseDecimalInput,
+  percentToRate,
+  rateToPercent,
+  toInputDecimal,
+} from "@/lib/decimal";
 import { labels } from "@/lib/labels";
 
 type Company = Schemas["CompanyRead"];
@@ -52,11 +58,13 @@ type Draft = {
   taxEnabled: boolean;
   intelligenceEnabled: boolean;
   reorderPoint: string;
+  taxPercent: string;
 };
 
 function draftOf(company: Company): Draft {
   const settings = company.settings as Record<string, unknown>;
   const reorder = settings.default_reorder_point;
+  const rate = settings.default_tax_rate;
   return {
     name: company.name,
     timezone: company.timezone,
@@ -64,6 +72,7 @@ function draftOf(company: Company): Draft {
     taxEnabled: settings.tax_enabled !== false,
     intelligenceEnabled: settings.intelligence_enabled !== false,
     reorderPoint: typeof reorder === "string" ? toInputDecimal(reorder) : "",
+    taxPercent: typeof rate === "string" ? rateToPercent(rate) : "",
   };
 }
 
@@ -84,7 +93,12 @@ function CompanyForm({ company }: { company: Company }) {
   const initial = draftOf(company);
   const [draft, setDraft] = useState<Draft>(initial);
   const [confirming, setConfirming] = useState<string[] | null>(null);
-  const [errors, setErrors] = useState<{ name?: string; reorder?: string; form?: string }>({});
+  const [errors, setErrors] = useState<{
+    name?: string;
+    reorder?: string;
+    tax?: string;
+    form?: string;
+  }>({});
   const t = labels.settings.company;
   const onOff = (value: boolean) => (value ? t.on : t.off);
 
@@ -111,6 +125,8 @@ function CompanyForm({ company }: { company: Company }) {
   });
 
   const reorder = draft.reorderPoint.trim() ? parseDecimalInput(draft.reorderPoint) : null;
+  // Taux appliqué aux articles créés sans taux (ADR 0066) ; vide = 0.
+  const taxRate = draft.taxPercent.trim() ? percentToRate(draft.taxPercent) : null;
 
   const buildBody = (): Schemas["CompanyUpdate"] => {
     const body: Schemas["CompanyUpdate"] = {};
@@ -119,7 +135,8 @@ function CompanyForm({ company }: { company: Company }) {
     const settingsChanged =
       draft.taxEnabled !== initial.taxEnabled ||
       draft.intelligenceEnabled !== initial.intelligenceEnabled ||
-      draft.reorderPoint.trim() !== initial.reorderPoint;
+      draft.reorderPoint.trim() !== initial.reorderPoint ||
+      draft.taxPercent.trim() !== initial.taxPercent;
     if (settingsChanged) {
       // `settings` remplace l'objet entier (ADR 0054) : on renvoie les autres clés.
       body.settings = {
@@ -127,6 +144,7 @@ function CompanyForm({ company }: { company: Company }) {
         tax_enabled: draft.taxEnabled,
         intelligence_enabled: draft.intelligenceEnabled,
         default_reorder_point: reorder,
+        default_tax_rate: taxRate,
       };
     }
     return body;
@@ -146,6 +164,14 @@ function CompanyForm({ company }: { company: Company }) {
           onOff(draft.intelligenceEnabled),
         ),
       );
+    if (draft.taxPercent.trim() !== initial.taxPercent)
+      changes.push(
+        t.change(
+          t.defaultTax,
+          initial.taxPercent ? `${initial.taxPercent} %` : t.none,
+          draft.taxPercent.trim() ? `${draft.taxPercent.trim()} %` : t.none,
+        ),
+      );
     if (draft.reorderPoint.trim() !== initial.reorderPoint)
       changes.push(
         t.change(
@@ -162,6 +188,13 @@ function CompanyForm({ company }: { company: Company }) {
     if (!draft.name.trim()) next.name = labels.validation.required;
     if (draft.reorderPoint.trim() && (reorder === null || !/^\d+(\.\d{1,3})?$/.test(reorder)))
       next.reorder = t.invalidThreshold;
+    if (
+      draft.taxPercent.trim() &&
+      (taxRate === null ||
+        compareDecimal(taxRate, "1") !== -1 ||
+        !/^\d+(\.\d{1,4})?$/.test(taxRate))
+    )
+      next.tax = t.invalidTax;
     setErrors(next);
     if (Object.keys(next).length > 0) return;
     const body = buildBody();
@@ -205,7 +238,6 @@ function CompanyForm({ company }: { company: Company }) {
             <div className="space-y-1.5">
               <Label htmlFor="company-slug">{t.slug}</Label>
               <Input id="company-slug" value={company.slug} readOnly disabled className="h-9" />
-              <p className="text-xs text-muted-foreground">{t.slugHint}</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="company-currency">{t.currency}</Label>
@@ -216,7 +248,6 @@ function CompanyForm({ company }: { company: Company }) {
                 disabled
                 className="h-9"
               />
-              <p className="text-xs text-muted-foreground">{t.currencyHint}</p>
             </div>
           </div>
           <div className="space-y-1.5">
@@ -237,7 +268,6 @@ function CompanyForm({ company }: { company: Company }) {
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">{t.timezoneHint}</p>
           </div>
         </CardContent>
       </Card>
@@ -268,6 +298,19 @@ function CompanyForm({ company }: { company: Company }) {
             </label>
           ))}
           <div className="space-y-1.5">
+            <Label htmlFor="company-tax">{t.defaultTax}</Label>
+            <Input
+              id="company-tax"
+              inputMode="decimal"
+              value={draft.taxPercent}
+              disabled={!canEdit}
+              aria-invalid={Boolean(errors.tax)}
+              onChange={(event) => set("taxPercent", event.target.value)}
+              className="h-9 w-40 text-right numeric"
+            />
+            <FieldError message={errors.tax} />
+          </div>
+          <div className="space-y-1.5">
             <Label htmlFor="company-reorder">{t.reorderPoint}</Label>
             <Input
               id="company-reorder"
@@ -279,7 +322,6 @@ function CompanyForm({ company }: { company: Company }) {
               className="h-9 w-40 text-right numeric"
             />
             <FieldError message={errors.reorder} />
-            <p className="text-xs text-muted-foreground">{t.reorderHint}</p>
           </div>
         </CardContent>
       </Card>

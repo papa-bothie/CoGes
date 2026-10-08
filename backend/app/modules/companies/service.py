@@ -15,7 +15,7 @@ from app.core.errors import NotFoundError
 from app.core.tenancy import TenantContext
 from app.modules.companies.models import Company
 from app.modules.companies.repository import CompanyRepository
-from app.modules.companies.schemas import DEFAULT_REORDER_POINT, CompanyUpdate
+from app.modules.companies.schemas import DEFAULT_REORDER_POINT, DEFAULT_TAX_RATE, CompanyUpdate
 
 #: Modifier ces champs change l'interprétation de toutes les données suivantes :
 #: devise, fuseau, TVA, seuils. L'audit critique est donc obligatoire.
@@ -79,6 +79,12 @@ def default_reorder_point(session: Session, ctx: TenantContext) -> Decimal | Non
     """Seuil d'alerte appliqué à un produit suivi créé sans seuil (ADR 0054), ou `None`."""
     value = get_current_company(session, ctx).settings.get(DEFAULT_REORDER_POINT)
     return None if value is None else Decimal(str(value))
+
+
+def default_tax_rate(session: Session, ctx: TenantContext) -> Decimal:
+    """Taux appliqué à un article créé sans taux (ADR 0066, complément), 0 par défaut."""
+    value = get_current_company(session, ctx).settings.get(DEFAULT_TAX_RATE)
+    return Decimal("0") if value is None else Decimal(str(value))
 
 
 def get_current_company(session: Session, ctx: TenantContext) -> Company:

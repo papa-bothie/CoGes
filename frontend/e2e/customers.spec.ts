@@ -27,7 +27,7 @@ async function creditSale(client: ManagerApi, customerId: string) {
   return sale as { id: string; sale_no: string };
 }
 
-test("fiche client : encours, achats, dettes ; code en double refusé", async ({
+test("ajouter un client en deux champs ; sa fiche montre achats et dettes", async ({
   page,
   request,
 }) => {
@@ -37,13 +37,14 @@ test("fiche client : encours, achats, dettes ; code en double refusé", async ({
   await login(page);
 
   await page.goto("/customers");
-  await page.getByRole("button", { name: "Nouveau client" }).click();
+  await page.getByRole("button", { name: "Ajouter une personne" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Nom", { exact: true }).fill(name);
-  await dialog.getByLabel("Code (facultatif, généré sinon)").fill(`CLI-${marker}`);
-  await dialog.getByLabel("Téléphone (facultatif)").fill("+221 77 000 00 00");
-  await dialog.getByLabel("Encours autorisé (facultatif)").fill("50000");
-  await dialog.getByRole("button", { name: "Enregistrer" }).click();
+  // Lot 1 : ni code, ni encours ; « +221 » affiché, le numéro se groupe tout seul.
+  await expect(dialog.getByText("+221")).toBeVisible();
+  await dialog.getByLabel("Nom du client").fill(name);
+  await dialog.getByLabel("Téléphone").fill("770000000");
+  await expect(dialog.getByLabel("Téléphone")).toHaveValue("77 000 00 00");
+  await dialog.getByRole("button", { name: "Enregistrer le client" }).click();
 
   await expect(page).toHaveURL(/\/customers\/[0-9a-f-]+$/);
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
@@ -62,18 +63,9 @@ test("fiche client : encours, achats, dettes ; code en double refusé", async ({
     animations: "disabled",
   });
 
-  // Un second client ne peut pas reprendre le même code : refus près du champ.
   await page.goto("/customers");
-  await page.getByRole("button", { name: "Nouveau client" }).click();
-  await dialog.getByLabel("Nom", { exact: true }).fill(`Autre ${marker}`);
-  await dialog.getByLabel("Code (facultatif, généré sinon)").fill(`CLI-${marker}`);
-  await dialog.getByRole("button", { name: "Enregistrer" }).click();
-  await expect(dialog.getByRole("alert").first()).toBeVisible();
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Fermer", exact: true }).click();
-
   await page.getByRole("searchbox").fill(name);
-  await expect(page.getByRole("row").filter({ hasText: name })).toContainText(/50\s000\sFCFA/);
+  await expect(page.getByRole("row").filter({ hasText: name })).toContainText("77 000 00 00");
   await page.getByRole("searchbox").fill("");
   await expect(page.getByText(/^\d+ clients?$/)).toBeVisible();
   await page.screenshot({

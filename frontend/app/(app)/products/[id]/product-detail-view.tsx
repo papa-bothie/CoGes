@@ -1,14 +1,14 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Boxes, Pencil, Tag } from "lucide-react";
+import { ArrowLeft, Boxes, Pencil, Printer, Tag } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { ErrorState } from "@/components/error-state";
 import { FieldError } from "@/components/field-error";
-import { MovementDialog } from "@/components/inventory/movement-dialog";
+import { StockCorrectionDialog } from "@/components/inventory/stock-correction-dialog";
 import { Money, spacedGroups } from "@/components/money";
 import { PageHeader } from "@/components/page-header";
 import { StockStatusBadge } from "@/components/status/status-badge";
@@ -99,7 +99,6 @@ export function ProductDetailView({ productId }: { productId: string }) {
         title={data.name}
         count={
           <span className="flex flex-wrap items-center gap-2">
-            <span className="numeric">{data.sku}</span>
             {!data.is_active && <Badge variant="neutral">{labels.products.inactiveBadge}</Badge>}
             {line && <StockStatusBadge status={line.status} />}
           </span>
@@ -114,6 +113,14 @@ export function ProductDetailView({ productId }: { productId: string }) {
                 </Link>
               </Button>
             </Can>
+            {data.barcode && (
+              <Button variant="outline" asChild>
+                <Link href={`/products/${data.id}/etiquette`}>
+                  <Printer aria-hidden />
+                  {labels.products.printLabel}
+                </Link>
+              </Button>
+            )}
             <Can permission="prices:create">
               <Button variant="outline" onClick={() => setPriceOpen(true)}>
                 <Tag aria-hidden />
@@ -218,7 +225,9 @@ export function ProductDetailView({ productId }: { productId: string }) {
                               <span className="numeric">
                                 {formatDateTime(movement.occurred_at, timeZone)}
                               </span>
-                              {movement.note && ` · ${movement.note}`}
+                              {movement.reason_code
+                                ? ` · ${labels.stock.reasons[movement.reason_code]}`
+                                : movement.note && ` · ${movement.note}`}
                             </p>
                           </div>
                           <span
@@ -256,22 +265,33 @@ export function ProductDetailView({ productId }: { productId: string }) {
               <Row label={labels.products.category}>
                 {(data.category_id && categoryPath.get(data.category_id)) ?? "—"}
               </Row>
-              <Row label={labels.products.barcode}>
-                <span className="numeric">{data.barcode ?? "—"}</span>
-              </Row>
               <Row label={labels.products.unit}>{labels.units[data.unit]}</Row>
-              <Row label={labels.products.taxRate}>
-                <span className="numeric">{rateToPercent(data.default_tax_rate)} %</span>
-              </Row>
               <Row label={labels.products.reorderPoint}>
                 <span className="numeric">{formatQty(data.reorder_point)}</span>
               </Row>
-              <Row label={labels.products.stockTracked}>
-                {data.is_stock_tracked ? labels.products.yes : labels.products.no}
-              </Row>
-              <Row label={labels.products.createdAt}>
-                <span className="numeric">{formatDate(data.created_at, timeZone)}</span>
-              </Row>
+              {/* Les champs avancés, fermés par défaut (lot 1). */}
+              <details className="pt-2">
+                <summary className="min-h-cible cursor-pointer content-center font-bold">
+                  {labels.products.moreInfo}
+                </summary>
+                <div className="space-y-2">
+                  <Row label={labels.products.sku}>
+                    <span className="numeric">{data.sku}</span>
+                  </Row>
+                  <Row label={labels.products.barcode}>
+                    <span className="numeric">{data.barcode ?? "—"}</span>
+                  </Row>
+                  <Row label={labels.products.taxRate}>
+                    <span className="numeric">{rateToPercent(data.default_tax_rate)} %</span>
+                  </Row>
+                  <Row label={labels.products.stockTracked}>
+                    {data.is_stock_tracked ? labels.products.yes : labels.products.no}
+                  </Row>
+                  <Row label={labels.products.createdAt}>
+                    <span className="numeric">{formatDate(data.created_at, timeZone)}</span>
+                  </Row>
+                </div>
+              </details>
             </CardContent>
           </Card>
 
@@ -311,12 +331,7 @@ export function ProductDetailView({ productId }: { productId: string }) {
       </div>
 
       <PriceDialog product={data} open={priceOpen} onOpenChange={setPriceOpen} />
-      <MovementDialog
-        open={adjustOpen}
-        onOpenChange={setAdjustOpen}
-        product={{ id: data.id, name: data.name, sku: data.sku }}
-        defaultType="adjustment"
-      />
+      <StockCorrectionDialog open={adjustOpen} onOpenChange={setAdjustOpen} productId={data.id} />
     </>
   );
 }

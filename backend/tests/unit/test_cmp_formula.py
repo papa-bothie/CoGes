@@ -71,11 +71,14 @@ def test_a_movement_refuses_a_float() -> None:
     ("payload", "expected"),
     [
         ({"type": "purchase_in", "qty_delta": "-1", "unit_cost": "10"}, "est une entrée"),
-        ({"type": "loss", "qty_delta": "1"}, "est une sortie"),
-        ({"type": "adjustment", "qty_delta": "1", "unit_cost": "10"}, "exige un motif"),
+        ({"type": "loss", "qty_delta": "1", "reason_code": "damaged"}, "est une sortie"),
+        ({"type": "adjustment", "qty_delta": "1", "unit_cost": "10"}, "exige une raison"),
         ({"type": "purchase_in", "qty_delta": "1"}, "exige un coût unitaire"),
-        ({"type": "loss", "qty_delta": "-1", "note": "x", "unit_cost": "10"}, "valorisée au CMP"),
-        ({"type": "adjustment", "qty_delta": "0", "note": "x"}, "aucun sens"),
+        (
+            {"type": "loss", "qty_delta": "-1", "reason_code": "damaged", "unit_cost": "10"},
+            "valorisée au CMP",
+        ),
+        ({"type": "adjustment", "qty_delta": "0", "reason_code": "count_error"}, "aucun sens"),
     ],
 )
 def test_movement_bounds_name_the_faulty_field(payload: dict[str, str], expected: str) -> None:

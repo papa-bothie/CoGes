@@ -53,6 +53,29 @@ def number_pattern(prefix: str) -> str:
     return f"^{prefix}-([0-9]+)$"
 
 
+#: Préfixe GS1 des codes à usage interne au magasin (plage 20 à 29) : un EAN-13 qui
+#: commence par 2 ne désigne jamais un produit d'un fabricant (ADR 0066).
+INTERNAL_EAN_PREFIX = "2"
+#: Chiffres du compteur dans l'EAN-13 interne : 1 préfixe + 11 + 1 clé.
+INTERNAL_EAN_WIDTH = 11
+
+
+def ean13_check_digit(body: str) -> str:
+    """Clé de contrôle GS1 des douze premiers chiffres : poids 1 et 3 en alternance."""
+    total = sum(int(digit) * (3 if index % 2 else 1) for index, digit in enumerate(body))
+    return str((10 - total % 10) % 10)
+
+
+def internal_ean13(number: int) -> str:
+    """`7` → `2000000000077` : préfixe interne, compteur sur 11 chiffres, clé."""
+    body = f"{INTERNAL_EAN_PREFIX}{number:0{INTERNAL_EAN_WIDTH}d}"
+    return body + ean13_check_digit(body)
+
+
+#: Compteur d'un EAN-13 interne, pour retrouver le plus grand déjà attribué.
+INTERNAL_EAN_PATTERN = f"^{INTERNAL_EAN_PREFIX}([0-9]{{{INTERNAL_EAN_WIDTH}}})[0-9]$"
+
+
 #: Largeur du compteur d'un document. `V-000123` reste lisible et trié
 #: alphabétiquement jusqu'à 999 999 ventes, bien au-delà d'une PME.
 DOCUMENT_WIDTH = 6

@@ -16,7 +16,8 @@
   *Note des lots 0 et F : 0063 a servi à la liste de clients de la vente (B3), 0064 au thème
   de la maquette v2 et 0065 à l'heure figée et au seed de la maquette ; les ADR nommés plus bas
   sont décalés de trois rangs (« Références et codes-barres générés » = 0066, « Raisons de
-  correction en liste fermée » = 0067, refonte visuelle = 0068).*
+  correction en liste fermée » = 0067). Au lot 1, 0068 a servi à Wave et Orange Money : la
+  refonte visuelle devient 0069.*
 - **Invariants à ne jamais casser :** RLS FORCE et rôles séparés, Idempotency-Key sur les écritures
   financières, annulation par contre-écriture, outbox, garde du dernier gérant.
 - Aucun service payant sans mon accord explicite. Ne commite jamais `.env` ni `.env.bak`.
