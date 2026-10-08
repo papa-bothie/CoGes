@@ -20,6 +20,8 @@ from app.modules.inventory.schemas import (
     MovementPage,
     MovementRead,
     MovementType,
+    NewProductCreate,
+    NewProductRead,
     StockPage,
 )
 
@@ -95,6 +97,23 @@ def record_movement(
         ip_address=client_ip(request),
     )
     return MovementRead.model_validate(movement)
+
+
+@router.post("/products", response_model=NewProductRead, status_code=status.HTTP_201_CREATED)
+def create_product_with_stock(
+    payload: NewProductCreate,
+    request: Request,
+    tenant: Annotated[TenantSession, Depends(require_permission("products:create"))],
+    _stock: Annotated[TenantSession, Depends(require_permission("inventory:create"))],
+) -> NewProductRead:
+    """Crée un article et son stock d'ouverture dans la même transaction (ADR 0066).
+
+    Sans référence ni code-barres, le serveur attribue `ART-0001` et un EAN-13 interne.
+    Une quantité positive exige le prix d'achat, qui valorise le mouvement `initial`.
+    """
+    return service.create_product_with_stock(
+        tenant.session, tenant.ctx, payload, ip_address=client_ip(request)
+    )
 
 
 @router.post(

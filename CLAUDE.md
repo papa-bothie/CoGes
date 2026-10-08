@@ -208,7 +208,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 12 Front : opérations | `12-front-operations.md` | 11 | e2e vente | ✅ 81 Vitest, 16 e2e locaux (vente, survente, retour, ajustement, produits, clients, fournisseurs) ; captures `docs/design/captures/phase-12/` |
 | 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ✅ 92 Vitest, 26 e2e locaux (dont paiement réparti, métrique, insight écarté, vendeur sans paramètres) ; 674 tests backend ; captures `docs/design/captures/phase-13/` |
 | 14 Finition visuelle (Impeccable) | `14-polish-impeccable.md` | 13 | audit Impeccable | ✅ audit 13/20 → 18/20, axe 241 → 0 violation (clair + sombre), 96 Vitest, 30 e2e ; `docs/design/DESIGN.md` ; captures `docs/design/captures/phase-14/` |
-| 15 Simplicité d'abord | `15-refonte-simplicite.md` | 14 | bugs B1–B3, test du commerçant, axe, captures | 🟨 lot 0 fusionné (PR n° 8) ; lot F (thème v2, kit, `/dev/composants`, seed `maquette`, `maquette-check`) sur `feat/phase15-foundations` ; lots 1, 2, 3 à faire |
+| 15 Simplicité d'abord | `15-refonte-simplicite.md` | 14 | bugs B1–B3, test du commerçant, axe, captures | 🟨 lot 0 fusionné (PR n° 8) ; lot F fusionné (PR n° 9 : thème v2, kit, `/dev/composants`, seed `maquette`, `maquette-check`) ; lot 1 (formulaires courts) sur `feat/phase15-forms` ; lots 2, 3 à faire |
 
 ## 9. Journal des décisions
 
@@ -279,6 +279,9 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0063 | 2026-10-07 | **Liste de clients pour la vente** : `GET /sales/customer-choices` (récents puis alphabétique, téléphone, dette ouverte, pages de 50) ; Popover en portail, « Nouveau client » ; les ADR du prompt de phase 15 décalés d'un rang | `docs/decisions/0063-liste-de-clients-pour-la-vente.md` |
 | 0064 | 2026-10-07 | **Thème de la maquette v2** : jetons `--coges-*` puis rôles dans `globals.css`, classes de rubrique, `text-sm` à 15 px, Figtree et JetBrains Mono hébergées, logo officiel, kit `components/kit/` et vitrine `/dev/composants` (404 en production), « 87 500 F », aucune couleur en dur (test), sombre dérivé ; couleur d'article tirée du nom | `docs/decisions/0064-theme-de-la-maquette-v2.md` |
 | 0065 | 2026-10-07 | **Heure figée et seed de la maquette** : `COGES_FROZEN_NOW` pour les lectures métier (`core/clock.py`, accepté en `local` et `ci` seulement), seed recalé sur l'heure figée (`restamp`, rôle propriétaire), `make seed-maquette` cohérent au plus près (accueil exact), `make maquette-check` (pixelmatch, 2 %, serveurs :8101/:3101 à part) | `docs/decisions/0065-heure-figee-et-seed-de-la-maquette.md` |
+| 0066 | 2026-10-08 | **Références et codes-barres générés** : `sku` facultatif (`ART-0001` par entreprise), EAN-13 interne préfixe 2 si rien n'est scanné, nouvel essai sous savepoint en concurrence ; unités `sac` et `bouteille` (révision 0015) ; `POST /inventory/products` crée l'article et son stock d'ouverture en une transaction (prix d'achat exigé) | `docs/decisions/0066-references-et-codes-barres-generes.md` |
+| 0067 | 2026-10-08 | **Raisons de correction en liste fermée** : `reason_code` (7 raisons) obligatoire sur `adjustment` et `loss`, le type s'en déduit, note facultative, `inv_reason_coherent` en base | `docs/decisions/0067-raisons-de-correction-en-liste-fermee.md` |
+| 0068 | 2026-10-08 | **Wave et Orange Money** : deux valeurs de `pay_method` (révision 0015), `mobile_money` gardé pour l'existant ; refonte visuelle décalée en 0069 | `docs/decisions/0068-wave-et-orange-money.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**

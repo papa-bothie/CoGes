@@ -2295,6 +2295,48 @@
         }
       }
     },
+    "/api/v1/inventory/products": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "summary": "Create Product With Stock",
+        "description": "Crée un article et son stock d'ouverture dans la même transaction (ADR 0066).\n\nSans référence ni code-barres, le serveur attribue `ART-0001` et un EAN-13 interne.\nUne quantité positive exige le prix d'achat, qui valorise le mouvement `initial`.",
+        "operationId": "create_product_with_stock_api_v1_inventory_products_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewProductCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewProductRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/inventory/movements/{movement_id}/reverse": {
       "post": {
         "tags": [
@@ -8105,7 +8147,14 @@
             "title": "Product Id"
           },
           "type": {
-            "$ref": "#/components/schemas/ManualMovementType"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ManualMovementType"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "qty_delta": {
             "$ref": "#/components/schemas/Quantity-Input"
@@ -8142,6 +8191,16 @@
               }
             ]
           },
+          "reason_code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StockReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "occurred_at": {
             "anyOf": [
               {
@@ -8159,7 +8218,6 @@
         "type": "object",
         "required": [
           "product_id",
-          "type",
           "qty_delta"
         ],
         "title": "MovementCreate",
@@ -8281,6 +8339,16 @@
             ],
             "title": "Note"
           },
+          "reason_code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StockReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "occurred_at": {
             "type": "string",
             "format": "date-time",
@@ -8317,6 +8385,7 @@
           "reversal_of_movement_id",
           "supplier_id",
           "note",
+          "reason_code",
           "occurred_at",
           "created_by",
           "created_at"
@@ -8339,6 +8408,118 @@
       "MovementUnitCost": {
         "$ref": "#/components/schemas/UnitCost-Input",
         "ge": "0"
+      },
+      "NewProductCreate": {
+        "properties": {
+          "sku": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Sku"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "$ref": "#/components/schemas/ProductName"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/ProductUnit",
+            "default": "piece"
+          },
+          "barcode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Barcode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "is_stock_tracked": {
+            "type": "boolean",
+            "title": "Is Stock Tracked",
+            "default": true
+          },
+          "default_tax_rate": {
+            "$ref": "#/components/schemas/TaxRate-Input",
+            "default": "0"
+          },
+          "reorder_point": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReorderPoint-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit_price": {
+            "$ref": "#/components/schemas/SellingPrice-Input"
+          },
+          "cost_price": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CostPrice-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "opening_qty": {
+            "$ref": "#/components/schemas/Quantity-Input",
+            "default": "0",
+            "ge": "0"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "unit_price"
+        ],
+        "title": "NewProductCreate",
+        "description": "Un article et ce qu'on en a déjà (ADR 0066) : « Combien en avez-vous ? ».\n\nInventory compose la façade de Products : l'article et son mouvement `initial`\nnaissent dans la même transaction. Le stock d'ouverture est valorisé au prix d'achat."
+      },
+      "NewProductRead": {
+        "properties": {
+          "product": {
+            "$ref": "#/components/schemas/ProductRead"
+          },
+          "opening_movement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MovementRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product",
+          "opening_movement"
+        ],
+        "title": "NewProductRead"
       },
       "NotificationPage": {
         "properties": {
@@ -8831,6 +9012,8 @@
         "enum": [
           "cash",
           "mobile_money",
+          "wave",
+          "orange_money",
           "bank_transfer",
           "card",
           "cheque"
@@ -9018,7 +9201,14 @@
       "ProductCreate": {
         "properties": {
           "sku": {
-            "$ref": "#/components/schemas/Sku"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Sku"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "name": {
             "$ref": "#/components/schemas/ProductName"
@@ -9085,7 +9275,6 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "sku",
           "name",
           "unit_price"
         ],
@@ -9545,7 +9734,9 @@
           "litre",
           "carton",
           "metre",
-          "paquet"
+          "paquet",
+          "sac",
+          "bouteille"
         ]
       },
       "ProductUpdate": {
@@ -11285,6 +11476,18 @@
           "total"
         ],
         "title": "StockPage"
+      },
+      "StockReason": {
+        "type": "string",
+        "enum": [
+          "damaged",
+          "expired",
+          "lost_or_stolen",
+          "home_use",
+          "count_error",
+          "found",
+          "supplier_gift"
+        ]
       },
       "StockStatus": {
         "type": "string",

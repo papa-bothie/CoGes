@@ -45,13 +45,17 @@ from app.modules.inventory.repository import (
     StockHistoryRepository,
 )
 from app.modules.inventory.schemas import (
+    CORRECTION_TYPES,
     MANUAL_MOVEMENT_TYPES,
-    TYPES_REQUIRING_NOTE,
     MovementCreate,
+    MovementRead,
+    NewProductCreate,
+    NewProductRead,
     StockLine,
     StockRebuildLine,
 )
 from app.modules.products import service as products_service
+from app.modules.products.schemas import ProductRead
 
 # --------------------------------------------------------------- erreurs métier
 # Une classe par règle, avec son code stable en anglais et son message en français.
@@ -325,13 +329,14 @@ def record_movement(
     entry = InventoryMovement(
         company_id=ctx.company_id,
         product_id=payload.product_id,
-        type=payload.type,
+        type=payload.movement_type,
         qty_delta=payload.qty_delta,
         unit_cost=_entry_unit_cost(payload, current),
         ref_type=ref_type,
         ref_id=ref_id,
         supplier_id=payload.supplier_id,
         note=payload.note,
+        reason_code=payload.reason_code,
         created_by=ctx.user_id,
     )
     if payload.occurred_at is not None:
@@ -349,7 +354,7 @@ def record_movement(
         },
     )
 
-    if payload.type in TYPES_REQUIRING_NOTE:
+    if payload.type in CORRECTION_TYPES:
         # Seule écriture de stock qui ne vient d'aucun flux métier : audit critique,
         # dans la transaction (liste des opérations, Architecture technique).
         audit_critical(
@@ -364,6 +369,39 @@ def record_movement(
 
     _emit_stock_updated(session, ctx, movement)
     return movement
+
+
+def create_product_with_stock(
+    session: Session,
+    ctx: TenantContext,
+    payload: NewProductCreate,
+    *,
+    ip_address: str | None = None,
+) -> NewProductRead:
+    """Crée l'article par la façade de Products, puis son stock d'ouverture (ADR 0066).
+
+    Une seule transaction : si le mouvement est refusé, l'article ne reste pas.
+    """
+    product, price = products_service.create_product(
+        session, ctx, payload.product(), ip_address=ip_address
+    )
+    movement = None
+    if payload.opening_qty > 0:
+        movement = record_movement(
+            session,
+            ctx,
+            MovementCreate(
+                product_id=product.id,
+                type="initial",
+                qty_delta=payload.opening_qty,
+                unit_cost=payload.cost_price,
+            ),
+            ip_address=ip_address,
+        )
+    return NewProductRead(
+        product=ProductRead.build(product, price),
+        opening_movement=None if movement is None else MovementRead.model_validate(movement),
+    )
 
 
 def reverse_movement(
@@ -715,6 +753,7 @@ def _audited(movement: InventoryMovement) -> dict[str, Any]:
         "qty_delta": str(movement.qty_delta),
         "unit_cost": str(movement.unit_cost),
         "note": movement.note,
+        "reason_code": movement.reason_code,
     }
 
 

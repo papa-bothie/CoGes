@@ -23,7 +23,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, audit_critical
-from app.core.errors import BusinessRuleError, NotFoundError, sqlstate
+from app.core.codes import CODE_ATTEMPTS, format_code, internal_ean13
+from app.core.errors import BusinessRuleError, NotFoundError, constraint_name, sqlstate
 from app.core.search import normalise_term
 from app.core.tenancy import TenantContext
 from app.modules.categories import service as categories_service
@@ -37,6 +38,11 @@ from app.modules.products.schemas import (
     ProductSummary,
     ProductUpdate,
 )
+
+#: Préfixe des références attribuées par le serveur : `ART-0001` (ADR 0066).
+SKU_PREFIX = "ART"
+
+_UNIQUE_VIOLATION = "23505"
 
 # --------------------------------------------------------------- erreurs métier
 
@@ -225,7 +231,7 @@ def count_active_in_category(session: Session, ctx: TenantContext, category_id: 
 def _assert_codes_are_free(
     repository: ProductRepository,
     *,
-    sku: str,
+    sku: str | None,
     barcode: str | None,
     excluding: UUID | None = None,
 ) -> None:
@@ -234,14 +240,67 @@ def _assert_codes_are_free(
     Les contraintes `products_sku_uq` et `products_barcode_uq` restent l'autorité :
     en concurrence, c'est PostgreSQL qui tranche.
     """
-    existing = repository.get_by_sku(sku)
-    if existing is not None and existing.id != excluding:
-        raise ProductSkuTakenError(details={"sku": sku})
+    if sku is not None:
+        existing = repository.get_by_sku(sku)
+        if existing is not None and existing.id != excluding:
+            raise ProductSkuTakenError(details={"sku": sku})
 
     if barcode is not None:
         owner = repository.get_by_barcode(barcode)
         if owner is not None and owner.id != excluding:
             raise ProductBarcodeTakenError(details={"barcode": barcode})
+
+
+def _add_with_codes(
+    session: Session,
+    ctx: TenantContext,
+    repository: ProductRepository,
+    payload: ProductCreate,
+    reorder_point: Decimal | None,
+) -> Product:
+    """Ajoute la fiche avec sa référence et son code-barres, attribués s'ils manquent.
+
+    Comme les codes clients (ADR 0013) : le numéro suivant vient du plus grand compteur
+    de l'entreprise, et l'unicité de la base. Deux créations simultanées visent le même
+    numéro ; `products_sku_uq` ou `products_barcode_uq` refuse la seconde, qui recommence
+    sous un savepoint (ADR 0066).
+    """
+    for attempt in range(CODE_ATTEMPTS):
+        sku = payload.sku or format_code(SKU_PREFIX, repository.max_sku_number(SKU_PREFIX) + 1)
+        barcode = payload.barcode or internal_ean13(repository.max_internal_barcode_number() + 1)
+        savepoint = session.begin_nested()
+        product = repository.add(
+            Product(
+                company_id=ctx.company_id,
+                category_id=payload.category_id,
+                sku=sku,
+                barcode=barcode,
+                name=payload.name,
+                unit=payload.unit,
+                is_stock_tracked=payload.is_stock_tracked,
+                default_tax_rate=payload.default_tax_rate,
+                reorder_point=reorder_point,
+                is_active=True,
+            )
+        )
+        try:
+            session.flush()
+        except IntegrityError as exc:
+            savepoint.rollback()
+            if sqlstate(exc) != _UNIQUE_VIOLATION:
+                raise
+            # Un code imposé par l'appelant ne se corrige pas tout seul.
+            constraint = constraint_name(exc)
+            if constraint == "products_sku_uq" and payload.sku is not None:
+                raise ProductSkuTakenError(details={"sku": sku}) from exc
+            if constraint == "products_barcode_uq" and payload.barcode is not None:
+                raise ProductBarcodeTakenError(details={"barcode": barcode}) from exc
+            if attempt == CODE_ATTEMPTS - 1:
+                raise ProductSkuTakenError(details={"sku": sku}) from exc
+            continue
+        savepoint.commit()
+        return product
+    raise AssertionError("boucle de numérotation sortie sans résultat")  # pragma: no cover
 
 
 def create_product(
@@ -267,21 +326,7 @@ def create_product(
     if reorder_point is None and payload.is_stock_tracked:
         reorder_point = companies_service.default_reorder_point(session, ctx)
 
-    product = repository.add(
-        Product(
-            company_id=ctx.company_id,
-            category_id=payload.category_id,
-            sku=payload.sku,
-            barcode=payload.barcode,
-            name=payload.name,
-            unit=payload.unit,
-            is_stock_tracked=payload.is_stock_tracked,
-            default_tax_rate=payload.default_tax_rate,
-            reorder_point=reorder_point,
-            is_active=True,
-        )
-    )
-    session.flush()
+    product = _add_with_codes(session, ctx, repository, payload, reorder_point)
 
     price = ProductPriceRepository(session, ctx).add(
         ProductPrice(

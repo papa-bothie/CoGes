@@ -10,8 +10,9 @@ from collections.abc import Sequence
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Select, func, or_, select, update
+from sqlalchemy import BigInteger, ColumnElement, Integer, Select, cast, func, or_, select, update
 
+from app.core.codes import INTERNAL_EAN_PATTERN, number_pattern
 from app.core.repository import TenantRepository
 from app.core.search import code_matches, name_matches, relevance_order
 from app.modules.products.models import Product, ProductPrice
@@ -87,6 +88,20 @@ class ProductRepository(TenantRepository[Product]):
         lignes supprimées, sinon le message serait « SKU libre » puis 500.
         """
         return self.session.execute(self._select().where(Product.sku == sku)).scalar_one_or_none()
+
+    def max_sku_number(self, prefix: str) -> int:
+        """Plus grand compteur de référence `ART-0001` de l'entreprise, supprimés compris."""
+        stmt = select(
+            func.max(cast(func.substring(Product.sku, number_pattern(prefix)), Integer))
+        ).where(Product.company_id == self.ctx.company_id)
+        return int(self.session.execute(stmt).scalar_one() or 0)
+
+    def max_internal_barcode_number(self) -> int:
+        """Plus grand compteur d'EAN-13 interne de l'entreprise, supprimés compris."""
+        stmt = select(
+            func.max(cast(func.substring(Product.barcode, INTERNAL_EAN_PATTERN), BigInteger))
+        ).where(Product.company_id == self.ctx.company_id)
+        return int(self.session.execute(stmt).scalar_one() or 0)
 
     def get_by_barcode(self, barcode: str) -> Product | None:
         """Homonyme de code-barres vivant (`products_barcode_uq` est partielle)."""

@@ -24,7 +24,11 @@ from app.core.money import Amount
 
 #: Les cinq moyens par lesquels de l'argent entre ou sort réellement (§ 8.1).
 #: `offset` en est **exclu** : une vente ne s'encaisse pas en compensation.
-type PaymentMethod = Literal["cash", "mobile_money", "bank_transfer", "card", "cheque"]
+#: `wave` et `orange_money` (révision 0015, ADR 0068) précisent l'opérateur ;
+#: `mobile_money` reste accepté pour les paiements d'avant et les imports.
+type PaymentMethod = Literal[
+    "cash", "mobile_money", "wave", "orange_money", "bank_transfer", "card", "cheque"
+]
 
 #: Ce qu'un gérant peut choisir pour régler un retour : les cinq moyens, ou la
 #: compensation d'une dette du client, qui ne fait bouger aucune caisse (ADR 0024).

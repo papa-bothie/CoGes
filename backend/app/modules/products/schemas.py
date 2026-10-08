@@ -26,8 +26,9 @@ NAME_MAX_LENGTH = 200
 SKU_MAX_LENGTH = 64
 BARCODE_MAX_LENGTH = 64
 
-#: Les 6 valeurs du `CHECK (unit IN (...))` du § 8.3, et rien d'autre.
-type ProductUnit = Literal["piece", "kg", "litre", "carton", "metre", "paquet"]
+#: Les valeurs du `CHECK (unit IN (...))` : les 6 du § 8.3, plus le sac et la bouteille
+#: (révision 0015, ADR 0066).
+type ProductUnit = Literal["piece", "kg", "litre", "carton", "metre", "paquet", "sac", "bouteille"]
 
 type ProductName = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=NAME_MAX_LENGTH)
@@ -125,7 +126,8 @@ class ProductCreate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    sku: Sku
+    #: Omis : le serveur attribue `ART-0001`… (ADR 0066).
+    sku: Sku | None = None
     name: ProductName
     unit: ProductUnit = "piece"
     barcode: Barcode | None = None
@@ -135,6 +137,8 @@ class ProductCreate(BaseModel):
     reorder_point: ReorderPoint | None = None
     unit_price: SellingPrice
     cost_price: CostPrice | None = None
+    # `barcode` omis : le serveur génère un EAN-13 interne (préfixe 2, ADR 0066). Un code
+    # fabricant scanné reste prioritaire.
 
 
 class ProductUpdate(BaseModel):
