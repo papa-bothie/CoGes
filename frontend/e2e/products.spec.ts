@@ -79,6 +79,7 @@ test("catégories, création d'un article, changement de prix, correction du sto
   await dialog.getByRole("radio", { name: "Retrouvé" }).click();
   await dialog.getByRole("button", { name: "Valider la correction" }).click();
   await expect(page.getByText("Stock corrigé.")).toBeVisible();
+  await expect(dialog).toBeHidden();
   await expect(page.getByText(/^14 pièces$/)).toBeVisible();
   await shot(page, "fiche-produit");
 

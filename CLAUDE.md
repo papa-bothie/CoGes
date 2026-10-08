@@ -208,7 +208,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 12 Front : opérations | `12-front-operations.md` | 11 | e2e vente | ✅ 81 Vitest, 16 e2e locaux (vente, survente, retour, ajustement, produits, clients, fournisseurs) ; captures `docs/design/captures/phase-12/` |
 | 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ✅ 92 Vitest, 26 e2e locaux (dont paiement réparti, métrique, insight écarté, vendeur sans paramètres) ; 674 tests backend ; captures `docs/design/captures/phase-13/` |
 | 14 Finition visuelle (Impeccable) | `14-polish-impeccable.md` | 13 | audit Impeccable | ✅ audit 13/20 → 18/20, axe 241 → 0 violation (clair + sombre), 96 Vitest, 30 e2e ; `docs/design/DESIGN.md` ; captures `docs/design/captures/phase-14/` |
-| 15 Simplicité d'abord | `15-refonte-simplicite.md` | 14 | bugs B1–B3, test du commerçant, axe, captures | 🟨 lot 0 fusionné (PR n° 8) ; lot F fusionné (PR n° 9 : thème v2, kit, `/dev/composants`, seed `maquette`, `maquette-check`) ; lot 1 (formulaires courts) sur `feat/phase15-forms` ; lots 2, 3 à faire |
+| 15 Simplicité d'abord | `15-refonte-simplicite.md` | 14 | bugs B1–B3, test du commerçant, axe, captures | 🟨 lot 0 fusionné (PR n° 8) ; lot F fusionné (PR n° 9 : thème v2, kit, `/dev/composants`, seed `maquette`, `maquette-check`) ; lot 1 (formulaires courts : codes générés, raisons de stock, Wave et Orange Money, montants au pavé, « Ajouter une personne ») sur `feat/phase15-forms`, 764 tests backend, 163 Vitest, e2e verts ; lots 2, 3 à faire |
 
 ## 9. Journal des décisions
 
