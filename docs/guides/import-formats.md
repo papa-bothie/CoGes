@@ -9,12 +9,16 @@ fichier** sans `dry_run`. L'import est **tout ou rien** : une seule ligne fautiv
 n'est écrit (422 `import_invalid`, rapport dans `error.details`). En-tête `Idempotency-Key`
 obligatoire.
 
-Les en-têtes sont comparés sans casse, sans accents, sans ponctuation et sans petits mots :
-`Prix de vente`, `prix_vente` et `PRIX VENTE` désignent la même colonne. Les nombres
+Les en-têtes sont des **mots simples** (phase 15, ADR 0069), comparés sans casse, sans
+accents, sans ponctuation et sans petits mots : `Prix de vente`, `prix_vente` et
+`PRIX VENTE` désignent la même colonne. Les anciens en-têtes techniques restent reconnus
+(colonne « Ancien nom » ci-dessous) : un fichier préparé avant la phase 15 s'importe
+toujours. Le rapport d'erreurs nomme la colonne par son mot. Les nombres
 acceptent `1 234,50`, `1.234,50` et `1234.50` ; un taux accepte `18 %` ou `0,18`. Les
 booléens : `oui` / `non` (ou `vrai`/`faux`, `1`/`0`). Un export du même référentiel
 (`GET /api/v1/exports/referentials/{type}`) produit exactement ces colonnes : il se réimporte
-tel quel.
+tel quel. L'export des ventes (`Vente n°`, `Date`, `Statut`, `Client`, `Sous-total`,
+`Remise`, `Taxes`, `Total`, `Payé`, `Retourné`) ne se réimporte pas.
 
 **Formules neutralisées (ADR 0045).** Un export ne contient jamais de formule. En CSV, un
 texte qui commence par `=`, `+`, `-`, `@`, une tabulation ou un retour chariot est précédé
@@ -24,46 +28,46 @@ est retirée : l'aller-retour export → import rend la valeur d'origine.
 
 ## categories
 
-| Colonne | Obligatoire | Contenu |
-|---|---|---|
-| `nom` | oui | nom de la catégorie |
-| `parent` | non | nom d'une catégorie existante ou d'une ligne **précédente** du fichier |
+| Colonne | Ancien nom | Obligatoire | Contenu |
+|---|---|---|---|
+| `Nom` | `nom` | oui | nom de la catégorie |
+| `Parent` | `parent` | non | nom d'une catégorie existante ou d'une ligne **précédente** du fichier |
 
 ## products
 
-| Colonne | Obligatoire | Contenu |
-|---|---|---|
-| `sku` | oui | code article, unique dans l'entreprise (mis en majuscules) |
-| `nom` | oui | désignation |
-| `prix_vente` | oui | premier prix de vente, > 0 (`product_prices`) |
-| `categorie` | non | nom d'une catégorie existante, non ambigu |
-| `unite` | non | `piece`, `kg`, `litre`, `carton`, `metre`, `paquet` (et leurs écritures usuelles) |
-| `code_barres` | non | unique dans l'entreprise |
-| `taux_taxe` | non | de 0 à < 1, ou en pourcentage |
-| `prix_achat` | non | coût d'achat indicatif |
-| `seuil_reappro` | non | seuil de stock bas |
-| `suivi_stock` | non | `oui` par défaut |
-| `stock_initial` | non | quantité ; crée un mouvement `initial` (façade Inventory) |
-| `cout_unitaire` | si `stock_initial` | coût du stock initial (à défaut, `prix_achat`) : fixe le CMP |
+| Colonne | Ancien nom | Obligatoire | Contenu |
+|---|---|---|---|
+| `Référence` | `sku` | non | unique dans l'entreprise (mis en majuscules) ; générée (`ART-0001`…) si vide (ADR 0066) |
+| `Nom` | `nom` | oui | désignation |
+| `Prix de vente` | `prix_vente` | oui | premier prix de vente, > 0 (`product_prices`) |
+| `Catégorie` | `categorie` | non | nom d'une catégorie existante, non ambigu |
+| `Unité` | `unite` | non | `piece`, `kg`, `litre`, `carton`, `metre`, `paquet`, `sac`, `bouteille` (et leurs écritures usuelles) |
+| `Code-barres` | `code_barres` | non | unique dans l'entreprise |
+| `TVA` | `taux_taxe` | non | de 0 à < 1, ou en pourcentage ; à défaut, la TVA par défaut de l'entreprise |
+| `Prix d'achat` | `prix_achat` | non | prix d'achat indicatif |
+| `Seuil d'alerte` | `seuil_reappro` | non | seuil de stock bas |
+| `Suivi du stock` | `suivi_stock` | non | `oui` par défaut |
+| `Stock initial` | `stock_initial` | non | quantité ; crée un mouvement `initial` (façade Inventory) |
+| `Coût unitaire` | `cout_unitaire` | si `Stock initial` | coût du stock initial (à défaut, `Prix d'achat`) : fixe le prix d'achat moyen |
 
 ## customers
 
-| Colonne | Obligatoire | Contenu |
-|---|---|---|
-| `nom` | oui | |
-| `code` | non | généré (`CLI-0001`…) si absent |
-| `telephone` | non | |
-| `email` | non | |
-| `plafond_credit` | non | montant ≥ 0 |
+| Colonne | Ancien nom | Obligatoire | Contenu |
+|---|---|---|---|
+| `Nom` | `nom` | oui | |
+| `Code` | `code` | non | généré (`CLI-0001`…) si absent |
+| `Téléphone` | `telephone` | non | |
+| `E-mail` | `email` | non | |
+| `Plafond de crédit` | `plafond_credit` | non | montant ≥ 0 |
 
 ## suppliers
 
-| Colonne | Obligatoire | Contenu |
-|---|---|---|
-| `nom` | oui | |
-| `code` | non | généré (`FRN-0001`…) si absent |
-| `telephone` | non | |
-| `delai_paiement_jours` | non | entier |
+| Colonne | Ancien nom | Obligatoire | Contenu |
+|---|---|---|---|
+| `Nom` | `nom` | oui | |
+| `Code` | `code` | non | généré (`FRN-0001`…) si absent |
+| `Téléphone` | `telephone` | non | |
+| `Délai de paiement (jours)` | `delai_paiement_jours` | non | entier |
 
 ## Codes d'erreur du rapport
 
