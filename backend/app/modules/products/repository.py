@@ -142,6 +142,28 @@ class ProductRepository(TenantRepository[Product]):
         )
         return self.session.execute(stmt).scalars().all()
 
+    def counts_by_category(self) -> dict[UUID, int]:
+        """Produits vivants par catégorie : ce que la garde de suppression regarde."""
+        stmt = (
+            select(Product.category_id, func.count())
+            .where(
+                Product.company_id == self.ctx.company_id,
+                Product.deleted_at.is_(None),
+                Product.category_id.is_not(None),
+            )
+            .group_by(Product.category_id)
+        )
+        return {
+            category_id: int(count)
+            for category_id, count in self.session.execute(stmt).all()
+            if category_id is not None
+        }
+
+    def ids_matching(self, search: str) -> list[UUID]:
+        """Produits vivants dont le nom, la référence ou le code-barres répond."""
+        stmt = self._live().where(*self._filters(search=search, category_id=None, is_active=None))
+        return list(self.session.execute(stmt.with_only_columns(Product.id)).scalars())
+
     def count_live_in_category(self, category_id: UUID) -> int:
         """Produits actifs rattachés à une catégorie.
 

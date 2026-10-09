@@ -102,6 +102,18 @@ class InventoryMovementRepository(TenantRepository[InventoryMovement]):
         )
         return int(self.session.execute(stmt).scalar_one())
 
+    def net_sold(self, product_id: UUID, *, since: datetime, until: datetime) -> Decimal:
+        """Quantité vendue nette sur la période : sorties de vente, retours clients et
+        annulations (leurs inverses) compensés."""
+        stmt = select(func.coalesce(func.sum(InventoryMovement.qty_delta), 0)).where(
+            InventoryMovement.company_id == self.ctx.company_id,
+            InventoryMovement.product_id == product_id,
+            InventoryMovement.type.in_(("sale_out", "customer_return_in")),
+            InventoryMovement.occurred_at >= since,
+            InventoryMovement.occurred_at <= until,
+        )
+        return -Decimal(self.session.execute(stmt).scalar_one())
+
     def reversal_of(self, movement_id: UUID) -> InventoryMovement | None:
         """Le mouvement qui annule celui-ci, s'il existe déjà.
 
@@ -176,6 +188,46 @@ class ProductStockRepository:
             .offset((page - 1) * page_size)
         )
         return self.session.execute(stmt).scalars().all()
+
+    def all(self) -> Sequence[ProductStock]:
+        """Toutes les lignes de stock de l'entreprise : une boutique en compte quelques
+        centaines, la liste filtrée et triée se calcule d'un coup (ADR 0071)."""
+        return self.session.execute(self._select()).scalars().all()
+
+    def highest_on_hand_since(
+        self, product_ids: Sequence[UUID], since: datetime
+    ) -> dict[UUID, Decimal]:
+        """Plus haut stock atteint par chaque article depuis `since`, rejoué du journal.
+
+        La somme cumulée court sur tout l'historique (le stock à une date est la somme
+        de tous les mouvements antérieurs) ; seuls les points postérieurs à `since`
+        comptent. Un article sans mouvement depuis est absent : son stock n'a pas bougé.
+        """
+        if not product_ids:
+            return {}
+        running = (
+            select(
+                InventoryMovement.product_id.label("product_id"),
+                InventoryMovement.occurred_at.label("occurred_at"),
+                func.sum(InventoryMovement.qty_delta)
+                .over(
+                    partition_by=InventoryMovement.product_id,
+                    order_by=(InventoryMovement.occurred_at, InventoryMovement.id),
+                )
+                .label("on_hand"),
+            )
+            .where(
+                InventoryMovement.company_id == self.ctx.company_id,
+                InventoryMovement.product_id.in_(list(product_ids)),
+            )
+            .subquery()
+        )
+        stmt = (
+            select(running.c.product_id, func.max(running.c.on_hand))
+            .where(running.c.occurred_at >= since)
+            .group_by(running.c.product_id)
+        )
+        return {row[0]: Decimal(row[1]) for row in self.session.execute(stmt).all()}
 
     def count(self, *, product_ids: Sequence[UUID] | None = None) -> int:
         stmt = (

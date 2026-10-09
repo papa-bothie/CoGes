@@ -22,7 +22,7 @@ nommées, écrire l'audit critique des ajustements manuels, et poser l'événeme
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, NamedTuple
 from uuid import UUID
@@ -31,12 +31,21 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import clock, money
 from app.core.audit import AuditAction, audit_critical
-from app.core.errors import BusinessRuleError, NotFoundError, constraint_name, sqlstate
+from app.core.errors import (
+    BusinessRuleError,
+    NotFoundError,
+    ValidationFailedError,
+    constraint_name,
+    sqlstate,
+)
 from app.core.events.outbox import emit
 from app.core.events.types import EventType
 from app.core.tenancy import TenantContext
 from app.modules.categories import service as categories_service
+from app.modules.finance import service as finance_service
+from app.modules.finance.schemas import AllocationInput, DebtCreate, PaymentCreate
 from app.modules.inventory.events import AGGREGATE_TYPE, stock_updated_payload
 from app.modules.inventory.models import InventoryMovement, ProductStock
 from app.modules.inventory.repository import (
@@ -47,15 +56,19 @@ from app.modules.inventory.repository import (
 from app.modules.inventory.schemas import (
     CORRECTION_TYPES,
     MANUAL_MOVEMENT_TYPES,
+    DeliveryCreate,
+    DeliveryLineRead,
+    DeliveryRead,
     MovementCreate,
     MovementRead,
     NewProductCreate,
     NewProductRead,
     StockLine,
     StockRebuildLine,
+    StockSummary,
 )
 from app.modules.products import service as products_service
-from app.modules.products.schemas import ProductRead
+from app.modules.products.schemas import ProductRead, ProductSummary
 
 # --------------------------------------------------------------- erreurs métier
 # Une classe par règle, avec son code stable en anglais et son message en français.
@@ -189,6 +202,13 @@ def list_movements(
     )
 
 
+def net_sold(
+    session: Session, ctx: TenantContext, product_id: UUID, *, since: datetime, until: datetime
+) -> Decimal:
+    """Quantité vendue nette d'un article sur une période (« Vendu ce mois »)."""
+    return InventoryMovementRepository(session, ctx).net_sold(product_id, since=since, until=until)
+
+
 def get_movement(session: Session, ctx: TenantContext, movement_id: UUID) -> InventoryMovement:
     """Mouvement du tenant courant. Celui d'une autre entreprise donne 404."""
     movement = InventoryMovementRepository(session, ctx).get(movement_id)
@@ -206,6 +226,22 @@ def _status(qty_on_hand: Decimal, reorder_point: Decimal | None) -> str:
     return "ok"
 
 
+#: Une livraison rattache ses entrées à la dette fournisseur qui la porte (révision 0017).
+DELIVERY_REF_TYPE = "supplier_debt"
+
+#: Fenêtre du niveau d'un article : son stock rapporté au plus haut des 90 derniers jours.
+LEVEL_WINDOW_DAYS = 90
+_STATUS_ORDER = {"out": 0, "low": 1, "ok": 2}
+
+
+def _level(qty: Decimal, highest: Decimal | None) -> Decimal:
+    """Part du plus haut stock récent qui reste (0 à 1), au centième."""
+    peak = qty if highest is None else max(highest, qty)
+    if peak <= 0:
+        return Decimal("0.00")
+    return (qty / peak).quantize(Decimal("0.01"))
+
+
 def get_stock(
     session: Session,
     ctx: TenantContext,
@@ -213,51 +249,91 @@ def get_stock(
     page: int,
     page_size: int,
     product_ids: Sequence[UUID] | None = None,
+    status: str | None = None,
+    category_id: UUID | None = None,
+    search: str | None = None,
 ) -> tuple[list[StockLine], int]:
-    """Stock valorisé d'une page d'articles, joint aux fiches produit.
+    """Stock valorisé, joint aux fiches produit, filtré et trié (ADR 0012, ADR 0071).
 
-    Deux requêtes plutôt qu'une jointure : Inventory (bande C) lit Products
-    (bande B) **par sa façade**, jamais par son modèle ni son repository (ADR 0012).
-    Les articles en rupture remontent en premier — c'est ce que le gérant cherche.
-    `product_ids` restreint la page à un lot d'articles : c'est ainsi que la liste des
-    produits et la saisie d'une vente lisent le stock de ce qu'elles affichent (ADR 0050).
+    Inventory (bande C) lit Products (bande B) **par sa façade**, jamais par son modèle.
+    Épuisés d'abord, puis bientôt épuisés, puis les autres, par nom : c'est ce que le
+    gérant cherche. `product_ids` restreint la liste à un lot d'articles (saisie d'une
+    vente, ADR 0050) ; `status`, `category_id` et `search` sont les puces et la
+    recherche de l'écran Stock. Chaque ligne donne son prix de vente et son niveau, le
+    stock rapporté au plus haut des 90 derniers jours.
     """
     stock_repository = ProductStockRepository(session, ctx)
-    rows = stock_repository.page(page=page, page_size=page_size, product_ids=product_ids)
-    total = stock_repository.count(product_ids=product_ids)
-
+    rows = (
+        list(stock_repository.many(list(product_ids)).values())
+        if product_ids
+        else list(stock_repository.all())
+    )
     summaries = products_service.get_summaries(session, ctx, [row.product_id for row in rows])
-    category_ids = [
-        summary.category_id for summary in summaries.values() if summary.category_id is not None
-    ]
-    category_names = categories_service.get_names(session, ctx, category_ids)
-
-    lines: list[StockLine] = []
+    matching = None if not search else products_service.ids_matching(session, ctx, search)
+    selected: list[tuple[ProductStock, ProductSummary, str]] = []
     for row in rows:
         summary = summaries.get(row.product_id)
         if summary is None:
             # Produit supprimé logiquement : sa projection survit (le journal aussi),
             # mais la fiche n'est plus lisible. On ne devine rien, on n'affiche rien.
             continue
-        lines.append(
-            StockLine(
-                product_id=row.product_id,
-                sku=summary.sku,
-                name=summary.name,
-                unit=summary.unit,
-                category_id=summary.category_id,
-                category_name=(
-                    None if summary.category_id is None else category_names.get(summary.category_id)
-                ),
-                qty_on_hand=row.qty_on_hand,
-                avg_cost=row.avg_cost,
-                stock_value=row.stock_value,
-                reorder_point=summary.reorder_point,
-                status=_status(row.qty_on_hand, summary.reorder_point),
-                last_movement_at=row.last_movement_at,
-            )
+        state = _status(row.qty_on_hand, summary.reorder_point)
+        if status is not None and state != status:
+            continue
+        if category_id is not None and summary.category_id != category_id:
+            continue
+        if matching is not None and row.product_id not in matching:
+            continue
+        selected.append((row, summary, state))
+    selected.sort(key=lambda item: (_STATUS_ORDER[item[2]], item[1].name.casefold()))
+    shown = selected[(page - 1) * page_size : page * page_size]
+
+    shown_ids = [row.product_id for row, _, _ in shown]
+    category_names = categories_service.get_names(
+        session,
+        ctx,
+        [summary.category_id for _, summary, _ in shown if summary.category_id is not None],
+    )
+    prices = products_service.current_unit_prices(session, ctx, shown_ids)
+    since = clock.now() - timedelta(days=LEVEL_WINDOW_DAYS)
+    highest = stock_repository.highest_on_hand_since(shown_ids, since)
+
+    lines = [
+        StockLine(
+            product_id=row.product_id,
+            sku=summary.sku,
+            name=summary.name,
+            unit=summary.unit,
+            category_id=summary.category_id,
+            category_name=(
+                None if summary.category_id is None else category_names.get(summary.category_id)
+            ),
+            qty_on_hand=row.qty_on_hand,
+            avg_cost=row.avg_cost,
+            stock_value=row.stock_value,
+            reorder_point=summary.reorder_point,
+            status=state,
+            last_movement_at=row.last_movement_at,
+            unit_price=prices.get(row.product_id),
+            level=_level(row.qty_on_hand, highest.get(row.product_id)),
         )
-    return lines, total
+        for row, summary, state in shown
+    ]
+    return lines, len(selected)
+
+
+def stock_summary(session: Session, ctx: TenantContext) -> StockSummary:
+    """En tête de l'écran Stock : articles, valeur au prix d'achat, alertes (ADR 0071)."""
+    rows = ProductStockRepository(session, ctx).all()
+    summaries = products_service.get_summaries(session, ctx, [row.product_id for row in rows])
+    live = [(row, summaries[row.product_id]) for row in rows if row.product_id in summaries]
+    states = [_status(row.qty_on_hand, summary.reorder_point) for row, summary in live]
+    return StockSummary(
+        product_count=len(live),
+        stock_value=money.amount(sum((row.stock_value for row, _ in live), Decimal("0"))),
+        low_count=states.count("low"),
+        out_count=states.count("out"),
+    )
 
 
 # ------------------------------------------------------------------- écritures
@@ -308,12 +384,14 @@ def record_movement(
     payload: MovementCreate,
     *,
     idempotency_key: UUID | None = None,
+    reference: tuple[str, UUID] | None = None,
     ip_address: str | None = None,
 ) -> InventoryMovement:
     """Écrit un mouvement, et avec lui le stock, l'audit et l'événement.
 
     Point d'entrée unique du stock : tout passe par ici, y compris les sorties de
-    vente à partir de la phase 05.
+    vente à partir de la phase 05. `reference` rattache le mouvement à la pièce qui
+    l'a fait naître (la dette d'une livraison, ADR 0071).
     """
     if not products_service.is_stock_tracked(session, ctx, payload.product_id):
         # Le trigger `CG021` reste l'autorité ; ce contrôle rend la main plus tôt,
@@ -325,7 +403,7 @@ def record_movement(
     # Capturés avant le `flush` risqué : après un rejet, la transaction est morte et
     # relire un attribut expiré échouerait à son tour (ADR 0010).
     available = Decimal("0") if current is None else current.qty_on_hand
-    ref_type, ref_id = _reference(payload, idempotency_key)
+    ref_type, ref_id = reference or _reference(payload, idempotency_key)
 
     entry = InventoryMovement(
         company_id=ctx.company_id,
@@ -402,6 +480,109 @@ def create_product_with_stock(
     return NewProductRead(
         product=ProductRead.build(product, price),
         opening_movement=None if movement is None else MovementRead.model_validate(movement),
+    )
+
+
+class DeliveryPaymentError(ValidationFailedError):
+    """« Une partie » qui n'en est pas une : rien, ou le total ou plus.
+
+    422 : la demande se contredit (le total se calcule sur ses propres lignes).
+    """
+
+    code = "invalid_delivery_payment"
+    default_message = "Le montant payé doit être plus que 0 et moins que le total."
+
+
+class EmptyDeliveryError(ValidationFailedError):
+    code = "empty_delivery"
+    default_message = "Une livraison sans montant ne s'enregistre pas : indiquez les prix d'achat."
+
+
+def receive_delivery(
+    session: Session,
+    ctx: TenantContext,
+    payload: DeliveryCreate,
+    *,
+    ip_address: str | None = None,
+) -> DeliveryRead:
+    """Reçoit une livraison fournisseur (écran 11, ADR 0071), tout ou rien.
+
+    1. La dette fournisseur du total s'ouvre, avec son échéance : Finance vérifie le
+       fournisseur (404 s'il n'est pas de l'entreprise) et audite la dette.
+    2. Chaque article entre en stock (`purchase_in`, au coût tapé : le CMP se recalcule),
+       rattaché à la dette par `ref_type = 'supplier_debt'`.
+    3. Si l'on paie tout ou une partie, le décaissement est lettré sur la dette.
+
+    Une seule transaction : un refus à n'importe quelle étape n'en laisse aucune trace.
+    Inventory appelle Finance par sa façade, comme la confirmation d'une vente.
+    """
+    total = money.amount(sum((line.qty * line.unit_cost for line in payload.lines), Decimal("0")))
+    if total <= 0:
+        raise EmptyDeliveryError(details={"total": str(total)})
+    paid = {
+        "now": total,
+        "later": Decimal("0"),
+        "part": payload.paid_amount or Decimal("0"),
+    }[payload.payment_mode]
+    if payload.payment_mode == "part" and not Decimal("0") < paid < total:
+        raise DeliveryPaymentError(details={"paid_amount": str(paid), "total": str(total)})
+
+    debt = finance_service.create_debt(
+        session,
+        ctx,
+        DebtCreate(
+            party_type="supplier",
+            principal=total,
+            supplier_id=payload.supplier_id,
+            due_date=None if payload.payment_mode == "now" else payload.due_date,
+        ),
+        ip_address=ip_address,
+    )
+    lines: list[DeliveryLineRead] = []
+    for line in payload.lines:
+        movement = record_movement(
+            session,
+            ctx,
+            MovementCreate(
+                product_id=line.product_id,
+                type="purchase_in",
+                qty_delta=line.qty,
+                unit_cost=line.unit_cost,
+                supplier_id=payload.supplier_id,
+            ),
+            reference=(DELIVERY_REF_TYPE, debt.id),
+            ip_address=ip_address,
+        )
+        lines.append(
+            DeliveryLineRead(
+                product_id=line.product_id,
+                movement_id=movement.id,
+                qty=line.qty,
+                unit_cost=line.unit_cost,
+            )
+        )
+    payment = None
+    if paid > 0:
+        payment = finance_service.record_payment(
+            session,
+            ctx,
+            PaymentCreate(
+                direction="outflow",
+                method=payload.method,
+                amount=paid,
+                allocations=[AllocationInput(debt_id=debt.id, amount=paid)],
+            ),
+            ip_address=ip_address,
+        )
+    return DeliveryRead(
+        debt_id=debt.id,
+        supplier_id=payload.supplier_id,
+        payment_id=None if payment is None else payment.id,
+        total=total,
+        paid=paid,
+        balance=total - paid,
+        due_date=debt.due_date,
+        lines=lines,
     )
 
 

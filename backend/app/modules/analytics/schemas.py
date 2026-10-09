@@ -13,7 +13,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from app.core.money import Amount
+from app.core.money import Amount, Quantity
+from app.modules.inventory.schemas import MovementType, StockReason
 
 #: Longueur maximale d'une plage d'analyse, en jours. Aucun texte ne la fixe ;
 #: la borne existe pour qu'une plage saisie de travers ne balaye pas dix ans de
@@ -197,3 +198,32 @@ class Timeseries(BaseModel):
     period_from: date
     period_to: date
     points: list[TimeseriesPoint]
+
+
+class ProductHistoryItem(BaseModel):
+    """Un mouvement de l'article, avec de quoi l'écrire en phrase (écran 08, ADR 0071)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    movement_id: UUID
+    occurred_at: datetime
+    type: MovementType
+    reason_code: StockReason | None
+    qty_delta: Quantity
+    #: Client de la vente ou du retour, fournisseur de la livraison ; `None` sinon.
+    counterparty: str | None
+    #: Annulation d'un autre mouvement (ADR 0017).
+    is_reversal: bool
+
+
+class ProductHistory(BaseModel):
+    """« Ce qui s'est passé » et « Vendu ce mois » d'un article."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    #: Vendu depuis le 1er du mois, retours et annulations déduits.
+    month_sold_qty: Quantity
+    #: Jours écoulés du mois, aujourd'hui compris (« Environ 1 sac par jour »).
+    month_days: int
+    items: list[ProductHistoryItem]

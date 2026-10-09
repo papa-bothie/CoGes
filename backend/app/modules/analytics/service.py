@@ -36,6 +36,8 @@ from app.modules.analytics.schemas import (
     SERIES_LABELS,
     DailyCashPoint,
     FinanceOverview,
+    ProductHistory,
+    ProductHistoryItem,
     ProductMetric,
     ProductRanking,
     ProductRankRow,
@@ -48,7 +50,9 @@ from app.modules.expenses import service as expenses_service
 from app.modules.finance import service as finance_service
 from app.modules.intelligence import serving as intelligence_serving
 from app.modules.inventory import service as inventory_service
+from app.modules.products import service as products_service
 from app.modules.sales import service as sales_service
+from app.modules.suppliers import service as suppliers_service
 
 
 class PeriodInvertedError(ValidationFailedError):
@@ -518,4 +522,64 @@ def timeseries(
         period_from=period_from,
         period_to=period_to,
         points=points,
+    )
+
+
+#: Lignes de « Ce qui s'est passé » sur la fiche d'un article.
+HISTORY_SIZE = 30
+
+
+def product_history(
+    session: Session, ctx: TenantContext, product_id: UUID, *, limit: int = HISTORY_SIZE
+) -> ProductHistory:
+    """Historique d'un article en phrases (écran 08, ADR 0071).
+
+    Composé ici parce que Restitution peut lire toutes les façades : Inventory donne les
+    mouvements, Sales le client derrière une vente ou un retour, Suppliers le nom du
+    fournisseur d'une livraison. Un article d'une autre entreprise donne 404.
+    """
+    products_service.get_product(session, ctx, product_id)
+    movements, _ = inventory_service.list_movements(
+        session, ctx, page=1, page_size=limit, product_id=product_id
+    )
+    customers = sales_service.customer_names_of_lines(
+        session,
+        ctx,
+        sale_item_ids=[m.ref_id for m in movements if m.ref_type == "sale_item" and m.ref_id],
+        return_item_ids=[
+            m.ref_id for m in movements if m.ref_type == "sale_return_item" and m.ref_id
+        ],
+    )
+    suppliers = suppliers_service.names_by_ids(
+        session, ctx, [m.supplier_id for m in movements if m.supplier_id is not None]
+    )
+
+    def counterparty(movement: Any) -> str | None:
+        if movement.supplier_id is not None:
+            return suppliers.get(movement.supplier_id)
+        if movement.ref_id is not None:
+            return customers.get(movement.ref_id)
+        return None
+
+    zone = ZoneInfo(companies_service.get_timezone(session, ctx))
+    now = clock.now_in(zone.key)
+    month_start = datetime.combine(now.date().replace(day=1), time.min, tzinfo=zone)
+    return ProductHistory(
+        product_id=product_id,
+        month_sold_qty=to_quantity(
+            inventory_service.net_sold(session, ctx, product_id, since=month_start, until=now)
+        ),
+        month_days=now.day,
+        items=[
+            ProductHistoryItem(
+                movement_id=movement.id,
+                occurred_at=movement.occurred_at,
+                type=movement.type,
+                reason_code=movement.reason_code,
+                qty_delta=movement.qty_delta,
+                counterparty=counterparty(movement),
+                is_reversal=movement.reversal_of_movement_id is not None,
+            )
+            for movement in movements
+        ],
     )
