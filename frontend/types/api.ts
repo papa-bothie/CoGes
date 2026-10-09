@@ -708,7 +708,8 @@ export interface paths {
     };
     /**
      * Day Totals
-     * @description Nombre et total des ventes confirmées par jour, en tête de chaque groupe de la liste.
+     * @description Nombre et total des ventes par jour, en tête de chaque groupe de la liste, avec les
+     *     mêmes filtres qu'elle (`state`, `search`).
      *
      *     Déclarée avant `/{sale_id}` : sinon ce chemin serait lu comme un identifiant.
      */
@@ -3558,7 +3559,7 @@ export interface components {
     };
     /**
      * SaleDayTotal
-     * @description Ventes confirmées d'un jour, dans le fuseau de l'entreprise (ADR 0070).
+     * @description Les ventes d'un jour, dans le fuseau de l'entreprise (ADR 0070), brouillons exclus.
      */
     SaleDayTotal: {
       /**
@@ -3568,12 +3569,14 @@ export interface components {
       day: string;
       /** Sale Count */
       sale_count: number;
+      /** Confirmed Count */
+      confirmed_count: number;
       total: components["schemas"]["Amount-Output"];
     };
     /**
      * SaleDayTotals
      * @description Totaux par jour de la liste des ventes, du plus récent au plus ancien. Un jour sans
-     *     vente confirmée est absent : la liste n'affiche pas de groupe vide.
+     *     vente est absent : la liste n'affiche pas de groupe vide.
      */
     SaleDayTotals: {
       /** Items */
@@ -5831,6 +5834,8 @@ export interface operations {
       query: {
         date_from: string;
         date_to: string;
+        state?: components["schemas"]["SalePaymentState"] | null;
+        search?: string | null;
       };
       header?: never;
       path?: never;

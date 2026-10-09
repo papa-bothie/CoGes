@@ -239,19 +239,22 @@ class SalePage(BaseModel):
 
 
 class SaleDayTotal(BaseModel):
-    """Ventes confirmées d'un jour, dans le fuseau de l'entreprise (ADR 0070)."""
+    """Les ventes d'un jour, dans le fuseau de l'entreprise (ADR 0070), brouillons exclus."""
 
     model_config = ConfigDict(extra="forbid")
 
     day: date
+    #: Ventes du groupe, annulées comprises (« 5 ventes » dans la maquette 03).
     sale_count: int
-    #: Total vendu, tel que confirmé : ni les retours ni les annulations n'y entrent.
+    #: Ventes encaissées seulement (« Aujourd'hui : 4 ventes »).
+    confirmed_count: int
+    #: Total des ventes encaissées, tel que confirmé : ni retours ni annulations.
     total: Amount
 
 
 class SaleDayTotals(BaseModel):
     """Totaux par jour de la liste des ventes, du plus récent au plus ancien. Un jour sans
-    vente confirmée est absent : la liste n'affiche pas de groupe vide."""
+    vente est absent : la liste n'affiche pas de groupe vide."""
 
     model_config = ConfigDict(extra="forbid")
 

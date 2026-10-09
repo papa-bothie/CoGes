@@ -134,12 +134,22 @@ def day_totals(
     tenant: Annotated[TenantSession, Depends(require_permission("sales:read"))],
     date_from: Annotated[datetime, Query()],
     date_to: Annotated[datetime, Query()],
+    state: Annotated[SalePaymentState | None, Query()] = None,
+    search: Annotated[str | None, Query(max_length=120)] = None,
 ) -> SaleDayTotals:
-    """Nombre et total des ventes confirmées par jour, en tête de chaque groupe de la liste.
+    """Nombre et total des ventes par jour, en tête de chaque groupe de la liste, avec les
+    mêmes filtres qu'elle (`state`, `search`).
 
     Déclarée avant `/{sale_id}` : sinon ce chemin serait lu comme un identifiant.
     """
-    return service.day_totals(tenant.session, tenant.ctx, date_from=date_from, date_to=date_to)
+    return service.day_totals(
+        tenant.session,
+        tenant.ctx,
+        date_from=date_from,
+        date_to=date_to,
+        state=state,
+        search=search,
+    )
 
 
 @router.get("/{sale_id}", response_model=SaleDetail)

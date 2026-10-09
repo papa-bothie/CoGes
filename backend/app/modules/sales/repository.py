@@ -178,22 +178,44 @@ class SaleRepository(TenantRepository[Sale]):
         return int(self.session.execute(stmt).scalar_one())
 
     def day_totals(
-        self, *, date_from: datetime, date_to: datetime, timezone: str
-    ) -> list[tuple[date, int, Decimal]]:
-        """Ventes confirmées par jour local, du plus récent au plus ancien."""
+        self,
+        *,
+        date_from: datetime,
+        date_to: datetime,
+        timezone: str,
+        state: str | None = None,
+        sale_no: str | None = None,
+        search_customer_ids: Sequence[UUID] | None = None,
+    ) -> list[tuple[date, int, int, Decimal]]:
+        """(jour local, ventes, ventes encaissées, total encaissé), du plus récent au plus
+        ancien, brouillons exclus, avec les mêmes filtres que la liste."""
         day = func.date(func.timezone(timezone, Sale.sold_at))
+        confirmed = Sale.status == "confirmed"
         stmt = (
-            select(day, func.count(), func.coalesce(func.sum(Sale.total), 0))
+            select(
+                day,
+                func.count(),
+                func.count().filter(confirmed),
+                func.coalesce(func.sum(Sale.total).filter(confirmed), 0),
+            )
             .where(
                 Sale.company_id == self.ctx.company_id,
-                Sale.status == "confirmed",
-                Sale.sold_at >= date_from,
-                Sale.sold_at <= date_to,
+                *self._filters(
+                    date_from=date_from,
+                    date_to=date_to,
+                    state=state,
+                    sale_no=sale_no,
+                    search_customer_ids=search_customer_ids,
+                    include_drafts=False,
+                ),
             )
             .group_by(day)
             .order_by(day.desc())
         )
-        return [(row[0], int(row[1]), Decimal(row[2])) for row in self.session.execute(stmt)]
+        return [
+            (row[0], int(row[1]), int(row[2]), Decimal(row[3]))
+            for row in self.session.execute(stmt)
+        ]
 
     def with_returns(self, sale_ids: Sequence[UUID]) -> set[UUID]:
         """Parmi ces ventes, celles qui portent au moins un retour.

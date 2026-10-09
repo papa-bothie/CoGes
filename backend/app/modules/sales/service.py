@@ -351,18 +351,33 @@ def list_sales(
 
 
 def day_totals(
-    session: Session, ctx: TenantContext, *, date_from: datetime, date_to: datetime
+    session: Session,
+    ctx: TenantContext,
+    *,
+    date_from: datetime,
+    date_to: datetime,
+    state: str | None = None,
+    search: str | None = None,
 ) -> SaleDayTotals:
-    """Ventes confirmées par jour, dans le fuseau de l'entreprise (ADR 0070)."""
+    """Ventes par jour, dans le fuseau de l'entreprise, avec les filtres de la liste
+    (ADR 0070) : en tête de chaque groupe, et dans le résumé du jour."""
+    filters: dict[str, Any] = {"state": state}
+    term = search.strip() if search else ""
+    if term:
+        filters["sale_no"] = sale_number_of(term)
+        filters["search_customer_ids"] = customers_service.ids_matching(session, ctx, term)
     rows = SaleRepository(session, ctx).day_totals(
         date_from=date_from,
         date_to=date_to,
         timezone=companies_service.get_timezone(session, ctx),
+        **filters,
     )
     return SaleDayTotals(
         items=[
-            SaleDayTotal(day=day, sale_count=count, total=money.amount(total))
-            for day, count, total in rows
+            SaleDayTotal(
+                day=day, sale_count=count, confirmed_count=confirmed, total=money.amount(total)
+            )
+            for day, count, confirmed, total in rows
         ]
     )
 

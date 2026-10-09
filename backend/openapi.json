@@ -2678,7 +2678,7 @@
           "sales"
         ],
         "summary": "Day Totals",
-        "description": "Nombre et total des ventes confirmées par jour, en tête de chaque groupe de la liste.\n\nDéclarée avant `/{sale_id}` : sinon ce chemin serait lu comme un identifiant.",
+        "description": "Nombre et total des ventes par jour, en tête de chaque groupe de la liste, avec les\nmêmes filtres qu'elle (`state`, `search`).\n\nDéclarée avant `/{sale_id}` : sinon ce chemin serait lu comme un identifiant.",
         "operationId": "day_totals_api_v1_sales_day_totals_get",
         "parameters": [
           {
@@ -2699,6 +2699,39 @@
               "type": "string",
               "format": "date-time",
               "title": "Date To"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SalePaymentState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
             }
           }
         ],
@@ -10919,6 +10952,10 @@
             "type": "integer",
             "title": "Sale Count"
           },
+          "confirmed_count": {
+            "type": "integer",
+            "title": "Confirmed Count"
+          },
           "total": {
             "$ref": "#/components/schemas/Amount-Output"
           }
@@ -10928,10 +10965,11 @@
         "required": [
           "day",
           "sale_count",
+          "confirmed_count",
           "total"
         ],
         "title": "SaleDayTotal",
-        "description": "Ventes confirmées d'un jour, dans le fuseau de l'entreprise (ADR 0070)."
+        "description": "Les ventes d'un jour, dans le fuseau de l'entreprise (ADR 0070), brouillons exclus."
       },
       "SaleDayTotals": {
         "properties": {
@@ -10949,7 +10987,7 @@
           "items"
         ],
         "title": "SaleDayTotals",
-        "description": "Totaux par jour de la liste des ventes, du plus récent au plus ancien. Un jour sans\nvente confirmée est absent : la liste n'affiche pas de groupe vide."
+        "description": "Totaux par jour de la liste des ventes, du plus récent au plus ancien. Un jour sans\nvente est absent : la liste n'affiche pas de groupe vide."
       },
       "SaleDetail": {
         "properties": {

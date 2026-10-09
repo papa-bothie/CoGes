@@ -415,8 +415,30 @@ def test_day_totals_count_confirmed_sales_per_local_day(api_client: TestClient) 
     days = response.json()["items"]
     assert len(days) == 1
     assert date.fromisoformat(days[0]["day"]) in {today, today + timedelta(days=1)}
-    assert days[0]["sale_count"] == 2
+    # La maquette compte l'annulée dans le groupe (« 3 ventes ») mais pas dans le total.
+    assert days[0]["sale_count"] == 3
+    assert days[0]["confirmed_count"] == 2
     assert Decimal(days[0]["total"]) == Decimal("5000.00")
+
+    # Mêmes filtres que la liste : les seules annulées, puis le nom d'un client.
+    window = {
+        "date_from": (datetime.now(UTC) - timedelta(days=2)).isoformat(),
+        "date_to": (datetime.now(UTC) + timedelta(minutes=1)).isoformat(),
+    }
+    cancelled_only = api_client.get(
+        "/api/v1/sales/day-totals",
+        headers=auth_headers(token),
+        params={**window, "state": "cancelled"},
+    ).json()["items"]
+    assert [(d["sale_count"], d["confirmed_count"], d["total"]) for d in cancelled_only] == [
+        (1, 0, "0.00")
+    ]
+    by_name = api_client.get(
+        "/api/v1/sales/day-totals",
+        headers=auth_headers(token),
+        params={**window, "search": "Awa Diop"},
+    ).json()["items"]
+    assert [d["sale_count"] for d in by_name] == [1]
 
 
 def test_day_totals_need_sales_read(api_client: TestClient) -> None:
