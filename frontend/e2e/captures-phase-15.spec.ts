@@ -11,6 +11,7 @@ import { SCREENS, settle } from "./screens";
  * plus la connexion, dans le sous-dossier `lot-f/`. `CAPTURES_LOT=1` : les formulaires du lot 1
  * (article, personne, stock, paiements), dialogues ouverts, dans `lot-1/`. `CAPTURES_LOT=2` :
  * les écrans dont les mots changent (chiffres, stock, argent, Intelligence), dans `lot-2/`.
+ * `CAPTURES_LOT=3a` : accueil et écrans de vente (maquette 01 à 06), aussi à 390 px, dans `lot-3a/`.
  */
 const STAGE = process.env.CAPTURES_STAGE;
 const LOT = process.env.CAPTURES_LOT ?? "0";
@@ -25,6 +26,12 @@ const LOT_2 = [
   "analytics",
   "intelligence",
   "intelligence-panneau",
+];
+const LOT_3A = ["tableau-de-bord", "ventes", "nouvelle-vente", "vente-detail"];
+/** Lot 3a : les pages d'une vente confirmée (reçu, retour), relatives à sa fiche. */
+const LOT_3A_SALE_PAGES = [
+  { name: "vente-recu", suffix: "/receipt" },
+  { name: "vente-retour", suffix: "/returns/new" },
 ];
 /** Lot 2 : les onglets de « L'argent » dont les colonnes changent de nom. */
 const LOT_2_TABS = ["payments", "debts", "expenses"];
@@ -141,12 +148,31 @@ test.describe("captures de la phase 15", () => {
       test("écrans du lot", async ({ page, request }) => {
         test.skip(LOT === "1", "lot 1 : formulaires seulement");
         test.setTimeout(400_000);
-        const chosen = LOT === "0" ? LOT_0 : LOT === "2" ? LOT_2 : null;
+        const chosen =
+          LOT === "0" ? LOT_0 : LOT === "2" ? LOT_2 : LOT === "3a" ? LOT_3A : null;
         const screens = chosen ? SCREENS.filter((s) => chosen.includes(s.name)) : SCREENS;
         for (const screen of screens) {
           await screen.open(page, request);
           await settle(page);
           await shoot(page, screen.name);
+        }
+        if (LOT === "3a") {
+          const saleUrl = page.url();
+          for (const extra of LOT_3A_SALE_PAGES) {
+            await page.goto(`${saleUrl}${extra.suffix}`);
+            // Le reçu d'avant n'a pas de titre de niveau 1 : on attend la fin du chargement.
+            await expect(page.getByRole("main")).toBeVisible({ timeout: 30_000 });
+            await page.waitForLoadState("networkidle");
+            await shoot(page, extra.name);
+          }
+          // Téléphone (maquette 26) : les mêmes écrans à 390 px.
+          await page.setViewportSize({ width: 390, height: 844 });
+          for (const screen of screens) {
+            await screen.open(page, request);
+            await settle(page);
+            await shoot(page, `${screen.name}-390`);
+          }
+          return;
         }
         if (LOT === "2") {
           for (const tab of LOT_2_TABS) {
