@@ -422,3 +422,28 @@ def test_day_totals_count_confirmed_sales_per_local_day(api_client: TestClient) 
 def test_day_totals_need_sales_read(api_client: TestClient) -> None:
     response = api_client.get("/api/v1/sales/day-totals")
     assert response.status_code == 401
+
+
+def test_the_list_can_hide_drafts_and_find_my_own(api_client: TestClient) -> None:
+    """La liste de la maquette ne montre pas les brouillons ; « Nouvelle vente » reprend le
+    brouillon de la personne connectée, jamais celui d'un collègue."""
+    company, token = _fresh(api_client)
+    product_id = _product(api_client, token)
+    _sale(api_client, token, [(product_id, "1")], paid="1000")
+    mine = api_client.post("/api/v1/sales", headers=auth_headers(token), json={}).json()["id"]
+    seller = create_user_with_role(
+        api_client, token, company, role="vendeur", email=f"v-{uuid4().hex[:6]}@example.com"
+    )
+    theirs = api_client.post("/api/v1/sales", headers=auth_headers(seller), json={}).json()["id"]
+
+    def ids(user_token: str, **params: str) -> list[str]:
+        response = api_client.get("/api/v1/sales", headers=auth_headers(user_token), params=params)
+        assert response.status_code == 200, response.text
+        return [item["id"] for item in response.json()["items"]]
+
+    assert mine not in ids(token, include_drafts="false")
+    assert theirs not in ids(token, include_drafts="false")
+    assert len(ids(token, include_drafts="false")) == 1
+    assert {mine, theirs} <= set(ids(token))
+    assert ids(token, status="draft", mine="true") == [mine]
+    assert ids(seller, status="draft", mine="true") == [theirs]

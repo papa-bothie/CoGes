@@ -317,6 +317,8 @@ def list_sales(
     date_to: datetime | None = None,
     search: str | None = None,
     state: str | None = None,
+    include_drafts: bool = True,
+    mine: bool = False,
 ) -> tuple[Sequence[Sale], int, dict[UUID, Decimal]]:
     """Page de ventes, avec le total retourné de celles qui portent un retour.
 
@@ -325,7 +327,9 @@ def list_sales(
     intégralement remisé, donc d'un remboursable nul.
 
     `search` trouve un numéro exact ou les ventes des clients dont le nom répond
-    (ADR 0070) ; `state` filtre par état de paiement, dérivé.
+    (ADR 0070) ; `state` filtre par état de paiement, dérivé. `include_drafts=False` : la
+    liste de la maquette, sans brouillon ; `mine` : les ventes saisies par l'utilisateur
+    courant (« Nouvelle vente » reprend son brouillon du jour).
     """
     repository = SaleRepository(session, ctx)
     filters: dict[str, Any] = {
@@ -334,6 +338,8 @@ def list_sales(
         "date_from": date_from,
         "date_to": date_to,
         "state": state,
+        "include_drafts": include_drafts,
+        "created_by": ctx.user_id if mine else None,
     }
     term = search.strip() if search else ""
     if term:

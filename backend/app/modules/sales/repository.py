@@ -43,10 +43,16 @@ class SaleRepository(TenantRepository[Sale]):
         sale_no: str | None = None,
         state: str | None = None,
         search_customer_ids: Sequence[UUID] | None = None,
+        include_drafts: bool = True,
+        created_by: UUID | None = None,
     ) -> list[ColumnElement[bool]]:
         filters: list[ColumnElement[bool]] = []
         if status is not None:
             filters.append(Sale.status == status)
+        if not include_drafts:
+            filters.append(Sale.status != "draft")
+        if created_by is not None:
+            filters.append(Sale.created_by == created_by)
         if customer_id is not None:
             filters.append(Sale.customer_id == customer_id)
         if date_from is not None:
@@ -109,6 +115,8 @@ class SaleRepository(TenantRepository[Sale]):
         sale_no: str | None = None,
         state: str | None = None,
         search_customer_ids: Sequence[UUID] | None = None,
+        include_drafts: bool = True,
+        created_by: UUID | None = None,
     ) -> Sequence[Sale]:
         """Ventes de la plus récente à la plus ancienne, `id` pour départager."""
         if page < 1:
@@ -126,6 +134,8 @@ class SaleRepository(TenantRepository[Sale]):
                     sale_no=sale_no,
                     state=state,
                     search_customer_ids=search_customer_ids,
+                    include_drafts=include_drafts,
+                    created_by=created_by,
                 )
             )
             .order_by(Sale.sold_at.desc(), Sale.id.desc())
@@ -144,6 +154,8 @@ class SaleRepository(TenantRepository[Sale]):
         sale_no: str | None = None,
         state: str | None = None,
         search_customer_ids: Sequence[UUID] | None = None,
+        include_drafts: bool = True,
+        created_by: UUID | None = None,
     ) -> int:
         stmt = (
             select(func.count())
@@ -158,6 +170,8 @@ class SaleRepository(TenantRepository[Sale]):
                     sale_no=sale_no,
                     state=state,
                     search_customer_ids=search_customer_ids,
+                    include_drafts=include_drafts,
+                    created_by=created_by,
                 ),
             )
         )

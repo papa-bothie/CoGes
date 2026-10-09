@@ -2427,7 +2427,7 @@
           "sales"
         ],
         "summary": "List Sales",
-        "description": "Ventes de la plus récente à la plus ancienne, filtrables.\n\n`search` trouve un **numéro exact** (« V-001044 » ou « 1044 ») ou le nom d'un client ;\n`state` : payées, pas encore payées, avec retour, annulées (ADR 0070).",
+        "description": "Ventes de la plus récente à la plus ancienne, filtrables.\n\n`search` trouve un **numéro exact** (« V-001044 » ou « 1044 ») ou le nom d'un client ;\n`state` : payées, pas encore payées, avec retour, annulées (ADR 0070).\n`include_drafts=false` écarte les brouillons ; `mine=true` ne garde que les ventes\nsaisies par l'utilisateur du jeton.",
         "operationId": "list_sales_api_v1_sales_get",
         "parameters": [
           {
@@ -2551,6 +2551,26 @@
                 }
               ],
               "title": "State"
+            }
+          },
+          {
+            "name": "include_drafts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Drafts"
+            }
+          },
+          {
+            "name": "mine",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Mine"
             }
           }
         ],

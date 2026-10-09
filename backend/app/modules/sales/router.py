@@ -97,11 +97,15 @@ def list_sales(
     date_to: Annotated[datetime | None, Query()] = None,
     search: Annotated[str | None, Query(max_length=120)] = None,
     state: Annotated[SalePaymentState | None, Query()] = None,
+    include_drafts: Annotated[bool, Query()] = True,
+    mine: Annotated[bool, Query()] = False,
 ) -> SalePage:
     """Ventes de la plus récente à la plus ancienne, filtrables.
 
     `search` trouve un **numéro exact** (« V-001044 » ou « 1044 ») ou le nom d'un client ;
     `state` : payées, pas encore payées, avec retour, annulées (ADR 0070).
+    `include_drafts=false` écarte les brouillons ; `mine=true` ne garde que les ventes
+    saisies par l'utilisateur du jeton.
     """
     sales, total, returned_totals = service.list_sales(
         tenant.session,
@@ -114,6 +118,8 @@ def list_sales(
         date_to=date_to,
         search=search,
         state=state,
+        include_drafts=include_drafts,
+        mine=mine,
     )
     return SalePage(
         items=service.build_page(tenant.session, tenant.ctx, sales, returned_totals),

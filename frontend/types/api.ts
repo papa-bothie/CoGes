@@ -661,6 +661,8 @@ export interface paths {
      *
      *     `search` trouve un **numéro exact** (« V-001044 » ou « 1044 ») ou le nom d'un client ;
      *     `state` : payées, pas encore payées, avec retour, annulées (ADR 0070).
+     *     `include_drafts=false` écarte les brouillons ; `mine=true` ne garde que les ventes
+     *     saisies par l'utilisateur du jeton.
      */
     get: operations["list_sales_api_v1_sales_get"];
     put?: never;
@@ -5729,6 +5731,8 @@ export interface operations {
         date_to?: string | null;
         search?: string | null;
         state?: components["schemas"]["SalePaymentState"] | null;
+        include_drafts?: boolean;
+        mine?: boolean;
       };
       header?: never;
       path?: never;
