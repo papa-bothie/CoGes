@@ -150,6 +150,16 @@ const STATES: Record<string, (page: Page, request: APIRequestContext) => Promise
     await page.getByLabel("Quantité rendue de Huile Dinor 1 L").fill("2");
     await expect(page.getByText("2 800 F")).toBeVisible();
   },
+  "09": async (page) => {
+    await page.getByLabel("Nom de l'article").fill("Riz brisé 25 kg");
+    await page.getByLabel("Prix de vente (F)").fill("15500");
+    await page.getByLabel("Prix d'achat (F)").fill("14000");
+    await page.getByRole("button", { name: "Sac", exact: true }).click();
+    await page.getByRole("button", { name: "Céréales", exact: true }).click();
+    await page.getByLabel("Quantité en stock").fill("10");
+    await page.getByLabel("Seuil d’alerte").fill("3");
+    await page.getByLabel("Nom de l'article").blur();
+  },
   "04b": async (page) => {
     await page.getByRole("button", { name: "Annuler la vente" }).click();
     await expect(

@@ -36,7 +36,14 @@ const FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"];
  * champ reçoit ce que tape une douchette, ou le clavier. Facultatif : sans code, le serveur
  * en génère un.
  */
-export function BarcodeScanButton({ onScan }: { onScan: (code: string) => void }) {
+export function BarcodeScanButton({
+  onScan,
+  tile = false,
+}: {
+  onScan: (code: string) => void;
+  /** Grande tuile en pointillés de la maquette 09, au lieu d'un bouton. */
+  tile?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
   const [cameraOn, setCameraOn] = useState(false);
@@ -95,10 +102,24 @@ export function BarcodeScanButton({ onScan }: { onScan: (code: string) => void }
 
   return (
     <>
-      <Button type="button" variant="secondaire" size="standard" onClick={() => setOpen(true)}>
-        <ScanBarcode aria-hidden />
-        {t.scan}
-      </Button>
+      {tile ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={cn(
+            "flex min-h-[120px] flex-[1_1_200px] flex-col items-center justify-center gap-2.5 rounded-[18px] border-2 border-dashed border-input bg-background text-[17px] font-bold text-encre-2",
+            "outline-none hover:border-stock hover:text-stock-encre focus-visible:ring-3 focus-visible:ring-ring/50",
+          )}
+        >
+          <ScanBarcode className="size-[30px]" aria-hidden />
+          {t.scan}
+        </button>
+      ) : (
+        <Button type="button" variant="secondaire" size="standard" onClick={() => setOpen(true)}>
+          <ScanBarcode aria-hidden />
+          {t.scan}
+        </Button>
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

@@ -1,13 +1,13 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, X } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { ArrowLeft, Check, Loader2, X } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { FieldError } from "@/components/field-error";
-import { AmountField } from "@/components/kit/amount-field";
+import { cleanAmount } from "@/components/kit/amount-field";
 import { Chip } from "@/components/kit/chip";
 import { FieldHint } from "@/components/kit/feedback";
 import { QuantityStepper } from "@/components/kit/quantity-stepper";
@@ -25,6 +25,7 @@ import { compareDecimal, parseDecimalInput } from "@/lib/decimal";
 import { formatAmount } from "@/lib/format/money";
 import { labels } from "@/lib/labels";
 import { typedAmount } from "@/lib/payment-amount";
+import { qtyWithUnit } from "@/lib/units";
 import { cn } from "@/lib/utils";
 
 type Unit = Schemas["ProductUnit"];
@@ -61,7 +62,6 @@ export function marginLine(
  * (`POST /inventory/products`).
  */
 export function NewProductForm() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const { currency } = useCompanyLocale();
   const categories = useCategories();
@@ -81,6 +81,7 @@ export function NewProductForm() {
   const [warnAt, setWarnAt] = useState("");
   const [barcode, setBarcode] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [done, setDone] = useState<{ name: string; stock: string; price: string } | null>(null);
 
   const opening = parseDecimalInput(qty || "0");
   const hasStock = opening !== null && compareDecimal(opening, "0") === 1;
@@ -110,12 +111,26 @@ export function NewProductForm() {
         void queryClient.invalidateQueries({ queryKey: key });
       }
       toast.success(t.created);
-      router.push(`/products/${created.product.id}`);
+      setDone({
+        name: created.product.name,
+        stock: qtyWithUnit(opening ?? "0", created.product.unit),
+        price: formatAmount(created.product.unit_price, currency),
+      });
     },
     onError: (error) => setFormError(errorMessage(error)),
   });
 
   const onScan = useCallback((code: string) => setBarcode(code), []);
+
+  const again = () => {
+    setDone(null);
+    setName("");
+    setPrice("");
+    setCost("");
+    setQty("0");
+    setWarnAt("");
+    setBarcode(null);
+  };
 
   const submit = () => {
     if (!ready || opening === null) return;
@@ -136,169 +151,240 @@ export function NewProductForm() {
     });
   };
 
+  const field = cn(fieldClasses("stock"), "min-h-[58px] px-4 text-[19px]");
+
   return (
-    <form
-      noValidate
-      className="mx-auto max-w-[820px] space-y-6"
-      onSubmit={(event) => {
-        event.preventDefault();
-        submit();
-      }}
-    >
-      <div className="flex flex-wrap items-center gap-3">
-        <BarcodeScanButton onScan={onScan} />
-        {barcode && (
-          <span className="inline-flex items-center gap-2 rounded-full bg-stock-teinte px-4 py-2 text-corps font-bold numeric text-stock-encre">
-            {t.scanned(barcode)}
-            <button
-              type="button"
-              aria-label={t.removeCode}
-              onClick={() => setBarcode(null)}
-              className="rounded-full p-1 outline-none hover:bg-voile focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              <X className="size-4" aria-hidden />
-            </button>
-          </span>
-        )}
-      </div>
+    <div className="mx-auto flex max-w-[772px] flex-col gap-5">
+      <Link
+        href="/products"
+        className="inline-flex min-h-11 items-center gap-2 self-start font-bold text-ventes hover:text-ventes-encre pointer-coarse:min-h-12"
+      >
+        <ArrowLeft className="size-[22px]" aria-hidden />
+        {t.back}
+      </Link>
+      <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{t.title}</h1>
 
-      <div className="space-y-2">
-        <label htmlFor={nameId} className="block text-libelle">
-          {t.name}
-        </label>
-        <input
-          id={nameId}
-          value={name}
-          maxLength={200}
-          autoComplete="off"
-          onChange={(event) => setName(event.target.value)}
-          className={cn(fieldClasses("stock"), "min-h-bouton px-[18px] text-xl font-semibold")}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <AmountField label={t.price} value={price} onChange={setPrice} rubrique="stock" />
-          <AmountField label={t.cost} value={cost} onChange={setCost} rubrique="stock" />
-        </div>
-        <p
-          role="status"
-          className={cn(
-            "rounded-champ px-4 py-3 text-corps font-bold",
-            margin.tone === "gain"
-              ? "bg-ventes-teinte text-ventes-encre"
-              : margin.tone === "perte"
-                ? "bg-stock-teinte text-stock-encre"
-                : "bg-muted text-foreground",
-          )}
+      {done ? (
+        <section
+          aria-live="polite"
+          className="flex flex-col items-center gap-3 rounded-carte border border-border bg-card px-6 py-10 text-center"
         >
-          {margin.text}
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <p className="text-libelle">{t.soldBy}</p>
-        <div role="group" aria-label={t.soldBy} className="flex flex-wrap gap-2.5">
-          {UNITS.map((value) => (
-            <Chip
-              key={value}
-              rubrique="stock"
-              selected={unit === value}
-              onClick={() => setUnit(value)}
-            >
-              {labels.products.unitChips[value]}
-            </Chip>
-          ))}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <p className="text-libelle">{t.shelf}</p>
-        <div role="group" aria-label={t.shelf} className="flex flex-wrap gap-2.5">
-          {shelves.map((shelf) => (
-            <Chip
-              key={shelf.id}
-              rubrique="stock"
-              selected={categoryId === shelf.id}
-              onClick={() => setCategoryId(categoryId === shelf.id ? null : shelf.id)}
-            >
-              {shelf.name}
-            </Chip>
-          ))}
-          {canAddShelf && newShelf === null && (
-            <Chip rubrique="stock" onClick={() => setNewShelf("")}>
-              {t.newShelf}
-            </Chip>
-          )}
-        </div>
-        {newShelf !== null && (
-          <div className="flex flex-wrap items-end gap-2.5">
-            <div className="min-w-60 flex-1 space-y-1.5">
-              <label htmlFor={shelfId} className="block text-petit font-bold">
-                {t.newShelfName}
-              </label>
-              <input
-                id={shelfId}
-                autoFocus
-                value={newShelf}
-                maxLength={120}
-                onChange={(event) => setNewShelf(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    if (newShelf.trim()) addShelf.mutate(newShelf.trim());
-                  }
-                }}
-                className={cn(fieldClasses("stock"), "min-h-cible px-4 text-corps")}
-              />
-            </div>
-            <Button
-              type="button"
-              variant="secondaire"
-              disabled={!newShelf.trim() || addShelf.isPending}
-              onClick={() => addShelf.mutate(newShelf.trim())}
-            >
-              {t.addShelf}
+          <span
+            aria-hidden
+            className="flex size-20 items-center justify-center rounded-full bg-stock text-primary-foreground"
+          >
+            <Check className="size-11" strokeWidth={2.5} />
+          </span>
+          <h2 className="text-[28px] leading-tight font-extrabold">{t.done(done.name)}</h2>
+          <p className="text-lg text-muted-foreground">{t.doneDetail(done.stock, done.price)}</p>
+          <div className="mt-2.5 flex flex-wrap justify-center gap-3">
+            <Button type="button" variant="stock" size="standard" onClick={again}>
+              {t.another}
+            </Button>
+            <Button asChild variant="secondaire" size="standard">
+              <Link href="/sales/new">{t.goSell}</Link>
             </Button>
           </div>
-        )}
-      </div>
+        </section>
+      ) : (
+        <form
+          noValidate
+          className="flex flex-col gap-6 rounded-carte border border-border bg-card p-carte"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <BarcodeScanButton onScan={onScan} tile />
+            {barcode && (
+              <span className="inline-flex items-center gap-2 rounded-full bg-stock-teinte px-4 py-2 text-corps font-bold numeric text-stock-encre">
+                {t.scanned(barcode)}
+                <button
+                  type="button"
+                  aria-label={t.removeCode}
+                  onClick={() => setBarcode(null)}
+                  className="rounded-full p-1 outline-none hover:bg-voile focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <X className="size-4" aria-hidden />
+                </button>
+              </span>
+            )}
+          </div>
 
-      <div className="grid gap-6 sm:grid-cols-2">
-        <div className="space-y-2">
-          <p className="text-libelle">{t.howMany}</p>
-          <QuantityStepper
-            value={qty}
-            onChange={setQty}
-            itemName={name.trim() || t.thisArticle}
-            rubrique="stock"
-            size="grand"
-          />
-          {costMissing && <FieldHint rubrique="stock">{t.costForStock}</FieldHint>}
-        </div>
-        <div className="space-y-2">
-          <p className="text-libelle">{t.warnAt}</p>
-          <QuantityStepper
-            value={warnAt}
-            onChange={setWarnAt}
-            itemName={name.trim() || t.thisArticle}
-            rubrique="stock"
-            size="grand"
-          />
-        </div>
-      </div>
+          <div>
+            <label htmlFor={nameId} className="mb-2 block text-libelle">
+              {t.name}
+            </label>
+            <input
+              id={nameId}
+              value={name}
+              maxLength={200}
+              autoComplete="off"
+              onChange={(event) => setName(event.target.value)}
+              className={field}
+            />
+          </div>
 
-      <FieldError message={formError} />
-      <Button
-        type="submit"
-        variant="stock"
-        size="principal"
-        className="w-full"
-        disabled={!ready || save.isPending}
-      >
-        {save.isPending && <Loader2 className="animate-spin" aria-hidden />}
-        {t.submit}
-      </Button>
-    </form>
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-4">
+              <div className="flex-[1_1_220px]">
+                <label htmlFor={`${nameId}-prix`} className="mb-2 block text-libelle">
+                  {t.price}
+                </label>
+                <input
+                  id={`${nameId}-prix`}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={price}
+                  onChange={(event) => setPrice(cleanAmount(event.target.value))}
+                  className={cn(field, "numeric")}
+                />
+              </div>
+              <div className="flex-[1_1_220px]">
+                <label htmlFor={`${nameId}-achat`} className="mb-2 block text-libelle">
+                  {t.cost}
+                </label>
+                <input
+                  id={`${nameId}-achat`}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={cost}
+                  onChange={(event) => setCost(cleanAmount(event.target.value))}
+                  className={cn(field, "numeric")}
+                />
+              </div>
+            </div>
+            <p
+              role="status"
+              className={cn(
+                "rounded-champ px-[18px] py-3.5 text-lg font-bold",
+                margin.tone === "gain"
+                  ? "bg-ventes-teinte text-ventes-encre"
+                  : "bg-stock-teinte text-stock-encre",
+              )}
+            >
+              {margin.text}
+            </p>
+          </div>
+
+          <div>
+            <p className="mb-2 text-libelle">{t.soldBy}</p>
+            <div role="group" aria-label={t.soldBy} className="flex flex-wrap gap-2">
+              {UNITS.map((value) => (
+                <Chip
+                  key={value}
+                  rubrique="stock"
+                  className="min-h-[50px] font-semibold"
+                  selected={unit === value}
+                  onClick={() => setUnit(value)}
+                >
+                  {labels.products.unitChips[value]}
+                </Chip>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-libelle">{t.shelf}</p>
+            <div role="group" aria-label={t.shelf} className="flex flex-wrap gap-2">
+              {shelves.map((shelf) => (
+                <Chip
+                  key={shelf.id}
+                  rubrique="stock"
+                  className="min-h-[50px] font-semibold"
+                  selected={categoryId === shelf.id}
+                  onClick={() => setCategoryId(categoryId === shelf.id ? null : shelf.id)}
+                >
+                  {shelf.name}
+                </Chip>
+              ))}
+              {canAddShelf && newShelf === null && (
+                <Chip
+                  rubrique="stock"
+                  className="min-h-[50px] border-dashed font-semibold"
+                  onClick={() => setNewShelf("")}
+                >
+                  {t.newShelf}
+                </Chip>
+              )}
+            </div>
+            {newShelf !== null && (
+              <div className="mt-2.5 flex flex-wrap items-end gap-2.5">
+                <div className="min-w-60 flex-1 space-y-1.5">
+                  <label htmlFor={shelfId} className="block text-petit font-bold">
+                    {t.newShelfName}
+                  </label>
+                  <input
+                    id={shelfId}
+                    autoFocus
+                    value={newShelf}
+                    maxLength={120}
+                    onChange={(event) => setNewShelf(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        if (newShelf.trim()) addShelf.mutate(newShelf.trim());
+                      }
+                    }}
+                    className={cn(fieldClasses("stock"), "min-h-cible px-4 text-corps")}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="secondaire"
+                  disabled={!newShelf.trim() || addShelf.isPending}
+                  onClick={() => addShelf.mutate(newShelf.trim())}
+                >
+                  {t.addShelf}
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-6">
+            <div className="flex-[1_1_260px]">
+              <p className="mb-2 text-libelle">{t.howMany}</p>
+              <QuantityStepper
+                value={qty}
+                onChange={setQty}
+                itemName={name.trim() || t.thisArticle}
+                inputLabel={t.howManyField}
+                rubrique="stock"
+                size="grand"
+              />
+              {costMissing && <FieldHint rubrique="stock">{t.costForStock}</FieldHint>}
+            </div>
+            <div className="flex-[1_1_260px]">
+              <p className="mb-2 text-libelle">{t.warnAt}</p>
+              <QuantityStepper
+                value={warnAt}
+                onChange={setWarnAt}
+                itemName={name.trim() || t.thisArticle}
+                inputLabel={t.warnAtField}
+                rubrique="stock"
+                size="grand"
+              />
+            </div>
+          </div>
+
+          <FieldError message={formError} />
+          <Button
+            type="submit"
+            variant="stock"
+            size="principal"
+            className="w-full text-[21px] font-bold disabled:bg-stock/45 disabled:opacity-100"
+            disabled={!ready || save.isPending}
+          >
+            {save.isPending ? (
+              <Loader2 className="size-[26px] animate-spin" aria-hidden />
+            ) : (
+              <Check className="size-[26px]" aria-hidden />
+            )}
+            {t.submit}
+          </Button>
+        </form>
+      )}
+    </div>
   );
 }

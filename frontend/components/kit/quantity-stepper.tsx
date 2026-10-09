@@ -1,7 +1,5 @@
 "use client";
 
-import { Minus, Plus } from "lucide-react";
-
 import { labels } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +29,7 @@ export function QuantityStepper({
   min = 0,
   rubrique = "ventes",
   size = "normal",
+  inputLabel,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -39,6 +38,8 @@ export function QuantityStepper({
   min?: number;
   rubrique?: Rubrique;
   size?: "normal" | "grand";
+  /** Nom du champ, quand deux compteurs comptent le même article (maquette 09). */
+  inputLabel?: string;
 }) {
   const current = toNumber(value);
   const step = (delta: number) => {
@@ -46,9 +47,9 @@ export function QuantityStepper({
     onChange(String(next).replace(".", ","));
   };
   const button = cn(
-    "flex shrink-0 items-center justify-center rounded-touche border-2 border-input bg-card text-foreground",
+    "flex shrink-0 items-center justify-center rounded-touche border-2 border-input bg-card font-bold text-foreground",
     "outline-none hover:bg-voile focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
-    size === "grand" ? "size-14" : "size-12",
+    size === "grand" ? "size-14 text-[26px]" : "size-12 text-[22px]",
   );
   return (
     <div className="flex items-center gap-2.5">
@@ -59,12 +60,12 @@ export function QuantityStepper({
         disabled={current <= min}
         aria-label={labels.kit.decrease(itemName)}
       >
-        <Minus className="size-5" aria-hidden />
+        <span aria-hidden>−</span>
       </button>
       <input
         inputMode="decimal"
         autoComplete="off"
-        aria-label={`${labels.kit.quantity} : ${itemName}`}
+        aria-label={inputLabel ?? `${labels.kit.quantity} : ${itemName}`}
         value={value}
         onChange={(event) => onChange(cleanQuantity(event.target.value))}
         className={cn(
@@ -79,7 +80,7 @@ export function QuantityStepper({
         onClick={() => step(1)}
         aria-label={labels.kit.increase(itemName)}
       >
-        <Plus className="size-5" aria-hidden />
+        <span aria-hidden>+</span>
       </button>
     </div>
   );
