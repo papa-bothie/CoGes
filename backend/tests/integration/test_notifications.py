@@ -394,7 +394,7 @@ def test_alert_texts_read_like_the_screen(
     scan_due_debts(str(company_alpha.company_id), date.today().isoformat())
     due = _about(_feed(api_client, alpha_token), UUID(debt.json()["id"]))[0]
     assert due["body"] == (
-        f"Une dette de 21{nnbsp}830{nbsp}FCFA est échue depuis le {due_on:%d/%m/%Y}."
+        f"Une dette de 21{nnbsp}830{nbsp}FCFA devait être payée avant le {due_on:%d/%m/%Y}."
     )
     assert due["data"]["due_date"] == due_on.isoformat()
 

@@ -33,6 +33,7 @@ from app.modules.analytics.schemas import (
     MAX_PERIOD_DAYS,
     MAX_RANKING_LIMIT,
     METRIC_LABELS,
+    SERIES_LABELS,
     DailyCashPoint,
     FinanceOverview,
     ProductMetric,
@@ -504,7 +505,7 @@ def timeseries(
         day: (revenue if measure is TimeseriesMeasure.REVENUE else margin)
         for day, revenue, margin in rows
     }
-    label = "Chiffre d'affaires net" if measure is TimeseriesMeasure.REVENUE else "Marge brute"
+    label = SERIES_LABELS[measure]
 
     points: list[TimeseriesPoint] = []
     day = period_from

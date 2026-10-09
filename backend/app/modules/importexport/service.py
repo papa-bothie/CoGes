@@ -123,7 +123,7 @@ def import_file(
     """Valide puis importe un fichier ; lève `ImportInvalidError` (422) s'il a des erreurs."""
     importer = IMPORTERS[kind]
     try:
-        table = read_table(content, max_rows=MAX_IMPORT_ROWS)
+        table = importer.canonical(read_table(content, max_rows=MAX_IMPORT_ROWS))
     except UnreadableFileError as exc:
         raise ImportFileUnreadableError(str(exc)) from exc
     if len(table.rows) > MAX_IMPORT_ROWS:
@@ -329,16 +329,16 @@ def export_referential(
 # ------------------------------------------------------------ export des ventes
 
 SALES_HEADERS = (
-    "numero",
-    "date",
-    "statut",
-    "client",
-    "sous_total",
-    "remise",
-    "taxes",
-    "total",
-    "paye",
-    "retourne",
+    "Vente n°",
+    "Date",
+    "Statut",
+    "Client",
+    "Sous-total",
+    "Remise",
+    "Taxes",
+    "Total",
+    "Payé",
+    "Retourné",
 )
 
 _SALE_STATUS_LABELS = {"confirmed": "confirmée", "cancelled": "annulée", "draft": "brouillon"}

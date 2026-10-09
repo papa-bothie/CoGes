@@ -103,7 +103,7 @@ def test_file_with_an_error_writes_nothing(
     report = error["details"]
     assert report["rows"] == 20
     assert report["created"] == 0
-    assert [(item["row"], item["column"]) for item in report["errors"]] == [(8, "prix_vente")]
+    assert [(item["row"], item["column"]) for item in report["errors"]] == [(8, "Prix de vente")]
     # Rien n'a été écrit : ni référentiel, ni stock, ni audit, ni événement.
     assert _state(session_factory, company_alpha, prefix) == before
 
@@ -223,7 +223,12 @@ def test_missing_required_column_is_reported_on_the_header(
     assert response.status_code == 422
     errors = response.json()["error"]["details"]["errors"]
     assert errors == [
-        {"row": 1, "column": "prix_vente", "code": "missing_column", "message": "Colonne absente."}
+        {
+            "row": 1,
+            "column": "Prix de vente",
+            "code": "missing_column",
+            "message": "Colonne absente.",
+        }
     ]
 
 
@@ -358,7 +363,7 @@ def test_template_lists_the_expected_columns(api_client: TestClient, alpha_token
 
     assert response.status_code == 200
     header = response.content.decode("utf-8-sig").splitlines()[0]
-    assert header.startswith("sku;nom;prix_vente;categorie")
+    assert header.startswith("Référence;Nom;Prix de vente;Catégorie")
 
 
 def test_exported_referential_reimports_as_is(
@@ -374,4 +379,4 @@ def test_exported_referential_reimports_as_is(
     assert "attachment" in exported.headers["content-disposition"]
     sheet = load_workbook(io.BytesIO(exported.content)).worksheets[0]
     headers = [cell.value for cell in next(sheet.iter_rows(max_row=1))]
-    assert headers == ["nom", "code", "telephone", "delai_paiement_jours"]
+    assert headers == ["Nom", "Code", "Téléphone", "Délai de paiement (jours)"]
