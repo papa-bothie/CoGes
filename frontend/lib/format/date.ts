@@ -94,3 +94,13 @@ export function formatDayMonth(value: string | null | undefined, timeZone = "UTC
     month: "long",
   }).format(date);
 }
+
+/** Date en lettres avec l'année : « 6 octobre 2026 » (facture A4). */
+export function formatDateLong(value: string | null | undefined, timeZone = "UTC"): string {
+  const dayMonth = formatDayMonth(value, timeZone);
+  if (dayMonth === "—" || !value) return dayMonth;
+  const year = DATE_ONLY.test(value)
+    ? value.slice(0, 4)
+    : new Intl.DateTimeFormat("fr-FR", { timeZone, year: "numeric" }).format(new Date(value));
+  return `${dayMonth} ${year}`;
+}

@@ -52,6 +52,19 @@ export function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
+  // Le reçu s'affiche seul, sans barres (maquette 05) : c'est une feuille à imprimer.
+  if (/\/receipt$/.test(pathname)) {
+    return (
+      <main
+        id="contenu"
+        tabIndex={-1}
+        className="min-h-dvh bg-background px-4 pt-6 pb-12 outline-none md:px-marge-page print:p-0"
+      >
+        {children}
+      </main>
+    );
+  }
+
   const items = filterByPermission(MAIN_NAV, me.data.permissions).map((item) =>
     barItem(item, pathname),
   );

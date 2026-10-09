@@ -3,6 +3,7 @@ export { formatQty, formatQtyWithUnit } from "./qty";
 export {
   formatClock,
   formatDate,
+  formatDateLong,
   formatDateTime,
   formatDayLong,
   formatDayMonth,

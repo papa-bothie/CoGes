@@ -111,6 +111,10 @@ const STATES: Record<string, (page: Page, request: APIRequestContext) => Promise
     await mockupCart(page, request);
     await page.getByLabel("Autre montant donné").fill("30000");
   },
+  "05b": async (page) => {
+    await page.getByRole("button", { name: "Facture A4" }).click();
+    await expect(page.getByText("FACTURE", { exact: true })).toBeVisible();
+  },
   "04b": async (page) => {
     await page.getByRole("button", { name: "Annuler la vente" }).click();
     await expect(
