@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 
-import { DENSITY_BOOT_SCRIPT } from "@/lib/density-boot";
-
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -40,9 +38,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${figtree.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: DENSITY_BOOT_SCRIPT }} />
-      </head>
       <body className="min-h-dvh">
         <Providers>{children}</Providers>
       </body>

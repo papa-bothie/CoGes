@@ -3,8 +3,6 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
-/* Densité confortable des tableaux (réglage du navigateur, lib/density.ts). */
-@custom-variant comfortable (&:where([data-density="comfortable"] *));
 
 /*
  * Jetons de la maquette v2 (docs/design/maquette-v2/tokens.css, ADR 0064). Toute couleur du

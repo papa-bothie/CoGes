@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { NAV_ITEMS, pageTitle } from "./navigation";
+import { ADVICE_NAV, isActive, MAIN_NAV } from "./navigation";
 import { can, filterByPermission } from "./permissions";
 
 // Extraits de la matrice RBAC (ADR 0007).
@@ -50,39 +50,27 @@ describe("can", () => {
   });
 });
 
-describe("navigation filtrée", () => {
+describe("navigation de la maquette v2", () => {
+  const MANAGER = [...SALESPERSON, ...ACCOUNTANT, "products:create", "sales:create"];
   const hrefs = (permissions: string[]) =>
-    filterByPermission(NAV_ITEMS, permissions).map((item) => item.href);
+    filterByPermission(MAIN_NAV, permissions).map((item) => item.label);
 
-  it("garde l'ordre du prototype pour le vendeur, sans Finance ni Paramètres", () => {
-    expect(hrefs(SALESPERSON)).toEqual([
-      "/dashboard",
-      "/sales",
-      "/inventory",
-      "/products",
-      "/customers",
-      "/suppliers",
-      "/finance",
-    ]);
+  it("cinq entrées pour le gérant, dans l'ordre de la maquette", () => {
+    expect(hrefs(MANAGER)).toEqual(["Accueil", "Vendre", "Stock", "Clients", "Argent"]);
+    expect(can(MANAGER, ADVICE_NAV.permission)).toBe(true);
   });
 
-  it("montre Finance, Analytics, Intelligence et Paramètres au comptable", () => {
-    expect(hrefs(ACCOUNTANT)).toEqual([
-      "/dashboard",
-      "/sales",
-      "/finance",
-      "/analytics",
-      "/insights",
-      "/settings",
-    ]);
+  it("le vendeur ne voit que Accueil, Vendre et Clients", () => {
+    expect(hrefs(SALESPERSON)).toEqual(["Accueil", "Vendre", "Clients"]);
+    expect(can(SALESPERSON, ADVICE_NAV.permission)).toBe(false);
   });
-});
 
-describe("pageTitle", () => {
-  it("prend l'entrée de navigation la plus précise", () => {
-    expect(pageTitle("/sales")).toBe("Ventes");
-    expect(pageTitle("/sales/new")).toBe("Ventes");
-    expect(pageTitle("/notifications")).toBe("Notifications");
-    expect(pageTitle("/inconnu")).toBe("CoGes");
+  it("une rubrique s'allume sur ses pages provisoires", () => {
+    const [, sell, stock, clients] = MAIN_NAV;
+    expect(isActive("/sales/123/receipt", sell!)).toBe(true);
+    expect(isActive("/inventory", stock!)).toBe(true);
+    expect(isActive("/suppliers/9", clients!)).toBe(true);
+    expect(isActive("/analytics", ADVICE_NAV)).toBe(true);
+    expect(isActive("/salesman", sell!)).toBe(false);
   });
 });

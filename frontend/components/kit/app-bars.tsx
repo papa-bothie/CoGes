@@ -58,27 +58,35 @@ export function TopBar({
           <ul className="flex flex-wrap gap-1.5">
             {items.map((item) => (
               <li key={item.href}>
-                <Link
-                  href={item.href}
-                  aria-current={item.active ? "page" : undefined}
-                  className={cn(
-                    "flex min-h-cible items-center gap-2 rounded-touche px-4 text-corps font-semibold outline-none",
-                    "focus-visible:ring-3 focus-visible:ring-ring/50",
-                    item.active
-                      ? ACTIVE_TAB[item.rubrique ?? "neutre"]
-                      : "text-encre-2 hover:bg-voile hover:text-foreground",
-                  )}
-                >
-                  <item.icon className="size-[22px] shrink-0" aria-hidden />
-                  {item.label}
-                </Link>
+                <TabLink item={item} />
               </li>
             ))}
           </ul>
         </nav>
-        {trailing && <div className="flex items-center gap-1">{trailing}</div>}
+        {trailing && <div className="flex items-center gap-1.5">{trailing}</div>}
       </div>
     </header>
+  );
+}
+
+/** Un onglet de la barre du haut : 48 px, l'actif à la teinte de sa rubrique. */
+export function TabLink({ item, className }: { item: BarItem; className?: string }) {
+  return (
+    <Link
+      href={item.href}
+      aria-current={item.active ? "page" : undefined}
+      className={cn(
+        "flex min-h-cible items-center gap-2 rounded-touche px-4 text-corps font-semibold outline-none",
+        "focus-visible:ring-3 focus-visible:ring-ring/50",
+        item.active
+          ? ACTIVE_TAB[item.rubrique ?? "neutre"]
+          : "text-encre-2 hover:bg-voile hover:text-foreground",
+        className,
+      )}
+    >
+      <item.icon className="size-[22px] shrink-0" aria-hidden />
+      {item.label}
+    </Link>
   );
 }
 

@@ -26,19 +26,19 @@ export const labels = {
     breadcrumb: "Fil d'Ariane",
     mainNavigation: "Navigation principale",
   },
+  /** Coquille de la maquette v2 : cloche et engrenage (ADR 0070). */
+  shell: {
+    alerts: (count: number) =>
+      count === 0 ? "Alertes, aucune non lue" : `Alertes, ${count} non lue${count > 1 ? "s" : ""}`,
+    settingsMenu: "Réglages et compte",
+    settings: "Réglages",
+  },
   header: {
-    notifications: (count: number) =>
-      count === 0
-        ? "Notifications, aucune non lue"
-        : `Notifications, ${count} non lue${count > 1 ? "s" : ""}`,
     logout: "Se déconnecter",
     theme: "Changer de thème",
     themeLight: "Clair",
     themeDark: "Sombre",
     themeSystem: "Système",
-    density: "Densité des tableaux",
-    densityCompact: "Compacte",
-    densityComfortable: "Confortable",
   },
   login: {
     title: "Connexion",

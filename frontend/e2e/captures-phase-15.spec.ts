@@ -148,8 +148,7 @@ test.describe("captures de la phase 15", () => {
       test("écrans du lot", async ({ page, request }) => {
         test.skip(LOT === "1", "lot 1 : formulaires seulement");
         test.setTimeout(400_000);
-        const chosen =
-          LOT === "0" ? LOT_0 : LOT === "2" ? LOT_2 : LOT === "3a" ? LOT_3A : null;
+        const chosen = LOT === "0" ? LOT_0 : LOT === "2" ? LOT_2 : LOT === "3a" ? LOT_3A : null;
         const screens = chosen ? SCREENS.filter((s) => chosen.includes(s.name)) : SCREENS;
         for (const screen of screens) {
           await screen.open(page, request);

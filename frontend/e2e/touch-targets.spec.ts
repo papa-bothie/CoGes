@@ -4,11 +4,11 @@ import { DEMO, loginThroughUi } from "./fixtures";
 import { settle } from "./screens";
 
 /**
- * Cibles tactiles (ADR 0059) : sur tablette (`pointer: coarse`), toute cible interactive
- * visible mesure au moins 44 × 44 px — WCAG 2.5.5 et recommandations des plateformes. Sur
- * ordinateur, la densité compacte ne change pas (rien n'est mesuré ici).
+ * Cibles tactiles (ADR 0059, seuil remonté à 48 px par l'ADR 0070) : sur tablette
+ * (`pointer: coarse`), toute cible interactive visible mesure au moins 48 × 48 px — WCAG
+ * 2.5.5 et recommandations des plateformes.
  */
-const MIN = 44;
+const MIN = 48;
 
 test.use({ hasTouch: true, viewport: { width: 1024, height: 768 } });
 test.describe.configure({ timeout: 90_000 });
@@ -29,7 +29,7 @@ const INTERACTIVE = [
 
 type Offender = { label: string; width: number; height: number };
 
-/** Cibles visibles plus petites que 44 × 44 px, décrites pour le message d'échec. */
+/** Cibles visibles plus petites que 48 × 48 px, décrites pour le message d'échec. */
 async function smallTargets(page: Page): Promise<Offender[]> {
   return page.locator(INTERACTIVE).evaluateAll((elements, min) => {
     const offenders: { label: string; width: number; height: number }[] = [];
