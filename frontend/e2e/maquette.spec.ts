@@ -115,6 +115,10 @@ const STATES: Record<string, (page: Page, request: APIRequestContext) => Promise
     await page.getByRole("button", { name: "Facture A4" }).click();
     await expect(page.getByText("FACTURE", { exact: true })).toBeVisible();
   },
+  "06": async (page) => {
+    await page.getByLabel("Quantité rendue de Huile Dinor 1 L").fill("2");
+    await expect(page.getByText("2 800 F")).toBeVisible();
+  },
   "04b": async (page) => {
     await page.getByRole("button", { name: "Annuler la vente" }).click();
     await expect(
