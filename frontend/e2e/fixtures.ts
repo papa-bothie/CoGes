@@ -38,6 +38,28 @@ export async function managerToken(
   return (await response.json()).access_token as string;
 }
 
+/**
+ * Vide les brouillons du gérant : « Nouvelle vente » reprend le brouillon du jour de la même
+ * personne (ADR 0070), et chaque parcours doit partir d'un panier vide. Un brouillon ne se
+ * supprime pas ; ses lignes, si.
+ */
+export async function emptyMyDrafts(request: APIRequestContext, company: Credentials = E2E) {
+  const token = await managerToken(request, company);
+  const headers = { Authorization: `Bearer ${token}` };
+  const drafts = await request.get("/api/v1/sales?status=draft&mine=true&page_size=100", {
+    headers,
+  });
+  for (const draft of (await drafts.json()).items as { id: string }[]) {
+    const detail = await request.get(`/api/v1/sales/${draft.id}`, { headers });
+    for (const item of (await detail.json()).items as { id: string }[]) {
+      const removed = await request.delete(`/api/v1/sales/${draft.id}/items/${item.id}`, {
+        headers,
+      });
+      expect(removed.ok()).toBeTruthy();
+    }
+  }
+}
+
 /** Crée un vendeur par les routes réelles et renvoie ses identifiants. */
 export async function createSalesperson(request: APIRequestContext, company: Credentials = E2E) {
   const token = await managerToken(request, company);

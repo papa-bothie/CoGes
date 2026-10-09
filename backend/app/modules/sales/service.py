@@ -20,6 +20,7 @@ Inventory et Finance par leurs **façades**, et aucun d'eux ne le connaît.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -31,7 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.core import money
 from app.core.audit import AuditAction, audit_critical
-from app.core.codes import next_document_number
+from app.core.codes import DOCUMENT_PREFIXES, DOCUMENT_WIDTH, next_document_number
 from app.core.errors import BusinessRuleError, NotFoundError, constraint_name, sqlstate
 from app.core.events.outbox import emit
 from app.core.events.types import EventType
@@ -78,6 +79,8 @@ from app.modules.sales.schemas import (
     SaleCancel,
     SaleConfirm,
     SaleCreate,
+    SaleDayTotal,
+    SaleDayTotals,
     SaleDetail,
     SaleItemCreate,
     SaleItemRead,
@@ -90,6 +93,7 @@ from app.modules.sales.schemas import (
     SaleReturnRead,
     SaleUpdate,
 )
+from app.modules.users import service as users_service
 
 #: Types de documents numérotés par `document_counters` (ADR 0021).
 DOCUMENT_TYPE = "sale"
@@ -285,6 +289,22 @@ def customer_choices(
     )
 
 
+#: Un numéro de vente tapé dans la recherche : « V-001044 », « v1044 » ou « 1044 ».
+_SALE_NUMBER = re.compile(r"(?:v\s*-?\s*)?0*(\d{1,9})", re.IGNORECASE)
+
+
+def sale_number_of(term: str) -> str | None:
+    """Numéro de vente complet que désigne un terme tapé, ou `None` s'il n'en est pas un.
+
+    Le commerçant lit « Vente n° 1044 » : il doit retrouver V-001044 en tapant 1044. Le
+    numéro reste comparé **exactement**, jamais par `LIKE` (ADR 0013).
+    """
+    match = _SALE_NUMBER.fullmatch(term.strip())
+    if match is None:
+        return None
+    return f"{DOCUMENT_PREFIXES[DOCUMENT_TYPE]}-{int(match.group(1)):0{DOCUMENT_WIDTH}d}"
+
+
 def list_sales(
     session: Session,
     ctx: TenantContext,
@@ -295,13 +315,21 @@ def list_sales(
     customer_id: UUID | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
-    sale_no: str | None = None,
+    search: str | None = None,
+    state: str | None = None,
+    include_drafts: bool = True,
+    mine: bool = False,
 ) -> tuple[Sequence[Sale], int, dict[UUID, Decimal]]:
     """Page de ventes, avec le total retourné de celles qui portent un retour.
 
     Le troisième élément évite une requête par ligne : une vente absente de ce
     dictionnaire n'a aucun retour, une vente présente en a au moins un — fût-il
     intégralement remisé, donc d'un remboursable nul.
+
+    `search` trouve un numéro exact ou les ventes des clients dont le nom répond
+    (ADR 0070) ; `state` filtre par état de paiement, dérivé. `include_drafts=False` : la
+    liste de la maquette, sans brouillon ; `mine` : les ventes saisies par l'utilisateur
+    courant (« Nouvelle vente » reprend son brouillon du jour).
     """
     repository = SaleRepository(session, ctx)
     filters: dict[str, Any] = {
@@ -309,11 +337,49 @@ def list_sales(
         "customer_id": customer_id,
         "date_from": date_from,
         "date_to": date_to,
-        "sale_no": sale_no,
+        "state": state,
+        "include_drafts": include_drafts,
+        "created_by": ctx.user_id if mine else None,
     }
+    term = search.strip() if search else ""
+    if term:
+        filters["sale_no"] = sale_number_of(term)
+        filters["search_customer_ids"] = customers_service.ids_matching(session, ctx, term)
     sales = repository.page_filtered(page=page, page_size=page_size, **filters)
     total = repository.count_filtered(**filters)
     return sales, total, repository.returned_totals([sale.id for sale in sales])
+
+
+def day_totals(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    date_from: datetime,
+    date_to: datetime,
+    state: str | None = None,
+    search: str | None = None,
+) -> SaleDayTotals:
+    """Ventes par jour, dans le fuseau de l'entreprise, avec les filtres de la liste
+    (ADR 0070) : en tête de chaque groupe, et dans le résumé du jour."""
+    filters: dict[str, Any] = {"state": state}
+    term = search.strip() if search else ""
+    if term:
+        filters["sale_no"] = sale_number_of(term)
+        filters["search_customer_ids"] = customers_service.ids_matching(session, ctx, term)
+    rows = SaleRepository(session, ctx).day_totals(
+        date_from=date_from,
+        date_to=date_to,
+        timezone=companies_service.get_timezone(session, ctx),
+        **filters,
+    )
+    return SaleDayTotals(
+        items=[
+            SaleDayTotal(
+                day=day, sale_count=count, confirmed_count=confirmed, total=money.amount(total)
+            )
+            for day, count, confirmed, total in rows
+        ]
+    )
 
 
 def get_items(session: Session, ctx: TenantContext, sale_id: UUID) -> Sequence[SaleItem]:
@@ -764,6 +830,7 @@ def build_read(
     returned_total: Decimal | None,
     customer_name: str | None,
     debt_status: DebtStatus | None,
+    item_count: int,
 ) -> SaleRead:
     """En-tête d'une vente, tel que la liste l'affiche.
 
@@ -791,6 +858,7 @@ def build_read(
         cancel_reason=sale.cancel_reason,
         confirmed_at=sale.confirmed_at,
         cancelled_at=sale.cancelled_at,
+        item_count=item_count,
     )
 
 
@@ -807,12 +875,14 @@ def build_page(
     debt_statuses = finance_service.debt_statuses_for_sales(
         session, ctx, [sale.id for sale in sales]
     )
+    item_counts = SaleItemRepository(session, ctx).counts_by_sale([sale.id for sale in sales])
     return [
         build_read(
             sale,
             returned_total=returned_totals.get(sale.id),
             customer_name=None if sale.customer_id is None else names.get(sale.customer_id),
             debt_status=debt_statuses.get(sale.id),
+            item_count=item_counts.get(sale.id, 0),
         )
         for sale in sales
     ]
@@ -862,10 +932,16 @@ def build_detail(session: Session, ctx: TenantContext, sale: Sale) -> SaleDetail
     debt = finance_service.debt_for_sale(session, ctx, sale.id)
     return SaleDetail(
         **header.model_dump(),
+        seller_name=seller_name(session, ctx, sale),
         items=build_item_reads(session, ctx, get_items(session, ctx, sale.id)),
         payments=finance_service.payment_reads_for_sale(session, ctx, sale.id),
         debt=None if debt is None else DebtRead.model_validate(debt),
     )
+
+
+def seller_name(session: Session, ctx: TenantContext, sale: Sale) -> str | None:
+    """Nom de l'utilisateur qui a saisi la vente ; `None` s'il n'existe plus."""
+    return users_service.names_by_id(session, ctx, [sale.created_by]).get(sale.created_by)
 
 
 def build_receipt(session: Session, ctx: TenantContext, sale_id: UUID) -> ReceiptRead:
@@ -891,7 +967,9 @@ def build_receipt(session: Session, ctx: TenantContext, sale_id: UUID) -> Receip
     customer = None
     if sale.customer_id is not None:
         record = customers_service.get_customer(session, ctx, sale.customer_id)
-        customer = ReceiptCustomer(id=record.id, code=record.code, name=record.name)
+        customer = ReceiptCustomer(
+            id=record.id, code=record.code, name=record.name, phone=record.phone
+        )
 
     lines: list[ReceiptLine] = []
     for item in items:
@@ -916,8 +994,18 @@ def build_receipt(session: Session, ctx: TenantContext, sale_id: UUID) -> Receip
         status=sale.status,
         sold_at=sale.sold_at,
         confirmed_at=sale.confirmed_at,
-        company=ReceiptCompany(name=company.name, currency=company.currency),
+        company=ReceiptCompany(
+            name=company.name,
+            currency=company.currency,
+            address=company.address,
+            phone=company.phone,
+            wave_number=company.wave_number,
+            ninea=company.ninea,
+            rc=company.rc,
+            receipt_footer=company.receipt_footer,
+        ),
         customer=customer,
+        seller_name=seller_name(session, ctx, sale),
         lines=lines,
         subtotal=sale.subtotal,
         discount_total=sale.discount_total,

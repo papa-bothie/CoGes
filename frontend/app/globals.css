@@ -3,8 +3,6 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
-/* Densité confortable des tableaux (réglage du navigateur, lib/density.ts). */
-@custom-variant comfortable (&:where([data-density="comfortable"] *));
 
 /*
  * Jetons de la maquette v2 (docs/design/maquette-v2/tokens.css, ADR 0064). Toute couleur du
@@ -90,6 +88,12 @@
   --coges-blanc: #ffffff;
   --coges-recu-papier: #ffffff;
   --coges-recu-encre: #111111;
+  --coges-recu-gris: #444444;
+  --coges-recu-filet: #e5e5e5;
+  --coges-recu-entete: #f5f5f5;
+  --coges-recu-ombre: rgb(0 0 0 / 12%);
+  /* Plan de travail derrière le reçu (maquette 05) */
+  --coges-recu-fond: #e9e4db;
   --coges-ombre: #000000;
 
   /* Rôles des composants */
@@ -142,6 +146,7 @@
   --coges-bordure-champ: #36403a;
   --coges-filet: #222a24;
   --coges-voile: #232b25;
+  --coges-recu-fond: #2a332c;
   --coges-voile-2: #1e2620;
   --coges-encre: #eef1ec;
   --coges-encre-2: #cdd3cd;
@@ -285,6 +290,11 @@
   --color-blanc: var(--coges-blanc);
   --color-recu-papier: var(--coges-recu-papier);
   --color-recu-encre: var(--coges-recu-encre);
+  --color-recu-gris: var(--coges-recu-gris);
+  --color-recu-filet: var(--coges-recu-filet);
+  --color-recu-entete: var(--coges-recu-entete);
+  --color-recu-ombre: var(--coges-recu-ombre);
+  --color-recu-fond: var(--coges-recu-fond);
   --color-ombre: var(--coges-ombre);
 
   /* Formes et tailles de la maquette : `rounded-carte`, `h-bouton-principal`, `max-w-page`… */

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   compareDecimal,
+  sumDecimals,
   parseDecimalInput,
   percentToRate,
   rateToPercent,
@@ -63,5 +64,13 @@ describe("taux en pourcentage", () => {
     expect(rateToPercent("0.1800")).toBe("18");
     expect(rateToPercent("0.0550")).toBe("5,5");
     expect(rateToPercent("0.0000")).toBe("0");
+  });
+});
+
+describe("sumDecimals", () => {
+  it("additionne sans float, retenues comprises", () => {
+    expect(sumDecimals(["62000.00", "71500.00", "0.10", "0.20"])).toBe("133500.30");
+    expect(sumDecimals([])).toBe("0");
+    expect(sumDecimals(["1", "abc"])).toBeNull();
   });
 });

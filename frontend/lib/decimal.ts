@@ -57,6 +57,22 @@ export function subtractDecimal(a: string, b: string): string | null {
   return `${negative ? "-" : ""}${integer}${fraction}`;
 }
 
+/** `a + b` en chaîne, sans `float` (somme affichée d'une semaine de ventes). */
+export function addDecimal(a: string, b: string): string | null {
+  const negated = b.trim().startsWith("-") ? b.trim().slice(1) : `-${b.trim()}`;
+  return subtractDecimal(a, negated);
+}
+
+/** Somme d'une liste de décimaux, « 0 » pour une liste vide ; `null` si l'un est illisible. */
+export function sumDecimals(values: readonly string[]): string | null {
+  let total: string | null = "0";
+  for (const value of values) {
+    if (total === null) return null;
+    total = addDecimal(total, value);
+  }
+  return total;
+}
+
 /**
  * Taux saisi en pourcentage (« 18 », « 5,5 ») → fraction pour l'API (« 0.18 », « 0.055 »),
  * par décalage de la virgule sur la chaîne, sans `float`. `null` si illisible.

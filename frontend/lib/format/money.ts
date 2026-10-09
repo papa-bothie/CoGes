@@ -102,3 +102,12 @@ export function formatAmount(value: string | null | undefined, currency = "XOF")
   if (amount === "—") return amount;
   return `${amount}${NBSP}${SHORT_CURRENCY_LABELS[currency] ?? currency}`;
 }
+
+/**
+ * Montant sans unité, au format de la maquette v2 : `formatFigure("15500.00")` → « 15 500 »
+ * (barres de l'accueil, colonne du ticket, billets). Espace insécable pleine, comme
+ * `formatAmount`.
+ */
+export function formatFigure(value: string | null | undefined, currency = "XOF"): string {
+  return formatMoney(value, currency, { withCurrency: false }).replace(/\u202f/g, NBSP);
+}

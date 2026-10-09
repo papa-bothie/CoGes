@@ -2,8 +2,6 @@
 
 import type { ReactNode } from "react";
 
-import { useDeclarePageTitle } from "@/components/shell/page-title";
-
 /** Titre `h1` + compteur à gauche, action principale à droite (motif du prototype). */
 export function PageHeader({
   title,
@@ -14,7 +12,6 @@ export function PageHeader({
   count?: ReactNode;
   actions?: ReactNode;
 }) {
-  useDeclarePageTitle(title);
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div>

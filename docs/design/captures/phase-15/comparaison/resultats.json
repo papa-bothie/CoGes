@@ -195,193 +195,146 @@
     {
       "file": "26-telephone-390.png",
       "width": 390,
-      "percent": 9.744497926316107
+      "percent": 5.44476850164054,
+      "missing": []
     }
   ],
   "01": [
     {
       "file": "01-accueil.png",
       "width": 1280,
-      "percent": 10.329207805514159,
-      "missing": [
-        "Accueil",
-        "Vendre",
-        "Argent",
-        "Conseils",
-        "Bonjour Fatou",
-        "Mardi 6 octobre",
-        "Nouvelle vente",
-        "Vendu aujourd'hui",
-        "14 ventes",
-        "Dans la caisse",
-        "152 000 F",
-        "Espèces et mobile money",
-        "Les clients vous doivent",
-        "5 clients · Encaisser",
-        "Stock à surveiller",
-        "3 articles",
-        "Bientôt épuisés",
-        "Vos ventes des 7 derniers jours",
-        "Total : 568 500 F",
-        "62 000",
-        "71 500",
-        "98 000",
-        "124 000",
-        "45 000",
-        "80 500",
-        "Mer",
-        "Jeu",
-        "Sam",
-        "Dim",
-        "Lun",
-        "Aujourd'hui",
-        "À surveiller",
-        "R",
-        "Riz brisé 25 kg",
-        "Plus que 2 sacs",
-        "H",
-        "Huile Dinor 1 L",
-        "Plus que 4 bouteilles",
-        "MF",
-        "Doit 25 000 F depuis 12 jours",
-        "Tout voir",
-        "AD",
-        "10 h 42",
-        "Payé",
-        "·",
-        "Client de passage",
-        "10 h 15",
-        "9 h 58",
-        "Reste 10 000 F",
-        "BN",
-        "9 h 20",
-        "8 h 47"
-      ]
+      "percent": 4.94894513785395,
+      "missing": []
     },
     {
       "file": "01-accueil-390.png",
       "width": 390,
-      "percent": 9.384233797045185
+      "percent": 9.135123476760487
     }
   ],
   "02": [
     {
       "file": "02-nouvelle-vente.png",
       "width": 1280,
-      "percent": 9.945076856148493
+      "percent": 10.878524945770065,
+      "missing": []
     },
     {
       "file": "02-nouvelle-vente-390.png",
       "width": 390,
-      "percent": 9.50091173093807
+      "percent": 15.895409828684631
     }
   ],
   "02b": [
     {
       "file": "02b-nouvelle-vente-une-partie.png",
       "width": 1280,
-      "percent": 9.524619807121661
+      "percent": 9.254992655288193
     },
     {
       "file": "02b-nouvelle-vente-une-partie-390.png",
       "width": 390,
-      "percent": 10.564330008629513
+      "percent": 15.223196665930816
     }
   ],
   "02c": [
     {
       "file": "02c-nouvelle-vente-rendu-monnaie.png",
       "width": 1280,
-      "percent": 11.202380952380953
+      "percent": 10.547894488324177
     },
     {
       "file": "02c-nouvelle-vente-rendu-monnaie-390.png",
       "width": 390,
-      "percent": 11.022848365926611
+      "percent": 15.775734726723547
     }
   ],
   "02d": [
     {
       "file": "02d-nouvelle-vente-succes.png",
       "width": 1280,
-      "percent": 9.44257216775599
+      "percent": 2.86328125
     },
     {
       "file": "02d-nouvelle-vente-succes-390.png",
       "width": 390,
-      "percent": 10.495262313444131
+      "percent": 16.164518512437404
     }
   ],
   "03": [
     {
       "file": "03-liste-des-ventes.png",
       "width": 1280,
-      "percent": 5.9628688023743015
+      "percent": 2.1064809202870443,
+      "missing": []
     },
     {
       "file": "03-liste-des-ventes-390.png",
       "width": 390,
-      "percent": 8.51753863791697
+      "percent": 5.820060675009481
     }
   ],
   "04": [
     {
       "file": "04-detail-vente.png",
       "width": 1280,
-      "percent": 5.723524305555556
+      "percent": 4.908680555555556,
+      "missing": []
     },
     {
       "file": "04-detail-vente-390.png",
       "width": 390,
-      "percent": 4.649297399093755
+      "percent": 8.52414176430149
     }
   ],
   "04b": [
     {
       "file": "04b-detail-vente-annulation.png",
       "width": 1280,
-      "percent": 11.443780637254902
+      "percent": 5.49296875
     },
     {
       "file": "04b-detail-vente-annulation-390.png",
       "width": 390,
-      "percent": 13.028267812901106
+      "percent": 13.917793498701531
     }
   ],
   "05": [
     {
       "file": "05-recu-ticket.png",
       "width": 1280,
-      "percent": 14.1140625
+      "percent": 5.616927083333334,
+      "missing": []
     },
     {
       "file": "05-recu-ticket-390.png",
       "width": 390,
-      "percent": 12.455939984324264
+      "percent": 16.539693203448664
     }
   ],
   "05b": [
     {
       "file": "05b-recu-facture-a4.png",
       "width": 1280,
-      "percent": 20.762796336206897
+      "percent": 4.376872859589041
     },
     {
       "file": "05b-recu-facture-a4-390.png",
       "width": 390,
-      "percent": 14.773073610282914
+      "percent": 13.777115218975682
     }
   ],
   "06": [
     {
       "file": "06-retour-articles.png",
       "width": 1280,
-      "percent": 6.069997030878859
+      "percent": 4.258709422011084,
+      "missing": []
     },
     {
       "file": "06-retour-articles-390.png",
       "width": 390,
-      "percent": 8.181078691423519
+      "percent": 12.130150309460655
     }
   ],
   "07": [

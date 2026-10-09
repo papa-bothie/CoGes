@@ -1,14 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { DEMO, loginThroughUi } from "./fixtures";
+import { DEMO, emptyMyDrafts, loginThroughUi } from "./fixtures";
 import { settle } from "./screens";
 
 /**
- * Cibles tactiles (ADR 0059) : sur tablette (`pointer: coarse`), toute cible interactive
- * visible mesure au moins 44 × 44 px — WCAG 2.5.5 et recommandations des plateformes. Sur
- * ordinateur, la densité compacte ne change pas (rien n'est mesuré ici).
+ * Cibles tactiles (ADR 0059, seuil remonté à 48 px par l'ADR 0070) : sur tablette
+ * (`pointer: coarse`), toute cible interactive visible mesure au moins 48 × 48 px — WCAG
+ * 2.5.5 et recommandations des plateformes.
  */
-const MIN = 44;
+const MIN = 48;
 
 test.use({ hasTouch: true, viewport: { width: 1024, height: 768 } });
 test.describe.configure({ timeout: 90_000 });
@@ -29,7 +29,7 @@ const INTERACTIVE = [
 
 type Offender = { label: string; width: number; height: number };
 
-/** Cibles visibles plus petites que 44 × 44 px, décrites pour le message d'échec. */
+/** Cibles visibles plus petites que 48 × 48 px, décrites pour le message d'échec. */
 async function smallTargets(page: Page): Promise<Offender[]> {
   return page.locator(INTERACTIVE).evaluateAll((elements, min) => {
     const offenders: { label: string; width: number; height: number }[] = [];
@@ -91,15 +91,17 @@ test.beforeEach(async ({ page }) => {
   await expect(page.evaluate(() => matchMedia("(pointer: coarse)").matches)).resolves.toBe(true);
 });
 
-test("Nouvelle vente : saisie, ligne d'article et barre d'actions", async ({ page }) => {
+test("Nouvelle vente : tuiles, ligne du ticket et paiement", async ({ page, request }) => {
   // Un article du catalogue de démonstration, toujours en stock (ADR 0060).
   const product = { name: "Sucre en poudre" };
+  await emptyMyDrafts(request, DEMO);
   await page.goto("/sales/new");
   await settle(page);
+  await page.getByRole("searchbox", { name: "Chercher un article" }).fill(product.name);
   await page
-    .getByRole("combobox", { name: "Ajouter un article (nom ou référence)" })
-    .fill(product.name);
-  await page.getByRole("option", { name: new RegExp(product.name) }).click();
+    .getByRole("button", { name: new RegExp(`^Ajouter ${product.name}`) })
+    .first()
+    .click();
   await expect(page.getByRole("textbox", { name: `Quantité de ${product.name}` })).toBeVisible();
   await expectTouchFriendly(page);
 });

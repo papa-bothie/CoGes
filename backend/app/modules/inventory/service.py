@@ -24,7 +24,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, NamedTuple
 from uuid import UUID
 
 from sqlalchemy import text
@@ -586,8 +586,18 @@ def reverse_sale_out(
     return _write_reversal(session, ctx, movement)
 
 
-def stock_alert_count(session: Session, ctx: TenantContext) -> int:
-    """Nombre de produits dont le stock est retombé à son seuil d'alerte ou en dessous.
+class WatchedProduct(NamedTuple):
+    """Un article sous son seuil ou épuisé, pour la carte « À surveiller »."""
+
+    product_id: UUID
+    name: str
+    unit: str
+    qty_on_hand: Decimal
+    status: str
+
+
+def _under_threshold(session: Session, ctx: TenantContext) -> list[tuple[UUID, Decimal, Decimal]]:
+    """(produit, quantité, seuil) de chaque produit retombé à son seuil ou en dessous.
 
     Deux requêtes, pas une jointure : `products` porte le seuil, `product_stock` porte
     la quantité, et les deux tables appartiennent à des modules différents. Inventory
@@ -595,13 +605,42 @@ def stock_alert_count(session: Session, ctx: TenantContext) -> int:
     """
     thresholds = products_service.reorder_points(session, ctx)
     if not thresholds:
-        return 0
+        return []
     stocks = ProductStockRepository(session, ctx).many(list(thresholds))
-    return sum(
-        1
+    return [
+        (product_id, stock.qty_on_hand, threshold)
         for product_id, threshold in thresholds.items()
         if (stock := stocks.get(product_id)) is not None and stock.qty_on_hand <= threshold
-    )
+    ]
+
+
+def stock_alert_count(session: Session, ctx: TenantContext) -> int:
+    """Nombre de produits dont le stock est retombé à son seuil d'alerte ou en dessous."""
+    return len(_under_threshold(session, ctx))
+
+
+def stock_to_watch(session: Session, ctx: TenantContext, *, limit: int) -> list[WatchedProduct]:
+    """Les articles les plus urgents : épuisés d'abord, puis les plus bas par rapport à
+    leur seuil (ADR 0070). Comparer au seuil plutôt qu'à la quantité : 2 sacs de riz et
+    2 savons ne pressent pas autant."""
+
+    def urgency(row: tuple[UUID, Decimal, Decimal]) -> tuple[Decimal, Decimal]:
+        _, qty, threshold = row
+        return (qty / threshold if threshold > 0 else Decimal("0"), qty)
+
+    under = sorted(_under_threshold(session, ctx), key=urgency)
+    summaries = products_service.get_summaries(session, ctx, [row[0] for row in under])
+    watched: list[WatchedProduct] = []
+    for product_id, qty, threshold in under:
+        summary = summaries.get(product_id)
+        if summary is None:
+            continue
+        watched.append(
+            WatchedProduct(product_id, summary.name, summary.unit, qty, _status(qty, threshold))
+        )
+        if len(watched) == limit:
+            break
+    return watched
 
 
 def average_on_hand(

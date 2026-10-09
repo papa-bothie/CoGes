@@ -36,9 +36,14 @@ export function Avatar({
 }: {
   name: string | null;
   rubrique?: Rubrique;
-  size?: "normal" | "grand";
+  size?: "normal" | "moyen" | "grand";
 }) {
-  const dimension = size === "grand" ? "size-[52px] text-lg font-extrabold" : "size-11 font-bold";
+  const dimension =
+    size === "grand"
+      ? "size-[52px] text-lg font-extrabold"
+      : size === "moyen"
+        ? "size-[46px] font-bold"
+        : "size-11 font-bold";
   if (!name) {
     return (
       <span

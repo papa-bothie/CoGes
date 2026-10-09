@@ -59,6 +59,19 @@ def list_customers(
     )
 
 
+#: Plafond des clients retenus pour chercher des ventes par nom : au-delà, le nom tapé
+#: est trop vague pour servir, et la clause `IN` resterait bornée.
+SEARCH_IDS_LIMIT = 200
+
+
+def ids_matching(session: Session, ctx: TenantContext, search: str) -> list[UUID]:
+    """Clients dont le nom ou le code répond à la recherche (liste des ventes, ADR 0070)."""
+    term = normalise_term(search)
+    if term is None:
+        return []
+    return CustomerRepository(session, ctx).ids_matching(term, limit=SEARCH_IDS_LIMIT)
+
+
 def get_many(session: Session, ctx: TenantContext, customer_ids: Sequence[UUID]) -> list[Customer]:
     """Clients vivants de ce lot, **dans l'ordre demandé**. Un client supprimé est absent."""
     found = {c.id: c for c in CustomerRepository(session, ctx).live_by_ids(customer_ids)}

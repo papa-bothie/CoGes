@@ -25,11 +25,13 @@ from app.modules.sales.schemas import (
     SaleCancel,
     SaleConfirm,
     SaleCreate,
+    SaleDayTotals,
     SaleDetail,
     SaleItemCreate,
     SaleItemRead,
     SaleItemUpdate,
     SalePage,
+    SalePaymentState,
     SaleReturnCreate,
     SaleReturnDetail,
     SaleReturnList,
@@ -93,12 +95,17 @@ def list_sales(
     customer_id: Annotated[UUID | None, Query()] = None,
     date_from: Annotated[datetime | None, Query()] = None,
     date_to: Annotated[datetime | None, Query()] = None,
-    sale_no: Annotated[str | None, Query(alias="search")] = None,
+    search: Annotated[str | None, Query(max_length=120)] = None,
+    state: Annotated[SalePaymentState | None, Query()] = None,
+    include_drafts: Annotated[bool, Query()] = True,
+    mine: Annotated[bool, Query()] = False,
 ) -> SalePage:
     """Ventes de la plus récente à la plus ancienne, filtrables.
 
-    `search` cherche un **numéro exact** : un numéro se dicte et se retrouve
-    entier, une recherche approximative n'y aiderait personne.
+    `search` trouve un **numéro exact** (« V-001044 » ou « 1044 ») ou le nom d'un client ;
+    `state` : payées, pas encore payées, avec retour, annulées (ADR 0070).
+    `include_drafts=false` écarte les brouillons ; `mine=true` ne garde que les ventes
+    saisies par l'utilisateur du jeton.
     """
     sales, total, returned_totals = service.list_sales(
         tenant.session,
@@ -109,13 +116,39 @@ def list_sales(
         customer_id=customer_id,
         date_from=date_from,
         date_to=date_to,
-        sale_no=sale_no,
+        search=search,
+        state=state,
+        include_drafts=include_drafts,
+        mine=mine,
     )
     return SalePage(
         items=service.build_page(tenant.session, tenant.ctx, sales, returned_totals),
         page=page,
         page_size=page_size,
         total=total,
+    )
+
+
+@router.get("/day-totals", response_model=SaleDayTotals)
+def day_totals(
+    tenant: Annotated[TenantSession, Depends(require_permission("sales:read"))],
+    date_from: Annotated[datetime, Query()],
+    date_to: Annotated[datetime, Query()],
+    state: Annotated[SalePaymentState | None, Query()] = None,
+    search: Annotated[str | None, Query(max_length=120)] = None,
+) -> SaleDayTotals:
+    """Nombre et total des ventes par jour, en tête de chaque groupe de la liste, avec les
+    mêmes filtres qu'elle (`state`, `search`).
+
+    Déclarée avant `/{sale_id}` : sinon ce chemin serait lu comme un identifiant.
+    """
+    return service.day_totals(
+        tenant.session,
+        tenant.ctx,
+        date_from=date_from,
+        date_to=date_to,
+        state=state,
+        search=search,
     )
 
 

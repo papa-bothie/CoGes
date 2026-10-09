@@ -97,3 +97,6 @@ class UnreadCount(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     unread: int
+    #: Dont les alertes graves (`critical`) : seules elles allument le badge de la cloche
+    #: (maquette v2, ADR 0070).
+    critical: int

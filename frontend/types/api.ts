@@ -659,8 +659,10 @@ export interface paths {
      * List Sales
      * @description Ventes de la plus récente à la plus ancienne, filtrables.
      *
-     *     `search` cherche un **numéro exact** : un numéro se dicte et se retrouve
-     *     entier, une recherche approximative n'y aiderait personne.
+     *     `search` trouve un **numéro exact** (« V-001044 » ou « 1044 ») ou le nom d'un client ;
+     *     `state` : payées, pas encore payées, avec retour, annulées (ADR 0070).
+     *     `include_drafts=false` écarte les brouillons ; `mine=true` ne garde que les ventes
+     *     saisies par l'utilisateur du jeton.
      */
     get: operations["list_sales_api_v1_sales_get"];
     put?: never;
@@ -689,6 +691,29 @@ export interface paths {
      *     Déclarée avant `/{sale_id}` : sinon ce chemin serait lu comme un identifiant.
      */
     get: operations["customer_choices_api_v1_sales_customer_choices_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/sales/day-totals": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Day Totals
+     * @description Nombre et total des ventes par jour, en tête de chaque groupe de la liste, avec les
+     *     mêmes filtres qu'elle (`state`, `search`).
+     *
+     *     Déclarée avant `/{sale_id}` : sinon ce chemin serait lu comme un identifiant.
+     */
+    get: operations["day_totals_api_v1_sales_day_totals_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1803,6 +1828,18 @@ export interface components {
       settings: {
         [key: string]: unknown;
       };
+      /** Address */
+      address: string | null;
+      /** Phone */
+      phone: string | null;
+      /** Wave Number */
+      wave_number: string | null;
+      /** Ninea */
+      ninea: string | null;
+      /** Rc */
+      rc: string | null;
+      /** Receipt Footer */
+      receipt_footer: string | null;
       /**
        * Created At
        * Format: date-time
@@ -1829,6 +1866,18 @@ export interface components {
       settings?: {
         [key: string]: unknown;
       } | null;
+      /** Address */
+      address?: string | null;
+      /** Phone */
+      phone?: string | null;
+      /** Wave Number */
+      wave_number?: string | null;
+      /** Ninea */
+      ninea?: string | null;
+      /** Rc */
+      rc?: string | null;
+      /** Receipt Footer */
+      receipt_footer?: string | null;
     };
     "CostPrice-Input": components["schemas"]["UnitCost-Input"];
     "CostPrice-Output": components["schemas"]["UnitCost-Output"];
@@ -1967,8 +2016,14 @@ export interface components {
       /** Sales Today */
       sales_today: number;
       receivables_open: components["schemas"]["Amount-Output"];
+      /** Receivables Customer Count */
+      receivables_customer_count: number;
       /** Stock Alert Count */
       stock_alert_count: number;
+      cash_on_hand: components["schemas"]["Amount-Output"];
+      /** Watch Stock */
+      watch_stock: components["schemas"]["WatchStock"][];
+      watch_debt: components["schemas"]["WatchDebt"] | null;
       /** Revenue Trend */
       revenue_trend: components["schemas"]["RevenuePoint"][];
       /** Recent Sales */
@@ -3229,6 +3284,18 @@ export interface components {
       name: string;
       /** Currency */
       currency: string;
+      /** Address */
+      address: string | null;
+      /** Phone */
+      phone: string | null;
+      /** Wave Number */
+      wave_number: string | null;
+      /** Ninea */
+      ninea: string | null;
+      /** Rc */
+      rc: string | null;
+      /** Receipt Footer */
+      receipt_footer: string | null;
     };
     /**
      * ReceiptCustomer
@@ -3244,6 +3311,8 @@ export interface components {
       code: string | null;
       /** Name */
       name: string;
+      /** Phone */
+      phone: string | null;
     };
     /**
      * ReceiptLine
@@ -3292,6 +3361,8 @@ export interface components {
       confirmed_at: string | null;
       company: components["schemas"]["ReceiptCompany"];
       customer: components["schemas"]["ReceiptCustomer"] | null;
+      /** Seller Name */
+      seller_name: string | null;
       /** Lines */
       lines: components["schemas"]["ReceiptLine"][];
       subtotal: components["schemas"]["Amount-Output"];
@@ -3323,6 +3394,12 @@ export interface components {
        * Format: date-time
        */
       sold_at: string;
+      status: components["schemas"]["SaleStatus"];
+      balance: components["schemas"]["Amount-Output"];
+      debt_status: components["schemas"]["DebtStatus"] | null;
+      /** Has Returns */
+      has_returns: boolean;
+      returned_total: components["schemas"]["Amount-Output"];
     };
     RefundAmount: components["schemas"]["Amount-Input"];
     /**
@@ -3481,6 +3558,31 @@ export interface components {
       sold_at?: string | null;
     };
     /**
+     * SaleDayTotal
+     * @description Les ventes d'un jour, dans le fuseau de l'entreprise (ADR 0070), brouillons exclus.
+     */
+    SaleDayTotal: {
+      /**
+       * Day
+       * Format: date
+       */
+      day: string;
+      /** Sale Count */
+      sale_count: number;
+      /** Confirmed Count */
+      confirmed_count: number;
+      total: components["schemas"]["Amount-Output"];
+    };
+    /**
+     * SaleDayTotals
+     * @description Totaux par jour de la liste des ventes, du plus récent au plus ancien. Un jour sans
+     *     vente est absent : la liste n'affiche pas de groupe vide.
+     */
+    SaleDayTotals: {
+      /** Items */
+      items: components["schemas"]["SaleDayTotal"][];
+    };
+    /**
      * SaleDetail
      * @description Vente complète : en-tête, lignes, règlements et dette éventuelle.
      */
@@ -3518,6 +3620,10 @@ export interface components {
       confirmed_at: string | null;
       /** Cancelled At */
       cancelled_at: string | null;
+      /** Item Count */
+      item_count: number;
+      /** Seller Name */
+      seller_name: string | null;
       /** Items */
       items: components["schemas"]["SaleItemRead"][];
       /** Payments */
@@ -3588,6 +3694,8 @@ export interface components {
       /** Total */
       total: number;
     };
+    /** @enum {string} */
+    SalePaymentState: "paid" | "unpaid" | "returned" | "cancelled";
     SaleQty: components["schemas"]["Quantity-Input"];
     /**
      * SaleRead
@@ -3627,6 +3735,8 @@ export interface components {
       confirmed_at: string | null;
       /** Cancelled At */
       cancelled_at: string | null;
+      /** Item Count */
+      item_count: number;
     };
     /**
      * SaleReturnCreate
@@ -3975,6 +4085,8 @@ export interface components {
     UnreadCount: {
       /** Unread */
       unread: number;
+      /** Critical */
+      critical: number;
     };
     /** UserCreate */
     UserCreate: {
@@ -4066,6 +4178,39 @@ export interface components {
       input?: unknown;
       /** Context */
       ctx?: Record<string, never>;
+    };
+    /**
+     * WatchDebt
+     * @description Le client qui doit le plus, et depuis quand (« Doit 25 000 F depuis 12 jours »).
+     */
+    WatchDebt: {
+      /**
+       * Customer Id
+       * Format: uuid
+       */
+      customer_id: string;
+      /** Customer Name */
+      customer_name: string;
+      balance: components["schemas"]["Amount-Output"];
+      /** Days */
+      days: number;
+    };
+    /**
+     * WatchStock
+     * @description Un article à surveiller : sous son seuil ou épuisé (« Plus que 2 sacs »).
+     */
+    WatchStock: {
+      /**
+       * Product Id
+       * Format: uuid
+       */
+      product_id: string;
+      /** Name */
+      name: string;
+      /** Unit */
+      unit: string;
+      qty_on_hand: components["schemas"]["Quantity-Output"];
+      status: components["schemas"]["StockStatus"];
     };
   };
   responses: never;
@@ -5588,6 +5733,9 @@ export interface operations {
         date_from?: string | null;
         date_to?: string | null;
         search?: string | null;
+        state?: components["schemas"]["SalePaymentState"] | null;
+        include_drafts?: boolean;
+        mine?: boolean;
       };
       header?: never;
       path?: never;
@@ -5668,6 +5816,40 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["CustomerChoicePage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  day_totals_api_v1_sales_day_totals_get: {
+    parameters: {
+      query: {
+        date_from: string;
+        date_to: string;
+        state?: components["schemas"]["SalePaymentState"] | null;
+        search?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SaleDayTotals"];
         };
       };
       /** @description Validation Error */

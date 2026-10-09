@@ -496,3 +496,39 @@ def test_a_foreign_companys_alert_is_not_found(
     )
 
     assert response.status_code == 404
+
+
+def test_the_counter_says_how_many_unread_alerts_are_critical(
+    api_client: TestClient, alpha_token: str, company_alpha: DemoCompany
+) -> None:
+    """La cloche ne porte son badge que pour une alerte grave non lue (ADR 0070) : une
+    rupture compte, un stock bas non ; une rupture lue ne compte plus."""
+
+    def counter() -> dict[str, int]:
+        response = api_client.get(
+            f"{NOTIFICATIONS}/unread-count", headers=auth_headers(alpha_token)
+        )
+        assert response.status_code == 200, response.text
+        body: dict[str, int] = response.json()
+        return body
+
+    before = counter()
+    low = _product(api_client, alpha_token)
+    on_stock_updated(
+        **_stock_event(company_alpha.company_id, low, qty="2.000", below=True).as_message()
+    )
+    after_low = counter()
+    assert after_low["unread"] == before["unread"] + 1
+    assert after_low["critical"] == before["critical"]
+
+    out = _product(api_client, alpha_token)
+    on_stock_updated(
+        **_stock_event(company_alpha.company_id, out, qty="0.000", below=True).as_message()
+    )
+    assert counter()["critical"] == before["critical"] + 1
+
+    alert_id = _about(_feed(api_client, alpha_token), out)[0]["id"]
+    api_client.patch(
+        f"{NOTIFICATIONS}/{alert_id}", headers=auth_headers(alpha_token), json={"read": True}
+    )
+    assert counter()["critical"] == before["critical"]

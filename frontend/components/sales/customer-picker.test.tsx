@@ -80,7 +80,11 @@ describe("CustomerPicker", () => {
     const input = screen.getByRole("combobox", { name: /Rechercher un client/ });
     await userEvent.click(input);
     await userEvent.click(await screen.findByText("Awa Diop"));
-    expect(onSelect).toHaveBeenLastCalledWith({ id: "c2", name: "Awa Diop" });
+    expect(onSelect).toHaveBeenLastCalledWith({
+      id: "c2",
+      name: "Awa Diop",
+      phone: "77 412 08 33",
+    });
 
     await userEvent.click(input);
     await userEvent.click(await screen.findByText("Client de passage"));

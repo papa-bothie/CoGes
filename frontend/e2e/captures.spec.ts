@@ -10,6 +10,10 @@ import { DEMO, loginThroughUi } from "./fixtures";
 const CAPTURES = "../docs/design/captures/phase-12";
 
 test.describe("captures", () => {
+  // Captures d'une phase close : l'interface a changé depuis (phase 15, ADR 0070). Elles
+  // ne tournent plus que sur demande, pour refaire une image d'époque.
+  test.skip(process.env.CAPTURES_PHASE !== "12", "CAPTURES_PHASE=12 non défini");
+
   test.beforeEach(async ({ page }) => {
     await page.goto("/login");
     await loginThroughUi(page, DEMO);

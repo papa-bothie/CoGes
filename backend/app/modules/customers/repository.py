@@ -57,6 +57,17 @@ class CustomerRepository(TenantRepository[Customer]):
         stmt = self._live().where(Customer.id.in_(list(customer_ids)))
         return self.session.execute(stmt).scalars().all()
 
+    def ids_matching(self, search: str, *, limit: int) -> list[UUID]:
+        """Clients vivants trouvés par leur nom ou leur code, les plus pertinents d'abord."""
+        stmt = (
+            self._live()
+            .where(*self._filters(search=search))
+            .order_by(*relevance_order(Customer.name, (Customer.code,), search))
+            .limit(limit)
+            .with_only_columns(Customer.id)
+        )
+        return list(self.session.execute(stmt).scalars().all())
+
     def count_live(self, *, search: str | None = None, exclude_ids: Sequence[UUID] = ()) -> int:
         stmt = (
             select(func.count())

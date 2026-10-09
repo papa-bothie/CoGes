@@ -7,17 +7,17 @@ page HTML). Images : maquette | front | différences.
 
 | N° | Écran | Lot | 1280 px | 390 px | Textes manquants | Images |
 |---|---|---|---|---|---|---|
-| 01 | Accueil (à faire) | 3a | 10.3 % | 9.4 % | 52 | [1280](comparaison/01-accueil.png) [390](comparaison/01-accueil-390.png) |
-| 02 | Nouvelle vente (à faire) | 3a | 9.9 % | 9.5 % | — | [1280](comparaison/02-nouvelle-vente.png) [390](comparaison/02-nouvelle-vente-390.png) |
-| 02b | paiement d'une partie (montant tapé + pavé) (à faire) | 3a | 9.5 % | 10.6 % | — | [1280](comparaison/02b-nouvelle-vente-une-partie.png) [390](comparaison/02b-nouvelle-vente-une-partie-390.png) |
-| 02c | rendu de monnaie (à faire) | 3a | 11.2 % | 11.0 % | — | [1280](comparaison/02c-nouvelle-vente-rendu-monnaie.png) [390](comparaison/02c-nouvelle-vente-rendu-monnaie-390.png) |
-| 02d | écran de succès (à faire) | 3a | 9.4 % | 10.5 % | — | [1280](comparaison/02d-nouvelle-vente-succes.png) [390](comparaison/02d-nouvelle-vente-succes-390.png) |
-| 03 | Liste des ventes (à faire) | 3a | 6.0 % | 8.5 % | — | [1280](comparaison/03-liste-des-ventes.png) [390](comparaison/03-liste-des-ventes-390.png) |
-| 04 | Détail d'une vente (à faire) | 3a | 5.7 % | 4.6 % | — | [1280](comparaison/04-detail-vente.png) [390](comparaison/04-detail-vente-390.png) |
-| 04b | annulation (raison) (à faire) | 3a | 11.4 % | 13.0 % | — | [1280](comparaison/04b-detail-vente-annulation.png) [390](comparaison/04b-detail-vente-annulation-390.png) |
-| 05 | Reçu, petit ticket 80 mm (à faire) | 3a | 14.1 % | 12.5 % | — | [1280](comparaison/05-recu-ticket.png) [390](comparaison/05-recu-ticket-390.png) |
-| 05b | Reçu, facture A4 (à faire) | 3a | 20.8 % | 14.8 % | — | [1280](comparaison/05b-recu-facture-a4.png) [390](comparaison/05b-recu-facture-a4-390.png) |
-| 06 | Retour d'articles (à faire) | 3a | 6.1 % | 8.2 % | — | [1280](comparaison/06-retour-articles.png) [390](comparaison/06-retour-articles-390.png) |
+| 01 | Accueil | 3a | 4.9 % | 9.1 % | 0 | [1280](comparaison/01-accueil.png) [390](comparaison/01-accueil-390.png) |
+| 02 | Nouvelle vente | 3a | 10.9 % | 15.9 % | 0 | [1280](comparaison/02-nouvelle-vente.png) [390](comparaison/02-nouvelle-vente-390.png) |
+| 02b | paiement d'une partie (montant tapé + pavé) | 3a | 9.3 % | 15.2 % | — | [1280](comparaison/02b-nouvelle-vente-une-partie.png) [390](comparaison/02b-nouvelle-vente-une-partie-390.png) |
+| 02c | rendu de monnaie | 3a | 10.5 % | 15.8 % | — | [1280](comparaison/02c-nouvelle-vente-rendu-monnaie.png) [390](comparaison/02c-nouvelle-vente-rendu-monnaie-390.png) |
+| 02d | écran de succès | 3a | 2.9 % | 16.2 % | — | [1280](comparaison/02d-nouvelle-vente-succes.png) [390](comparaison/02d-nouvelle-vente-succes-390.png) |
+| 03 | Liste des ventes | 3a | 2.1 % | 5.8 % | 0 | [1280](comparaison/03-liste-des-ventes.png) [390](comparaison/03-liste-des-ventes-390.png) |
+| 04 | Détail d'une vente | 3a | 4.9 % | 8.5 % | 0 | [1280](comparaison/04-detail-vente.png) [390](comparaison/04-detail-vente-390.png) |
+| 04b | annulation (raison) | 3a | 5.5 % | 13.9 % | — | [1280](comparaison/04b-detail-vente-annulation.png) [390](comparaison/04b-detail-vente-annulation-390.png) |
+| 05 | Reçu, petit ticket 80 mm | 3a | 5.6 % | 16.5 % | 0 | [1280](comparaison/05-recu-ticket.png) [390](comparaison/05-recu-ticket-390.png) |
+| 05b | Reçu, facture A4 | 3a | 4.4 % | 13.8 % | — | [1280](comparaison/05b-recu-facture-a4.png) [390](comparaison/05b-recu-facture-a4-390.png) |
+| 06 | Retour d'articles | 3a | 4.3 % | 12.1 % | 0 | [1280](comparaison/06-retour-articles.png) [390](comparaison/06-retour-articles-390.png) |
 | 07 | Liste des articles (Stock) (à faire) | 3b | 6.5 % | 10.3 % | — | [1280](comparaison/07-liste-articles.png) [390](comparaison/07-liste-articles-390.png) |
 | 08 | Fiche article et étiquette (à faire) | 3b | 8.1 % | 7.8 % | — | [1280](comparaison/08-fiche-article.png) [390](comparaison/08-fiche-article-390.png) |
 | 09 | Nouvel article (à faire) | 3b | 7.7 % | 8.7 % | — | [1280](comparaison/09-nouvel-article.png) [390](comparaison/09-nouvel-article-390.png) |
@@ -47,4 +47,4 @@ page HTML). Images : maquette | front | différences.
 | 24d | historique (à faire) | 3e | 8.8 % | 10.7 % | — | [1280](comparaison/24d-reglages-historique.png) [390](comparaison/24d-reglages-historique-390.png) |
 | 24e | fichiers Excel (à faire) | 3e | 11.0 % | 14.9 % | — | [1280](comparaison/24e-reglages-fichiers-excel.png) [390](comparaison/24e-reglages-fichiers-excel-390.png) |
 | 25 | Connexion (à faire) | 3e | 7.0 % | 13.6 % | — | [1280](comparaison/25-connexion.png) [390](comparaison/25-connexion-390.png) |
-| 26 | Sur téléphone (390 px) (à faire) | 3a, puis chaque lot | — | 9.7 % | — | [390](comparaison/26-telephone-390.png) |
+| 26 | Sur téléphone (390 px) | 3a, puis chaque lot | — | 5.4 % | 0 | [390](comparaison/26-telephone-390.png) |

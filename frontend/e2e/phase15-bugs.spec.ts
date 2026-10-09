@@ -1,6 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { customerWithCredit, E2E, loginThroughUi, managerApi, stockedProduct } from "./fixtures";
+import {
+  customerWithCredit,
+  E2E,
+  emptyMyDrafts,
+  loginThroughUi,
+  managerApi,
+  stockedProduct,
+} from "./fixtures";
 
 /**
  * Les trois bugs du lot 0 de la phase 15, vus de l'écran. L'API e2e tourne **sans** relais
@@ -17,9 +24,9 @@ async function login(page: Page) {
 /** Montant affiché par la tuile « Vendu aujourd'hui », en francs entiers. */
 async function revenueToday(page: Page): Promise<number> {
   const figure = page
-    .locator('[data-slot="card"]')
-    .filter({ hasText: "Vendu aujourd'hui" })
-    .locator(".text-figure");
+    .getByRole("link", { name: /^Vendu aujourd'hui/ })
+    .first()
+    .locator(".numeric");
   await expect(figure).toBeVisible({ timeout: 30_000 });
   return Number((await figure.innerText()).replace(/\D/g, ""));
 }
@@ -30,19 +37,19 @@ test("B1 — une vente fait monter « Vendu aujourd'hui » sans worker ni relais
 }) => {
   const client = await managerApi(request);
   const product = await stockedProduct(client, { stock: "10", price: "1500" });
+  await emptyMyDrafts(request);
   await login(page);
   const before = await revenueToday(page);
 
   await page.goto("/sales/new");
-  const search = page.getByRole("combobox", { name: "Ajouter un article (nom ou référence)" });
-  await search.fill(product.name);
-  await page.getByRole("option", { name: new RegExp(product.name) }).click();
+  await page.getByRole("searchbox", { name: "Chercher un article" }).fill(product.name);
+  await page.getByRole("button", { name: `Ajouter ${product.name}` }).click();
   const qty = page.getByRole("textbox", { name: `Quantité de ${product.name}` });
   await qty.fill("2");
   await qty.press("Enter");
-  await expect(page.getByText("Totaux calculés par le serveur")).toBeVisible();
-  await page.getByRole("button", { name: "Confirmer la vente" }).click();
-  await expect(page).toHaveURL(/\/sales\/[0-9a-f-]+$/);
+  await expect(page.getByRole("button", { name: /^Encaisser 3\s000\sF$/ })).toBeEnabled();
+  await page.getByRole("button", { name: /^Encaisser/ }).click();
+  await expect(page.getByRole("heading", { name: "Vente enregistrée" })).toBeVisible();
 
   await page.goto("/dashboard");
   await expect.poll(() => revenueToday(page)).toBe(before + 3000);
@@ -58,8 +65,8 @@ test("B2 — une dette encaissée fait passer la vente à « Payé »", async ({
 
   await login(page);
   await page.goto(`/sales?search=${encodeURIComponent(sale.sale_no)}`);
-  await expect(page.getByRole("row", { name: new RegExp(customer.name) })).toContainText(
-    /Reste\s2\s000\sFCFA/,
+  await expect(page.getByRole("link", { name: new RegExp(customer.name) })).toContainText(
+    /Reste\s2\s000\sF/,
   );
 
   await page.goto("/finance?tab=debts&party=customer&status=open&page_size=100");
@@ -74,7 +81,7 @@ test("B2 — une dette encaissée fait passer la vente à « Payé »", async ({
   await expect(page.getByText("Dette encaissée.")).toBeVisible();
 
   await page.goto(`/sales?search=${encodeURIComponent(sale.sale_no)}`);
-  const row = page.getByRole("row", { name: new RegExp(customer.name) });
+  const row = page.getByRole("link", { name: new RegExp(customer.name) });
   await expect(row).toContainText("Payé");
   await expect(row).not.toContainText("Reste");
 });
@@ -93,6 +100,7 @@ test("B3 — avec 30 clients, le 30ᵉ se trouve en défilant et se choisit", as
 
   await login(page);
   await page.goto("/sales/new");
+  await page.getByRole("button", { name: /Client de passage.*Changer/ }).click();
   await page.getByRole("combobox", { name: "Rechercher un client (nom ou code)" }).click();
   const list = page.getByRole("listbox");
   await expect(list.getByRole("option").first()).toContainText("Client de passage");
@@ -107,6 +115,6 @@ test("B3 — avec 30 clients, le 30ᵉ se trouve en défilant et se choisit", as
   await expect(target).toBeInViewport();
   await target.click();
 
-  await expect(page.getByText(last)).toBeVisible();
+  await expect(page.getByRole("button", { name: new RegExp(last) })).toBeVisible();
   await expect(list).toBeHidden();
 });

@@ -29,6 +29,13 @@ class Company(Base):
     currency: Mapped[str] = mapped_column(String(3))
     timezone: Mapped[str] = mapped_column(Text)
     settings: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    # Coordonnées imprimées sur le reçu (révision 0016, ADR 0070), toutes facultatives.
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    phone: Mapped[str | None] = mapped_column(Text, nullable=True)
+    wave_number: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ninea: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    receipt_footer: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )

@@ -20,7 +20,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 from uuid import UUID
 
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -1398,6 +1398,30 @@ def paid_by_expenses(
 ) -> dict[UUID, Decimal]:
     """Montant réellement décaissé pour chaque dépense (paiements vivants seulement)."""
     return PaymentRepository(session, ctx).paid_by_expenses(expense_ids)
+
+
+def cash_on_hand(session: Session, ctx: TenantContext) -> Decimal:
+    """« Dans la caisse » : tout ce qui est entré moins sorti depuis le début (ADR 0070)."""
+    return PaymentRepository(session, ctx).cash_balance()
+
+
+class LargestCustomerDebt(NamedTuple):
+    """Le client qui doit le plus (carte « À surveiller » de l'accueil)."""
+
+    customer_id: UUID
+    balance: Decimal
+    oldest_open_at: datetime
+
+
+def open_customer_count(session: Session, ctx: TenantContext) -> int:
+    """Nombre de clients qui doivent encore quelque chose."""
+    return DebtRepository(session, ctx).open_customer_count()
+
+
+def largest_open_customer_debt(session: Session, ctx: TenantContext) -> LargestCustomerDebt | None:
+    """Le client à l'encours le plus élevé, et depuis quand il doit ; `None` si personne."""
+    found = DebtRepository(session, ctx).largest_open_customer_debt()
+    return None if found is None else LargestCustomerDebt(*found)
 
 
 def open_debt_totals(session: Session, ctx: TenantContext) -> dict[str, Decimal]:

@@ -7,7 +7,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, func, select, text
+from sqlalchemy import ColumnElement, exists, false, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.core.repository import MAX_PAGE_SIZE, TenantRepository
@@ -41,21 +41,51 @@ class SaleRepository(TenantRepository[Sale]):
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         sale_no: str | None = None,
+        state: str | None = None,
+        search_customer_ids: Sequence[UUID] | None = None,
+        include_drafts: bool = True,
+        created_by: UUID | None = None,
     ) -> list[ColumnElement[bool]]:
         filters: list[ColumnElement[bool]] = []
         if status is not None:
             filters.append(Sale.status == status)
+        if not include_drafts:
+            filters.append(Sale.status != "draft")
+        if created_by is not None:
+            filters.append(Sale.created_by == created_by)
         if customer_id is not None:
             filters.append(Sale.customer_id == customer_id)
         if date_from is not None:
             filters.append(Sale.sold_at >= date_from)
         if date_to is not None:
             filters.append(Sale.sold_at <= date_to)
+        # Recherche : un numéro **exact** (jamais de `LIKE`, ADR 0013) ou l'un des clients
+        # trouvés par leur nom. Sans ni l'un ni l'autre, la recherche ne trouve rien.
+        found: list[ColumnElement[bool]] = []
         if sale_no is not None:
-            # Égalité stricte sur un numéro, jamais de `LIKE` : un numéro se lit,
-            # se dicte et se retrouve entier (ADR 0013).
-            filters.append(Sale.sale_no == sale_no)
+            found.append(Sale.sale_no == sale_no)
+        if search_customer_ids:
+            found.append(Sale.customer_id.in_(list(search_customer_ids)))
+        if sale_no is not None or search_customer_ids is not None:
+            filters.append(or_(*found) if found else false())
+        if state is not None:
+            filters.append(self._state(state))
         return filters
+
+    def _state(self, state: str) -> ColumnElement[bool]:
+        """Les quatre puces d'état de la liste (ADR 0070), toutes dérivées."""
+        if state == "cancelled":
+            return Sale.status == "cancelled"
+        if state == "returned":
+            return exists().where(
+                SaleReturn.company_id == Sale.company_id, SaleReturn.sale_id == Sale.id
+            )
+        confirmed = Sale.status == "confirmed"
+        if state == "paid":
+            return confirmed & (Sale.paid_total >= Sale.total)
+        if state == "unpaid":
+            return confirmed & (Sale.paid_total < Sale.total)
+        raise ValueError(f"État de vente inconnu : {state!r}")
 
     def recent_customer_ids(self, *, limit: int) -> list[UUID]:
         """Clients des dernières ventes confirmées, du plus récent au plus ancien."""
@@ -83,6 +113,10 @@ class SaleRepository(TenantRepository[Sale]):
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         sale_no: str | None = None,
+        state: str | None = None,
+        search_customer_ids: Sequence[UUID] | None = None,
+        include_drafts: bool = True,
+        created_by: UUID | None = None,
     ) -> Sequence[Sale]:
         """Ventes de la plus récente à la plus ancienne, `id` pour départager."""
         if page < 1:
@@ -98,6 +132,10 @@ class SaleRepository(TenantRepository[Sale]):
                     date_from=date_from,
                     date_to=date_to,
                     sale_no=sale_no,
+                    state=state,
+                    search_customer_ids=search_customer_ids,
+                    include_drafts=include_drafts,
+                    created_by=created_by,
                 )
             )
             .order_by(Sale.sold_at.desc(), Sale.id.desc())
@@ -114,6 +152,10 @@ class SaleRepository(TenantRepository[Sale]):
         date_from: datetime | None = None,
         date_to: datetime | None = None,
         sale_no: str | None = None,
+        state: str | None = None,
+        search_customer_ids: Sequence[UUID] | None = None,
+        include_drafts: bool = True,
+        created_by: UUID | None = None,
     ) -> int:
         stmt = (
             select(func.count())
@@ -126,10 +168,54 @@ class SaleRepository(TenantRepository[Sale]):
                     date_from=date_from,
                     date_to=date_to,
                     sale_no=sale_no,
+                    state=state,
+                    search_customer_ids=search_customer_ids,
+                    include_drafts=include_drafts,
+                    created_by=created_by,
                 ),
             )
         )
         return int(self.session.execute(stmt).scalar_one())
+
+    def day_totals(
+        self,
+        *,
+        date_from: datetime,
+        date_to: datetime,
+        timezone: str,
+        state: str | None = None,
+        sale_no: str | None = None,
+        search_customer_ids: Sequence[UUID] | None = None,
+    ) -> list[tuple[date, int, int, Decimal]]:
+        """(jour local, ventes, ventes encaissées, total encaissé), du plus récent au plus
+        ancien, brouillons exclus, avec les mêmes filtres que la liste."""
+        day = func.date(func.timezone(timezone, Sale.sold_at))
+        confirmed = Sale.status == "confirmed"
+        stmt = (
+            select(
+                day,
+                func.count(),
+                func.count().filter(confirmed),
+                func.coalesce(func.sum(Sale.total).filter(confirmed), 0),
+            )
+            .where(
+                Sale.company_id == self.ctx.company_id,
+                *self._filters(
+                    date_from=date_from,
+                    date_to=date_to,
+                    state=state,
+                    sale_no=sale_no,
+                    search_customer_ids=search_customer_ids,
+                    include_drafts=False,
+                ),
+            )
+            .group_by(day)
+            .order_by(day.desc())
+        )
+        return [
+            (row[0], int(row[1]), int(row[2]), Decimal(row[3]))
+            for row in self.session.execute(stmt)
+        ]
 
     def with_returns(self, sale_ids: Sequence[UUID]) -> set[UUID]:
         """Parmi ces ventes, celles qui portent au moins un retour.
@@ -171,6 +257,17 @@ class SaleItemRepository(TenantRepository[SaleItem]):
     """Lignes de vente. Figées par `sale_items_no_change` dès la confirmation."""
 
     model = SaleItem
+
+    def counts_by_sale(self, sale_ids: Sequence[UUID]) -> dict[UUID, int]:
+        """Nombre de lignes de chaque vente : une requête pour toute une page."""
+        if not sale_ids:
+            return {}
+        stmt = (
+            select(SaleItem.sale_id, func.count())
+            .where(SaleItem.company_id == self.ctx.company_id, SaleItem.sale_id.in_(sale_ids))
+            .group_by(SaleItem.sale_id)
+        )
+        return {sale_id: int(count) for sale_id, count in self.session.execute(stmt).all()}
 
     def for_sale(self, sale_id: UUID) -> Sequence[SaleItem]:
         """Lignes d'une vente, dans l'ordre de saisie."""

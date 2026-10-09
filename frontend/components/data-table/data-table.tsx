@@ -144,7 +144,7 @@ export function DataTable<T>({
                       active === "asc" ? "ascending" : active === "desc" ? "descending" : undefined
                     }
                     className={cn(
-                      "h-10 px-4 comfortable:h-12",
+                      "h-12 px-4",
                       column.numeric && "text-right",
                       column.secondary && "max-lg:hidden",
                       column.className,

@@ -7,8 +7,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from app.core.money import Amount
+from app.core.money import Amount, Quantity
+from app.modules.finance.schemas import DebtStatus
+from app.modules.inventory.schemas import StockStatus
 from app.modules.notifications.schemas import NotificationSeverity
+from app.modules.sales.schemas import SaleStatus
 
 #: Profondeur de la courbe d'accueil, en jours.
 REVENUE_TREND_DAYS = 30
@@ -18,6 +21,9 @@ RECENT_SALES = 5
 
 #: Nombre d'alertes actives affichées.
 ACTIVE_ALERTS = 5
+
+#: Articles de la carte « À surveiller » (maquette v2, écran 01) : deux, puis la dette.
+WATCH_STOCK = 2
 
 
 class RevenuePoint(BaseModel):
@@ -39,6 +45,36 @@ class RecentSale(BaseModel):
     customer_name: str | None
     total: Amount
     sold_at: datetime
+    #: De quoi poser le badge « Payé », « Reste X F », « Retour » (ADR 0070).
+    status: SaleStatus
+    balance: Amount
+    debt_status: DebtStatus | None
+    has_returns: bool
+    returned_total: Amount
+
+
+class WatchStock(BaseModel):
+    """Un article à surveiller : sous son seuil ou épuisé (« Plus que 2 sacs »)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    name: str
+    unit: str
+    qty_on_hand: Quantity
+    status: StockStatus
+
+
+class WatchDebt(BaseModel):
+    """Le client qui doit le plus, et depuis quand (« Doit 25 000 F depuis 12 jours »)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    customer_id: UUID
+    customer_name: str
+    balance: Amount
+    #: Jours écoulés depuis sa plus ancienne dette ouverte, dans le fuseau de l'entreprise.
+    days: int
 
 
 class ActiveAlert(BaseModel):
@@ -74,7 +110,16 @@ class Dashboard(BaseModel):
     estimated_margin_month: Amount
     sales_today: int
     receivables_open: Amount
+    #: Nombre de clients qui doivent encore quelque chose (« 5 clients »).
+    receivables_customer_count: int
     stock_alert_count: int
+    #: Dans la caisse : tout ce qui est entré moins tout ce qui est sorti, depuis le début,
+    #: paiements vivants seulement, compensations exclues (ADR 0024, ADR 0070). Aucun fond
+    #: de caisse de départ en V1.
+    cash_on_hand: Amount
+    #: Carte « À surveiller » : articles les plus bas, puis la plus grosse dette client.
+    watch_stock: list[WatchStock]
+    watch_debt: WatchDebt | None
 
     revenue_trend: list[RevenuePoint]
     recent_sales: list[RecentSale]

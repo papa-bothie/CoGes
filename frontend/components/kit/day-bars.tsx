@@ -13,27 +13,41 @@ export type DayBar = {
 /**
  * Barres de la maquette v2 (01 « Vos ventes des 7 derniers jours ») : une barre par jour,
  * valeur écrite au-dessus, jours passés en vert clair, jour en cours en vert plein et libellé
- * gras. Sept barres de CSS, sans bibliothèque ; une liste pour les lecteurs d'écran
- * (« Mer : 62 000 »).
+ * gras ; une ligne de base continue sous les barres. Sept barres de CSS, sans bibliothèque ;
+ * une liste pour les lecteurs d'écran (« Mer : 62 000 »).
+ *
+ * La plus haute barre mesure `scale` px ; une valeur non nulle en garde au moins 4 (prompt
+ * de phase 15 : une valeur extrême n'écrase pas les autres).
  */
 export function DayBars({
   bars,
   label,
-  height = 200,
+  height = 250,
+  scale = 190,
   className,
 }: {
   bars: readonly DayBar[];
   /** Nom accessible de la liste (« Ventes des 7 derniers jours »). */
   label: string;
   height?: number;
+  scale?: number;
   className?: string;
 }) {
   const max = Math.max(...bars.map((bar) => bar.weight), 1);
+  const barHeight = (weight: number) =>
+    weight > 0 ? Math.max(4, Math.round((weight / max) * scale)) : 0;
   return (
-    <ul aria-label={label} className={cn("flex gap-3", className)}>
-      {bars.map((bar) => (
-        <li key={bar.label} className="flex min-w-0 flex-1 flex-col items-center">
-          <span className="flex w-full flex-1 flex-col items-center justify-end gap-2 border-b-2 border-filet">
+    <div className={className}>
+      <ul
+        aria-label={label}
+        className="flex items-end gap-3 border-b-2 border-border pb-1"
+        style={{ height }}
+      >
+        {bars.map((bar) => (
+          <li
+            key={bar.label}
+            className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1.5"
+          >
             <span
               className={cn(
                 "text-petit font-bold numeric",
@@ -46,23 +60,29 @@ export function DayBars({
             <span
               aria-hidden
               className={cn(
-                "w-full max-w-16 rounded-t-mini",
+                "w-full max-w-16 rounded-t-mini rounded-b-[4px]",
                 bar.current ? "bg-ventes" : "bg-barre-claire",
               )}
-              style={{ height: Math.max(4, Math.round((bar.weight / max) * height)) }}
+              style={{ height: barHeight(bar.weight) }}
             />
-          </span>
+          </li>
+        ))}
+      </ul>
+      <div aria-hidden className="mt-2 flex gap-3">
+        {bars.map((bar) => (
           <span
-            aria-hidden
+            key={bar.label}
             className={cn(
-              "mt-2.5 w-full truncate text-center text-corps",
-              bar.current ? "font-extrabold text-ventes-encre" : "text-muted-foreground",
+              "min-w-0 flex-1 truncate text-center text-sm",
+              bar.current
+                ? "font-extrabold text-ventes-encre"
+                : "font-semibold text-muted-foreground",
             )}
           >
             {bar.label}
           </span>
-        </li>
-      ))}
-    </ul>
+        ))}
+      </div>
+    </div>
   );
 }

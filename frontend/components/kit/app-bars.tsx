@@ -44,41 +44,49 @@ export function TopBar({
 }) {
   return (
     <header className="border-b border-border bg-card">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 md:px-marge-page">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 px-4 py-3.5 md:gap-x-4 md:px-marge-page md:py-3">
         <div className="mr-auto min-w-0">
           <div className="hidden md:block">
             <BrandHeader companyName={companyName} />
           </div>
           <div className="flex items-center gap-2.5 md:hidden">
             <BrandMark />
-            <span className="truncate font-bold">{companyName}</span>
+            <span className="truncate text-[17px] font-extrabold">{companyName}</span>
           </div>
         </div>
         <nav aria-label={labels.kit.nav.mainMenu} className="hidden md:block">
           <ul className="flex flex-wrap gap-1.5">
             {items.map((item) => (
               <li key={item.href}>
-                <Link
-                  href={item.href}
-                  aria-current={item.active ? "page" : undefined}
-                  className={cn(
-                    "flex min-h-cible items-center gap-2 rounded-touche px-4 text-corps font-semibold outline-none",
-                    "focus-visible:ring-3 focus-visible:ring-ring/50",
-                    item.active
-                      ? ACTIVE_TAB[item.rubrique ?? "neutre"]
-                      : "text-encre-2 hover:bg-voile hover:text-foreground",
-                  )}
-                >
-                  <item.icon className="size-[22px] shrink-0" aria-hidden />
-                  {item.label}
-                </Link>
+                <TabLink item={item} />
               </li>
             ))}
           </ul>
         </nav>
-        {trailing && <div className="flex items-center gap-1">{trailing}</div>}
+        {trailing && <div className="flex items-center gap-1.5">{trailing}</div>}
       </div>
     </header>
+  );
+}
+
+/** Un onglet de la barre du haut : 48 px, l'actif à la teinte de sa rubrique. */
+export function TabLink({ item, className }: { item: BarItem; className?: string }) {
+  return (
+    <Link
+      href={item.href}
+      aria-current={item.active ? "page" : undefined}
+      className={cn(
+        "flex min-h-cible items-center gap-2 rounded-touche px-4 text-corps font-semibold outline-none",
+        "focus-visible:ring-3 focus-visible:ring-ring/50",
+        item.active
+          ? ACTIVE_TAB[item.rubrique ?? "neutre"]
+          : "text-encre-2 hover:bg-voile hover:text-foreground",
+        className,
+      )}
+    >
+      <item.icon className="size-[22px] shrink-0" aria-hidden />
+      {item.label}
+    </Link>
   );
 }
 

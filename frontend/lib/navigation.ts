@@ -1,17 +1,14 @@
 import {
-  BarChart3,
-  Boxes,
-  LayoutDashboard,
+  CreditCard,
+  House,
+  Lightbulb,
   Package,
-  Settings,
   ShoppingCart,
-  Sparkles,
-  Truck,
   Users,
-  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
+import type { Rubrique } from "@/components/kit/rubrique";
 import { labels } from "@/lib/labels";
 import type { PermissionRule } from "@/lib/permissions";
 
@@ -19,62 +16,82 @@ export type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
-  /** Droit de lecture qui rend l'entrée utile ; absente = visible par tous. */
+  /** Couleur de l'onglet actif (maquette v2). */
+  rubrique: Rubrique;
+  /** Préfixes de chemins qui allument l'entrée : une rubrique couvre plusieurs pages. */
+  matches: readonly string[];
+  /** Droit qui rend l'entrée utile ; absente = visible par tous. */
   permission?: PermissionRule;
 };
 
-/** Ordre du prototype (docs/design/prototype-reference.md § 3). */
-export const NAV_ITEMS: readonly NavItem[] = [
+/**
+ * Les cinq entrées de la maquette v2 (écran 01), dans son ordre, plus « Conseils » à droite.
+ *
+ * Les droits choisissent les entrées du vendeur : Accueil, Vendre et Clients seulement
+ * (prompt de phase 15). Il lit les articles et la caisse pour vendre, mais ne gère ni le
+ * stock (`products:create`) ni l'argent (`debts:read`, `expenses:read`).
+ *
+ * Liens provisoires (ADR 0070) : Stock s'allume aussi sur `/inventory`, Clients sur
+ * `/suppliers`, Conseils sur `/analytics`, jusqu'à la fusion de ces pages aux lots 3b, 3c
+ * et 3e.
+ */
+export const MAIN_NAV: readonly NavItem[] = [
   {
     href: "/dashboard",
-    label: labels.nav.dashboard,
-    icon: LayoutDashboard,
+    label: labels.kit.nav.home,
+    icon: House,
+    rubrique: "ventes",
+    matches: ["/dashboard"],
     permission: "dashboard:read",
   },
-  { href: "/sales", label: labels.nav.sales, icon: ShoppingCart, permission: "sales:read" },
-  { href: "/inventory", label: labels.nav.inventory, icon: Boxes, permission: "inventory:read" },
-  { href: "/products", label: labels.nav.products, icon: Package, permission: "products:read" },
-  { href: "/customers", label: labels.nav.customers, icon: Users, permission: "customers:read" },
-  { href: "/suppliers", label: labels.nav.suppliers, icon: Truck, permission: "suppliers:read" },
+  {
+    href: "/sales/new",
+    label: labels.kit.nav.sell,
+    icon: ShoppingCart,
+    rubrique: "ventes",
+    matches: ["/sales"],
+    permission: { anyOf: ["sales:create", "sales:read"] },
+  },
+  {
+    href: "/products",
+    label: labels.kit.nav.stock,
+    icon: Package,
+    rubrique: "stock",
+    matches: ["/products", "/inventory"],
+    permission: { anyOf: ["products:create", "analytics:read"] },
+  },
+  {
+    href: "/customers",
+    label: labels.kit.nav.clients,
+    icon: Users,
+    rubrique: "clients",
+    matches: ["/customers", "/suppliers"],
+    permission: "customers:read",
+  },
   {
     href: "/finance",
-    label: labels.nav.finance,
-    icon: Wallet,
-    permission: { anyOf: ["payments:read", "debts:read", "expenses:read"] },
-  },
-  {
-    href: "/analytics",
-    label: labels.nav.analytics,
-    icon: BarChart3,
-    permission: "analytics:read",
-  },
-  { href: "/insights", label: labels.nav.insights, icon: Sparkles, permission: "insights:read" },
-  {
-    href: "/settings",
-    label: labels.nav.settings,
-    icon: Settings,
-    permission: { anyOf: ["company:read", "users:read", "roles:read", "audit:read"] },
+    label: labels.kit.nav.money,
+    icon: CreditCard,
+    rubrique: "argent",
+    matches: ["/finance"],
+    permission: { anyOf: ["debts:read", "expenses:read"] },
   },
 ];
 
-const EXTRA_TITLES: Record<string, string> = {
-  "/notifications": labels.nav.notifications,
+export const ADVICE_NAV: NavItem = {
+  href: "/insights",
+  label: labels.kit.nav.advice,
+  icon: Lightbulb,
+  rubrique: "conseils",
+  matches: ["/insights", "/analytics"],
+  permission: { anyOf: ["insights:read", "analytics:read"] },
 };
 
-/** Section d'un chemin (préfixe le plus long) : premier maillon du fil d'Ariane. */
-export function pageSection(pathname: string): { label: string; href: string } {
-  if (EXTRA_TITLES[pathname]) return { label: EXTRA_TITLES[pathname], href: pathname };
-  const match = NAV_ITEMS.filter(
-    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
-  ).sort((a, b) => b.href.length - a.href.length)[0];
-  return match ? { label: match.label, href: match.href } : { label: labels.app.name, href: "/" };
-}
+/** Les réglages, derrière l'engrenage. */
+export const SETTINGS_PERMISSION: PermissionRule = {
+  anyOf: ["company:read", "users:read", "roles:read", "audit:read"],
+};
 
-/** Titre de section affiché dans l'en-tête pour un chemin. */
-export function pageTitle(pathname: string): string {
-  return pageSection(pathname).label;
-}
-
-export function isActive(pathname: string, href: string): boolean {
-  return pathname === href || pathname.startsWith(`${href}/`);
+export function isActive(pathname: string, item: Pick<NavItem, "matches">): boolean {
+  return item.matches.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }

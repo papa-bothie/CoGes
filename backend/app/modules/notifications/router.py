@@ -49,7 +49,10 @@ def count_unread(
     tenant: Annotated[TenantSession, Depends(require_permission("notifications:read"))],
 ) -> UnreadCount:
     """Compteur de non-lus, pour la pastille de l'interface."""
-    return UnreadCount(unread=service.unread_count(tenant.session, tenant.ctx))
+    return UnreadCount(
+        unread=service.unread_count(tenant.session, tenant.ctx),
+        critical=service.unread_critical_count(tenant.session, tenant.ctx),
+    )
 
 
 @router.patch("/{notification_id}", response_model=NotificationRead)
