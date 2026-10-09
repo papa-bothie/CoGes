@@ -110,11 +110,11 @@ def test_product_names_never_become_formulas(
 
     rows = _visible_rows(exported.content, fmt)
     header = rows[0]
-    ours = {row[header.index("nom")]: row for row in rows[1:] if str(row[0]).startswith("FX-")}
+    ours = {row[header.index("Nom")]: row for row in rows[1:] if str(row[0]).startswith("FX-")}
     assert {_expected(name, fmt) for name in names} <= set(ours)
     if fmt == "xlsx":
         # Le prix reste un nombre dans le classeur.
-        prices = [row[header.index("prix_vente")] for row in ours.values()]
+        prices = [row[header.index("Prix de vente")] for row in ours.values()]
         assert all(isinstance(price, int | float) for price in prices)
 
 
@@ -175,7 +175,7 @@ def test_sales_export_never_holds_a_formula(
 
     rows = _visible_rows(downloaded.content, fmt)
     header = rows[0]
-    shown = {row[header.index("client")] for row in rows[1:]}
+    shown = {row[header.index("Client")] for row in rows[1:]}
     assert {_expected(name, fmt) for name in names} <= shown
 
 

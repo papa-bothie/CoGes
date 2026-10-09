@@ -8,9 +8,11 @@ Chaque importeur fait deux choses, dans cet ordre :
 2. `write` : appelle la façade du module (`create_product`, `record_movement`…).
    Jamais un repository, jamais un modèle d'un autre module (décision 01).
 
-Les colonnes portent des noms français, comparés sans casse ni accents
-(`Prix de vente` = `prix_de_vente`). La liste de chaque importeur est aussi celle de
-l'export du même référentiel : un fichier exporté se réimporte tel quel.
+Les colonnes portent des mots simples (« Référence », « Prix de vente »), comparés sans
+casse, accents ni petits mots (`Prix de vente` = `prix_vente`). Les anciens en-têtes
+techniques (`sku`, `taux_taxe`…) restent reconnus comme alias (ADR 0069). La liste de
+chaque importeur est aussi celle de l'export du même référentiel : un fichier exporté se
+réimporte tel quel.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ from app.modules.categories.schemas import CategoryCreate
 from app.modules.customers import service as customers_service
 from app.modules.customers.schemas import CustomerCreate
 from app.modules.importexport.schemas import ImportKind, ImportRowError
-from app.modules.importexport.tabular import Row, plain
+from app.modules.importexport.tabular import Row, Table, normalise_header, plain
 from app.modules.inventory import service as inventory_service
 from app.modules.inventory.schemas import MovementCreate
 from app.modules.products import service as products_service
@@ -131,10 +133,22 @@ class ImportState:
 
 @dataclass(frozen=True, slots=True)
 class Column:
+    """Une colonne : son mot (modèle, export, rapport d'erreur) et ses anciens noms."""
+
     header: str
     field: str | None
     required: bool = False
     convert: Callable[[str], Any] | None = None
+    aliases: tuple[str, ...] = ()
+
+    @property
+    def key(self) -> str:
+        """Clé des cellules d'une ligne : l'en-tête normalisé."""
+        return normalise_header(self.header)
+
+    @property
+    def keys(self) -> frozenset[str]:
+        return frozenset({self.key, *(normalise_header(alias) for alias in self.aliases)})
 
 
 @dataclass(frozen=True)
@@ -149,11 +163,25 @@ class Importer:
         return [column.header for column in self.columns]
 
     def missing_headers(self, present: list[str]) -> list[str]:
+        """Colonnes obligatoires absentes d'une table déjà ramenée aux clés (`canonical`)."""
         return [
             column.header
             for column in self.columns
-            if column.required and column.header not in present
+            if column.required and column.key not in present
         ]
+
+    def canonical(self, table: Table) -> Table:
+        """Renomme chaque en-tête reconnu (mot ou ancien nom) vers la clé de sa colonne."""
+        rename = {key: column.key for column in self.columns for key in column.keys}
+        headers = [rename.get(header, header) for header in table.headers]
+        rows = [
+            Row(
+                number=row.number,
+                cells={rename.get(header, header): value for header, value in row.cells.items()},
+            )
+            for row in table.rows
+        ]
+        return Table(headers=headers, rows=rows)
 
 
 def _error(row: Row, column: str | None, code: str, message: str) -> ImportRowError:
@@ -165,7 +193,7 @@ def _values(row: Row, columns: tuple[Column, ...]) -> tuple[dict[str, Any], list
     data: dict[str, Any] = {}
     errors: list[ImportRowError] = []
     for column in columns:
-        raw = row.cells.get(column.header, "").strip()
+        raw = row.cells.get(column.key, "").strip()
         if not raw:
             if column.required:
                 errors.append(
@@ -195,7 +223,10 @@ def _validate[ModelT: BaseModel](
 
 
 def _check_unique(state: ImportState, row: Row, column: str, value: str | None) -> None:
-    """Même code deux fois dans le fichier : la seconde ligne est refusée."""
+    """Même code deux fois dans le fichier : la seconde ligne est refusée.
+
+    `column` est le mot de la colonne, repris tel quel dans le rapport.
+    """
     if not value:
         return
     key = f"{column}:{value.casefold()}"
@@ -236,20 +267,19 @@ def _category_id(state: ImportState, row: Row, column: str, name: str) -> UUID:
 
 # ----------------------------------------------------------------- catégories
 
-_CATEGORY_COLUMNS = (
-    Column("nom", "name", required=True),
-    Column("parent", None),
-)
+_NAME = Column("Nom", "name", required=True)
+_PARENT = Column("Parent", None)
+_CATEGORY_COLUMNS = (_NAME, _PARENT)
 
 
 def _prepare_category(row: Row, state: ImportState) -> CategoryCreate:
     data, errors = _values(row, _CATEGORY_COLUMNS)
     if errors:
         raise RowRejectedError(errors)
-    parent = row.cells.get("parent", "").strip()
+    parent = row.cells.get(_PARENT.key, "").strip()
     if parent:
-        data["parent_id"] = _category_id(state, row, "parent", parent)
-    _check_unique(state, row, "nom", f"{parent}/{data.get('name', '')}")
+        data["parent_id"] = _category_id(state, row, _PARENT.header, parent)
+    _check_unique(state, row, _NAME.header, f"{parent}/{data.get('name', '')}")
     return _validate(CategoryCreate, data, row, _CATEGORY_COLUMNS)
 
 
@@ -274,19 +304,25 @@ class PreparedProduct:
     initial: MovementCreate | None
 
 
+# La référence est facultative : vide, elle est générée (`ART-0001`, ADR 0066).
+_SKU = Column("Référence", "sku", aliases=("sku",))
+_CATEGORY = Column("Catégorie", None)
+_BARCODE = Column("Code-barres", "barcode")
+_INITIAL_QTY = Column("Stock initial", "qty_delta")
+_INITIAL_COST = Column("Coût unitaire", "unit_cost")
 _PRODUCT_COLUMNS = (
-    Column("sku", "sku", required=True),
-    Column("nom", "name", required=True),
-    Column("prix_vente", "unit_price", required=True, convert=number_text),
-    Column("categorie", None),
-    Column("unite", "unit", convert=lambda value: _UNITS.get(plain(value), value)),
-    Column("code_barres", "barcode"),
-    Column("taux_taxe", "default_tax_rate", convert=rate_text),
-    Column("prix_achat", "cost_price", convert=number_text),
-    Column("seuil_reappro", "reorder_point", convert=number_text),
-    Column("suivi_stock", "is_stock_tracked", convert=_bool),
-    Column("stock_initial", None),
-    Column("cout_unitaire", None),
+    _SKU,
+    _NAME,
+    Column("Prix de vente", "unit_price", required=True, convert=number_text),
+    _CATEGORY,
+    Column("Unité", "unit", convert=lambda value: _UNITS.get(plain(value), value)),
+    _BARCODE,
+    Column("TVA", "default_tax_rate", convert=rate_text, aliases=("taux_taxe",)),
+    Column("Prix d'achat", "cost_price", convert=number_text),
+    Column("Seuil d'alerte", "reorder_point", convert=number_text, aliases=("seuil_reappro",)),
+    Column("Suivi du stock", "is_stock_tracked", convert=_bool),
+    Column(_INITIAL_QTY.header, None),
+    Column(_INITIAL_COST.header, None),
 )
 
 
@@ -294,14 +330,14 @@ def _prepare_product(row: Row, state: ImportState) -> PreparedProduct:
     data, errors = _values(row, _PRODUCT_COLUMNS)
     if errors:
         raise RowRejectedError(errors)
-    _check_unique(state, row, "sku", data.get("sku"))
-    _check_unique(state, row, "code_barres", data.get("barcode"))
-    category = row.cells.get("categorie", "").strip()
+    _check_unique(state, row, _SKU.header, data.get("sku"))
+    _check_unique(state, row, _BARCODE.header, data.get("barcode"))
+    category = row.cells.get(_CATEGORY.key, "").strip()
     if category:
-        data["category_id"] = _category_id(state, row, "categorie", category)
+        data["category_id"] = _category_id(state, row, _CATEGORY.header, category)
     product = _validate(ProductCreate, data, row, _PRODUCT_COLUMNS)
 
-    quantity = number_text(row.cells.get("stock_initial", "").strip())
+    quantity = number_text(row.cells.get(_INITIAL_QTY.key, "").strip())
     if not quantity or quantity in {"0", "0.0", "0.000"}:
         return PreparedProduct(product=product, initial=None)
     if not product.is_stock_tracked:
@@ -309,13 +345,13 @@ def _prepare_product(row: Row, state: ImportState) -> PreparedProduct:
             [
                 _error(
                     row,
-                    "stock_initial",
+                    _INITIAL_QTY.header,
                     "initial_stock_untracked",
                     "Un produit sans suivi de stock ne reçoit pas de stock initial.",
                 )
             ]
         )
-    cost = number_text(row.cells.get("cout_unitaire", "").strip())
+    cost = number_text(row.cells.get(_INITIAL_COST.key, "").strip())
     if not cost and product.cost_price is not None:
         cost = str(product.cost_price)
     if not cost:
@@ -323,16 +359,13 @@ def _prepare_product(row: Row, state: ImportState) -> PreparedProduct:
             [
                 _error(
                     row,
-                    "cout_unitaire",
+                    _INITIAL_COST.header,
                     "initial_cost_required",
                     "Un stock initial exige un coût unitaire (ou un prix d'achat).",
                 )
             ]
         )
-    movement_columns = (
-        Column("stock_initial", "qty_delta"),
-        Column("cout_unitaire", "unit_cost"),
-    )
+    movement_columns = (_INITIAL_QTY, _INITIAL_COST)
     # Identifiant provisoire : le produit n'existe pas encore. Il est remplacé à
     # l'écriture ; seule la cohérence quantité / coût est vérifiée ici.
     initial = _validate(
@@ -365,12 +398,14 @@ def _write_product(
 
 # ------------------------------------------------------- clients, fournisseurs
 
+_CODE = Column("Code", "code")
+_PHONE = Column("Téléphone", "phone")
 _CUSTOMER_COLUMNS = (
-    Column("nom", "name", required=True),
-    Column("code", "code"),
-    Column("telephone", "phone"),
-    Column("email", "email"),
-    Column("plafond_credit", "credit_limit", convert=number_text),
+    _NAME,
+    _CODE,
+    _PHONE,
+    Column("E-mail", "email", aliases=("email",)),
+    Column("Plafond de crédit", "credit_limit", convert=number_text),
 )
 
 
@@ -378,7 +413,7 @@ def _prepare_customer(row: Row, state: ImportState) -> CustomerCreate:
     data, errors = _values(row, _CUSTOMER_COLUMNS)
     if errors:
         raise RowRejectedError(errors)
-    _check_unique(state, row, "code", data.get("code"))
+    _check_unique(state, row, _CODE.header, data.get("code"))
     return _validate(CustomerCreate, data, row, _CUSTOMER_COLUMNS)
 
 
@@ -393,10 +428,10 @@ def _write_customer(
 
 
 _SUPPLIER_COLUMNS = (
-    Column("nom", "name", required=True),
-    Column("code", "code"),
-    Column("telephone", "phone"),
-    Column("delai_paiement_jours", "payment_terms_days", convert=number_text),
+    _NAME,
+    _CODE,
+    _PHONE,
+    Column("Délai de paiement (jours)", "payment_terms_days", convert=number_text),
 )
 
 
@@ -404,7 +439,7 @@ def _prepare_supplier(row: Row, state: ImportState) -> SupplierCreate:
     data, errors = _values(row, _SUPPLIER_COLUMNS)
     if errors:
         raise RowRejectedError(errors)
-    _check_unique(state, row, "code", data.get("code"))
+    _check_unique(state, row, _CODE.header, data.get("code"))
     return _validate(SupplierCreate, data, row, _SUPPLIER_COLUMNS)
 
 
@@ -427,11 +462,11 @@ IMPORTERS: dict[str, Importer] = {
 
 #: Colonne probable d'une erreur métier renvoyée par une façade.
 WRITE_ERROR_COLUMNS = {
-    "product_sku_taken": "sku",
-    "product_barcode_taken": "code_barres",
-    "customer_code_taken": "code",
-    "supplier_code_taken": "code",
-    "category_name_taken": "nom",
+    "product_sku_taken": _SKU.header,
+    "product_barcode_taken": _BARCODE.header,
+    "customer_code_taken": _CODE.header,
+    "supplier_code_taken": _CODE.header,
+    "category_name_taken": _NAME.header,
     "not_found": None,
 }
 

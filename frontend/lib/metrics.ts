@@ -29,15 +29,14 @@ export const METRIC_TEXTS: Record<
   { label: string; definition: string; leader: (product: string) => string }
 > = {
   revenue: {
-    label: "Chiffre d'affaires généré",
-    definition: "Somme des ventes nettes du produit sur la période, retours déduits.",
-    leader: (p) => `${p} génère le plus fort chiffre d'affaires sur la période.`,
+    label: "Ventes générées",
+    definition: "Ce que l'article a rapporté en ventes sur la période, retours enlevés.",
+    leader: (p) => `${p} rapporte le plus en ventes sur la période.`,
   },
   margin: {
-    label: "Marge générée",
-    definition:
-      "Chiffre d'affaires net moins le coût d'achat (CMP figé à la vente), sur la période.",
-    leader: (p) => `${p} génère la plus forte marge sur la période.`,
+    label: "Gagné sur les ventes",
+    definition: "Ce que l'article a fait gagner, une fois son prix d'achat enlevé, sur la période.",
+    leader: (p) => `${p} fait gagner le plus sur la période.`,
   },
   quantity: {
     label: "Quantité vendue",

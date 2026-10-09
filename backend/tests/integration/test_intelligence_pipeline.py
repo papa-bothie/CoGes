@@ -127,7 +127,7 @@ def test_a_dormant_stock_is_named_a_slow_mover_on_a_named_metric(
     assert len(slow) == 1
     evidence = slow[0].evidence
     assert evidence["metric_name"] == "Vélocité des ventes"
-    assert evidence["abc_metric"] == "Chiffre d'affaires généré sur 28 jours"
+    assert evidence["abc_metric"] == "Ventes générées sur 28 jours"
     assert evidence["abc_class"] == "C"
 
 

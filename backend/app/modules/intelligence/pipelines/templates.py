@@ -16,10 +16,10 @@ from app.core.display import dmy, fcfa, number
 METRIC_STOCKOUT = "Jours avant rupture prévue"
 METRIC_VELOCITY = "Vélocité des ventes"
 METRIC_QUANTITY = "Quantité vendue"
-METRIC_MARGIN_RATE = "Taux de marge générée"
+METRIC_MARGIN_RATE = "Part gagnée sur les ventes"
 METRIC_OVERDUE = "Retard de paiement"
 METRIC_HISTORY = "Historique de ventes"
-METRIC_REVENUE_28D = "Chiffre d'affaires généré sur 28 jours"
+METRIC_REVENUE_28D = "Ventes générées sur 28 jours"
 
 MAX_NAME = 80
 
@@ -76,7 +76,7 @@ def demand_spike(name: str, day: date, observed: Decimal, mean: str, z: float) -
 
 
 def margin_drop(name: str, rate_7d: Decimal, rate_28d: Decimal) -> tuple[str, str]:
-    title = f"Marge en baisse — {_name(name)}"
+    title = f"Gain en baisse — {_name(name)}"
     body = (
         f"{METRIC_MARGIN_RATE} : {number(rate_7d * 100, 1)} % sur 7 jours, contre "
         f"{number(rate_28d * 100, 1)} % sur 28 jours. Revoir le prix ou le coût d'achat."
@@ -85,7 +85,7 @@ def margin_drop(name: str, rate_7d: Decimal, rate_28d: Decimal) -> tuple[str, st
 
 
 def debt_overdue(customer: str, days: int, balance: Decimal, since: date) -> tuple[str, str]:
-    title = f"Créance en retard de {days} jours — {_name(customer)}"
+    title = f"Client en retard de paiement de {days} jours — {_name(customer)}"
     body = f"{fcfa(balance)} restent dus depuis le {dmy(since)}. Relancer le client."
     return title, body
 

@@ -17,7 +17,7 @@ async function login(page: Page) {
 }
 
 async function addArticle(page: Page, name: string) {
-  const search = page.getByRole("combobox", { name: "Ajouter un article (nom ou SKU)" });
+  const search = page.getByRole("combobox", { name: "Ajouter un article (nom ou référence)" });
   await search.fill(name);
   await page.getByRole("option", { name: new RegExp(name) }).click();
   await expect(page.getByRole("textbox", { name: `Quantité de ${name}` })).toBeVisible();
@@ -138,7 +138,7 @@ test("retour partiel puis remboursement", async ({ page, request }) => {
   await page.goto(`/sales/${sale.id}`);
   await page.getByRole("link", { name: "Effectuer un retour" }).click();
   await page.getByRole("textbox", { name: `Quantité retournée de ${product.name}` }).fill("1");
-  await page.getByLabel("Motif (facultatif)").fill("Emballage abîmé");
+  await page.getByLabel("Pourquoi ? (facultatif)").fill("Emballage abîmé");
   await page.screenshot({
     path: `${CAPTURES}/retour-saisie.png`,
     fullPage: true,

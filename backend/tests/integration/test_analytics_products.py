@@ -432,7 +432,7 @@ def test_the_timeseries_leaves_no_hole(
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["measure"] == "revenue"
-    assert body["measure_label"] == "Chiffre d'affaires net"
+    assert body["measure_label"] == "Vendu"
     assert len(body["points"]) == WINDOW_DAYS
     days = [point["day"] for point in body["points"]]
     assert days == sorted(days) and len(set(days)) == WINDOW_DAYS
@@ -450,7 +450,7 @@ def test_the_margin_series_is_below_the_revenue_series(
         f"{TIMESERIES}?measure=margin&{query}", headers=auth_headers(alpha_token)
     ).json()
 
-    assert margin["measure_label"] == "Marge brute"
+    assert margin["measure_label"] == "Gagné sur les ventes"
     total_revenue = sum(Decimal(point["value"]) for point in revenue["points"])
     total_margin = sum(Decimal(point["value"]) for point in margin["points"])
     assert Decimal("0") < total_margin < total_revenue

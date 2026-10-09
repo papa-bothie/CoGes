@@ -106,8 +106,8 @@ class ProductMetric(StrEnum):
 #: de l'Architecture attend à l'écran ; l'unité empêche de lire des unités par jour
 #: comme des francs.
 METRIC_LABELS: dict[ProductMetric, tuple[str, str]] = {
-    ProductMetric.REVENUE: ("Chiffre d'affaires généré", "XOF"),
-    ProductMetric.MARGIN: ("Marge générée", "XOF"),
+    ProductMetric.REVENUE: ("Ventes générées", "XOF"),
+    ProductMetric.MARGIN: ("Gagné sur les ventes", "XOF"),
     ProductMetric.QUANTITY: ("Quantité vendue", "unité"),
     ProductMetric.FREQUENCY: ("Fréquence de vente", "vente"),
     ProductMetric.ROTATION: ("Rotation du stock", "fois"),
@@ -165,6 +165,13 @@ class TimeseriesMeasure(StrEnum):
 
     REVENUE = "revenue"
     MARGIN = "margin"
+
+
+#: Libellé affiché de chaque série (mots simples, phase 15).
+SERIES_LABELS: dict[TimeseriesMeasure, str] = {
+    TimeseriesMeasure.REVENUE: "Vendu",
+    TimeseriesMeasure.MARGIN: "Gagné sur les ventes",
+}
 
 
 class TimeseriesPoint(BaseModel):

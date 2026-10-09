@@ -110,7 +110,7 @@ def on_sale_cancelled(**message: Any) -> str:
             ctx,
             notification_type=NotificationType.SALE_CANCELLED,
             title=f"Vente annulée — {sale_no}",
-            body=f"La vente {sale_no} ({fcfa(amount)}) a été annulée. Motif : {reason}"
+            body=f"La vente {sale_no} ({fcfa(amount)}) a été annulée. Pourquoi : {reason}"
             if reason
             else f"La vente {sale_no} ({fcfa(amount)}) a été annulée.",
             entity_id=str(received.aggregate_id),
@@ -139,11 +139,12 @@ def scan_due_debts(company_id: str, today: str | None = None) -> int:
                 session,
                 ctx,
                 notification_type=NotificationType.DEBT_DUE,
-                title="Dette échue",
+                title="Dette à payer : date dépassée",
                 body=(
-                    f"Une dette de {fcfa(debt.balance)} est échue depuis le {dmy(debt.due_date)}."
+                    f"Une dette de {fcfa(debt.balance)} devait être payée "
+                    f"avant le {dmy(debt.due_date)}."
                     if debt.due_date
-                    else f"Une dette de {fcfa(debt.balance)} est échue."
+                    else f"Une dette de {fcfa(debt.balance)} n'est pas encore payée."
                 ),
                 entity_id=str(debt.id),
                 data={
@@ -154,7 +155,7 @@ def scan_due_debts(company_id: str, today: str | None = None) -> int:
                 },
             )
     logger.info(
-        "Balayage des dettes échues",
+        "Balayage des dettes à payer",
         extra={"company_id": company_id, "notifications": sent},
     )
     return sent

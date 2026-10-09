@@ -71,7 +71,7 @@ test("un paiement réparti solde deux dettes du même client", async ({ page, re
 test("changer de métrique change le classement et son libellé", async ({ page }) => {
   await login(page, DEMO);
   await page.goto("/analytics");
-  await expect(page.getByTestId("ranking-title")).toContainText("chiffre d'affaires généré", {
+  await expect(page.getByTestId("ranking-title")).toContainText("ventes générées", {
     timeout: 30_000,
   });
 

@@ -74,7 +74,7 @@ def test_sales_export_is_built_by_the_worker_and_served(
     )
     assert downloaded.status_code == 200
     rows = list(csv.reader(io.StringIO(downloaded.content.decode("utf-8-sig")), delimiter=";"))
-    assert rows[0][:4] == ["numero", "date", "statut", "client"]
+    assert rows[0][:4] == ["Vente n°", "Date", "Statut", "Client"]
     assert len(rows) - 1 == status.json()["row_count"]
 
 

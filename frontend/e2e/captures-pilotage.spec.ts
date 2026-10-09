@@ -25,7 +25,7 @@ test.describe("captures du pilotage", () => {
 
   test("finance", async ({ page }) => {
     await page.goto("/finance");
-    await expect(page.getByText("Encaissements").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Entré dans la caisse").first()).toBeVisible({ timeout: 30_000 });
     await expect(
       page.locator(".recharts-surface").or(page.getByText(/Aucun mouvement/)),
     ).toBeVisible({

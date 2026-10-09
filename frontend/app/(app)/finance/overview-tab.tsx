@@ -46,6 +46,9 @@ export function OverviewTab() {
   const tone = (value: string | undefined) =>
     value !== undefined && compareDecimal(value, "0") === -1 ? "danger" : "success";
 
+  // Maquette 17 : « Gagné » devient « Perdu » sous zéro, le montant reste positif.
+  const lost = data !== undefined && compareDecimal(data.estimated_result, "0") === -1;
+
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
 
   return (
@@ -58,7 +61,6 @@ export function OverviewTab() {
           <KpiCard
             label={t.cashIn}
             value={money(data?.cash_in)}
-            hint={t.cashHint}
             icon={ArrowDownLeft}
             tone="success"
             loading={loading}
@@ -94,7 +96,6 @@ export function OverviewTab() {
           <KpiCard
             label={t.cogs}
             value={money(data?.cogs_net)}
-            hint={t.cogsHint}
             icon={Receipt}
             tone="neutral"
             loading={loading}
@@ -102,7 +103,6 @@ export function OverviewTab() {
           <KpiCard
             label={t.grossMargin}
             value={money(data?.gross_margin)}
-            hint={t.grossMarginHint}
             icon={Calculator}
             tone={tone(data?.gross_margin)}
             loading={loading}
@@ -116,9 +116,8 @@ export function OverviewTab() {
             loading={loading}
           />
           <KpiCard
-            label={t.result}
-            value={money(data?.estimated_result)}
-            hint={t.resultHint}
+            label={lost ? t.loss : t.result}
+            value={money(lost ? data?.estimated_result.slice(1) : data?.estimated_result)}
             icon={Scale}
             tone={tone(data?.estimated_result)}
             loading={loading}
@@ -133,7 +132,6 @@ export function OverviewTab() {
           <KpiCard
             label={t.receivables}
             value={money(data?.receivables_open)}
-            hint={t.openHint}
             icon={HandCoins}
             tone="neutral"
             loading={loading}
@@ -141,7 +139,6 @@ export function OverviewTab() {
           <KpiCard
             label={t.payables}
             value={money(data?.payables_open)}
-            hint={t.openHint}
             icon={Truck}
             tone="neutral"
             loading={loading}

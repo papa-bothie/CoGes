@@ -14,17 +14,17 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 }
 
-/** Montant affiché par la tuile « CA du jour », en francs entiers. */
+/** Montant affiché par la tuile « Vendu aujourd'hui », en francs entiers. */
 async function revenueToday(page: Page): Promise<number> {
   const figure = page
     .locator('[data-slot="card"]')
-    .filter({ hasText: "CA du jour" })
+    .filter({ hasText: "Vendu aujourd'hui" })
     .locator(".text-figure");
   await expect(figure).toBeVisible({ timeout: 30_000 });
   return Number((await figure.innerText()).replace(/\D/g, ""));
 }
 
-test("B1 — une vente fait monter le CA du jour sans worker ni relais", async ({
+test("B1 — une vente fait monter « Vendu aujourd'hui » sans worker ni relais", async ({
   page,
   request,
 }) => {
@@ -34,7 +34,7 @@ test("B1 — une vente fait monter le CA du jour sans worker ni relais", async (
   const before = await revenueToday(page);
 
   await page.goto("/sales/new");
-  const search = page.getByRole("combobox", { name: "Ajouter un article (nom ou SKU)" });
+  const search = page.getByRole("combobox", { name: "Ajouter un article (nom ou référence)" });
   await search.fill(product.name);
   await page.getByRole("option", { name: new RegExp(product.name) }).click();
   const qty = page.getByRole("textbox", { name: `Quantité de ${product.name}` });
