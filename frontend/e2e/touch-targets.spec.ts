@@ -96,7 +96,9 @@ test("Nouvelle vente : saisie, ligne d'article et barre d'actions", async ({ pag
   const product = { name: "Sucre en poudre" };
   await page.goto("/sales/new");
   await settle(page);
-  await page.getByRole("combobox", { name: "Ajouter un article (nom ou SKU)" }).fill(product.name);
+  await page
+    .getByRole("combobox", { name: "Ajouter un article (nom ou référence)" })
+    .fill(product.name);
   await page.getByRole("option", { name: new RegExp(product.name) }).click();
   await expect(page.getByRole("textbox", { name: `Quantité de ${product.name}` })).toBeVisible();
   await expectTouchFriendly(page);

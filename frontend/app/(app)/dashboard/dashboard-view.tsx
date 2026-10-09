@@ -164,7 +164,6 @@ export function DashboardView() {
         <KpiCard
           label={labels.dashboard.marginMonth}
           value={formatMoney(data?.estimated_margin_month, currency)}
-          hint={labels.dashboard.marginHint}
           icon={TrendingUp}
           tone="success"
           loading={loading}
