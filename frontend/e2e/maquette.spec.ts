@@ -5,7 +5,7 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 import pixelmatch from "pixelmatch";
 import { PNG } from "pngjs";
 
-import { loginThroughUi, managerApi, type Credentials } from "./fixtures";
+import { loginThroughUi, managerApi, managerToken, type Credentials } from "./fixtures";
 
 /**
  * Comparaison automatique du front à la maquette v2 (règle 5 du prompt de phase 15).
@@ -48,27 +48,108 @@ const DONE = new Set<string>([]);
 /** Écrans exemptés du seuil, avec leur écart noté dans ecarts.md. */
 const ALLOWED = new Set<string>([]);
 
+/** Attend la réponse d'une écriture sur le brouillon (ligne ajoutée, changée, retirée). */
+function draftWrite(page: Page) {
+  return page.waitForResponse(
+    (response) =>
+      /\/api\/v1\/sales(\/[^/]+\/items)?/.test(response.url()) &&
+      response.request().method() !== "GET",
+  );
+}
+
+/**
+ * Le panier de la maquette 02 : 1 riz, 2 huiles, 3 sucres, client de passage. « Nouvelle
+ * vente » reprend le brouillon du jour (ADR 0070) : ses lignes sont retirées d'abord, par
+ * l'API, pour que chaque passage parte du même panier sans créer de nouveau brouillon.
+ */
+async function mockupCart(page: Page, request: APIRequestContext) {
+  const token = await managerToken(request, MAQUETTE);
+  const headers = { Authorization: `Bearer ${token}` };
+  const drafts = await request.get("/api/v1/sales?status=draft&mine=true&page_size=100", {
+    headers,
+  });
+  for (const draft of (await drafts.json()).items as { id: string }[]) {
+    const detail = await request.get(`/api/v1/sales/${draft.id}`, { headers });
+    for (const item of (await detail.json()).items as { id: string }[]) {
+      const removed = await request.delete(`/api/v1/sales/${draft.id}/items/${item.id}`, {
+        headers,
+      });
+      expect(removed.ok()).toBeTruthy();
+    }
+  }
+  await page.reload();
+  await expect(page.getByText("Touchez un article pour l'ajouter")).toBeVisible({
+    timeout: 30_000,
+  });
+  for (const [name, times] of [
+    ["Riz brisé 25 kg", 1],
+    ["Huile Dinor 1 L", 2],
+    ["Sucre en morceaux 1 kg", 3],
+  ] as const) {
+    for (let i = 0; i < times; i += 1) {
+      const written = draftWrite(page);
+      await page.getByRole("button", { name: `Ajouter ${name}` }).click();
+      await written;
+      await page.waitForLoadState("networkidle");
+    }
+  }
+  await expect(page.getByText("21 000 F").first()).toBeVisible();
+}
+
 /**
  * États d'un écran (02b, 04b…) : les actions qui y mènent depuis la route. Ils sont
- * écrits avec l'écran, aux lots 3 ; d'ici là, la route seule est capturée.
+ * écrits avec l'écran, aux lots 3.
  */
-const STATES: Record<string, (page: Page) => Promise<void>> = {};
+const STATES: Record<string, (page: Page, request: APIRequestContext) => Promise<void>> = {
+  "02": mockupCart,
+  "02b": async (page, request) => {
+    await mockupCart(page, request);
+    await page.getByRole("button", { name: "Une partie", exact: true }).click();
+    await page.getByLabel("Il donne maintenant").fill("7500");
+  },
+  "02c": async (page, request) => {
+    await mockupCart(page, request);
+    await page.getByLabel("Autre montant donné").fill("30000");
+  },
+  "02d": async (page, request) => {
+    await mockupCart(page, request);
+    // La confirmation est simulée : une vraie vente changerait la liste de l'écran 03. La
+    // réponse est le brouillon lui-même, relu par l'API et marqué encaissé.
+    const token = await managerToken(request, MAQUETTE);
+    await page.route("**/api/v1/sales/*/confirm", async (route) => {
+      const url = route
+        .request()
+        .url()
+        .replace(/\/confirm$/, "");
+      const detail = await request.get(url, { headers: { Authorization: `Bearer ${token}` } });
+      const sale = (await detail.json()) as Record<string, unknown>;
+      await route.fulfill({
+        json: { ...sale, status: "confirmed", paid_total: sale.total, balance: "0.00" },
+      });
+    });
+    await page.getByRole("button", { name: /^Encaisser/ }).click();
+    await expect(page.getByRole("heading", { name: "Vente enregistrée" })).toBeVisible();
+  },
+};
 
 type Row = { no: string; name: string; capture: string; route: string; lot: string };
 
 function parseScreens(): Row[] {
   const text = readFileSync(join(MOCKUP, "ecrans.md"), "utf8");
+  let previous = "/dashboard";
   return text
     .split("\n")
     .filter((line) => /^\|\s*\d{2}[a-z]?\s*\|/.test(line))
     .map((line) => {
       const cells = line.split("|").map((cell) => cell.trim());
       const [, no = "", name = "", capture = "", , route = "", lot = ""] = cells;
+      // Un état (« idem ») reprend la route de son écran.
+      previous = route.match(/`([^`]+)`/)?.[1] ?? previous;
       return {
         no,
         name: name.replace(/^…\s*/, ""),
         capture: capture.replace(/`/g, ""),
-        route: route.match(/`([^`]+)`/)?.[1] ?? "/dashboard",
+        route: previous,
         lot,
       };
     });
@@ -272,7 +353,7 @@ test.describe("maquette v2", () => {
         await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
       }
       await page.goto(route);
-      await STATES[row.no]?.(page);
+      await STATES[row.no]?.(page, request);
 
       const expected = await referenceTexts(page, row);
       const measured: Result[] = [];

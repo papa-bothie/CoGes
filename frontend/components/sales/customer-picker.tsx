@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 type Choice = Schemas["CustomerChoice"];
 
 /** Ce que la vente retient du client choisi ; `null` = client de passage. */
-export type PickedCustomer = { id: string; name: string };
+export type PickedCustomer = { id: string; name: string; phone?: string | null };
 
 /** Une page de 50 : assez pour une boutique, et la suite arrive au défilement. */
 export const CUSTOMER_PAGE_SIZE = 50;
@@ -48,10 +48,13 @@ export function CustomerPicker({
   onSelect,
   disabled = false,
   currency,
+  autoOpen = false,
 }: {
   onSelect: (customer: PickedCustomer | null) => void;
   disabled?: boolean;
   currency?: string;
+  /** Ouvre la liste tout de suite (« Changer » sur le ticket de vente, maquette 02). */
+  autoOpen?: boolean;
 }) {
   const id = useId();
   const listId = `${id}-list`;
@@ -59,7 +62,7 @@ export function CustomerPicker({
   const listRef = useRef<HTMLUListElement>(null);
   const sentinelRef = useRef<HTMLLIElement>(null);
   const [text, setText] = useState("");
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(autoOpen);
   const [active, setActive] = useState(0);
   const [creating, setCreating] = useState(false);
   const term = useDebouncedValue(text.trim());
@@ -108,7 +111,11 @@ export function CustomerPicker({
   }, [open, hasNextPage, isFetchingNextPage, fetchNextPage, options.length]);
 
   const choose = (option: Option) => {
-    onSelect(option.choice ? { id: option.choice.id, name: option.choice.name } : null);
+    onSelect(
+      option.choice
+        ? { id: option.choice.id, name: option.choice.name, phone: option.choice.phone }
+        : null,
+    );
     setText("");
     setOpen(false);
   };
@@ -144,6 +151,7 @@ export function CustomerPicker({
               aria-hidden
             />
             <Input
+              autoFocus={autoOpen}
               id={id}
               role="combobox"
               aria-expanded={open}
@@ -239,7 +247,9 @@ export function CustomerPicker({
         kind="customer"
         open={creating}
         onOpenChange={setCreating}
-        onSaved={(saved) => onSelect({ id: saved.person.id, name: saved.person.name })}
+        onSaved={(saved) =>
+          onSelect({ id: saved.person.id, name: saved.person.name, phone: saved.person.phone })
+        }
       />
     </>
   );

@@ -1,39 +1,30 @@
 "use client";
 
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, UserRound, X } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
 
 import { ErrorState } from "@/components/error-state";
-import { AmountField, AmountShortcuts } from "@/components/kit/amount-field";
-import { ChoiceGroup } from "@/components/kit/choice-group";
+import { FieldError } from "@/components/field-error";
+import { AmountField, cleanAmount } from "@/components/kit/amount-field";
 import { PaymentAmount } from "@/components/kit/payment-amount";
 import { PaymentMethodChips } from "@/components/kit/payment-method-chips";
-import { FieldError } from "@/components/field-error";
-import { Money } from "@/components/money";
-import { PageHeader } from "@/components/page-header";
 import { CustomerPicker, type PickedCustomer } from "@/components/sales/customer-picker";
-import { SearchCombobox } from "@/components/search-combobox";
-import { SaleStatusBadge } from "@/components/status/status-badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useCompanyLocale, useMe } from "@/hooks/use-me";
 import { api, unwrap } from "@/lib/api/client";
-import { isApiError, errorMessage } from "@/lib/api/errors";
+import { errorMessage, isApiError } from "@/lib/api/errors";
 import { useIdempotencyKey } from "@/lib/api/idempotency";
 import { queryKeys } from "@/lib/api/queries/keys";
-import { useStockFor, type StockLine } from "@/lib/api/queries/stock";
+import { useStockFor } from "@/lib/api/queries/stock";
 import type { Schemas } from "@/lib/api/schema";
-import { compareDecimal } from "@/lib/decimal";
-import { formatMoney, formatQty } from "@/lib/format";
-import { dayEndIso } from "@/lib/format/zoned";
-import { formatAmount } from "@/lib/format/money";
+import { compareDecimal, toInputDecimal } from "@/lib/decimal";
+import { formatAmount, formatFigure, formatQty } from "@/lib/format";
+import { dayEndIso, dayStartIso } from "@/lib/format/zoned";
 import { labels } from "@/lib/labels";
 import {
   billShortcuts,
@@ -43,16 +34,21 @@ import {
   typedAmount,
   wholeUnits,
 } from "@/lib/payment-amount";
+import { todayIn } from "@/lib/period";
 import { cn } from "@/lib/utils";
 
-import { SaleLineRow, type LineChange } from "./sale-line-row";
+import { ProductGrid } from "./product-grid";
+import { SaleSuccess } from "./sale-success";
+import { TicketLine, type LineChange } from "./ticket-line";
 
 type SaleDetail = Schemas["SaleDetail"];
 type Product = Schemas["ProductRead"];
 type PaymentMethod = Schemas["PaymentMethod"];
 type Mode = "full" | "partial" | "credit";
+type Done = { sale: SaleDetail; line: string; phone: string | null };
 
 const MODES: readonly Mode[] = ["full", "partial", "credit"];
+const t = labels.sales.editor;
 
 /** Refus de la confirmation qui concernent le règlement plutôt qu'une ligne. */
 const SETTLEMENT_ERRORS = new Set([
@@ -61,30 +57,14 @@ const SETTLEMENT_ERRORS = new Set([
   "overpayment",
 ]);
 
-type ProductHit = { product: Product; stock: StockLine | undefined };
-
-async function searchProducts(text: string): Promise<ProductHit[]> {
-  const page = await unwrap(
-    api.GET("/api/v1/products", {
-      params: { query: { search: text || undefined, is_active: true, page_size: 8 } },
-    }),
-  );
-  const ids = page.items.map((product) => product.id);
-  const stock = ids.length
-    ? await unwrap(
-        api.GET("/api/v1/inventory/stock", {
-          params: { query: { product_id: ids, page_size: 100 } },
-        }),
-      )
-    : { items: [] };
-  const byProduct = new Map(stock.items.map((line) => [line.product_id, line]));
-  return page.items.map((product) => ({ product, stock: byProduct.get(product.id) }));
-}
-
 /**
- * Saisie d'une vente. Le brouillon naît **côté serveur** au premier article, chaque
- * modification y est synchronisée, et les totaux affichés sont ceux qu'il renvoie : le
- * front ne calcule aucun montant. Seule la confirmation touche au stock et à l'argent.
+ * « Nouvelle vente » de la maquette v2 (écran 02), pensée caisse : on touche des tuiles, on
+ * choisit comment le client paie, on encaisse. Aucune saisie clavier n'est nécessaire.
+ *
+ * Le brouillon naît **côté serveur** au premier article et chaque toucher y est synchronisé
+ * (ADR 0052) : les totaux affichés sont ceux du serveur, le front ne calcule aucun montant
+ * de vente. Seule la confirmation touche au stock et à l'argent, sous une clé d'idempotence
+ * gardée jusqu'au succès. Après la confirmation, l'écran de succès (02d).
  */
 export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
   const router = useRouter();
@@ -92,10 +72,11 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
   const { data: me } = useMe();
   const { currency } = useCompanyLocale();
   const timeZone = me?.company.timezone ?? "UTC";
-  const showTax = me?.company.tax_enabled ?? true;
 
   const [saleId, setSaleId] = useState(initialId);
   const [pendingCustomer, setPendingCustomer] = useState<PickedCustomer | null>(null);
+  const [customerPhone, setCustomerPhone] = useState<string | null>(null);
+  const [changingCustomer, setChangingCustomer] = useState(false);
   const [lineErrors, setLineErrors] = useState<Record<string, string>>({});
   const [articleError, setArticleError] = useState<string | null>(null);
   const [settlementError, setSettlementError] = useState<string | null>(null);
@@ -105,7 +86,39 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
   const [given, setGiven] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [dueDate, setDueDate] = useState("");
+  const [done, setDone] = useState<Done | null>(null);
   const idempotency = useIdempotencyKey();
+
+  // « Nouvelle vente » reprend le brouillon du jour de la même personne : un panier
+  // interrompu (coupure, mauvais clic) n'est pas perdu. Une seule fois, à l'ouverture.
+  const [resuming, setResuming] = useState(!initialId);
+  const resume = useQuery({
+    queryKey: queryKeys.sales.list({ resume: true, timeZone }),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/sales", {
+          params: {
+            query: {
+              status: "draft",
+              mine: true,
+              date_from: dayStartIso(todayIn(timeZone), timeZone) ?? undefined,
+              page_size: 1,
+            },
+          },
+        }),
+      ),
+    enabled: resuming && Boolean(me),
+    staleTime: 0,
+  });
+  if (resuming && resume.data) {
+    setResuming(false);
+    const draft = resume.data.items[0];
+    if (draft && !saleId) {
+      setSaleId(draft.id);
+      window.history.replaceState(null, "", `/sales/${draft.id}/edit`);
+    }
+  }
+  if (resuming && resume.isError) setResuming(false);
 
   const sale = useQuery({
     queryKey: queryKeys.sales.detail(saleId ?? "new"),
@@ -119,10 +132,11 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
   const stock = useStockFor(productIds);
   const mutating = useIsMutating({ mutationKey: ["sale-editor"] }) > 0;
 
-  // Une vente confirmée ou annulée ne se modifie plus : on montre son détail.
+  // Une vente confirmée ou annulée ne se modifie plus : on montre son détail (sauf juste
+  // après l'encaissement, où l'écran de succès prend la place).
   useEffect(() => {
-    if (data && data.status !== "draft") router.replace(`/sales/${data.id}`);
-  }, [data, router]);
+    if (data && data.status !== "draft" && !done) router.replace(`/sales/${data.id}`);
+  }, [data, done, router]);
 
   const refresh = (id: string) =>
     queryClient.invalidateQueries({ queryKey: queryKeys.sales.detail(id) });
@@ -200,9 +214,27 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
 
   const chooseCustomer = (customer: PickedCustomer | null) => {
     setSettlementError(null);
+    setChangingCustomer(false);
+    setCustomerPhone(customer?.phone ?? null);
     if (saleId) setCustomer.mutate(customer);
     else setPendingCustomer(customer);
   };
+
+  /** Toucher une tuile : 1 de plus, ou une nouvelle ligne. */
+  const addProduct = (product: Product) => {
+    const existing = items.find((item) => item.product_id === product.id);
+    if (!existing) {
+      addItem.mutate(product);
+      return;
+    }
+    const next = (wholeUnits(existing.qty) + 1n).toString();
+    updateItem.mutate({ itemId: existing.id, change: { qty: next } });
+  };
+
+  const inCart = useMemo(
+    () => new Map(items.map((item) => [item.product_id, toInputDecimal(item.qty)])),
+    [items],
+  );
 
   const shortProducts = useMemo(() => {
     const short = new Set<string>();
@@ -214,15 +246,28 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
   }, [items, stock.data]);
 
   const total = wholeUnits(data?.total);
-  // « Une partie » : de 1 F jusqu'au total exclu, message en direct (lot 1).
   const partCheck = partPaymentCheck(paidInput, total, currency);
   const change = changeDue(typedAmount(given), total);
+  const customerName = saleId ? data?.customer_name : pendingCustomer?.name;
+  const customerId = saleId ? data?.customer_id : pendingCustomer?.id;
+  const needCustomer = mode !== "full" && !customerId;
 
   const paidAmount = (): string | null => {
     if (!data) return null;
     if (mode === "full") return data.total;
     if (mode === "credit") return "0";
     return partCheck.ok ? paidInput : null;
+  };
+
+  const successLine = (confirmed: SaleDetail): string => {
+    const name = confirmed.customer_name ?? "";
+    if (mode === "full") {
+      return method === "cash" || method === "wave" || method === "orange_money"
+        ? t.success.paid[method]
+        : t.success.paid.other(labels.paymentMethods[method]);
+    }
+    const amount = formatAmount(confirmed.balance, currency);
+    return mode === "partial" ? t.success.owesStill(name, amount) : t.success.owes(name, amount);
   };
 
   const confirm = useMutation({
@@ -242,12 +287,12 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
     },
     onSuccess: (confirmed: SaleDetail) => {
       idempotency.renew();
+      setDone({ sale: confirmed, line: successLine(confirmed), phone: customerPhone });
       queryClient.setQueryData(queryKeys.sales.detail(confirmed.id), confirmed);
       for (const key of [queryKeys.sales.all, queryKeys.stock.all, queryKeys.dashboard]) {
         void queryClient.invalidateQueries({ queryKey: key });
       }
-      toast.success(labels.sales.confirmed(confirmed.sale_no));
-      router.push(`/sales/${confirmed.id}`);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.products.all });
     },
     onError: (error) => {
       if (isApiError(error) && error.code === "insufficient_stock") {
@@ -279,334 +324,315 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
     }
     confirm.mutate({
       paid_amount: paid,
-      method,
+      method: mode === "credit" ? "cash" : method,
       due_date: mode !== "full" && dueDate ? dayEndIso(dueDate, timeZone) : null,
     });
   };
+
+  const startNewSale = () => {
+    setDone(null);
+    setSaleId(undefined);
+    setPendingCustomer(null);
+    setCustomerPhone(null);
+    setMode("full");
+    setMethod("cash");
+    setPaidInput("");
+    setGiven("");
+    setDueDate("");
+    setLineErrors({});
+    window.history.replaceState(null, "", "/sales/new");
+  };
+
+  if (done) {
+    return (
+      <SaleSuccess
+        sale={done.sale}
+        line={done.line}
+        phone={done.phone}
+        shop={me?.company.name ?? ""}
+        timeZone={timeZone}
+        currency={currency}
+        onNewSale={startNewSale}
+      />
+    );
+  }
 
   if (saleId && sale.isError) {
     return <ErrorState error={sale.error} onRetry={() => void sale.refetch()} />;
   }
 
-  const loadingDraft = Boolean(saleId) && sale.isPending;
-  const customerName = saleId ? data?.customer_name : pendingCustomer?.name;
-  const customerId = saleId ? data?.customer_id : pendingCustomer?.id;
+  const loadingDraft = resuming || (Boolean(saleId) && sale.isPending);
   const busy = mutating || sale.isFetching;
-  const canConfirm =
-    Boolean(data) &&
-    items.length > 0 &&
-    shortProducts.size === 0 &&
-    !busy &&
-    !confirm.isPending &&
-    (mode !== "partial" || partCheck.ok);
+  const blocked =
+    !data ||
+    items.length === 0 ||
+    shortProducts.size > 0 ||
+    needCustomer ||
+    (mode === "partial" && !partCheck.ok);
+  const ctaLabel =
+    mode === "credit"
+      ? t.saveCredit
+      : t.encash(formatAmount(mode === "partial" ? paidInput || "0" : data?.total, currency));
 
   return (
-    <>
-      <PageHeader
-        title={data ? labels.sales.editTitle(data.sale_no) : labels.sales.newSale}
-        count={data && <SaleStatusBadge status={data.status} hasReturns={data.has_returns} />}
-      />
+    <div className="mx-auto flex max-w-[1192px] flex-wrap items-start gap-5">
+      <div className="flex min-w-0 flex-[3_1_560px] flex-col gap-2">
+        <ProductGrid
+          inCart={inCart}
+          onAdd={addProduct}
+          disabled={addItem.isPending || loadingDraft || confirm.isPending}
+          currency={currency}
+        />
+        <FieldError message={articleError} />
+      </div>
 
-      {/* Sous `xl`, la barre d'actions est fixée en bas : on réserve sa hauteur. */}
-      <div className="grid items-start gap-6 pb-28 xl:grid-cols-[minmax(0,1fr)_20rem] xl:pb-0">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>{labels.sales.customer}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loadingDraft ? (
-                <Skeleton className="h-9 w-full" />
-              ) : customerId ? (
-                <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
-                  <span className="flex items-center gap-2 font-medium">
-                    <UserRound className="size-4 text-muted-foreground" aria-hidden />
-                    {customerName}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={labels.sales.removeCustomer}
-                    disabled={setCustomer.isPending}
-                    onClick={() => chooseCustomer(null)}
-                  >
-                    <X />
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <CustomerPicker
-                    onSelect={chooseCustomer}
-                    disabled={setCustomer.isPending}
-                    currency={currency}
-                  />
-                  <p className="mt-2 text-sm text-muted-foreground">{labels.sales.noCustomer}</p>
-                </>
+      <aside
+        aria-label={labels.sales.receipt}
+        className="flex min-w-0 flex-[2_1_360px] flex-col gap-[18px] rounded-carte border border-border bg-card p-5"
+      >
+        <div>
+          <p className="mb-2 text-libelle">{t.client}</p>
+          {changingCustomer ? (
+            <CustomerPicker
+              onSelect={chooseCustomer}
+              disabled={setCustomer.isPending}
+              currency={currency}
+              autoOpen
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setChangingCustomer(true)}
+              disabled={setCustomer.isPending || loadingDraft}
+              className={cn(
+                "flex min-h-16 w-full items-center gap-3 rounded-champ border-2 border-clients bg-clients-teinte px-3 py-2 text-left text-foreground",
+                "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
               )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>{labels.sales.articles}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <SearchCombobox
-                label={labels.sales.productSearch}
-                queryKey={queryKeys.products.search}
-                search={searchProducts}
-                itemKey={(hit) => hit.product.id}
-                disabled={addItem.isPending || loadingDraft}
-                onSelect={(hit) => {
-                  if (items.some((item) => item.product_id === hit.product.id)) {
-                    setArticleError(labels.sales.alreadyInSale);
-                    return;
-                  }
-                  addItem.mutate(hit.product);
-                }}
-                renderItem={({ product, stock: line }) => (
-                  <span className="flex items-center justify-between gap-3">
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">{product.name}</span>
-                      <span className="text-xs numeric text-muted-foreground">{product.sku}</span>
-                    </span>
-                    <span className="text-right">
-                      <span className="block numeric whitespace-nowrap">
-                        {formatMoney(product.unit_price, currency)}
-                      </span>
-                      <span
-                        className={cn(
-                          "text-xs numeric",
-                          line?.status === "out" ? "text-danger-ink" : "text-muted-foreground",
-                        )}
-                      >
-                        {line ? `${formatQty(line.qty_on_hand)} en stock` : "—"}
-                      </span>
-                    </span>
-                  </span>
-                )}
-              />
-              <FieldError message={articleError} />
-
-              {loadingDraft ? (
-                <Skeleton className="h-24 w-full" />
-              ) : items.length === 0 ? (
-                <p className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                  {labels.sales.noLines}
-                </p>
-              ) : (
-                <div className="overflow-x-auto rounded-lg border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="hover:bg-transparent">
-                        <TableHead className="px-3">{labels.sales.lineColumns.product}</TableHead>
-                        <TableHead className="px-3 text-right">
-                          {labels.sales.lineColumns.unitPrice}
-                        </TableHead>
-                        <TableHead className="px-3 text-right">
-                          {labels.sales.lineColumns.qty}
-                        </TableHead>
-                        <TableHead className="px-3 text-right">
-                          {labels.sales.lineColumns.discount}
-                        </TableHead>
-                        {showTax && (
-                          <TableHead className="px-3 text-right">
-                            {labels.sales.lineColumns.tax}
-                          </TableHead>
-                        )}
-                        <TableHead className="px-3 text-right">
-                          {labels.sales.lineColumns.total}
-                        </TableHead>
-                        <TableHead className="w-10 px-2">
-                          <span className="sr-only">Actions</span>
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {items.map((item) => {
-                        const line = stock.data?.get(item.product_id);
-                        const short = shortProducts.has(item.product_id);
-                        return (
-                          <SaleLineRow
-                            key={item.id}
-                            item={item}
-                            currency={currency}
-                            showTax={showTax}
-                            stock={line}
-                            short={short}
-                            error={
-                              lineErrors[item.id] ??
-                              (short && line
-                                ? labels.sales.insufficient(formatQty(line.qty_on_hand))
-                                : undefined)
-                            }
-                            disabled={confirm.isPending}
-                            onChange={(change) => updateItem.mutate({ itemId: item.id, change })}
-                            onRemove={() => removeItem.mutate(item.id)}
-                          />
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+            >
+              <span
+                aria-hidden
+                className="flex size-11 shrink-0 items-center justify-center rounded-full bg-clients font-bold text-primary-foreground"
+              >
+                {customerName ? <InitialsOf name={customerName} /> : "·"}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-bold">
+                  {customerName ?? labels.kit.walkIn}
+                </span>
+                <span className="block text-muted-foreground">
+                  {customerName ? (customerPhone ?? "") : t.walkInHint}
+                </span>
+              </span>
+              <span className="font-bold text-clients-encre">{t.change}</span>
+            </button>
+          )}
         </div>
 
-        <div className="grid items-start gap-6 md:grid-cols-2 xl:sticky xl:top-20 xl:block xl:space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>{labels.sales.totals}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <TotalRow label={labels.sales.subtotal} value={data?.subtotal} currency={currency} />
-              <TotalRow
-                label={labels.sales.discounts}
-                value={data?.discount_total}
-                currency={currency}
-              />
-              {showTax && (
-                <TotalRow label={labels.sales.taxes} value={data?.tax_total} currency={currency} />
-              )}
-              <div className="flex items-baseline justify-between border-t pt-3">
-                <span className="font-semibold">{labels.sales.total}</span>
-                <Money value={data?.total ?? "0"} currency={currency} className="text-figure-sm" />
-              </div>
-              <p
-                aria-live="polite"
-                className="flex items-center gap-1.5 text-xs text-muted-foreground"
-              >
-                {busy ? (
-                  <>
-                    <Loader2 className="size-3 animate-spin" aria-hidden />
-                    {labels.sales.updating}
-                  </>
-                ) : (
-                  labels.sales.upToDate
-                )}
-              </p>
-            </CardContent>
-          </Card>
+        <div>
+          <p className="mb-1 text-libelle">{t.cart}</p>
+          {loadingDraft ? (
+            <Skeleton className="h-24 w-full" />
+          ) : items.length === 0 ? (
+            <p className="rounded-[18px] border-2 border-dashed border-input px-2 py-7 text-center text-libelle font-normal text-muted-foreground">
+              {t.emptyCart}
+            </p>
+          ) : (
+            items.map((item) => {
+              const line = stock.data?.get(item.product_id);
+              const short = shortProducts.has(item.product_id);
+              return (
+                <TicketLine
+                  key={item.id}
+                  item={item}
+                  currency={currency}
+                  disabled={confirm.isPending}
+                  error={
+                    lineErrors[item.id] ??
+                    (short && line
+                      ? labels.sales.insufficient(formatQty(line.qty_on_hand))
+                      : undefined)
+                  }
+                  onChange={(lineChange) =>
+                    updateItem.mutate({ itemId: item.id, change: lineChange })
+                  }
+                  onRemove={() => removeItem.mutate(item.id)}
+                />
+              );
+            })
+          )}
+        </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{labels.sales.settlement}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <ChoiceGroup
-                label={labels.sales.customerPays}
-                value={mode}
-                onValueChange={(value) => {
+        <div className="flex items-baseline justify-between rounded-[18px] bg-ventes-teinte px-[18px] py-4">
+          <span className="text-xl font-bold">{t.total}</span>
+          <span
+            aria-live="polite"
+            aria-busy={busy}
+            className="text-[36px] leading-tight font-extrabold numeric text-ventes-encre"
+          >
+            {formatAmount(data?.total ?? "0", currency)}
+          </span>
+        </div>
+
+        <div>
+          <p id="pays" className="mb-2 text-libelle">
+            {t.customerPays}
+          </p>
+          <div role="group" aria-labelledby="pays" className="flex flex-wrap gap-2">
+            {MODES.map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={mode === value}
+                onClick={() => {
                   setMode(value);
                   setPaidInput("");
                   setGiven("");
                   setSettlementError(null);
                 }}
-                choices={MODES.map((value) => ({
-                  value,
-                  label: labels.sales.settlementModes[value],
-                }))}
-                className="grid grid-cols-3"
-              />
-
-              {mode !== "credit" && <PaymentMethodChips value={method} onChange={setMethod} />}
-
-              {mode === "full" && method === "cash" && data && (
-                <div className="space-y-2.5">
-                  <p className="text-libelle">{labels.payment.customerGives}</p>
-                  <AmountShortcuts shortcuts={billShortcuts(total, currency)} onPick={setGiven} />
-                  <AmountField
-                    label={labels.payment.otherGiven}
-                    value={given}
-                    onChange={setGiven}
-                  />
-                  {change !== null && (
-                    <p
-                      role="status"
-                      className="flex items-baseline justify-between rounded-champ bg-argent-teinte px-4 py-3 text-argent-encre"
-                    >
-                      <span className="text-libelle">{labels.payment.change}</span>
-                      <span className="text-chiffre numeric">
-                        {formatAmount(change.toString(), currency)}
-                      </span>
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {mode === "partial" && (
-                <PaymentAmount
-                  id="paid-amount"
-                  label={labels.payment.givesNow}
-                  value={paidInput}
-                  onChange={setPaidInput}
-                  shortcuts={partShortcuts(total, currency)}
-                  check={partCheck}
-                />
-              )}
-
-              {mode !== "full" && (
-                <>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="due-date">{labels.sales.dueDate}</Label>
-                    <Input
-                      id="due-date"
-                      type="date"
-                      value={dueDate}
-                      onChange={(event) => setDueDate(event.target.value)}
-                      className="h-9"
-                    />
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {customerId
-                      ? labels.sales.balanceBecomesDebt
-                      : labels.sales.creditNeedsCustomer}
-                  </p>
-                </>
-              )}
-              <FieldError message={settlementError} />
-            </CardContent>
-          </Card>
-
-          {/*
-            Actions : sous la colonne à partir de `xl` ; en dessous (tablette), barre fixée en
-            bas avec le total, pour que « Confirmer la vente » reste toujours à portée.
-          */}
-          <div className="space-y-2 max-xl:fixed max-xl:inset-x-0 max-xl:bottom-0 max-xl:z-20 max-xl:border-t max-xl:bg-card max-xl:px-4 max-xl:py-3 max-xl:shadow-lg md:max-xl:px-6 lg:max-xl:left-52 print:hidden">
-            <div className="flex flex-wrap items-center gap-2 xl:flex-col xl:items-stretch">
-              <div className="mr-auto min-w-0 xl:hidden">
-                <p className="text-xs text-muted-foreground">{labels.sales.total}</p>
-                <Money value={data?.total ?? "0"} currency={currency} className="text-figure-sm" />
-              </div>
-              <Button
-                className="max-xl:order-last xl:w-full"
-                size="lg"
-                disabled={!canConfirm}
-                onClick={submitConfirm}
+                className={cn(
+                  "min-h-16 flex-[1_1_140px] rounded-[18px] border-2 px-3 py-2 text-libelle",
+                  "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                  mode === value
+                    ? "border-ventes bg-ventes text-primary-foreground"
+                    : "border-input bg-card text-foreground hover:bg-voile",
+                )}
               >
-                {confirm.isPending && <Loader2 className="animate-spin" aria-hidden />}
-                {confirm.isPending ? labels.sales.confirming : labels.sales.confirm}
-              </Button>
-              <Button
-                variant="outline"
-                className="xl:order-last xl:w-full"
-                disabled={!saleId || busy}
-                onClick={() => {
-                  toast.success(labels.sales.draftSaved);
-                  router.push("/sales");
-                }}
-              >
-                {labels.sales.saveDraft}
-              </Button>
-            </div>
-            {shortProducts.size > 0 && (
-              <p className="text-sm text-danger-ink">{labels.sales.confirmBlocked}</p>
-            )}
-            <FieldError message={confirmError} />
+                {labels.sales.settlementModes[value]}
+              </button>
+            ))}
           </div>
         </div>
-      </div>
+
+        {mode !== "credit" && (
+          <PaymentMethodChips
+            value={method}
+            onChange={setMethod}
+            label={t.methods}
+            hideLabel
+            stretch
+            tone="teinte"
+          />
+        )}
+
+        {mode === "full" && method === "cash" && total > 0n && (
+          <div>
+            <p id="donne" className="mb-2 text-libelle">
+              {labels.payment.customerGives}
+            </p>
+            <div role="group" aria-labelledby="donne" className="flex flex-wrap gap-2">
+              {billShortcuts(total, currency).map((bill) => (
+                <button
+                  key={bill.value}
+                  type="button"
+                  aria-pressed={given === bill.value}
+                  onClick={() => setGiven(cleanAmount(bill.value))}
+                  className={cn(
+                    "min-h-cible flex-[1_1_90px] rounded-full border-2 px-[18px] font-semibold numeric",
+                    "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                    given === bill.value
+                      ? "border-ventes bg-ventes-teinte text-ventes-encre"
+                      : "border-input bg-card text-foreground hover:bg-voile",
+                  )}
+                >
+                  {bill.value === total.toString()
+                    ? bill.label
+                    : formatFigure(bill.value, currency)}
+                </button>
+              ))}
+            </div>
+            <div className="mt-2">
+              <AmountField
+                label={labels.payment.otherGiven}
+                hideLabel
+                placeholder={labels.payment.otherGivenPlaceholder}
+                size="rendu"
+                value={
+                  billShortcuts(total, currency).some((bill) => bill.value === given) ? "" : given
+                }
+                onChange={setGiven}
+              />
+            </div>
+            {change !== null && (
+              <p
+                role="status"
+                className="mt-2.5 flex items-baseline justify-between rounded-champ bg-argent-teinte px-4 py-3"
+              >
+                <span className="font-bold">{labels.payment.change}</span>
+                <span className="text-[26px] font-extrabold numeric text-argent-encre">
+                  {formatAmount(change.toString(), currency)}
+                </span>
+              </p>
+            )}
+          </div>
+        )}
+
+        {mode === "partial" && total > 0n && (
+          <PaymentAmount
+            id="paid-amount"
+            label={labels.payment.givesNow}
+            placeholder={labels.payment.typeAmount}
+            value={paidInput}
+            onChange={setPaidInput}
+            shortcuts={partShortcuts(total, currency)}
+            check={partCheck}
+            okRubrique="stock"
+          />
+        )}
+
+        {mode !== "full" && customerId && (
+          <div className="space-y-1.5">
+            <Label htmlFor="due-date" className="text-libelle">
+              {labels.sales.dueDate}
+            </Label>
+            <Input
+              id="due-date"
+              type="date"
+              value={dueDate}
+              onChange={(event) => setDueDate(event.target.value)}
+              className="h-12 rounded-champ border-2 text-corps"
+            />
+          </div>
+        )}
+
+        {needCustomer && items.length > 0 && (
+          <p className="rounded-champ bg-stock-teinte px-4 py-3 font-bold text-stock-encre">
+            {t.needCustomer}
+          </p>
+        )}
+        <FieldError message={settlementError} />
+
+        <Button
+          variant="ventes"
+          size="principal"
+          className="w-full text-[21px] font-bold disabled:bg-ventes/45 disabled:opacity-100"
+          disabled={blocked || busy || confirm.isPending}
+          onClick={submitConfirm}
+        >
+          {confirm.isPending ? (
+            <Loader2 className="size-[26px] animate-spin" aria-hidden />
+          ) : (
+            <Check className="size-[26px]" aria-hidden />
+          )}
+          {ctaLabel}
+        </Button>
+        {shortProducts.size > 0 && (
+          <p className="text-sm text-danger-ink">{labels.sales.confirmBlocked}</p>
+        )}
+        <FieldError message={confirmError} />
+      </aside>
+    </div>
+  );
+}
+
+function InitialsOf({ name }: { name: string }) {
+  return (
+    <>
+      {name
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((word) => word.charAt(0).toLocaleUpperCase("fr-FR"))
+        .join("")}
     </>
   );
 }
@@ -615,21 +641,4 @@ function without(record: Record<string, string>, key: string): Record<string, st
   const next = { ...record };
   delete next[key];
   return next;
-}
-
-function TotalRow({
-  label,
-  value,
-  currency,
-}: {
-  label: string;
-  value: string | undefined;
-  currency: string;
-}) {
-  return (
-    <div className="flex items-baseline justify-between">
-      <span className="text-muted-foreground">{label}</span>
-      <Money value={value ?? "0"} currency={currency} />
-    </div>
-  );
 }

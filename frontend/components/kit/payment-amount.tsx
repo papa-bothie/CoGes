@@ -23,6 +23,8 @@ export function PaymentAmount({
   rubrique = "ventes",
   id,
   autoFocus,
+  placeholder,
+  okRubrique,
 }: {
   label: ReactNode;
   value: string;
@@ -32,6 +34,9 @@ export function PaymentAmount({
   rubrique?: Rubrique;
   id?: string;
   autoFocus?: boolean;
+  placeholder?: string;
+  /** Couleur du message quand le montant va (vente en partie : orange, il restera à payer). */
+  okRubrique?: Rubrique;
 }) {
   return (
     <div className="space-y-3">
@@ -42,6 +47,7 @@ export function PaymentAmount({
         onChange={onChange}
         rubrique={rubrique}
         autoFocus={autoFocus}
+        placeholder={placeholder}
         invalid={check.tone === "trop"}
       />
       {shortcuts.length > 0 && <AmountShortcuts shortcuts={shortcuts} onPick={onChange} />}
@@ -54,7 +60,10 @@ export function PaymentAmount({
           check.tone === "trop"
             ? "bg-stock-teinte text-stock-encre"
             : check.tone === "bon"
-              ? cn(RUBRIQUE_CLASSES[rubrique].tint, RUBRIQUE_CLASSES[rubrique].ink)
+              ? cn(
+                  RUBRIQUE_CLASSES[okRubrique ?? rubrique].tint,
+                  RUBRIQUE_CLASSES[okRubrique ?? rubrique].ink,
+                )
               : "bg-muted text-foreground",
         )}
       >

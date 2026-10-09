@@ -21,7 +21,7 @@ import {
   formatAmount,
   formatClock,
   formatDayLong,
-  formatMoney,
+  formatFigure,
   formatQtyWithUnit,
   formatWeekdayShort,
 } from "@/lib/format";
@@ -234,10 +234,7 @@ function WeekCard({ data, currency }: { data: Dashboard | undefined; currency: s
           label={t.weekLabel}
           bars={week.map((point, index) => ({
             label: index === week.length - 1 ? t.today : formatWeekdayShort(point.day),
-            display: formatMoney(point.net_revenue, currency, { withCurrency: false }).replace(
-              / /g,
-              " ",
-            ),
+            display: formatFigure(point.net_revenue, currency),
             weight: Number(point.net_revenue),
             current: index === week.length - 1,
           }))}

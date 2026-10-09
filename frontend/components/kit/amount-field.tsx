@@ -32,6 +32,9 @@ export function AmountField({
   invalid = false,
   id,
   autoFocus,
+  placeholder,
+  hideLabel = false,
+  size = "montant",
 }: {
   label: ReactNode;
   value: string;
@@ -42,13 +45,18 @@ export function AmountField({
   invalid?: boolean;
   id?: string;
   autoFocus?: boolean;
+  placeholder?: string;
+  /** Libellé pour les lecteurs d'écran seulement (« Autre montant donné », maquette 02). */
+  hideLabel?: boolean;
+  /** `rendu` : le champ « Autre montant » du rendu de monnaie, 56 px et 20 px. */
+  size?: "montant" | "rendu";
 }) {
   const generated = useId();
   const inputId = id ?? generated;
   const hintId = `${inputId}-aide`;
   return (
     <div className="space-y-2">
-      <label htmlFor={inputId} className="block text-libelle">
+      <label htmlFor={inputId} className={hideLabel ? "sr-only" : "block text-libelle"}>
         {label}
       </label>
       <div className="relative">
@@ -57,17 +65,22 @@ export function AmountField({
           inputMode="numeric"
           autoComplete="off"
           autoFocus={autoFocus}
+          placeholder={placeholder}
           value={value}
           onChange={(event) => onChange(cleanAmount(event.target.value))}
           aria-invalid={invalid || undefined}
           aria-describedby={hint ? hintId : undefined}
           className={cn(
             fieldClasses(rubrique),
-            "min-h-champ-montant pr-12 pl-[18px] text-[28px] font-extrabold numeric",
+            "pr-12 pl-[18px] font-extrabold numeric placeholder:text-muted-foreground",
+            size === "rendu" ? "min-h-14 text-xl" : "min-h-champ-montant text-[28px]",
           )}
         />
         <span
-          className="pointer-events-none absolute top-1/2 right-[18px] -translate-y-1/2 text-xl font-extrabold text-muted-foreground"
+          className={cn(
+            "pointer-events-none absolute top-1/2 right-[18px] -translate-y-1/2 font-extrabold text-muted-foreground",
+            size === "rendu" ? "text-xl" : "text-[22px]",
+          )}
           aria-hidden
         >
           {currencyLabel}

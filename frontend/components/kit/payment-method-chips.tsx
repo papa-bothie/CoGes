@@ -24,18 +24,27 @@ export function PaymentMethodChips({
   onChange,
   rubrique = "ventes",
   label = labels.payment.how,
+  hideLabel = false,
+  stretch = false,
+  tone = "plein",
 }: {
   value: Method;
   onChange: (value: Method) => void;
   rubrique?: Rubrique;
   label?: string;
+  /** Libellé lu seulement par les lecteurs d'écran (maquette 02 : les puces seules). */
+  hideLabel?: boolean;
+  /** Puces étirées sur la ligne, comme dans le ticket de vente. */
+  stretch?: boolean;
+  /** `teinte` : la puce choisie prend la teinte claire (maquette 02), pas la couleur pleine. */
+  tone?: "plein" | "teinte";
 }) {
   const labelId = useId();
   const [more, setMore] = useState(OTHER_METHODS.includes(value));
   const shown = more ? [...MAIN_METHODS, ...OTHER_METHODS] : MAIN_METHODS;
   return (
     <div className="space-y-2">
-      <p id={labelId} className="text-libelle">
+      <p id={labelId} className={hideLabel ? "sr-only" : "text-libelle"}>
         {label}
       </p>
       <div role="group" aria-labelledby={labelId} className="flex flex-wrap gap-2.5">
@@ -43,15 +52,20 @@ export function PaymentMethodChips({
           <Chip
             key={method}
             rubrique={rubrique}
-            tone="plein"
+            tone={tone}
             selected={value === method}
             onClick={() => onChange(method)}
+            className={stretch ? "flex-[1_1_110px]" : undefined}
           >
             {labels.paymentMethods[method]}
           </Chip>
         ))}
         {!more && (
-          <Chip rubrique={rubrique} onClick={() => setMore(true)}>
+          <Chip
+            rubrique={rubrique}
+            onClick={() => setMore(true)}
+            className={stretch ? "flex-[1_1_110px]" : undefined}
+          >
             {labels.payment.otherMethods}
           </Chip>
         )}
