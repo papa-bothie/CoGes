@@ -4158,6 +4158,8 @@ export interface components {
       unit_price: components["schemas"]["Amount-Output"] | null;
       /** Level */
       level: string;
+      /** Is Stock Tracked */
+      is_stock_tracked: boolean;
     };
     /** StockPage */
     StockPage: {

@@ -206,6 +206,8 @@ class StockLine(BaseModel):
     unit_price: Amount | None
     #: Stock rapporté au plus haut des 90 derniers jours, de 0 à 1 : la barre de niveau.
     level: Decimal
+    #: Un article non suivi (service, recharge) figure sans quantité à compter.
+    is_stock_tracked: bool
 
 
 class StockPage(BaseModel):

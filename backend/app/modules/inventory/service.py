@@ -234,6 +234,48 @@ LEVEL_WINDOW_DAYS = 90
 _STATUS_ORDER = {"out": 0, "low": 1, "ok": 2}
 
 
+class _StockRow(NamedTuple):
+    """Une ligne de la vue Stock : la projection, ou un article encore jamais entré."""
+
+    product_id: UUID
+    qty_on_hand: Decimal
+    avg_cost: Decimal
+    stock_value: Decimal
+    last_movement_at: datetime | None
+
+
+def _stock_rows(
+    session: Session, ctx: TenantContext, product_ids: Sequence[UUID] | None
+) -> tuple[list[_StockRow], dict[UUID, ProductSummary]]:
+    """Lignes de stock et fiches. Sans lot d'articles, les articles actifs qui n'ont
+    encore aucun mouvement (créés sans stock, ou non suivis) y figurent à zéro : l'écran
+    Stock les montre aussi (ADR 0071)."""
+    repository = ProductStockRepository(session, ctx)
+    stored = list(repository.many(list(product_ids)).values()) if product_ids else repository.all()
+    rows = [
+        _StockRow(
+            row.product_id, row.qty_on_hand, row.avg_cost, row.stock_value, row.last_movement_at
+        )
+        for row in stored
+    ]
+    summaries = products_service.get_summaries(session, ctx, [row.product_id for row in rows])
+    if not product_ids:
+        active = products_service.active_summaries(session, ctx)
+        known = {row.product_id for row in rows}
+        for product_id, summary in active.items():
+            if product_id not in known:
+                rows.append(_StockRow(product_id, Decimal("0"), Decimal("0"), Decimal("0"), None))
+                summaries[product_id] = summary
+    return rows, summaries
+
+
+def _row_status(row: _StockRow, summary: ProductSummary) -> str:
+    """Un article non suivi n'est jamais « épuisé » : il n'a pas de stock à compter."""
+    if not summary.is_stock_tracked:
+        return "ok"
+    return _status(row.qty_on_hand, summary.reorder_point)
+
+
 def _level(qty: Decimal, highest: Decimal | None) -> Decimal:
     """Part du plus haut stock récent qui reste (0 à 1), au centième."""
     peak = qty if highest is None else max(highest, qty)
@@ -263,21 +305,16 @@ def get_stock(
     stock rapporté au plus haut des 90 derniers jours.
     """
     stock_repository = ProductStockRepository(session, ctx)
-    rows = (
-        list(stock_repository.many(list(product_ids)).values())
-        if product_ids
-        else list(stock_repository.all())
-    )
-    summaries = products_service.get_summaries(session, ctx, [row.product_id for row in rows])
+    rows, summaries = _stock_rows(session, ctx, product_ids)
     matching = None if not search else products_service.ids_matching(session, ctx, search)
-    selected: list[tuple[ProductStock, ProductSummary, str]] = []
+    selected: list[tuple[_StockRow, ProductSummary, str]] = []
     for row in rows:
         summary = summaries.get(row.product_id)
         if summary is None:
             # Produit supprimé logiquement : sa projection survit (le journal aussi),
             # mais la fiche n'est plus lisible. On ne devine rien, on n'affiche rien.
             continue
-        state = _status(row.qty_on_hand, summary.reorder_point)
+        state = _row_status(row, summary)
         if status is not None and state != status:
             continue
         if category_id is not None and summary.category_id != category_id:
@@ -316,6 +353,7 @@ def get_stock(
             last_movement_at=row.last_movement_at,
             unit_price=prices.get(row.product_id),
             level=_level(row.qty_on_hand, highest.get(row.product_id)),
+            is_stock_tracked=summary.is_stock_tracked,
         )
         for row, summary, state in shown
     ]
@@ -324,10 +362,9 @@ def get_stock(
 
 def stock_summary(session: Session, ctx: TenantContext) -> StockSummary:
     """En tête de l'écran Stock : articles, valeur au prix d'achat, alertes (ADR 0071)."""
-    rows = ProductStockRepository(session, ctx).all()
-    summaries = products_service.get_summaries(session, ctx, [row.product_id for row in rows])
+    rows, summaries = _stock_rows(session, ctx, None)
     live = [(row, summaries[row.product_id]) for row in rows if row.product_id in summaries]
-    states = [_status(row.qty_on_hand, summary.reorder_point) for row, summary in live]
+    states = [_row_status(row, summary) for row, summary in live]
     return StockSummary(
         product_count=len(live),
         stock_value=money.amount(sum((row.stock_value for row, _ in live), Decimal("0"))),

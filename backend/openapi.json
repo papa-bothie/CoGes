@@ -12489,6 +12489,10 @@
             "type": "string",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Level"
+          },
+          "is_stock_tracked": {
+            "type": "boolean",
+            "title": "Is Stock Tracked"
           }
         },
         "additionalProperties": false,
@@ -12507,7 +12511,8 @@
           "status",
           "last_movement_at",
           "unit_price",
-          "level"
+          "level",
+          "is_stock_tracked"
         ],
         "title": "StockLine",
         "description": "Stock valorisé d'un article, joint à sa fiche produit.\n\nC'est la vue « produits + stock » de l'ADR 0012 : elle vit ici parce que\nProducts (bande B) n'a pas le droit de lire le stock (bande C)."

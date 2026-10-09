@@ -441,3 +441,25 @@ def test_the_history_of_another_company_s_article_is_not_found(
         f"/api/v1/analytics/products/{foreign}/history", headers=auth_headers(token)
     )
     assert response.status_code == 404
+
+
+def test_an_article_without_stock_still_shows(api_client: TestClient) -> None:
+    """Un article jamais entré en stock, ou non suivi, reste visible sur l'écran Stock."""
+    _company, token = _fresh(api_client)
+    empty = _product(api_client, token, "Bougies", stock="0")
+    service = api_client.post(
+        "/api/v1/products",
+        headers=auth_headers(token),
+        json={"name": "Recharge téléphone", "unit_price": "500", "is_stock_tracked": False},
+    ).json()["id"]
+
+    lines = {line["product_id"]: line for line in _stock(api_client, token)["items"]}
+    assert lines[empty]["status"] == "out"
+    assert lines[empty]["is_stock_tracked"] is True
+    assert Decimal(lines[empty]["qty_on_hand"]) == Decimal("0")
+    assert lines[service]["is_stock_tracked"] is False
+    assert lines[service]["status"] == "ok"
+
+    summary = api_client.get("/api/v1/inventory/stock/summary", headers=auth_headers(token)).json()
+    assert summary["product_count"] == 2
+    assert summary["out_count"] == 1
