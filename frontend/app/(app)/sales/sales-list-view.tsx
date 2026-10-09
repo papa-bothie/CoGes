@@ -193,7 +193,7 @@ export function SalesListView() {
     <div className="mx-auto flex max-w-page flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-titre-page tracking-[-0.01em]">{t.title}</h1>
+          <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{t.title}</h1>
           <p className="mt-0.5 text-lg text-muted-foreground">
             {summary.data
               ? t.summary(

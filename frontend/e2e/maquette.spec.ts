@@ -111,6 +111,12 @@ const STATES: Record<string, (page: Page, request: APIRequestContext) => Promise
     await mockupCart(page, request);
     await page.getByLabel("Autre montant donné").fill("30000");
   },
+  "04b": async (page) => {
+    await page.getByRole("button", { name: "Annuler la vente" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Pourquoi annuler cette vente ?" }),
+    ).toBeVisible();
+  },
   "02d": async (page, request) => {
     await mockupCart(page, request);
     // La confirmation est simulée : une vraie vente changerait la liste de l'écran 03. La

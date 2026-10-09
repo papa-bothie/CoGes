@@ -81,3 +81,16 @@ export function formatWeekdayShort(day: string): string {
   );
   return capitalise(text.replace(".", ""));
 }
+
+/** Jour et mois en lettres : « 20 octobre » (échéance d'une dette, maquette 04). */
+export function formatDayMonth(value: string | null | undefined, timeZone = "UTC"): string {
+  if (!value) return "—";
+  const day = DATE_ONLY.test(value) ? `${value}T12:00:00Z` : value;
+  const date = new Date(day);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("fr-FR", {
+    timeZone: DATE_ONLY.test(value) ? "UTC" : timeZone,
+    day: "numeric",
+    month: "long",
+  }).format(date);
+}

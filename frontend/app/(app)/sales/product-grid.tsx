@@ -74,7 +74,7 @@ export function ProductGrid({
 
   return (
     <section className="flex min-w-0 flex-col gap-4">
-      <h1 className="text-titre-page tracking-[-0.01em]">{labels.sales.newSale}</h1>
+      <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{labels.sales.newSale}</h1>
       <div className="relative">
         <Search
           className="pointer-events-none absolute top-[17px] left-4 size-[22px] text-muted-foreground"

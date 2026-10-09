@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { formatClock, formatDate, formatDateTime, formatDayLong, formatWeekdayShort } from "./date";
+import {
+  formatClock,
+  formatDate,
+  formatDateTime,
+  formatDayLong,
+  formatDayMonth,
+  formatWeekdayShort,
+} from "./date";
 
 describe("formatDate", () => {
   it("affiche jj/mm/aaaa dans le fuseau de l'entreprise", () => {
@@ -41,5 +48,7 @@ describe("dates de la maquette v2", () => {
     expect(formatDayLong("2026-10-06")).toBe("Mardi 6 octobre");
     expect(formatWeekdayShort("2026-09-30")).toBe("Mer");
     expect(formatWeekdayShort("2026-10-04")).toBe("Dim");
+    expect(formatDayMonth("2026-10-20")).toBe("20 octobre");
+    expect(formatDayMonth("2026-10-20T23:30:00Z", "Africa/Dakar")).toBe("20 octobre");
   });
 });
