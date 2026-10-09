@@ -17,7 +17,7 @@
   de la maquette v2 et 0065 à l'heure figée et au seed de la maquette ; les ADR nommés plus bas
   sont décalés de trois rangs (« Références et codes-barres générés » = 0066, « Raisons de
   correction en liste fermée » = 0067). Au lot 1, 0068 a servi à Wave et Orange Money ; au
-  lot 2, 0069 aux mots simples et à l'import tolérant : la refonte visuelle devient 0070.*
+  lot 2, 0069 aux mots simples et à l'import tolérant : la refonte visuelle devient 0070 (lot 3a).*
 - **Invariants à ne jamais casser :** RLS FORCE et rôles séparés, Idempotency-Key sur les écritures
   financières, annulation par contre-écriture, outbox, garde du dernier gérant.
 - Aucun service payant sans mon accord explicite. Ne commite jamais `.env` ni `.env.bak`.

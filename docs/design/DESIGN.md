@@ -224,11 +224,19 @@ de marque éclairci. Contraste AA vérifié par axe, en clair et en sombre.
 
 ## Layout
 
-Page de 1180 px au plus, marge de 24 px (16 px sur téléphone), 20 px entre sections, cartes
-de 22 px de marge intérieure. Au-dessus de 768 px, **barre du haut** (logo, onglets de
-rubrique, alertes, thème) ; au-dessous, **barre basse** de cinq entrées (Accueil, Vendre,
-Stock, Clients, Argent). Les écrans adoptent cette navigation au lot 3a ; d'ici là, la barre
-latérale de la phase 14 reste, avec le logo officiel.
+Page de 1180 px au plus (1240 px pour « Nouvelle vente »), marge de 24 px (16 px sur
+téléphone), 20 px entre sections, cartes de 22 px de marge intérieure. Chaque écran porte sa
+largeur ; la coquille ne donne que les marges.
+
+**Navigation (lot 3a, ADR 0070).** Au-dessus de 768 px, **barre du haut** : logo et nom de
+la boutique, cinq onglets (Accueil, Vendre, Stock, Clients, Argent) dont l'actif prend la
+teinte de sa rubrique, puis Conseils, la cloche et l'engrenage. La cloche mène aux alertes ;
+son badge n'apparaît que pour une alerte grave non lue. L'engrenage ouvre un menu : la
+personne et son rôle, Réglages, Mode sombre, Se déconnecter (et Conseils sur téléphone). Le
+vendeur ne voit qu'Accueil, Vendre et Clients. Au-dessous de 768 px, en-tête compact (logo,
+nom, cloche, engrenage) et **barre basse** fixe à cinq entrées : l'écran 26 est la
+référence du téléphone. Le reçu et le bon de retour s'affichent seuls, sans barres. Plus de
+réglage de densité : 48 px partout.
 
 ## Shapes
 
@@ -259,7 +267,15 @@ Tous dans `frontend/components/kit/`, montrés par `/dev/composants` (développe
   (`FieldHint`).
 - **Barres des 7 jours** (`DayBars`) : valeur au-dessus, jour en cours en vert plein.
 - **Interrupteur** (`ToggleSwitch`) : 64 × 36 px.
-- **Barres de navigation** (`TopBar`, `BottomNav`) et **logo** (`components/brand/`).
+- **Barres de navigation** (`TopBar`, `TabLink`, `BottomNav`) et **logo** (`components/brand/`).
+
+Écrans du lot 3a, dans `frontend/app/(app)/` : accueil (`dashboard/`), nouvelle vente
+(`sales/sale-editor.tsx`, `product-grid.tsx`, `ticket-line.tsx`, `sale-success.tsx`), liste
+et détail des ventes, reçu (`sales/[id]/receipt/`, ticket en JetBrains Mono et facture A4),
+retour d'articles et bon de retour. Aides d'affichage : `lib/sale-status.ts` (pastille d'une
+vente), `lib/units.ts` (« 2 sacs », « Vente n° 1044 »), `lib/whatsapp.ts` (reçu en texte,
+lien `wa.me`), `lib/number-words.ts` (montant en toutes lettres), `lib/refund.ts` (valeur
+rendue, même formule que le serveur).
 
 ## Do's and Don'ts
 

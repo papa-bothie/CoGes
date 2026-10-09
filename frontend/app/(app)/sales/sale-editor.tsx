@@ -377,7 +377,9 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
   const ctaLabel =
     mode === "credit"
       ? t.saveCredit
-      : t.encash(formatAmount(mode === "partial" ? paidInput || "0" : data?.total, currency));
+      : t.encash(
+          formatAmount(mode === "partial" ? paidInput || "0" : (data?.total ?? "0"), currency),
+        );
 
   return (
     <div className="mx-auto flex max-w-[1192px] flex-wrap items-start gap-5">
