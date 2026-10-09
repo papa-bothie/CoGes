@@ -44,7 +44,13 @@ class NotificationRepository(TenantRepository[Notification]):
         )
         return self.session.execute(stmt).scalars().all()
 
-    def count_for_user(self, user_id: UUID, *, unread_only: bool = False) -> int:
+    def count_for_user(
+        self,
+        user_id: UUID,
+        *,
+        unread_only: bool = False,
+        types: Sequence[str] | None = None,
+    ) -> int:
         stmt = (
             select(func.count())
             .select_from(Notification)
@@ -55,6 +61,8 @@ class NotificationRepository(TenantRepository[Notification]):
         )
         if unread_only:
             stmt = stmt.where(Notification.read_at.is_(None))
+        if types is not None:
+            stmt = stmt.where(Notification.type.in_(list(types)))
         return int(self.session.execute(stmt).scalar_one())
 
     def get_for_user(self, user_id: UUID, notification_id: UUID) -> Notification | None:

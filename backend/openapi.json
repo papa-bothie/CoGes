@@ -12323,12 +12323,17 @@
           "unread": {
             "type": "integer",
             "title": "Unread"
+          },
+          "critical": {
+            "type": "integer",
+            "title": "Critical"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "unread"
+          "unread",
+          "critical"
         ],
         "title": "UnreadCount",
         "description": "Compteur de non-lus de l'utilisateur courant."

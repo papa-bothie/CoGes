@@ -4080,6 +4080,8 @@ export interface components {
     UnreadCount: {
       /** Unread */
       unread: number;
+      /** Critical */
+      critical: number;
     };
     /** UserCreate */
     UserCreate: {

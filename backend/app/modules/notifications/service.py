@@ -24,7 +24,7 @@ from app.core.errors import NotFoundError
 from app.core.tenancy import TenantContext
 from app.modules.notifications.models import Notification
 from app.modules.notifications.repository import NotificationRepository
-from app.modules.notifications.schemas import NotificationType
+from app.modules.notifications.schemas import CRITICAL_TYPES, NotificationType
 
 # Ré-export : la façade expose la gravité d'un type d'alerte (ADR 0059).
 from app.modules.notifications.schemas import severity_of as severity_of
@@ -170,6 +170,13 @@ def list_for_user(
     )
     total = repository.count_for_user(ctx.user_id, unread_only=unread_only)
     return list(items), total
+
+
+def unread_critical_count(session: Session, ctx: TenantContext) -> int:
+    """Alertes graves non lues de l'utilisateur courant (badge de la cloche)."""
+    return NotificationRepository(session, ctx).count_for_user(
+        ctx.user_id, unread_only=True, types=[str(kind) for kind in CRITICAL_TYPES]
+    )
 
 
 def unread_count(session: Session, ctx: TenantContext) -> int:
