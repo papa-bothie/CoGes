@@ -4,7 +4,7 @@ import { labels } from "@/lib/labels";
 
 import { ProductDetailView } from "./product-detail-view";
 
-export const metadata: Metadata = { title: labels.nav.products };
+export const metadata: Metadata = { title: labels.stockScreens.list.title };
 
 export default async function ProductPage({ params }: PageProps<"/products/[id]">) {
   const { id } = await params;
