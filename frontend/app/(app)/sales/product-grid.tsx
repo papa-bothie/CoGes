@@ -10,6 +10,7 @@ import { fieldClasses } from "@/components/kit/rubrique";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { api, unwrap } from "@/lib/api/client";
+import { useCategories } from "@/lib/api/queries/categories";
 import { queryKeys } from "@/lib/api/queries/keys";
 import { useStockFor, type StockLine } from "@/lib/api/queries/stock";
 import type { Schemas } from "@/lib/api/schema";
@@ -55,10 +56,8 @@ export function ProductGrid({
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const term = useDebouncedValue(text.trim());
 
-  const categories = useQuery({
-    queryKey: queryKeys.categories.all,
-    queryFn: () => unwrap(api.GET("/api/v1/categories", { params: { query: { page_size: 100 } } })),
-  });
+  // Le même cache que les autres écrans : une seule forme de données sous cette clé.
+  const categories = useCategories();
   const params = {
     search: term || undefined,
     category_id: categoryId ?? undefined,
@@ -107,7 +106,7 @@ export function ProductGrid({
         <Chip selected={categoryId === null} onClick={() => setCategoryId(null)}>
           {t.all}
         </Chip>
-        {categories.data?.items.map((category) => (
+        {categories.data?.map((category) => (
           <Chip
             key={category.id}
             selected={categoryId === category.id}

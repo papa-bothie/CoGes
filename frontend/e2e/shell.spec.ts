@@ -4,17 +4,14 @@ import { createSalesperson, DEMO, loginThroughUi } from "./fixtures";
 
 const CAPTURES = "../docs/design/captures/phase-11";
 
+/** Les cinq entrées de la maquette v2 (ADR 0070), puis Conseils. */
 const NAVIGATION = [
-  ["Tableau de bord", "/dashboard"],
-  ["Ventes", "/sales"],
-  ["Stock", "/inventory"],
-  ["Produits", "/products"],
+  ["Accueil", "/dashboard"],
+  // « Nouvelle vente » reprend le brouillon du jour s'il y en a un (ADR 0070).
+  ["Vendre", "/sales/(new|[0-9a-f-]+/edit)"],
+  ["Stock", "/products"],
   ["Clients", "/customers"],
-  ["Fournisseurs", "/suppliers"],
-  ["Finance", "/finance"],
-  ["Analytics", "/analytics"],
-  ["CoGes Intelligence", "/insights"],
-  ["Paramètres", "/settings"],
+  ["Argent", "/finance"],
 ] as const;
 
 test("connexion → coquille → navigation → rechargement → déconnexion", async ({ page }) => {
@@ -26,48 +23,47 @@ test("connexion → coquille → navigation → rechargement → déconnexion", 
   await loginThroughUi(page, DEMO);
   await expect(page).toHaveURL(/\/sales$/);
 
-  // En-tête : entreprise, utilisateur, rôle ; barre latérale sans sélecteur.
+  // Barre du haut : logo et nom de la boutique, cinq entrées, Conseils, cloche, engrenage.
   const header = page.getByRole("banner");
-  await expect(header.getByText("Gérant")).toBeVisible();
-  const nav = page.getByRole("navigation", { name: "Navigation principale" });
+  await expect(header.getByText("Alimentation Keur Fatou").first()).toBeVisible();
+  const nav = page.getByRole("navigation", { name: "Menu principal" }).first();
   await expect(nav.getByRole("link")).toHaveText(NAVIGATION.map(([label]) => label));
+  await expect(header.getByRole("link", { name: "Conseils" })).toBeVisible();
   // Aucun sélecteur d'entreprise dans la coquille (les écrans ont leurs propres filtres).
-  await expect(page.getByRole("complementary").getByRole("combobox")).toHaveCount(0);
   await expect(header.getByRole("combobox")).toHaveCount(0);
   await expect(page.getByText(/mode démonstration/i)).toHaveCount(0);
 
   for (const [label, href] of NAVIGATION) {
     await nav.getByRole("link", { name: label }).click();
     await expect(page).toHaveURL(new RegExp(`${href}$`));
-    await expect(page.getByRole("heading", { level: 1, name: label })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
     await expect(nav.getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
   }
 
   // Rechargement : le jeton en mémoire est perdu, le refresh silencieux le remplace.
-  await nav.getByRole("link", { name: "Tableau de bord" }).click();
+  await nav.getByRole("link", { name: "Accueil" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
   await page.reload();
-  await expect(page.getByRole("heading", { level: 1, name: "Tableau de bord" })).toBeVisible();
-  await expect(header.getByText("Gérant")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^Bonjour / })).toBeVisible();
   await page.screenshot({ path: `${CAPTURES}/coquille-clair.png` });
 
-  // Thème sombre.
-  await page.getByRole("button", { name: "Changer de thème" }).click();
-  await page.getByRole("menuitemradio", { name: "Sombre" }).click();
+  // L'engrenage : la personne, son rôle, le mode sombre.
+  await header.getByRole("button", { name: "Réglages et compte" }).click();
+  await expect(page.getByRole("menu").getByText("Gérant")).toBeVisible();
+  await page.getByRole("menuitem", { name: "Passer en mode sombre" }).click();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(page.getByRole("menu")).toBeHidden();
   await page.screenshot({ path: `${CAPTURES}/coquille-sombre.png` });
-  await page.getByRole("button", { name: "Changer de thème" }).click();
-  await page.getByRole("menuitemradio", { name: "Clair" }).click();
+  await header.getByRole("button", { name: "Réglages et compte" }).click();
+  await page.getByRole("menuitem", { name: "Passer en mode clair" }).click();
 
-  // La cloche ouvre le panneau des alertes, qui mène à la page complète.
-  await page.getByRole("button", { name: /^Notifications/ }).click();
-  await expect(page.getByRole("dialog", { name: "Notifications" })).toBeVisible();
-  await page.getByRole("link", { name: "Toutes les notifications" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Notifications" })).toBeVisible();
+  // La cloche mène aux alertes.
+  await header.getByRole("link", { name: /^Alertes/ }).click();
+  await expect(page).toHaveURL(/\/notifications$/);
 
   // Déconnexion : retour à la connexion, et l'application reste fermée.
-  await page.getByRole("button", { name: "Se déconnecter" }).click();
+  await header.getByRole("button", { name: "Réglages et compte" }).click();
+  await page.getByRole("menuitem", { name: "Se déconnecter" }).click();
   await expect(page).toHaveURL(/\/login\?reason=logout/);
   await expect(page.getByText("Vous êtes déconnecté.")).toBeVisible();
   await page.goto("/dashboard");
@@ -104,16 +100,17 @@ test("session révoquée côté serveur : retour à la connexion", async ({ page
   await expect(page.getByText("Votre session a expiré. Reconnectez-vous.")).toBeVisible();
 });
 
-test("vendeur : Paramètres masqué, rôle affiché", async ({ page, request }) => {
+test("vendeur : seulement Accueil, Vendre et Clients", async ({ page, request }) => {
   const salesperson = await createSalesperson(request);
   await page.goto("/login");
   await loginThroughUi(page, salesperson);
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByRole("banner").getByText("Vendeur", { exact: true })).toBeVisible();
-  const nav = page.getByRole("navigation", { name: "Navigation principale" });
-  await expect(nav.getByRole("link", { name: "Ventes" })).toBeVisible();
-  await expect(nav.getByRole("link", { name: "Paramètres" })).toHaveCount(0);
-  await expect(nav.getByRole("link", { name: "Analytics" })).toHaveCount(0);
+  const nav = page.getByRole("navigation", { name: "Menu principal" }).first();
+  await expect(nav.getByRole("link")).toHaveText(["Accueil", "Vendre", "Clients"]);
+  await expect(page.getByRole("link", { name: "Conseils" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Réglages et compte" }).click();
+  await expect(page.getByRole("menu").getByText("Vendeur", { exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Réglages" })).toHaveCount(0);
 });
 
 test("redirection ouverte : next=/\\evil.example garde l'utilisateur sur le site", async ({
@@ -125,5 +122,5 @@ test("redirection ouverte : next=/\\evil.example garde l'utilisateur sur le site
   await page.goto("/login?next=/%5Cevil.example");
   await loginThroughUi(page, DEMO);
   await expect(page).toHaveURL(`${origin}/dashboard`);
-  await expect(page.getByRole("heading", { level: 1, name: "Tableau de bord" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^Bonjour / })).toBeVisible();
 });

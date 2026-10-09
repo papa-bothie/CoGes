@@ -110,15 +110,20 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
     enabled: resuming && Boolean(me),
     staleTime: 0,
   });
+  const [resumedId, setResumedId] = useState<string | null>(null);
   if (resuming && resume.data) {
     setResuming(false);
     const draft = resume.data.items[0];
     if (draft && !saleId) {
       setSaleId(draft.id);
-      window.history.replaceState(null, "", `/sales/${draft.id}/edit`);
+      setResumedId(draft.id);
     }
   }
   if (resuming && resume.isError) setResuming(false);
+  // L'URL suit le brouillon repris, hors du rendu : le routeur de Next écoute l'historique.
+  useEffect(() => {
+    if (resumedId) window.history.replaceState(null, "", `/sales/${resumedId}/edit`);
+  }, [resumedId]);
 
   const sale = useQuery({
     queryKey: queryKeys.sales.detail(saleId ?? "new"),

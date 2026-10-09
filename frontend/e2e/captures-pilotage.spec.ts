@@ -17,6 +17,10 @@ async function shoot(page: Page, name: string) {
 }
 
 test.describe("captures du pilotage", () => {
+  // Captures d'une phase close : l'interface a changé depuis (phase 15, ADR 0070). Elles
+  // ne tournent plus que sur demande, pour refaire une image d'époque.
+  test.skip(process.env.CAPTURES_PHASE !== "13", "CAPTURES_PHASE=13 non défini");
+
   test.beforeEach(async ({ page }) => {
     await page.goto("/login");
     await loginThroughUi(page, DEMO);
