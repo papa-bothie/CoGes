@@ -44,14 +44,14 @@ export function TopBar({
 }) {
   return (
     <header className="border-b border-border bg-card">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 md:px-marge-page">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 px-4 py-3.5 md:gap-x-4 md:px-marge-page md:py-3">
         <div className="mr-auto min-w-0">
           <div className="hidden md:block">
             <BrandHeader companyName={companyName} />
           </div>
           <div className="flex items-center gap-2.5 md:hidden">
             <BrandMark />
-            <span className="truncate font-bold">{companyName}</span>
+            <span className="truncate text-[17px] font-extrabold">{companyName}</span>
           </div>
         </div>
         <nav aria-label={labels.kit.nav.mainMenu} className="hidden md:block">

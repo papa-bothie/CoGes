@@ -54,7 +54,7 @@ export function StatTile({
   );
   const className = cn(
     "flex flex-col text-foreground",
-    compact ? "gap-1 rounded-tuile px-4 py-4" : "min-h-[170px] gap-2.5 rounded-carte p-carte",
+    compact ? "gap-0.5 rounded-[18px] p-3.5" : "min-h-[170px] gap-2.5 rounded-carte p-carte",
     tone.tint,
   );
   return href ? (

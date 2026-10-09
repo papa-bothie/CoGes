@@ -76,6 +76,7 @@ const ALLOWED = new Set<string>([
   "05",
   "05b",
   "06",
+  "26",
 ]);
 
 /** Attend la réponse d'une écriture sur le brouillon (ligne ajoutée, changée, retirée). */

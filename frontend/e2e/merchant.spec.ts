@@ -21,12 +21,10 @@ function counter(page: Page) {
     },
     report: (name: string) => {
       const seconds = ((Date.now() - started) / 1000).toFixed(1);
-      test
-        .info()
-        .annotations.push({
-          type: "commerçant",
-          description: `${name} : ${taps} touches, 0 frappe, ${seconds} s`,
-        });
+      test.info().annotations.push({
+        type: "commerçant",
+        description: `${name} : ${taps} touches, 0 frappe, ${seconds} s`,
+      });
       return taps;
     },
     page,
