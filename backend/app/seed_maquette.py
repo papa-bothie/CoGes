@@ -1079,6 +1079,13 @@ _RESTAMP_SQL = (
         AND b.event_type = 'stock.updated'
         AND m.id = CAST(b.payload ->> 'movement_id' AS uuid);
     """,
+    # Le seed construit lui-même les faits (`_rebuild_facts`) et la comparaison tourne sans
+    # relais : sans ceci, l'outbox attendrait depuis des jours et l'accueil afficherait le
+    # bandeau de retard (ADR 0061), absent de la maquette. Publié à l'heure de l'événement.
+    """
+    UPDATE business_events SET published_at = occurred_at
+    WHERE company_id = :co AND published_at IS NULL;
+    """,
     # Faits analytiques : construits au moment de la capture.
     """
     UPDATE daily_sales_facts SET built_at = :frozen WHERE company_id = :co;

@@ -43,7 +43,7 @@ export function StatTile({
       <span
         className={cn(
           "font-extrabold numeric",
-          compact ? "text-[22px] leading-7" : "text-[36px] leading-[44px]",
+          compact ? "text-[22px] leading-7" : "text-[36px] leading-[1.1]",
           compact && tone.ink,
         )}
       >

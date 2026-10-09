@@ -90,29 +90,37 @@ export const labels = {
     noInterval: "Non fourni par le modèle",
   },
   dashboard: {
+    /** Accueil de la maquette v2 (écrans 01 et 26, ADR 0070). */
+    title: "Accueil",
+    greeting: (name: string) => `Bonjour ${name}`,
+    newSale: "Nouvelle vente",
     revenueToday: "Vendu aujourd'hui",
-    revenueMonth: "Vendu ce mois",
-    marginMonth: "Gagné sur les ventes ce mois",
-    salesToday: "Ventes du jour",
+    salesCount: (count: number) => `${count} vente${count > 1 ? "s" : ""}`,
+    cash: "Dans la caisse",
+    cashHint: "Espèces et mobile money",
     receivables: "Les clients vous doivent",
-    stockAlerts: "Alertes de stock",
-    stockAlertsHint: (count: number) =>
-      count === 0 ? "Aucun article sous le seuil" : "Articles sous le seuil ou en rupture",
-    monthHint: (from: string, to: string) => `Du ${from} au ${to}`,
-    revenueTrend: "Vos ventes des 30 derniers jours",
-    revenueTrendLabel: "Vendu par jour sur les 30 derniers jours",
+    receivablesShort: "On vous doit",
+    receivablesHint: (count: number) => `${count} client${count > 1 ? "s" : ""} · Encaisser`,
+    stockWatch: "Stock à surveiller",
+    stockWatchShort: "À surveiller",
+    stockCount: (count: number) => `${count} article${count > 1 ? "s" : ""}`,
+    stockHint: "Bientôt épuisés",
+    week: "Vos ventes des 7 derniers jours",
+    weekLabel: "Vendu par jour sur les 7 derniers jours",
+    weekTotal: "Total :",
+    today: "Aujourd'hui",
+    watch: "À surveiller",
+    watchLeft: (qty: string) => `Plus que ${qty}`,
+    watchOut: "Épuisé",
+    watchDebt: (amount: string, days: number) =>
+      days === 0
+        ? `Doit ${amount} depuis aujourd'hui`
+        : `Doit ${amount} depuis ${days} jour${days > 1 ? "s" : ""}`,
+    nothingToWatch: "Rien à surveiller pour l'instant.",
     recentSales: "Dernières ventes",
-    noRecentSales: "Aucune vente confirmée pour l'instant.",
+    seeAll: "Tout voir",
+    noRecentSales: "Aucune vente pour l'instant.",
     anonymousCustomer: "Client de passage",
-    computedAt: (at: string) => `Chiffres calculés le ${at}`,
-    seeAllSales: "Toutes les ventes",
-    alerts: "Alertes",
-    stockAlertBanner: (count: number) =>
-      count > 1
-        ? `${count} articles sous le seuil d'alerte ou en rupture`
-        : "1 article sous le seuil d'alerte ou en rupture",
-    seeStock: "Voir le stock",
-    alertGroup: (title: string, count: number) => `${title} (${count})`,
     outboxLag: "Certains chiffres se mettent à jour, patientez une minute.",
   },
   common: {

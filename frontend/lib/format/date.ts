@@ -44,3 +44,40 @@ export function formatDateTime(value: string | null | undefined, timeZone = "UTC
   if (Number.isNaN(date.getTime())) return "—";
   return formatter(timeZone, true).format(date).replace(",", "");
 }
+
+function parts(value: string, timeZone: string, options: Intl.DateTimeFormatOptions) {
+  return new Intl.DateTimeFormat("fr-FR", { timeZone, ...options }).formatToParts(new Date(value));
+}
+
+/** Heure de la maquette v2 : « 10 h 42 », « 9 h 58 », dans le fuseau de l'entreprise. */
+export function formatClock(value: string | null | undefined, timeZone = "UTC"): string {
+  if (!value || Number.isNaN(new Date(value).getTime())) return "—";
+  const found = parts(value, timeZone, { hour: "numeric", minute: "2-digit", hourCycle: "h23" });
+  const hour = found.find((part) => part.type === "hour")?.value ?? "";
+  const minute = found.find((part) => part.type === "minute")?.value ?? "";
+  return `${Number(hour)} h ${minute}`;
+}
+
+const capitalise = (text: string) => text.charAt(0).toLocaleUpperCase("fr-FR") + text.slice(1);
+
+/** Jour calendaire (« 2026-10-06 ») en toutes lettres : « Mardi 6 octobre ». */
+export function formatDayLong(day: string): string {
+  const match = DATE_ONLY.exec(day);
+  if (!match) return "—";
+  const text = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "UTC",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(new Date(`${day}T12:00:00Z`));
+  return capitalise(text);
+}
+
+/** Jour de la semaine abrégé sous une barre de graphique : « Mer », « Jeu ». */
+export function formatWeekdayShort(day: string): string {
+  if (!DATE_ONLY.test(day)) return "—";
+  const text = new Intl.DateTimeFormat("fr-FR", { timeZone: "UTC", weekday: "short" }).format(
+    new Date(`${day}T12:00:00Z`),
+  );
+  return capitalise(text.replace(".", ""));
+}
