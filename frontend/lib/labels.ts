@@ -633,6 +633,37 @@ export const labels = {
     sac: "sac",
     bouteille: "bouteille",
   },
+  /** Écrans Stock de la maquette v2 (07 à 12, ADR 0071). */
+  stockScreens: {
+    list: {
+      title: "Stock",
+      summary: (count: string, value: string) => [
+        count,
+        "· votre stock vaut",
+        value,
+        "au prix d'achat",
+      ],
+      count: (count: number) => `${count} article${count > 1 ? "s" : ""}`,
+      newArticle: "Nouvel article",
+      receive: "Recevoir une livraison",
+      adjust: "Corriger le stock",
+      shelves: "Gérer les rayons",
+      search: "Chercher un article ou scanner son code",
+      searchLabel: "Chercher un article",
+      filters: "Filtrer les articles",
+      all: "Tous",
+      low: (count: number) => `Bientôt épuisés (${count})`,
+      out: (count: number) => `Épuisés (${count})`,
+      sold: (shelf: string | null, price: string) =>
+        shelf ? `${shelf} · vendu ${price}` : `vendu ${price}`,
+      left: (qty: string) => `Plus que ${qty}`,
+      outText: "Épuisé",
+      level: (name: string, percent: number) => `Niveau de ${name} : ${percent} %`,
+      empty: "Aucun article ici",
+      emptyHint: "Changez de filtre ou de recherche.",
+      journal: "Tous les mouvements",
+    },
+  },
   products: {
     count: (count: number) => `${count} produit${count > 1 ? "s" : ""}`,
     add: "Ajouter un produit",

@@ -6,6 +6,7 @@ const category = (id: string, name: string, parent_id: string | null = null): Ca
   id,
   name,
   parent_id,
+  color: null,
   created_at: "2026-09-30T00:00:00Z",
 });
 
