@@ -15,11 +15,17 @@ from app.core.errors import NotFoundError
 from app.core.tenancy import TenantContext
 from app.modules.companies.models import Company
 from app.modules.companies.repository import CompanyRepository
-from app.modules.companies.schemas import DEFAULT_REORDER_POINT, DEFAULT_TAX_RATE, CompanyUpdate
+from app.modules.companies.schemas import (
+    DEFAULT_REORDER_POINT,
+    DEFAULT_TAX_RATE,
+    SHOP_FIELDS,
+    CompanyUpdate,
+)
 
 #: Modifier ces champs change l'interprétation de toutes les données suivantes :
-#: devise, fuseau, TVA, seuils. L'audit critique est donc obligatoire.
-SENSITIVE_FIELDS = ("currency", "timezone", "settings")
+#: devise, fuseau, TVA, seuils ; ou ce que les reçus attestent : identifiants fiscaux et
+#: coordonnées de la boutique (ADR 0070). L'audit critique est donc obligatoire.
+SENSITIVE_FIELDS = ("currency", "timezone", "settings", *SHOP_FIELDS)
 
 
 def create_company(

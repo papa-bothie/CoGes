@@ -30,10 +30,13 @@ from app.modules.dashboard.schemas import (
     ACTIVE_ALERTS,
     RECENT_SALES,
     REVENUE_TREND_DAYS,
+    WATCH_STOCK,
     ActiveAlert,
     Dashboard,
     RecentSale,
     RevenuePoint,
+    WatchDebt,
+    WatchStock,
 )
 from app.modules.finance import service as finance_service
 from app.modules.inventory import service as inventory_service
@@ -120,7 +123,20 @@ def _compose(session: Session, ctx: TenantContext) -> Dashboard:
         estimated_margin_month=to_amount(margin_month),
         sales_today=sales_today,
         receivables_open=to_amount(debts["customer"]),
+        receivables_customer_count=finance_service.open_customer_count(session, ctx),
         stock_alert_count=inventory_service.stock_alert_count(session, ctx),
+        cash_on_hand=to_amount(finance_service.cash_on_hand(session, ctx)),
+        watch_stock=[
+            WatchStock(
+                product_id=item.product_id,
+                name=item.name,
+                unit=item.unit,
+                qty_on_hand=item.qty_on_hand,
+                status=item.status,
+            )
+            for item in inventory_service.stock_to_watch(session, ctx, limit=WATCH_STOCK)
+        ],
+        watch_debt=_watch_debt(session, ctx, today=today, zone=zone),
         revenue_trend=_trend(by_day, trend_from, today),
         recent_sales=_recent_sales(session, ctx),
         active_alerts=_active_alerts(session, ctx),
@@ -143,23 +159,45 @@ def _trend(by_day: dict[date, Decimal], period_from: date, period_to: date) -> l
 
 
 def _recent_sales(session: Session, ctx: TenantContext) -> list[RecentSale]:
-    """Cinq dernières ventes confirmées, client nommé."""
-    sales, _, _ = sales_service.list_sales(
+    """Cinq dernières ventes confirmées, client nommé, avec leur état de paiement."""
+    sales, _, returned = sales_service.list_sales(
         session, ctx, page=1, page_size=RECENT_SALES, status="confirmed"
-    )
-    names = customers_service.names_by_ids(
-        session, ctx, [sale.customer_id for sale in sales if sale.customer_id is not None]
     )
     return [
         RecentSale(
-            id=sale.id,
-            sale_no=sale.sale_no,
-            customer_name=None if sale.customer_id is None else names.get(sale.customer_id),
-            total=to_amount(sale.total),
-            sold_at=sale.sold_at,
+            id=read.id,
+            sale_no=read.sale_no,
+            customer_name=read.customer_name,
+            total=to_amount(read.total),
+            sold_at=read.sold_at,
+            status=read.status,
+            balance=read.balance,
+            debt_status=read.debt_status,
+            has_returns=read.has_returns,
+            returned_total=read.returned_total,
         )
-        for sale in sales
+        for read in sales_service.build_page(session, ctx, sales, returned)
     ]
+
+
+def _watch_debt(
+    session: Session, ctx: TenantContext, *, today: date, zone: ZoneInfo
+) -> WatchDebt | None:
+    """La plus grosse dette client, et depuis combien de jours elle court."""
+    largest = finance_service.largest_open_customer_debt(session, ctx)
+    if largest is None:
+        return None
+    name = customers_service.names_by_ids(session, ctx, [largest.customer_id]).get(
+        largest.customer_id
+    )
+    if name is None:
+        return None
+    return WatchDebt(
+        customer_id=largest.customer_id,
+        customer_name=name,
+        balance=to_amount(largest.balance),
+        days=max(0, (today - largest.oldest_open_at.astimezone(zone).date()).days),
+    )
 
 
 def _active_alerts(session: Session, ctx: TenantContext) -> list[ActiveAlert]:

@@ -7,7 +7,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Row, exists, func, select
+from sqlalchemy import ColumnElement, Row, case, exists, func, select
 from sqlalchemy.orm import aliased
 
 from app.core.repository import TenantRepository
@@ -187,6 +187,18 @@ class PaymentRepository(TenantRepository[Payment]):
         for direction, total in self.session.execute(stmt):
             totals[direction] = Decimal(total)
         return totals
+
+    def cash_balance(self) -> Decimal:
+        """Tout ce qui est entré moins tout ce qui est sorti, depuis le début (ADR 0070).
+
+        Même règle que la trésorerie (`_counts_as_cash`) : ni compensation, ni paiement
+        annulé, ni annulation.
+        """
+        signed = case((Payment.direction == "inflow", Payment.amount), else_=-Payment.amount)
+        stmt = select(func.coalesce(func.sum(signed), 0)).where(
+            Payment.company_id == self.ctx.company_id, *_counts_as_cash()
+        )
+        return Decimal(self.session.execute(stmt).scalar_one())
 
     def paid_by_expenses(self, expense_ids: Sequence[UUID]) -> dict[UUID, Decimal]:
         """Décaissé par dépense, hors paiements annulés et annulations (ADR 0053)."""
@@ -412,6 +424,36 @@ class DebtRepository(TenantRepository[Debt]):
             .limit(limit)
         )
         return self.session.execute(stmt).scalars().all()
+
+    def open_customer_count(self) -> int:
+        """Nombre de clients qui ont au moins une dette ouverte."""
+        stmt = select(func.count(func.distinct(Debt.customer_id))).where(
+            Debt.company_id == self.ctx.company_id,
+            Debt.party_type == "customer",
+            Debt.status.in_(OPEN_STATUSES),
+        )
+        return int(self.session.execute(stmt).scalar_one())
+
+    def largest_open_customer_debt(self) -> tuple[UUID, Decimal, datetime] | None:
+        """Le client qui doit le plus : son encours et sa plus ancienne dette ouverte."""
+        total = func.sum(Debt.balance)
+        stmt = (
+            select(Debt.customer_id, total, func.min(Debt.created_at))
+            .where(
+                Debt.company_id == self.ctx.company_id,
+                Debt.party_type == "customer",
+                Debt.customer_id.is_not(None),
+                Debt.status.in_(OPEN_STATUSES),
+            )
+            .group_by(Debt.customer_id)
+            .having(total > 0)
+            .order_by(total.desc(), func.min(Debt.created_at), Debt.customer_id)
+            .limit(1)
+        )
+        row = self.session.execute(stmt).first()
+        if row is None or row[0] is None:
+            return None
+        return row[0], Decimal(row[1]), row[2]
 
     def open_totals_by_party(self) -> dict[str, Decimal]:
         """Créances clients et dettes fournisseurs encore ouvertes, à l'instant t.

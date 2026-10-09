@@ -136,3 +136,65 @@ def test_the_sale_customer_list_never_shows_another_company(
     ).json()
     mine = [item for item in own["items"] if item["id"] == foreign]
     assert mine and mine[0]["open_debt"] != "0.00"
+
+
+def test_the_sales_search_by_name_never_finds_another_company(
+    api_client: TestClient, alpha_token: str, beta_token: str
+) -> None:
+    """`GET /sales?search=` (ADR 0070) cherche les clients du tenant, jamais ceux d'autrui.
+
+    Le nom est rare : la recherche par trigrammes trouverait sinon, chez alpha, ses
+    propres clients au nom voisin (« Client … »), ce qui n'est pas une fuite.
+    """
+    product_id = _stocked_product(api_client, beta_token)
+    name = f"Zéphyrine Kouyaté {uuid4().hex[:6]}"
+    customer = api_client.post(
+        "/api/v1/customers", headers=auth_headers(beta_token), json={"name": name}
+    )
+    assert customer.status_code == 201, customer.text
+    sale: dict[str, Any] = api_client.post(
+        "/api/v1/sales",
+        headers=auth_headers(beta_token),
+        json={"customer_id": customer.json()["id"]},
+    ).json()
+    api_client.post(
+        f"/api/v1/sales/{sale['id']}/items",
+        headers=auth_headers(beta_token),
+        json={"product_id": product_id, "qty": "1"},
+    )
+    confirmed = api_client.post(
+        f"/api/v1/sales/{sale['id']}/confirm",
+        headers=write_headers(beta_token),
+        json={"paid_amount": "500", "method": "cash"},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+
+    seen_by_alpha = api_client.get(
+        "/api/v1/sales", headers=auth_headers(alpha_token), params={"search": name}
+    )
+    assert seen_by_alpha.status_code == 200
+    assert sale["id"] not in {item["id"] for item in seen_by_alpha.json()["items"]}
+
+    seen_by_beta = api_client.get(
+        "/api/v1/sales", headers=auth_headers(beta_token), params={"search": name}
+    )
+    assert sale["id"] in {item["id"] for item in seen_by_beta.json()["items"]}
+
+
+def test_day_totals_count_only_the_readers_sales(
+    api_client: TestClient, alpha_token: str, beta_token: str
+) -> None:
+    """`GET /sales/day-totals` (ADR 0070) : une vente de beta ne change rien chez alpha."""
+    window = {"date_from": "2000-01-01T00:00:00Z", "date_to": "2100-01-01T00:00:00Z"}
+
+    def counts(token: str) -> int:
+        response = api_client.get(
+            "/api/v1/sales/day-totals", headers=auth_headers(token), params=window
+        )
+        assert response.status_code == 200, response.text
+        return sum(item["sale_count"] for item in response.json()["items"])
+
+    alpha_before, beta_before = counts(alpha_token), counts(beta_token)
+    _customer_with_debt(api_client, beta_token, _stocked_product(api_client, beta_token))
+    assert counts(alpha_token) == alpha_before
+    assert counts(beta_token) == beta_before + 1

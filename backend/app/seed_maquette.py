@@ -43,6 +43,8 @@ from app.core.tenancy import TenantContext, tenant_transaction
 from app.modules.analytics import service as analytics_service
 from app.modules.categories import service as categories_service
 from app.modules.categories.schemas import CategoryCreate
+from app.modules.companies import service as companies_service
+from app.modules.companies.schemas import CompanyUpdate
 from app.modules.customers import service as customers_service
 from app.modules.customers.schemas import CustomerCreate
 from app.modules.expenses import service as expenses_service
@@ -469,9 +471,23 @@ def _with_permissions(ctx: TenantContext, user_id: UUID) -> TenantContext:
     return TenantContext(user_id=user_id, company_id=ctx.company_id, permissions=frozenset(codes))
 
 
+#: Coordonnées de la boutique, comme sur le reçu et la facture de la maquette (05, 05b).
+SHOP_DETAILS = CompanyUpdate(
+    address="Marché HLM 5, Dakar",
+    phone="77 123 45 67",
+    wave_number="77 123 45 67",
+    ninea="0012345678",
+    rc="SN-DKR-2024-A-1234",
+    receipt_footer=(
+        "Merci de votre visite ! Les articles ne sont ni repris ni échangés après 7 jours."
+    ),
+)
+
+
 def _fill(manager: TenantContext, plan: list[PlannedSale], *, slug: str, password: str) -> Shop:
     manager = _with_permissions(manager, manager.user_id)
     with tenant_transaction(manager) as session:
+        companies_service.update_current_company(session, manager, SHOP_DETAILS)
         role_id = rbac_service.system_role_id(session, manager, SALESPERSON)
         roles = [] if role_id is None else [role_id]
         modou = users_service.create_user(
@@ -1009,7 +1025,7 @@ _RESTAMP_SQL = (
     """
     UPDATE audit_logs SET occurred_at = :opening
     WHERE company_id = :co
-        AND entity_table IN ('product_prices', 'users', 'user_roles', 'roles');
+        AND entity_table IN ('product_prices', 'users', 'user_roles', 'roles', 'companies');
     """,
     # Outbox : l'heure de l'événement qu'elle porte.
     """

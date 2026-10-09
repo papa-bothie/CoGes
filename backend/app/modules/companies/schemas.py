@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 #: Réglages booléens connus ; absents, ils valent « activé » (ADR 0022, 0036).
 BOOLEAN_SETTINGS = ("tax_enabled", "intelligence_enabled")
@@ -61,6 +61,17 @@ def _checked_reorder_point(value: Any) -> str | None:
     return str(number)
 
 
+#: Coordonnées de la boutique (révision 0016) → longueur maximale, comme en base.
+SHOP_FIELDS: dict[str, int] = {
+    "address": 200,
+    "phone": 30,
+    "wave_number": 30,
+    "ninea": 30,
+    "rc": 40,
+    "receipt_footer": 300,
+}
+
+
 class CompanyRead(BaseModel):
     """Vue publique de l'entreprise courante."""
 
@@ -72,6 +83,12 @@ class CompanyRead(BaseModel):
     currency: str
     timezone: str
     settings: dict[str, Any]
+    address: str | None
+    phone: str | None
+    wave_number: str | None
+    ninea: str | None
+    rc: str | None
+    receipt_footer: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -87,6 +104,22 @@ class CompanyUpdate(BaseModel):
     #: Remplace l'objet entier : l'appelant renvoie les clés qu'il ne modifie pas. Les
     #: réglages connus sont vérifiés ; les autres sont conservés tels quels.
     settings: dict[str, Any] | None = None
+    #: Coordonnées imprimées sur le reçu. `null` ou une chaîne vide les efface.
+    address: str | None = Field(default=None, max_length=SHOP_FIELDS["address"])
+    phone: str | None = Field(default=None, max_length=SHOP_FIELDS["phone"])
+    wave_number: str | None = Field(default=None, max_length=SHOP_FIELDS["wave_number"])
+    ninea: str | None = Field(default=None, max_length=SHOP_FIELDS["ninea"])
+    rc: str | None = Field(default=None, max_length=SHOP_FIELDS["rc"])
+    receipt_footer: str | None = Field(default=None, max_length=SHOP_FIELDS["receipt_footer"])
+
+    @field_validator(*SHOP_FIELDS, mode="before")
+    @classmethod
+    def _blank_is_none(cls, value: Any) -> Any:
+        # Une ligne vide ne s'imprime pas : elle s'enregistre comme absente.
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
 
     @model_validator(mode="after")
     def _check_settings(self) -> Self:

@@ -2427,7 +2427,7 @@
           "sales"
         ],
         "summary": "List Sales",
-        "description": "Ventes de la plus récente à la plus ancienne, filtrables.\n\n`search` cherche un **numéro exact** : un numéro se dicte et se retrouve\nentier, une recherche approximative n'y aiderait personne.",
+        "description": "Ventes de la plus récente à la plus ancienne, filtrables.\n\n`search` trouve un **numéro exact** (« V-001044 » ou « 1044 ») ou le nom d'un client ;\n`state` : payées, pas encore payées, avec retour, annulées (ADR 0070).",
         "operationId": "list_sales_api_v1_sales_get",
         "parameters": [
           {
@@ -2527,13 +2527,30 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 120
                 },
                 {
                   "type": "null"
                 }
               ],
               "title": "Search"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SalePaymentState"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
             }
           }
         ],
@@ -2618,6 +2635,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CustomerChoicePage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sales/day-totals": {
+      "get": {
+        "tags": [
+          "sales"
+        ],
+        "summary": "Day Totals",
+        "description": "Nombre et total des ventes confirmées par jour, en tête de chaque groupe de la liste.\n\nDéclarée avant `/{sale_id}` : sinon ce chemin serait lu comme un identifiant.",
+        "operationId": "day_totals_api_v1_sales_day_totals_get",
+        "parameters": [
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "title": "Date To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaleDayTotals"
                 }
               }
             }
@@ -5881,6 +5952,72 @@
             "type": "object",
             "title": "Settings"
           },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "wave_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wave Number"
+          },
+          "ninea": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ninea"
+          },
+          "rc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rc"
+          },
+          "receipt_footer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Footer"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -5901,6 +6038,12 @@
           "currency",
           "timezone",
           "settings",
+          "address",
+          "phone",
+          "wave_number",
+          "ninea",
+          "rc",
+          "receipt_footer",
           "created_at",
           "updated_at"
         ],
@@ -5958,6 +6101,78 @@
               }
             ],
             "title": "Settings"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "wave_number": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wave Number"
+          },
+          "ninea": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ninea"
+          },
+          "rc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rc"
+          },
+          "receipt_footer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Footer"
           }
         },
         "additionalProperties": false,
@@ -6347,9 +6562,33 @@
           "receivables_open": {
             "$ref": "#/components/schemas/Amount-Output"
           },
+          "receivables_customer_count": {
+            "type": "integer",
+            "title": "Receivables Customer Count"
+          },
           "stock_alert_count": {
             "type": "integer",
             "title": "Stock Alert Count"
+          },
+          "cash_on_hand": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "watch_stock": {
+            "items": {
+              "$ref": "#/components/schemas/WatchStock"
+            },
+            "type": "array",
+            "title": "Watch Stock"
+          },
+          "watch_debt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WatchDebt"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "revenue_trend": {
             "items": {
@@ -6394,7 +6633,11 @@
           "estimated_margin_month",
           "sales_today",
           "receivables_open",
+          "receivables_customer_count",
           "stock_alert_count",
+          "cash_on_hand",
+          "watch_stock",
+          "watch_debt",
           "revenue_trend",
           "recent_sales",
           "active_alerts",
@@ -9890,13 +10133,85 @@
           "currency": {
             "type": "string",
             "title": "Currency"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "wave_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wave Number"
+          },
+          "ninea": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ninea"
+          },
+          "rc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rc"
+          },
+          "receipt_footer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Footer"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
           "name",
-          "currency"
+          "currency",
+          "address",
+          "phone",
+          "wave_number",
+          "ninea",
+          "rc",
+          "receipt_footer"
         ],
         "title": "ReceiptCompany",
         "description": "En-tête du reçu : qui vend."
@@ -9922,6 +10237,17 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
           }
         },
         "additionalProperties": false,
@@ -9929,7 +10255,8 @@
         "required": [
           "id",
           "code",
-          "name"
+          "name",
+          "phone"
         ],
         "title": "ReceiptCustomer",
         "description": "Client du reçu, absent sur une vente au comptoir."
@@ -10028,6 +10355,17 @@
               }
             ]
           },
+          "seller_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seller Name"
+          },
           "lines": {
             "items": {
               "$ref": "#/components/schemas/ReceiptLine"
@@ -10071,6 +10409,7 @@
           "confirmed_at",
           "company",
           "customer",
+          "seller_name",
           "lines",
           "subtotal",
           "discount_total",
@@ -10112,6 +10451,29 @@
             "type": "string",
             "format": "date-time",
             "title": "Sold At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SaleStatus"
+          },
+          "balance": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "debt_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DebtStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "has_returns": {
+            "type": "boolean",
+            "title": "Has Returns"
+          },
+          "returned_total": {
+            "$ref": "#/components/schemas/Amount-Output"
           }
         },
         "additionalProperties": false,
@@ -10121,7 +10483,12 @@
           "sale_no",
           "customer_name",
           "total",
-          "sold_at"
+          "sold_at",
+          "status",
+          "balance",
+          "debt_status",
+          "has_returns",
+          "returned_total"
         ],
         "title": "RecentSale",
         "description": "Une vente récente, réduite à ce qu'une liste d'accueil montre."
@@ -10521,6 +10888,49 @@
         "title": "SaleCreate",
         "description": "Ouverture d'un brouillon. Aucun effet de bord (§ 5.1)."
       },
+      "SaleDayTotal": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "sale_count": {
+            "type": "integer",
+            "title": "Sale Count"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Amount-Output"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "day",
+          "sale_count",
+          "total"
+        ],
+        "title": "SaleDayTotal",
+        "description": "Ventes confirmées d'un jour, dans le fuseau de l'entreprise (ADR 0070)."
+      },
+      "SaleDayTotals": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SaleDayTotal"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "SaleDayTotals",
+        "description": "Totaux par jour de la liste des ventes, du plus récent au plus ancien. Un jour sans\nvente confirmée est absent : la liste n'affiche pas de groupe vide."
+      },
       "SaleDetail": {
         "properties": {
           "id": {
@@ -10633,6 +11043,21 @@
             ],
             "title": "Cancelled At"
           },
+          "item_count": {
+            "type": "integer",
+            "title": "Item Count"
+          },
+          "seller_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seller Name"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/SaleItemRead"
@@ -10679,6 +11104,8 @@
           "cancel_reason",
           "confirmed_at",
           "cancelled_at",
+          "item_count",
+          "seller_name",
           "items",
           "payments",
           "debt"
@@ -10865,6 +11292,15 @@
         ],
         "title": "SalePage"
       },
+      "SalePaymentState": {
+        "type": "string",
+        "enum": [
+          "paid",
+          "unpaid",
+          "returned",
+          "cancelled"
+        ]
+      },
       "SaleQty": {
         "$ref": "#/components/schemas/Quantity-Input",
         "gt": "0"
@@ -10980,6 +11416,10 @@
               }
             ],
             "title": "Cancelled At"
+          },
+          "item_count": {
+            "type": "integer",
+            "title": "Item Count"
           }
         },
         "additionalProperties": false,
@@ -11002,7 +11442,8 @@
           "returned_total",
           "cancel_reason",
           "confirmed_at",
-          "cancelled_at"
+          "cancelled_at",
+          "item_count"
         ],
         "title": "SaleRead",
         "description": "Vente en liste : l'en-tête, sans ses lignes."
@@ -12127,6 +12568,70 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WatchDebt": {
+        "properties": {
+          "customer_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Customer Id"
+          },
+          "customer_name": {
+            "type": "string",
+            "title": "Customer Name"
+          },
+          "balance": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "days": {
+            "type": "integer",
+            "title": "Days"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "customer_id",
+          "customer_name",
+          "balance",
+          "days"
+        ],
+        "title": "WatchDebt",
+        "description": "Le client qui doit le plus, et depuis quand (« Doit 25 000 F depuis 12 jours »)."
+      },
+      "WatchStock": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "qty_on_hand": {
+            "$ref": "#/components/schemas/Quantity-Output"
+          },
+          "status": {
+            "$ref": "#/components/schemas/StockStatus"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "name",
+          "unit",
+          "qty_on_hand",
+          "status"
+        ],
+        "title": "WatchStock",
+        "description": "Un article à surveiller : sous son seuil ou épuisé (« Plus que 2 sacs »)."
       }
     }
   }

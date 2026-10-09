@@ -11,7 +11,7 @@ la TVA de l'entreprise, le coût du CMP, et les totaux sont produits par la base
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
@@ -34,6 +34,10 @@ RETURN_REASON_MAX_LENGTH = 500
 #: Les trois valeurs de l'ENUM `sale_status` (§ 8.1). « Retournée » n'en est pas
 #: une : c'est une information dérivée, exposée par `has_returns`.
 type SaleStatus = Literal["draft", "confirmed", "cancelled"]
+
+#: Filtre « état » de la liste des ventes (maquette v2, écran 03, ADR 0070). Dérivé :
+#: payée (plus rien à payer), pas encore payée (un reste), avec retour, annulée.
+type SalePaymentState = Literal["paid", "unpaid", "returned", "cancelled"]
 
 #: Bornes des `CHECK` du § 8.4, doublées côté schéma : le client reçoit un 422 qui
 #: nomme le champ, la base reste l'autorité pour qui n'entre pas par l'API.
@@ -185,11 +189,15 @@ class SaleRead(BaseModel):
     cancel_reason: str | None
     confirmed_at: datetime | None
     cancelled_at: datetime | None
+    #: Nombre de lignes (« 3 articles » dans la liste, ADR 0070).
+    item_count: int
 
 
 class SaleDetail(SaleRead):
     """Vente complète : en-tête, lignes, règlements et dette éventuelle."""
 
+    #: Nom de l'utilisateur qui a saisi la vente (« servie par Fatou », ADR 0070).
+    seller_name: str | None
     items: list[SaleItemRead]
     payments: list[PaymentRead]
     debt: DebtRead | None
@@ -230,6 +238,26 @@ class SalePage(BaseModel):
     total: int
 
 
+class SaleDayTotal(BaseModel):
+    """Ventes confirmées d'un jour, dans le fuseau de l'entreprise (ADR 0070)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    day: date
+    sale_count: int
+    #: Total vendu, tel que confirmé : ni les retours ni les annulations n'y entrent.
+    total: Amount
+
+
+class SaleDayTotals(BaseModel):
+    """Totaux par jour de la liste des ventes, du plus récent au plus ancien. Un jour sans
+    vente confirmée est absent : la liste n'affiche pas de groupe vide."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[SaleDayTotal]
+
+
 class ReceiptCompany(BaseModel):
     """En-tête du reçu : qui vend."""
 
@@ -237,6 +265,13 @@ class ReceiptCompany(BaseModel):
 
     name: str
     currency: str
+    #: Coordonnées de la boutique (révision 0016) ; absentes, la ligne ne s'imprime pas.
+    address: str | None
+    phone: str | None
+    wave_number: str | None
+    ninea: str | None
+    rc: str | None
+    receipt_footer: str | None
 
 
 class ReceiptCustomer(BaseModel):
@@ -247,6 +282,8 @@ class ReceiptCustomer(BaseModel):
     id: UUID
     code: str | None
     name: str
+    #: Pour envoyer le reçu par WhatsApp (ADR 0070).
+    phone: str | None
 
 
 class ReceiptLine(BaseModel):
@@ -282,6 +319,8 @@ class ReceiptRead(BaseModel):
     confirmed_at: datetime | None
     company: ReceiptCompany
     customer: ReceiptCustomer | None
+    #: « Servi par » : l'utilisateur qui a saisi la vente.
+    seller_name: str | None
     lines: list[ReceiptLine]
     subtotal: Amount
     discount_total: Amount
