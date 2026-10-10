@@ -551,6 +551,9 @@ export const labels = {
       why: "Pourquoi ?",
       submit: "Valider la correction",
       done: "Stock corrigé.",
+      doneLine: (name: string, qty: string, reason: string) =>
+        `${name} : ${qty} maintenant (${reason}).`,
+      nothing: "Aucun article suivi en stock.",
       change: "Changer d'article",
     },
     reasons: {
