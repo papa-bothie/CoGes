@@ -71,6 +71,8 @@ export function DeliveryForm({ productId }: { productId?: string }) {
   const [method, setMethod] = useState<Method>("cash");
   const [dueDays, setDueDays] = useState<(typeof DUE_DAYS)[number]>(15);
   const [creating, setCreating] = useState(false);
+  // Le fournisseur créé ici reste choisi même s'il n'est pas parmi les 100 premiers.
+  const [created, setCreated] = useState<{ id: string; name: string } | null>(null);
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -96,7 +98,7 @@ export function DeliveryForm({ productId }: { productId?: string }) {
     },
   });
   const prefill = useQuery({
-    queryKey: queryKeys.stock.forProducts(productId ? [productId] : []),
+    queryKey: queryKeys.stock.list({ delivery: "prefill", product_id: productId }),
     enabled: Boolean(productId),
     queryFn: () =>
       unwrap(
@@ -133,7 +135,11 @@ export function DeliveryForm({ productId }: { productId?: string }) {
 
   const total = lines.reduce((sum, line) => sum + lineTotal(line), 0n);
   const paidAmount = typedAmount(paid);
-  const supplier = suppliers.data?.items.find((item) => item.id === supplierId);
+  const supplierChoices = [
+    ...(suppliers.data?.items ?? []),
+    ...(created && !suppliers.data?.items.some((item) => item.id === created.id) ? [created] : []),
+  ];
+  const supplier = supplierChoices.find((item) => item.id === supplierId);
   const validLines = lines.filter((line) => {
     const qty = parseDecimalInput(line.qty);
     return qty !== null && compareDecimal(qty, "0") === 1 && line.cost !== "";
@@ -231,7 +237,7 @@ export function DeliveryForm({ productId }: { productId?: string }) {
               <Skeleton className="h-12 w-full" />
             ) : (
               <div role="group" aria-labelledby="who" className="flex flex-wrap gap-2">
-                {suppliers.data?.items.map((item) => (
+                {supplierChoices.map((item) => (
                   <Chip
                     key={item.id}
                     rubrique="stock"
@@ -487,6 +493,7 @@ export function DeliveryForm({ productId }: { productId?: string }) {
         onOpenChange={setCreating}
         onSaved={(saved) => {
           void queryClient.invalidateQueries({ queryKey: queryKeys.suppliers.all });
+          setCreated({ id: saved.person.id, name: saved.person.name });
           setSupplierId(saved.person.id);
         }}
       />

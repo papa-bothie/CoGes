@@ -65,7 +65,7 @@ export function CategoriesView() {
     <div className="mx-auto flex max-w-[932px] flex-col gap-5">
       <Link
         href="/products"
-        className="inline-flex min-h-11 items-center gap-2 self-start font-bold text-foreground hover:underline"
+        className="inline-flex min-h-11 items-center gap-2 self-start font-bold text-foreground hover:underline pointer-coarse:min-h-12"
       >
         <ArrowLeft className="size-[22px]" aria-hidden />
         {t.back}

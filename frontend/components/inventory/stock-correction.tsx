@@ -90,12 +90,29 @@ export function StockCorrection({ productId }: { productId?: string }) {
     queryFn: () =>
       unwrap(api.GET("/api/v1/inventory/stock", { params: { query: { page_size: 100 } } })),
   });
-  const lines = (stock.data?.items ?? []).filter((line) => line.is_stock_tracked !== false);
+  // L'article venu de sa fiche peut être au-delà des 100 premiers : on le lit à part.
+  const asked = useQuery({
+    queryKey: queryKeys.stock.list({ correction: true, product_id: productId }),
+    enabled: Boolean(productId),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/inventory/stock", {
+          params: { query: { product_id: productId ? [productId] : [] } },
+        }),
+      ),
+  });
+  const listed = stock.data?.items ?? [];
+  const extra = (asked.data?.items ?? []).filter(
+    (item) => !listed.some((other) => other.product_id === item.product_id),
+  );
+  const lines = [...extra, ...listed].filter((line) => line.is_stock_tracked !== false);
   // D'office, le premier article qui a encore du stock : « Moins 1 » doit pouvoir partir.
-  const line =
-    lines.find((item) => item.product_id === pickedId) ??
-    lines.find((item) => item.status !== "out") ??
-    lines[0];
+  const loading = stock.isPending || asked.isLoading;
+  const line = loading
+    ? undefined
+    : (lines.find((item) => item.product_id === pickedId) ??
+      lines.find((item) => item.status !== "out") ??
+      lines[0]);
 
   const parsed = parseDecimalInput(qty);
   const positive = parsed !== null && compareDecimal(parsed, "0") === 1;
@@ -169,7 +186,7 @@ export function StockCorrection({ productId }: { productId?: string }) {
           <p id="which" className="px-2.5 pt-2 pb-1 text-libelle">
             {t.whichProduct}
           </p>
-          {stock.isPending ? (
+          {loading ? (
             <Skeleton className="h-72 w-full" />
           ) : (
             <div role="radiogroup" aria-labelledby="which">
@@ -376,7 +393,7 @@ export function StockCorrection({ productId }: { productId?: string }) {
               </button>
             </>
           ) : (
-            !stock.isPending && <p className="text-muted-foreground">{t.nothing}</p>
+            !loading && <p className="text-muted-foreground">{t.nothing}</p>
           )}
         </section>
       </div>
