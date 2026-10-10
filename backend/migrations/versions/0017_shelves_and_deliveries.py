@@ -74,8 +74,10 @@ def downgrade() -> None:
     op.execute("ALTER TABLE inventory_movements DISABLE TRIGGER USER")
     op.execute("ALTER TABLE inventory_movements NO FORCE ROW LEVEL SECURITY")
     op.execute(
-        "UPDATE inventory_movements SET ref_type = NULL, ref_id = NULL "
-        "WHERE ref_type = 'supplier_debt'"
+        """
+        UPDATE inventory_movements SET ref_type = NULL, ref_id = NULL
+        WHERE ref_type = 'supplier_debt'
+        """
     )
     op.execute("ALTER TABLE inventory_movements FORCE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE inventory_movements ENABLE TRIGGER USER")
