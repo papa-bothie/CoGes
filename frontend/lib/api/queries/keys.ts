@@ -42,6 +42,15 @@ export const queryKeys = {
     list: (params: Record<string, unknown>) => ["customers", "list", params] as const,
     detail: (id: string) => ["customers", "detail", id] as const,
   },
+  /** Écrans 13 à 16 (ADR 0072) : listes et fiches composées par Analytics. */
+  people: {
+    all: ["people"] as const,
+    list: (kind: string, params: Record<string, unknown>) =>
+      ["people", kind, "list", params] as const,
+    sheet: (kind: string, id: string) => ["people", kind, "sheet", id] as const,
+    history: (kind: string, id: string, view: string) =>
+      ["people", kind, "history", id, view] as const,
+  },
   suppliers: {
     all: ["suppliers"] as const,
     list: (params: Record<string, unknown>) => ["suppliers", "list", params] as const,

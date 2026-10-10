@@ -752,6 +752,7 @@ def customer_sales(
                 balance=to_amount(sale.total - sale.paid_total),
                 debt_status=statuses.get(sale.id),
                 has_returns=sale.id in returned,
+                returned_total=to_amount(returned.get(sale.id, Decimal("0"))),
                 item_names=names(sale.id),
                 item_count=len(products.get(sale.id, [])),
             )

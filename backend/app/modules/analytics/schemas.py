@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -300,11 +301,12 @@ class CustomerSaleRow(BaseModel):
     sale_id: UUID
     sale_no: str
     sold_at: datetime
-    status: str
+    status: Literal["confirmed", "cancelled"]
     total: Amount
     balance: Amount
-    debt_status: str | None
+    debt_status: Literal["open", "partially_paid", "paid", "written_off"] | None
     has_returns: bool
+    returned_total: Amount
     #: Les trois premiers articles, dans l'ordre de saisie, et le nombre de lignes.
     item_names: list[str]
     item_count: int
@@ -385,7 +387,7 @@ class SupplierDeliveryRow(BaseModel):
     created_at: datetime
     total: Amount
     balance: Amount
-    status: str
+    status: Literal["open", "partially_paid", "paid", "written_off"]
     due_date: date | None
     #: Les trois plus grosses lignes ; une dette saisie à la main n'en a aucune.
     lines: list[DeliveryLineRow]

@@ -7330,6 +7330,10 @@
           },
           "status": {
             "type": "string",
+            "enum": [
+              "confirmed",
+              "cancelled"
+            ],
             "title": "Status"
           },
           "total": {
@@ -7341,7 +7345,13 @@
           "debt_status": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "open",
+                  "partially_paid",
+                  "paid",
+                  "written_off"
+                ]
               },
               {
                 "type": "null"
@@ -7352,6 +7362,9 @@
           "has_returns": {
             "type": "boolean",
             "title": "Has Returns"
+          },
+          "returned_total": {
+            "$ref": "#/components/schemas/Amount-Output"
           },
           "item_names": {
             "items": {
@@ -7376,6 +7389,7 @@
           "balance",
           "debt_status",
           "has_returns",
+          "returned_total",
           "item_names",
           "item_count"
         ],
@@ -13722,6 +13736,12 @@
           },
           "status": {
             "type": "string",
+            "enum": [
+              "open",
+              "partially_paid",
+              "paid",
+              "written_off"
+            ],
             "title": "Status"
           },
           "due_date": {

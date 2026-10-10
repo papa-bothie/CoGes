@@ -2263,14 +2263,18 @@ export interface components {
        * Format: date-time
        */
       sold_at: string;
-      /** Status */
-      status: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "confirmed" | "cancelled";
       total: components["schemas"]["Amount-Output"];
       balance: components["schemas"]["Amount-Output"];
       /** Debt Status */
-      debt_status: string | null;
+      debt_status: ("open" | "partially_paid" | "paid" | "written_off") | null;
       /** Has Returns */
       has_returns: boolean;
+      returned_total: components["schemas"]["Amount-Output"];
       /** Item Names */
       item_names: string[];
       /** Item Count */
@@ -4562,8 +4566,11 @@ export interface components {
       created_at: string;
       total: components["schemas"]["Amount-Output"];
       balance: components["schemas"]["Amount-Output"];
-      /** Status */
-      status: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "open" | "partially_paid" | "paid" | "written_off";
       /** Due Date */
       due_date: string | null;
       /** Lines */
