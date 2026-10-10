@@ -1,220 +1,276 @@
 "use client";
 
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { FolderTree, Plus } from "lucide-react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { Loader2, Menu, Plus, Search, SlidersVertical, Truck } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMemo } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { DataTable, type Column } from "@/components/data-table";
 import { ErrorState } from "@/components/error-state";
-import { Money } from "@/components/money";
-import { PageHeader } from "@/components/page-header";
-import { StockStatusBadge } from "@/components/status/status-badge";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Chip } from "@/components/kit/chip";
+import { ProductSquare } from "@/components/kit/list-row";
+import { fieldClasses } from "@/components/kit/rubrique";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { Can } from "@/hooks/use-permission";
 import { useTableParams } from "@/hooks/use-table-params";
 import { api, unwrap } from "@/lib/api/client";
-import { flattenTree, useCategories } from "@/lib/api/queries/categories";
+import { useCategories } from "@/lib/api/queries/categories";
 import { queryKeys } from "@/lib/api/queries/keys";
-import { useStockFor } from "@/lib/api/queries/stock";
 import type { Schemas } from "@/lib/api/schema";
-import { formatQtyWithUnit } from "@/lib/format";
+import { formatAmount } from "@/lib/format";
 import { labels } from "@/lib/labels";
+import { qtyWithUnit } from "@/lib/units";
+import { cn } from "@/lib/utils";
 
-type Product = Schemas["ProductRead"];
-const ALL = "all";
+type StockLine = Schemas["StockLine"];
+
+const t = labels.stockScreens.list;
+const PAGE_SIZE = 50;
+
+const STATUS_INK = {
+  ok: "text-foreground",
+  low: "text-stock-encre",
+  out: "text-depenses-encre",
+} as const;
+const STATUS_BAR = { ok: "bg-ventes", low: "bg-barre-sortie", out: "bg-depenses" } as const;
+
+/** Quantité affichée : « Épuisé », « Plus que 2 sacs », « 18 boîtes », rien si non suivi. */
+function stockText(line: StockLine): string {
+  if (!line.is_stock_tracked) return labels.products.notTracked;
+  const qty = qtyWithUnit(line.qty_on_hand, line.unit);
+  if (line.status === "out") return t.outText;
+  return line.status === "low" ? t.left(qty) : qty;
+}
+
+/** Largeur de la barre : le niveau, au moins 6 % pour un article qui en a encore. */
+function barPercent(line: StockLine): number {
+  if (line.status === "out") return 0;
+  return Math.max(6, Math.round(Number(line.level) * 100));
+}
+
+const SHORTCUT = cn(
+  "flex min-h-20 items-center gap-3 rounded-carte border border-border bg-card px-5 text-libelle text-foreground",
+  "outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50",
+);
 
 /**
- * Catalogue (`/products` : recherche, catégorie, état, prix) complété par le stock des
- * articles de la page (`/inventory/stock?product_id=…`, ADR 0012 et 0050).
+ * L'écran Stock de la maquette v2 (07) : valeur du stock, raccourcis (livraison,
+ * correction, rayons), recherche, puces d'état et de rayon, et la liste des articles,
+ * épuisés d'abord, chacun avec sa quantité en couleur et sa barre de niveau. Filtre et
+ * recherche restent dans l'URL ; le journal de tous les mouvements reste derrière un
+ * lien (ADR 0071).
  */
 export function ProductsListView() {
-  const router = useRouter();
   const table = useTableParams();
   const { currency } = useCompanyLocale();
+  const filter = table.get("filter") ?? "all";
+  const [text, setText] = useState(table.search);
+  const term = useDebouncedValue(text.trim());
+  const { setSearch } = table;
+  useEffect(() => {
+    if (term !== table.search) setSearch(term);
+  }, [term, table.search, setSearch]);
+
   const categories = useCategories();
-  const tree = useMemo(() => flattenTree(categories.data ?? []), [categories.data]);
-  const categoryPath = useMemo(() => new Map(tree.map((node) => [node.id, node.path])), [tree]);
-
-  const categoryId = table.get("category");
-  // Par défaut, le catalogue actif : c'est lui qu'on vend.
-  const state = table.get("state") ?? "active";
-  const params = {
-    page: table.page,
-    page_size: table.pageSize,
-    search: table.search || undefined,
-    category_id: categoryId ?? undefined,
-    is_active: state === "all" ? undefined : state === "active",
-  };
-  const query = useQuery({
-    queryKey: queryKeys.products.list(params),
-    queryFn: () => unwrap(api.GET("/api/v1/products", { params: { query: params } })),
-    placeholderData: keepPreviousData,
+  const summary = useQuery({
+    queryKey: [...queryKeys.stock.all, "summary"],
+    queryFn: () => unwrap(api.GET("/api/v1/inventory/stock/summary")),
   });
-  const ids = useMemo(() => (query.data?.items ?? []).map((product) => product.id), [query.data]);
-  const stock = useStockFor(ids);
-
-  const columns: Column<Product>[] = [
-    {
-      id: "product",
-      header: labels.products.columns.product,
-      cell: (product) => (
-        <div>
-          <p className="font-medium">{product.name}</p>
-          <p className="text-xs numeric text-muted-foreground">{product.sku}</p>
-        </div>
+  const filters = {
+    status: filter === "low" || filter === "out" ? (filter as "low" | "out") : undefined,
+    category_id: filter !== "all" && filter !== "low" && filter !== "out" ? filter : undefined,
+    search: table.search || undefined,
+  };
+  const stock = useInfiniteQuery({
+    queryKey: queryKeys.stock.list({ infinite: true, ...filters }),
+    queryFn: ({ pageParam }) =>
+      unwrap(
+        api.GET("/api/v1/inventory/stock", {
+          params: { query: { ...filters, page: pageParam, page_size: PAGE_SIZE } },
+        }),
       ),
-    },
-    {
-      id: "category",
-      header: labels.products.columns.category,
-      cell: (product) =>
-        (product.category_id && categoryPath.get(product.category_id)) ?? (
-          <span className="text-muted-foreground">—</span>
-        ),
-    },
-    {
-      id: "price",
-      header: labels.products.columns.price,
-      numeric: true,
-      cell: (product) =>
-        product.unit_price ? (
-          <Money value={product.unit_price} currency={currency} className="font-medium" />
-        ) : (
-          <span className="text-muted-foreground">{labels.products.noPrice}</span>
-        ),
-    },
-    {
-      id: "stock",
-      header: labels.products.columns.stock,
-      numeric: true,
-      cell: (product) => {
-        if (!product.is_stock_tracked) {
-          return <span className="text-muted-foreground">{labels.products.notTracked}</span>;
+    initialPageParam: 1,
+    getNextPageParam: (last, pages) =>
+      pages.reduce((count, page) => count + page.items.length, 0) < last.total
+        ? last.page + 1
+        : undefined,
+  });
+
+  const sentinel = useRef<HTMLDivElement>(null);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = stock;
+  useEffect(() => {
+    const target = sentinel.current;
+    if (!target || !hasNextPage || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting) && !isFetchingNextPage) {
+          void fetchNextPage();
         }
-        const line = stock.data?.get(product.id);
-        return line ? (
-          <span className="whitespace-nowrap">
-            {formatQtyWithUnit(
-              line.qty_on_hand,
-              labels.units[product.unit],
-              labels.unitsPlural[product.unit],
-            )}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        );
       },
-    },
-    {
-      id: "status",
-      header: labels.products.columns.status,
-      cell: (product) => {
-        const line = stock.data?.get(product.id);
-        return (
-          <span className="flex flex-wrap gap-1">
-            {!product.is_active && <Badge variant="neutral">{labels.products.inactiveBadge}</Badge>}
-            {product.is_stock_tracked && line && <StockStatusBadge status={line.status} />}
-            {product.is_stock_tracked && !line && (
-              <Badge variant="neutral">{labels.products.noMovement}</Badge>
-            )}
-          </span>
-        );
-      },
-    },
-  ];
+      { rootMargin: "256px" },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const lines = stock.data?.pages.flatMap((page) => page.items) ?? [];
+  const counts = summary.data;
+  const [countText, prefix, value, suffix] = counts
+    ? t.summary(t.count(counts.product_count), formatAmount(counts.stock_value, currency))
+    : [];
 
   return (
-    <>
-      <PageHeader
-        title={labels.nav.products}
-        count={query.data ? labels.products.count(query.data.total) : undefined}
-        actions={
-          <>
-            <Button variant="outline" asChild>
-              <Link href="/products/categories">
-                <FolderTree aria-hidden />
-                {labels.products.categories}
-              </Link>
-            </Button>
-            <Can permission="products:create">
-              <Button asChild>
-                <Link href="/products/new">
-                  <Plus aria-hidden />
-                  {labels.products.add}
-                </Link>
-              </Button>
-            </Can>
-          </>
-        }
-      />
-      {query.isError ? (
-        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
-      ) : (
-        <DataTable
-          caption={labels.nav.products}
-          columns={columns}
-          rows={query.data?.items}
-          rowKey={(product) => product.id}
-          total={query.data?.total ?? 0}
-          page={table.page}
-          pageSize={table.pageSize}
-          onPageChange={table.setPage}
-          loading={query.isFetching}
-          onRowClick={(product) => router.push(`/products/${product.id}`)}
-          empty={labels.products.empty}
-          search={{
-            value: table.search,
-            onChange: table.setSearch,
-            placeholder: labels.products.searchPlaceholder,
-          }}
-          filters={
-            <>
-              <Select
-                value={categoryId ?? ALL}
-                onValueChange={(value) => table.setFilter("category", value === ALL ? null : value)}
-              >
-                <SelectTrigger className="w-56" aria-label={labels.products.categoryFilter}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>{labels.products.allCategories}</SelectItem>
-                  {tree.map((node) => (
-                    <SelectItem key={node.id} value={node.id}>
-                      <span style={{ paddingLeft: `${node.depth * 12}px` }}>{node.name}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={state}
-                onValueChange={(value) =>
-                  table.setFilter("state", value === "active" ? null : value)
-                }
-              >
-                <SelectTrigger className="w-36" aria-label={labels.products.activeFilter}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">{labels.products.active}</SelectItem>
-                  <SelectItem value="inactive">{labels.products.inactive}</SelectItem>
-                  <SelectItem value="all">{labels.products.all}</SelectItem>
-                </SelectContent>
-              </Select>
-            </>
-          }
+    <div className="mx-auto flex max-w-page flex-col gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{t.title}</h1>
+          <p className="text-lg text-muted-foreground">
+            {counts ? (
+              <>
+                {countText} {prefix}{" "}
+                <span className="font-extrabold numeric text-stock-encre">{value}</span> {suffix}
+              </>
+            ) : (
+              " "
+            )}
+          </p>
+        </div>
+        <Can permission="products:create">
+          <Link
+            href="/products/new"
+            className={cn(
+              "inline-flex min-h-[60px] items-center gap-2.5 rounded-bouton bg-stock px-[22px] text-[19px] font-bold text-primary-foreground",
+              "outline-none hover:bg-stock/90 focus-visible:ring-3 focus-visible:ring-ring/50",
+            )}
+          >
+            <Plus className="size-6" aria-hidden />
+            {t.newArticle}
+          </Link>
+        </Can>
+      </div>
+
+      <Can permission="inventory:create">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
+          <Link href="/inventory/receive" className={SHORTCUT}>
+            <Truck className="size-[30px] text-stock" aria-hidden />
+            {t.receive}
+          </Link>
+          <Link href="/inventory/adjust" className={SHORTCUT}>
+            <SlidersVertical className="size-[30px] text-stock" aria-hidden />
+            {t.adjust}
+          </Link>
+          <Link href="/products/categories" className={SHORTCUT}>
+            <Menu className="size-[30px] text-stock" aria-hidden />
+            {t.shelves}
+          </Link>
+        </div>
+      </Can>
+
+      <div className="relative">
+        <Search
+          className="pointer-events-none absolute top-[17px] left-4 size-[22px] text-muted-foreground"
+          aria-hidden
         />
+        <label htmlFor="stock-search" className="sr-only">
+          {t.searchLabel}
+        </label>
+        <input
+          id="stock-search"
+          type="search"
+          autoComplete="off"
+          placeholder={t.search}
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          className={cn(fieldClasses("stock"), "min-h-14 pr-4 pl-12 text-libelle font-normal")}
+        />
+      </div>
+
+      <div role="group" aria-label={t.filters} className="flex flex-wrap gap-2">
+        {[
+          { value: "all", label: t.all },
+          { value: "low", label: t.low(counts?.low_count ?? 0) },
+          { value: "out", label: t.out(counts?.out_count ?? 0) },
+          ...(categories.data ?? [])
+            .filter((category) => category.parent_id === null)
+            .map((category) => ({ value: category.id, label: category.name })),
+        ].map((chip) => (
+          <Chip
+            key={chip.value}
+            rubrique="stock"
+            tone="plein"
+            className="font-semibold"
+            selected={filter === chip.value}
+            onClick={() => table.setFilter("filter", chip.value === "all" ? null : chip.value)}
+          >
+            {chip.label}
+          </Chip>
+        ))}
+      </div>
+
+      {stock.isError ? (
+        <ErrorState error={stock.error} onRetry={() => void stock.refetch()} />
+      ) : stock.isPending ? (
+        <Skeleton className="h-96 w-full rounded-carte" />
+      ) : lines.length === 0 ? (
+        <section className="rounded-carte border border-border bg-card px-5 py-10 text-center text-lg">
+          <p className="font-bold">{t.empty}</p>
+          <p className="mt-1 text-muted-foreground">{t.emptyHint}</p>
+        </section>
+      ) : (
+        <section className="rounded-carte border border-border bg-card p-2.5">
+          {lines.map((line) => (
+            <Link
+              key={line.product_id}
+              href={`/products/${line.product_id}`}
+              className={cn(
+                "flex min-h-24 flex-wrap items-center gap-x-4 gap-y-3 rounded-[18px] px-3.5 py-3 text-foreground",
+                "outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50",
+              )}
+            >
+              <ProductSquare name={line.name} size="moyen" />
+              <span className="min-w-0 flex-[1_1_220px]">
+                <span className="block text-libelle">{line.name}</span>
+                <span className="block text-muted-foreground">
+                  {t.sold(line.category_name, formatAmount(line.unit_price, currency))}
+                </span>
+              </span>
+              <span className="flex min-w-[150px] flex-col items-end gap-1.5">
+                <span className={cn("text-[17px] font-extrabold", STATUS_INK[line.status])}>
+                  {stockText(line)}
+                </span>
+                {line.is_stock_tracked && (
+                  <span
+                    role="img"
+                    aria-label={t.level(line.name, barPercent(line))}
+                    className="h-2.5 w-[140px] overflow-hidden rounded-full bg-filet"
+                  >
+                    <span
+                      className={cn("block h-full rounded-full", STATUS_BAR[line.status])}
+                      style={{ width: `${barPercent(line)}%` }}
+                    />
+                  </span>
+                )}
+              </span>
+            </Link>
+          ))}
+        </section>
       )}
-    </>
+      <div ref={sentinel} aria-hidden className="h-px" />
+      {isFetchingNextPage && (
+        <p className="flex items-center justify-center gap-2 text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" aria-hidden />
+          {labels.table.loading}
+        </p>
+      )}
+      <Can permission="inventory:read">
+        <Link
+          href="/inventory"
+          className="inline-flex min-h-12 items-center self-start font-bold text-stock-encre underline underline-offset-2 hover:text-foreground"
+        >
+          {t.journal}
+        </Link>
+      </Can>
+    </div>
   );
 }

@@ -312,7 +312,9 @@
   --spacing-marge-page: 24px;
   --spacing-sections: 20px;
   --spacing-carte: 22px;
-  --container-page: 1180px;
+  /* `.wrap` de la maquette : 1180 px marges comprises (`box-sizing: border-box`), soit
+     1132 px de contenu une fois les 24 px de chaque côté retirés. */
+  --container-page: 1132px;
 
   /*
    * Textes de la maquette. Le corps ne descend jamais sous 15 px : `text-sm` passe de 14 à

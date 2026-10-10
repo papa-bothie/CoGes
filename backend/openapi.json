@@ -1273,6 +1273,28 @@
         }
       }
     },
+    "/api/v1/products/category-counts": {
+      "get": {
+        "tags": [
+          "products"
+        ],
+        "summary": "Category Counts",
+        "description": "Nombre d'articles de chaque rayon. Déclarée avant `/{product_id}`.",
+        "operationId": "category_counts_api_v1_products_category_counts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryCounts"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/products/{product_id}": {
       "get": {
         "tags": [
@@ -2040,7 +2062,7 @@
           "inventory"
         ],
         "summary": "List Stock",
-        "description": "Stock valorisé, article par article, ruptures en tête.\n\nC'est la vue « produits + stock » de l'ADR 0012 : elle appartient à Inventory,\nparce que Products n'a pas le droit de lire le stock. `product_id` se répète\n(au plus 100) pour lire le stock d'un lot d'articles ; un article sans aucun\nmouvement n'a pas de ligne.",
+        "description": "Stock valorisé, article par article, ruptures en tête.\n\nC'est la vue « produits + stock » de l'ADR 0012 : elle appartient à Inventory,\nparce que Products n'a pas le droit de lire le stock. `product_id` se répète\n(au plus 100) pour lire le stock d'un lot d'articles ; un article sans aucun\nmouvement n'a pas de ligne. `status`, `category_id` et `search` filtrent la liste de\nl'écran Stock (ADR 0071) ; chaque ligne porte son prix de vente et son niveau.",
         "operationId": "list_stock_api_v1_inventory_stock_get",
         "parameters": [
           {
@@ -2086,6 +2108,56 @@
               ],
               "title": "Product Id"
             }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StockStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "category_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category Id"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
           }
         ],
         "responses": {
@@ -2105,6 +2177,28 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inventory/stock/summary": {
+      "get": {
+        "tags": [
+          "inventory"
+        ],
+        "summary": "Stock Summary",
+        "description": "Nombre d'articles, valeur du stock au prix d'achat, bientôt épuisés et épuisés.",
+        "operationId": "stock_summary_api_v1_inventory_stock_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockSummary"
                 }
               }
             }
@@ -2320,6 +2414,48 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/NewProductRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inventory/deliveries": {
+      "post": {
+        "tags": [
+          "inventory"
+        ],
+        "summary": "Receive Delivery",
+        "description": "Reçoit une livraison : stock, dette fournisseur et paiement, tout ou rien (ADR 0071).\n\n« Tout maintenant » paie le total, « Une partie » le montant donné, « Plus tard »\nrien : le reste devient une dette envers le fournisseur, payable avant `due_date`.",
+        "operationId": "receive_delivery_api_v1_inventory_deliveries_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeliveryCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryRead"
                 }
               }
             }
@@ -4605,6 +4741,50 @@
         }
       }
     },
+    "/api/v1/analytics/products/{product_id}/history": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Product History",
+        "description": "« Ce qui s'est passé » sur la fiche d'un article : ventes, livraisons, retours et\ncorrections, avec le client, le fournisseur ou la raison (ADR 0071).",
+        "operationId": "product_history_api_v1_analytics_products__product_id__history_get",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductHistory"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/notifications": {
       "get": {
         "tags": [
@@ -5844,6 +6024,50 @@
           "outflow"
         ]
       },
+      "CategoryColor": {
+        "type": "integer",
+        "maximum": 8.0,
+        "minimum": 1.0
+      },
+      "CategoryCount": {
+        "properties": {
+          "category_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Category Id"
+          },
+          "product_count": {
+            "type": "integer",
+            "title": "Product Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "category_id",
+          "product_count"
+        ],
+        "title": "CategoryCount",
+        "description": "Nombre d'articles vivants d'un rayon."
+      },
+      "CategoryCounts": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryCount"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "CategoryCounts",
+        "description": "Articles par rayon (écran 12 « Rayons », ADR 0071). Un rayon vide est absent."
+      },
       "CategoryCreate": {
         "properties": {
           "name": {
@@ -5860,6 +6084,16 @@
               }
             ],
             "title": "Parent Id"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -5930,6 +6164,17 @@
             "type": "string",
             "title": "Name"
           },
+          "color": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -5942,6 +6187,7 @@
           "id",
           "parent_id",
           "name",
+          "color",
           "created_at"
         ],
         "title": "CategoryRead",
@@ -5970,6 +6216,16 @@
               }
             ],
             "title": "Parent Id"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CategoryColor"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -7039,6 +7295,194 @@
         ],
         "title": "DebtWriteOff",
         "description": "Abandon d'une créance : le motif n'est pas facultatif."
+      },
+      "DeliveryCreate": {
+        "properties": {
+          "supplier_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Supplier Id"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/DeliveryLineCreate"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Lines"
+          },
+          "payment_mode": {
+            "$ref": "#/components/schemas/DeliveryPaymentMode"
+          },
+          "paid_amount": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Amount-Input",
+                "gt": "0"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "method": {
+            "$ref": "#/components/schemas/PaymentMethod",
+            "default": "cash"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "supplier_id",
+          "lines",
+          "payment_mode"
+        ],
+        "title": "DeliveryCreate",
+        "description": "Une livraison fournisseur (ADR 0071) : le stock entre, la dette s'ouvre, le paiement\néventuel la règle, dans une seule transaction."
+      },
+      "DeliveryLineCreate": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "qty": {
+            "$ref": "#/components/schemas/Quantity-Input",
+            "gt": "0"
+          },
+          "unit_cost": {
+            "$ref": "#/components/schemas/UnitCost-Input",
+            "ge": "0"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "qty",
+          "unit_cost"
+        ],
+        "title": "DeliveryLineCreate",
+        "description": "Un article livré : quantité et prix d'achat unitaire, tous deux tapés librement."
+      },
+      "DeliveryLineRead": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "movement_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Movement Id"
+          },
+          "qty": {
+            "$ref": "#/components/schemas/Quantity-Output"
+          },
+          "unit_cost": {
+            "$ref": "#/components/schemas/UnitCost-Output"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "movement_id",
+          "qty",
+          "unit_cost"
+        ],
+        "title": "DeliveryLineRead"
+      },
+      "DeliveryPaymentMode": {
+        "type": "string",
+        "enum": [
+          "now",
+          "part",
+          "later"
+        ]
+      },
+      "DeliveryRead": {
+        "properties": {
+          "debt_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Debt Id"
+          },
+          "supplier_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Supplier Id"
+          },
+          "payment_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Id"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "paid": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "balance": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/DeliveryLineRead"
+            },
+            "type": "array",
+            "title": "Lines"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "debt_id",
+          "supplier_id",
+          "payment_id",
+          "total",
+          "paid",
+          "balance",
+          "due_date",
+          "lines"
+        ],
+        "title": "DeliveryRead",
+        "description": "Ce que la livraison a écrit : la dette qui la porte, ce qui est payé et ce qui reste."
       },
       "ExpenseAmount": {
         "$ref": "#/components/schemas/Amount-Input",
@@ -9589,6 +10033,97 @@
         "title": "ProductCreate",
         "description": "Création d'un produit **et** de son premier intervalle de prix.\n\n`unit_price` est obligatoire : un produit sans prix n'est pas vendable, et\nSales n'aurait rien à figer sur sa ligne (ADR 0011)."
       },
+      "ProductHistory": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "month_sold_qty": {
+            "$ref": "#/components/schemas/Quantity-Output"
+          },
+          "month_days": {
+            "type": "integer",
+            "title": "Month Days"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProductHistoryItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "month_sold_qty",
+          "month_days",
+          "items"
+        ],
+        "title": "ProductHistory",
+        "description": "« Ce qui s'est passé » et « Vendu ce mois » d'un article."
+      },
+      "ProductHistoryItem": {
+        "properties": {
+          "movement_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Movement Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "type": {
+            "$ref": "#/components/schemas/MovementType"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StockReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "qty_delta": {
+            "$ref": "#/components/schemas/Quantity-Output"
+          },
+          "counterparty": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterparty"
+          },
+          "is_reversal": {
+            "type": "boolean",
+            "title": "Is Reversal"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "movement_id",
+          "occurred_at",
+          "type",
+          "reason_code",
+          "qty_delta",
+          "counterparty",
+          "is_reversal"
+        ],
+        "title": "ProductHistoryItem",
+        "description": "Un mouvement de l'article, avec de quoi l'écrire en phrase (écran 08, ADR 0071)."
+      },
       "ProductMetric": {
         "type": "string",
         "enum": [
@@ -11939,6 +12474,25 @@
               }
             ],
             "title": "Last Movement At"
+          },
+          "unit_price": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Amount-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "level": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Level"
+          },
+          "is_stock_tracked": {
+            "type": "boolean",
+            "title": "Is Stock Tracked"
           }
         },
         "additionalProperties": false,
@@ -11955,7 +12509,10 @@
           "stock_value",
           "reorder_point",
           "status",
-          "last_movement_at"
+          "last_movement_at",
+          "unit_price",
+          "level",
+          "is_stock_tracked"
         ],
         "title": "StockLine",
         "description": "Stock valorisé d'un article, joint à sa fiche produit.\n\nC'est la vue « produits + stock » de l'ADR 0012 : elle vit ici parce que\nProducts (bande B) n'a pas le droit de lire le stock (bande C)."
@@ -12011,6 +12568,35 @@
           "low",
           "out"
         ]
+      },
+      "StockSummary": {
+        "properties": {
+          "product_count": {
+            "type": "integer",
+            "title": "Product Count"
+          },
+          "stock_value": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "low_count": {
+            "type": "integer",
+            "title": "Low Count"
+          },
+          "out_count": {
+            "type": "integer",
+            "title": "Out Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_count",
+          "stock_value",
+          "low_count",
+          "out_count"
+        ],
+        "title": "StockSummary",
+        "description": "En tête de l'écran Stock (maquette v2, écran 07, ADR 0071)."
       },
       "StoredPaymentMethod": {
         "anyOf": [

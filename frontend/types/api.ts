@@ -394,6 +394,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/products/category-counts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Category Counts
+     * @description Nombre d'articles de chaque rayon. Déclarée avant `/{product_id}`.
+     */
+    get: operations["category_counts_api_v1_products_category_counts_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/products/{product_id}": {
     parameters: {
       query?: never;
@@ -564,9 +584,30 @@ export interface paths {
      *     C'est la vue « produits + stock » de l'ADR 0012 : elle appartient à Inventory,
      *     parce que Products n'a pas le droit de lire le stock. `product_id` se répète
      *     (au plus 100) pour lire le stock d'un lot d'articles ; un article sans aucun
-     *     mouvement n'a pas de ligne.
+     *     mouvement n'a pas de ligne. `status`, `category_id` et `search` filtrent la liste de
+     *     l'écran Stock (ADR 0071) ; chaque ligne porte son prix de vente et son niveau.
      */
     get: operations["list_stock_api_v1_inventory_stock_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/inventory/stock/summary": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stock Summary
+     * @description Nombre d'articles, valeur du stock au prix d'achat, bientôt épuisés et épuisés.
+     */
+    get: operations["stock_summary_api_v1_inventory_stock_summary_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -619,6 +660,29 @@ export interface paths {
      *     Une quantité positive exige le prix d'achat, qui valorise le mouvement `initial`.
      */
     post: operations["create_product_with_stock_api_v1_inventory_products_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/inventory/deliveries": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Receive Delivery
+     * @description Reçoit une livraison : stock, dette fournisseur et paiement, tout ou rien (ADR 0071).
+     *
+     *     « Tout maintenant » paie le total, « Une partie » le montant donné, « Plus tard »
+     *     rien : le reste devient une dette envers le fournisseur, payable avant `due_date`.
+     */
+    post: operations["receive_delivery_api_v1_inventory_deliveries_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1272,6 +1336,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/analytics/products/{product_id}/history": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Product History
+     * @description « Ce qui s'est passé » sur la fiche d'un article : ventes, livraisons, retours et
+     *     corrections, avec le client, le fournisseur ou la raison (ADR 0071).
+     */
+    get: operations["product_history_api_v1_analytics_products__product_id__history_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/notifications": {
     parameters: {
       query?: never;
@@ -1753,11 +1838,34 @@ export interface components {
     CancelReason: string;
     /** @enum {string} */
     CashDirection: "inflow" | "outflow";
+    CategoryColor: number;
+    /**
+     * CategoryCount
+     * @description Nombre d'articles vivants d'un rayon.
+     */
+    CategoryCount: {
+      /**
+       * Category Id
+       * Format: uuid
+       */
+      category_id: string;
+      /** Product Count */
+      product_count: number;
+    };
+    /**
+     * CategoryCounts
+     * @description Articles par rayon (écran 12 « Rayons », ADR 0071). Un rayon vide est absent.
+     */
+    CategoryCounts: {
+      /** Items */
+      items: components["schemas"]["CategoryCount"][];
+    };
     /** CategoryCreate */
     CategoryCreate: {
       name: components["schemas"]["CategoryName"];
       /** Parent Id */
       parent_id?: string | null;
+      color?: components["schemas"]["CategoryColor"] | null;
     };
     CategoryName: string;
     /**
@@ -1788,6 +1896,8 @@ export interface components {
       parent_id: string | null;
       /** Name */
       name: string;
+      /** Color */
+      color: number | null;
       /**
        * Created At
        * Format: date-time
@@ -1805,6 +1915,7 @@ export interface components {
       name?: components["schemas"]["CategoryName"] | null;
       /** Parent Id */
       parent_id?: string | null;
+      color?: components["schemas"]["CategoryColor"] | null;
     };
     /**
      * CompanyRead
@@ -2142,6 +2253,81 @@ export interface components {
     DebtWriteOff: {
       /** Reason */
       reason: string;
+    };
+    /**
+     * DeliveryCreate
+     * @description Une livraison fournisseur (ADR 0071) : le stock entre, la dette s'ouvre, le paiement
+     *     éventuel la règle, dans une seule transaction.
+     */
+    DeliveryCreate: {
+      /**
+       * Supplier Id
+       * Format: uuid
+       */
+      supplier_id: string;
+      /** Lines */
+      lines: components["schemas"]["DeliveryLineCreate"][];
+      payment_mode: components["schemas"]["DeliveryPaymentMode"];
+      paid_amount?: components["schemas"]["Amount-Input"] | null;
+      /** @default cash */
+      method: components["schemas"]["PaymentMethod"];
+      /** Due Date */
+      due_date?: string | null;
+    };
+    /**
+     * DeliveryLineCreate
+     * @description Un article livré : quantité et prix d'achat unitaire, tous deux tapés librement.
+     */
+    DeliveryLineCreate: {
+      /**
+       * Product Id
+       * Format: uuid
+       */
+      product_id: string;
+      qty: components["schemas"]["Quantity-Input"];
+      unit_cost: components["schemas"]["UnitCost-Input"];
+    };
+    /** DeliveryLineRead */
+    DeliveryLineRead: {
+      /**
+       * Product Id
+       * Format: uuid
+       */
+      product_id: string;
+      /**
+       * Movement Id
+       * Format: uuid
+       */
+      movement_id: string;
+      qty: components["schemas"]["Quantity-Output"];
+      unit_cost: components["schemas"]["UnitCost-Output"];
+    };
+    /** @enum {string} */
+    DeliveryPaymentMode: "now" | "part" | "later";
+    /**
+     * DeliveryRead
+     * @description Ce que la livraison a écrit : la dette qui la porte, ce qui est payé et ce qui reste.
+     */
+    DeliveryRead: {
+      /**
+       * Debt Id
+       * Format: uuid
+       */
+      debt_id: string;
+      /**
+       * Supplier Id
+       * Format: uuid
+       */
+      supplier_id: string;
+      /** Payment Id */
+      payment_id: string | null;
+      total: components["schemas"]["Amount-Output"];
+      paid: components["schemas"]["Amount-Output"];
+      balance: components["schemas"]["Amount-Output"];
+      /** Due Date */
+      due_date: string | null;
+      /** Lines */
+      lines: components["schemas"]["DeliveryLineRead"][];
     };
     ExpenseAmount: components["schemas"]["Amount-Input"];
     /** ExpenseCategoryCreate */
@@ -3089,6 +3275,45 @@ export interface components {
       cost_price?: components["schemas"]["CostPrice-Input"] | null;
     };
     /**
+     * ProductHistory
+     * @description « Ce qui s'est passé » et « Vendu ce mois » d'un article.
+     */
+    ProductHistory: {
+      /**
+       * Product Id
+       * Format: uuid
+       */
+      product_id: string;
+      month_sold_qty: components["schemas"]["Quantity-Output"];
+      /** Month Days */
+      month_days: number;
+      /** Items */
+      items: components["schemas"]["ProductHistoryItem"][];
+    };
+    /**
+     * ProductHistoryItem
+     * @description Un mouvement de l'article, avec de quoi l'écrire en phrase (écran 08, ADR 0071).
+     */
+    ProductHistoryItem: {
+      /**
+       * Movement Id
+       * Format: uuid
+       */
+      movement_id: string;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at: string;
+      type: components["schemas"]["MovementType"];
+      reason_code: components["schemas"]["StockReason"] | null;
+      qty_delta: components["schemas"]["Quantity-Output"];
+      /** Counterparty */
+      counterparty: string | null;
+      /** Is Reversal */
+      is_reversal: boolean;
+    };
+    /**
      * ProductMetric
      * @description Les huit métriques du Diagramme 7, **jamais équivalentes**.
      *
@@ -3930,6 +4155,11 @@ export interface components {
       status: components["schemas"]["StockStatus"];
       /** Last Movement At */
       last_movement_at: string | null;
+      unit_price: components["schemas"]["Amount-Output"] | null;
+      /** Level */
+      level: string;
+      /** Is Stock Tracked */
+      is_stock_tracked: boolean;
     };
     /** StockPage */
     StockPage: {
@@ -3953,6 +4183,19 @@ export interface components {
       | "supplier_gift";
     /** @enum {string} */
     StockStatus: "ok" | "low" | "out";
+    /**
+     * StockSummary
+     * @description En tête de l'écran Stock (maquette v2, écran 07, ADR 0071).
+     */
+    StockSummary: {
+      /** Product Count */
+      product_count: number;
+      stock_value: components["schemas"]["Amount-Output"];
+      /** Low Count */
+      low_count: number;
+      /** Out Count */
+      out_count: number;
+    };
     StoredPaymentMethod: components["schemas"]["PaymentMethod"] | "offset";
     SupplierCode: string;
     /**
@@ -5063,6 +5306,26 @@ export interface operations {
       };
     };
   };
+  category_counts_api_v1_products_category_counts_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CategoryCounts"];
+        };
+      };
+    };
+  };
   read_product_api_v1_products__product_id__get: {
     parameters: {
       query?: never;
@@ -5561,6 +5824,9 @@ export interface operations {
         page?: number;
         page_size?: number;
         product_id?: string[] | null;
+        status?: components["schemas"]["StockStatus"] | null;
+        category_id?: string | null;
+        search?: string | null;
       };
       header?: never;
       path?: never;
@@ -5584,6 +5850,26 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  stock_summary_api_v1_inventory_stock_summary_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StockSummary"];
         };
       };
     };
@@ -5679,6 +5965,39 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["NewProductRead"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  receive_delivery_api_v1_inventory_deliveries_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DeliveryCreate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DeliveryRead"];
         };
       };
       /** @description Validation Error */
@@ -6945,6 +7264,37 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["Timeseries"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  product_history_api_v1_analytics_products__product_id__history_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        product_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProductHistory"];
         };
       };
       /** @description Validation Error */

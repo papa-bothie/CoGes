@@ -382,6 +382,29 @@ def day_totals(
     )
 
 
+def customer_names_of_lines(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    sale_item_ids: Sequence[UUID],
+    return_item_ids: Sequence[UUID],
+) -> dict[UUID, str | None]:
+    """Nom du client derrière chaque ligne de vente ou de retour (« Vendu à Awa Diop »,
+    ADR 0071) ; `None` pour un client de passage."""
+    repository = SaleItemRepository(session, ctx)
+    customers = {
+        **repository.customer_ids_by_item(sale_item_ids),
+        **repository.customer_ids_by_return_item(return_item_ids),
+    }
+    names = customers_service.names_by_ids(
+        session, ctx, [value for value in customers.values() if value is not None]
+    )
+    return {
+        line_id: None if customer_id is None else names.get(customer_id)
+        for line_id, customer_id in customers.items()
+    }
+
+
 def get_items(session: Session, ctx: TenantContext, sale_id: UUID) -> Sequence[SaleItem]:
     """Lignes d'une vente, dans l'ordre de saisie."""
     return SaleItemRepository(session, ctx).for_sale(sale_id)

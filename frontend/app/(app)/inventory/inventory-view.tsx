@@ -1,79 +1,48 @@
 "use client";
 
-import { ClipboardCheck, PackagePlus, Truck } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { MovementDialog } from "@/components/inventory/movement-dialog";
-import { StockCorrectionDialog } from "@/components/inventory/stock-correction-dialog";
-import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Can } from "@/hooks/use-permission";
-import { useTableParams } from "@/hooks/use-table-params";
 import { labels } from "@/lib/labels";
 
 import { MovementJournal } from "./movement-journal";
-import { StockTable } from "./stock-table";
 
-type Tab = "current" | "journal";
-
-/** Stock courant valorisé au CMP, et journal des mouvements (onglet gardé dans l'URL). */
+/**
+ * « Tous les mouvements » : le journal de tous les articles, gardé derrière un lien de
+ * l'écran Stock (ADR 0071). On y annule un mouvement manuel (ADR 0017) et on y saisit les
+ * mouvements rares (renvoi au fournisseur, stock de départ) ; la correction et la
+ * livraison ont leurs écrans.
+ */
 export function InventoryView() {
-  const table = useTableParams();
-  const tab: Tab = table.get("tab") === "journal" ? "journal" : "current";
-  const [receiving, setReceiving] = useState(false);
-  const [correcting, setCorrecting] = useState(false);
-  const [total, setTotal] = useState<number | null>(null);
+  const [adding, setAdding] = useState(false);
+  const t = labels.stockScreens.list;
 
   return (
-    <>
-      <PageHeader
-        title={labels.nav.inventory}
-        count={total === null ? undefined : labels.stock.count(total)}
-        actions={
-          <Can permission="inventory:create">
-            <div className="flex flex-wrap gap-2.5">
-              <Can permission="products:create">
-                <Button variant="secondaire" asChild>
-                  <Link href="/products/new">
-                    <PackagePlus aria-hidden />
-                    {labels.stock.newProduct}
-                  </Link>
-                </Button>
-              </Can>
-              <Button variant="secondaire" onClick={() => setReceiving(true)}>
-                <Truck aria-hidden />
-                {labels.stock.receive}
-              </Button>
-              <Button variant="stock" onClick={() => setCorrecting(true)}>
-                <ClipboardCheck aria-hidden />
-                {labels.stock.correction.open}
-              </Button>
-            </div>
-          </Can>
-        }
-      />
-      <Tabs
-        value={tab}
-        onValueChange={(value) =>
-          // Changer d'onglet repart d'une liste vierge : les filtres ne sont pas partagés.
-          table.replaceAll(value === "journal" ? { tab: "journal" } : {})
-        }
+    <div className="mx-auto flex max-w-page flex-col gap-5">
+      <Link
+        href="/products"
+        className="inline-flex min-h-11 items-center gap-2 self-start font-bold text-ventes hover:text-ventes-encre pointer-coarse:min-h-12"
       >
-        <TabsList>
-          <TabsTrigger value="current">{labels.stock.tabs.current}</TabsTrigger>
-          <TabsTrigger value="journal">{labels.stock.tabs.journal}</TabsTrigger>
-        </TabsList>
-        <TabsContent value="current" className="mt-4">
-          {tab === "current" && <StockTable onTotal={setTotal} />}
-        </TabsContent>
-        <TabsContent value="journal" className="mt-4">
-          {tab === "journal" && <MovementJournal />}
-        </TabsContent>
-      </Tabs>
-      <MovementDialog open={receiving} onOpenChange={setReceiving} defaultType="purchase_in" />
-      <StockCorrectionDialog open={correcting} onOpenChange={setCorrecting} />
-    </>
+        <ArrowLeft className="size-[22px]" aria-hidden />
+        {t.title}
+      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{t.journal}</h1>
+        <Can permission="inventory:create">
+          <Button variant="secondaire" size="standard" onClick={() => setAdding(true)}>
+            <Plus aria-hidden />
+            {labels.stock.newMovement}
+          </Button>
+        </Can>
+      </div>
+      <section className="rounded-carte border border-border bg-card p-carte">
+        <MovementJournal />
+      </section>
+      <MovementDialog open={adding} onOpenChange={setAdding} defaultType="supplier_return_out" />
+    </div>
   );
 }

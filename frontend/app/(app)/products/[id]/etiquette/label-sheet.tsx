@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Printer } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { ErrorState } from "@/components/error-state";
@@ -26,7 +27,9 @@ const MAX_LABELS = 200;
  */
 export function LabelSheet({ productId }: { productId: string }) {
   const { currency } = useCompanyLocale();
-  const [count, setCount] = useState("1");
+  // « Imprimer 10 étiquettes » sur la fiche arrive avec le nombre choisi (ADR 0071).
+  const requested = useSearchParams().get("count");
+  const [count, setCount] = useState(requested && /^\d{1,3}$/.test(requested) ? requested : "1");
   const t = labels.products.labelPage;
   const product = useQuery({
     queryKey: queryKeys.products.detail(productId),

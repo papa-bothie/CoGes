@@ -1,452 +1,438 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Boxes, Pencil, Printer, Tag } from "lucide-react";
+import { ArrowLeft, Minus, Plus } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { ErrorState } from "@/components/error-state";
 import { FieldError } from "@/components/field-error";
-import { StockCorrectionDialog } from "@/components/inventory/stock-correction-dialog";
-import { Money, spacedGroups } from "@/components/money";
-import { PageHeader } from "@/components/page-header";
-import { StockStatusBadge } from "@/components/status/status-badge";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { cleanAmount } from "@/components/kit/amount-field";
+import { articleTone } from "@/components/kit/list-row";
+import { fieldClasses } from "@/components/kit/rubrique";
+import { Ean13Barcode } from "@/components/products/ean13-barcode";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale } from "@/hooks/use-me";
-import { Can } from "@/hooks/use-permission";
+import { Can, usePermission } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
-import { flattenTree, useCategories } from "@/lib/api/queries/categories";
+import { useCategories } from "@/lib/api/queries/categories";
 import { queryKeys } from "@/lib/api/queries/keys";
-import { useProduct } from "@/lib/api/queries/products";
 import { useStockFor } from "@/lib/api/queries/stock";
 import type { Schemas } from "@/lib/api/schema";
-import { compareDecimal, parseDecimalInput, rateToPercent } from "@/lib/decimal";
-import {
-  formatDate,
-  formatDateTime,
-  formatMoney,
-  formatQty,
-  formatQtyWithUnit,
-} from "@/lib/format";
+import { compareDecimal, subtractDecimal } from "@/lib/decimal";
+import { formatAmount, formatDateLong, formatQty } from "@/lib/format";
 import { labels } from "@/lib/labels";
+import { wholeUnits } from "@/lib/payment-amount";
+import { historyKind, historyPhrase, historyQty, historyWhen } from "@/lib/stock-history";
+import { qtyWithUnit } from "@/lib/units";
 import { cn } from "@/lib/utils";
 
 type Product = Schemas["ProductRead"];
 
+const t = labels.stockScreens.sheet;
+const MAX_LABELS = 500;
+/** Lignes de « Ce qui s'est passé » (maquette 08) ; le journal complet reste sur l'écran
+ * des mouvements. */
+const HISTORY_SHOWN = 6;
+
+const KIND_TONE = {
+  out: "bg-stock-teinte text-stock-encre",
+  loss: "bg-depenses-teinte text-depenses-encre",
+  in: "bg-ventes-teinte text-ventes-encre",
+  fix: "bg-argent-teinte text-argent-encre",
+} as const;
+const KIND_INK = {
+  out: "text-stock-encre",
+  loss: "text-depenses-encre",
+  in: "text-ventes-encre",
+  fix: "text-argent-encre",
+} as const;
+const KIND_SIGN = { out: "−", loss: "−", in: "+", fix: "=" } as const;
+
+const SQUARE_TONES = [
+  "bg-article-1",
+  "bg-article-2",
+  "bg-article-3",
+  "bg-article-4",
+  "bg-article-5",
+  "bg-article-6",
+  "bg-article-7",
+  "bg-article-8",
+  "bg-article-9",
+  "bg-article-10",
+  "bg-article-11",
+  "bg-article-12",
+] as const;
+
+const SECONDARY = cn(
+  "inline-flex min-h-bouton items-center justify-center rounded-bouton border-2 border-input bg-card px-5 text-[17px] font-bold text-foreground",
+  "outline-none hover:bg-voile focus-visible:ring-3 focus-visible:ring-ring/50",
+);
+const PRIMARY = cn(
+  "inline-flex min-h-bouton items-center justify-center rounded-bouton bg-stock px-5 text-[17px] font-bold text-primary-foreground",
+  "outline-none hover:bg-stock/90 focus-visible:ring-3 focus-visible:ring-ring/50",
+);
+
+function unitWord(unit: string): string {
+  return unit in labels.units ? labels.units[unit as keyof typeof labels.units] : unit;
+}
+
+/**
+ * Fiche d'un article, maquette v2 (écran 08) : prix modifiables sur place (historisés,
+ * ADR 0011), correction du stock, « Commander » qui ouvre une livraison préremplie
+ * (ADR 0071), quatre tuiles, l'historique en phrases et l'étiquette à imprimer.
+ */
 export function ProductDetailView({ productId }: { productId: string }) {
   const { timeZone, currency } = useCompanyLocale();
-  const product = useProduct(productId);
-  const categories = useCategories();
-  const categoryPath = useMemo(
-    () => new Map(flattenTree(categories.data ?? []).map((node) => [node.id, node.path])),
-    [categories.data],
-  );
+  const [editing, setEditing] = useState(false);
+  const [labelsCount, setLabelsCount] = useState("10");
+  const [more, setMore] = useState(false);
+  const canSeeHistory = usePermission("inventory:read");
+
+  const product = useQuery({
+    queryKey: queryKeys.products.detail(productId),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/products/{product_id}", {
+          params: { path: { product_id: productId } },
+        }),
+      ),
+  });
   const stock = useStockFor([productId]);
-  const prices = useQuery({
-    queryKey: queryKeys.products.prices(productId),
+  const history = useQuery({
+    queryKey: [...queryKeys.products.detail(productId), "history"],
     queryFn: () =>
       unwrap(
-        api.GET("/api/v1/products/{product_id}/prices", {
-          params: { path: { product_id: productId }, query: { page_size: 20 } },
+        api.GET("/api/v1/analytics/products/{product_id}/history", {
+          params: { path: { product_id: productId } },
         }),
       ),
+    enabled: canSeeHistory,
   });
-  const movements = useQuery({
-    queryKey: queryKeys.movements.list({ product_id: productId, page_size: 8 }),
-    queryFn: () =>
-      unwrap(
-        api.GET("/api/v1/inventory/movements", {
-          params: { query: { product_id: productId, page_size: 8 } },
-        }),
-      ),
-  });
-  const [priceOpen, setPriceOpen] = useState(false);
-  const [adjustOpen, setAdjustOpen] = useState(false);
+  const categories = useCategories();
 
   if (product.isError) {
     return <ErrorState error={product.error} onRetry={() => void product.refetch()} />;
   }
-  if (!product.data) return <Skeleton className="h-96 w-full" />;
+  if (!product.data) return <Skeleton className="mx-auto h-96 max-w-page" />;
 
   const data = product.data;
-  const line = stock.data?.get(data.id);
+  const line = stock.data?.get(productId);
+  const unit = unitWord(data.unit);
+  const shelf = categories.data?.find((category) => category.id === data.category_id)?.name;
+  const qty = line?.qty_on_hand ?? "0";
+  const low = line ? line.status !== "ok" : false;
+  const cost =
+    line && compareDecimal(line.avg_cost, "0") === 1 ? line.avg_cost : (data.cost_price ?? null);
+  const gain = cost ? subtractDecimal(data.unit_price ?? "0", cost) : null;
+  const gainNegative = gain !== null && gain.startsWith("-");
+  const monthSold = history.data?.month_sold_qty ?? "0";
+  const perDay =
+    history.data && history.data.month_days > 0
+      ? (Number(monthSold) / history.data.month_days).toFixed(0)
+      : "0";
+  const copies = Math.min(MAX_LABELS, Math.max(0, Number(labelsCount) || 0));
 
   return (
-    <>
+    <div className="mx-auto flex max-w-page flex-col gap-5">
       <Link
         href="/products"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        className="inline-flex min-h-11 items-center gap-2 self-start font-bold text-ventes hover:text-ventes-encre pointer-coarse:min-h-12"
       >
-        <ArrowLeft className="size-4" aria-hidden />
-        {labels.products.backToList}
+        <ArrowLeft className="size-[22px]" aria-hidden />
+        {t.back}
       </Link>
-      <PageHeader
-        title={data.name}
-        count={
-          <span className="flex flex-wrap items-center gap-2">
-            {!data.is_active && <Badge variant="neutral">{labels.products.inactiveBadge}</Badge>}
-            {line && <StockStatusBadge status={line.status} />}
-          </span>
-        }
-        actions={
-          <>
-            <Can permission="products:update">
-              <Button variant="outline" asChild>
-                <Link href={`/products/${data.id}/edit`}>
-                  <Pencil aria-hidden />
-                  {labels.products.edit}
-                </Link>
-              </Button>
-            </Can>
-            {data.barcode && (
-              <Button variant="outline" asChild>
-                <Link href={`/products/${data.id}/etiquette`}>
-                  <Printer aria-hidden />
-                  {labels.products.printLabel}
-                </Link>
-              </Button>
-            )}
-            <Can permission="prices:create">
-              <Button variant="outline" onClick={() => setPriceOpen(true)}>
-                <Tag aria-hidden />
-                {labels.products.changePrice}
-              </Button>
-            </Can>
-            {data.is_stock_tracked && (
-              <Can permission="inventory:update">
-                <Button onClick={() => setAdjustOpen(true)}>
-                  <Boxes aria-hidden />
-                  {labels.products.adjustStock}
-                </Button>
-              </Can>
-            )}
-          </>
-        }
-      />
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>{labels.products.priceHistory}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {prices.data ? (
-                <ol className="relative space-y-4 border-l pl-6">
-                  {prices.data.items.map((price) => {
-                    const current = price.valid_to === null;
-                    return (
-                      <li key={price.id} className="relative">
-                        <span
-                          aria-hidden
-                          className={cn(
-                            "absolute top-1.5 -left-[31px] size-3 rounded-full border-2 border-card",
-                            current ? "bg-primary" : "bg-muted-foreground/40",
-                          )}
-                        />
-                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                          <Money
-                            value={price.unit_price}
-                            currency={currency}
-                            className={cn("text-base", current && "font-semibold")}
-                          />
-                          {current && <Badge variant="info">{labels.products.current}</Badge>}
-                          {price.cost_price && (
-                            <span className="text-sm text-muted-foreground">
-                              {labels.products.costPrice(formatMoney(price.cost_price, currency))}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm numeric text-muted-foreground">
-                          {current
-                            ? labels.products.priceFrom(formatDateTime(price.valid_from, timeZone))
-                            : labels.products.priceRange(
-                                formatDateTime(price.valid_from, timeZone),
-                                formatDateTime(price.valid_to, timeZone),
-                              )}
-                        </p>
-                      </li>
-                    );
-                  })}
-                </ol>
-              ) : (
-                <Skeleton className="h-24 w-full" />
-              )}
-            </CardContent>
-          </Card>
-
-          {data.is_stock_tracked && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{labels.products.lastMovements}</CardTitle>
-                <CardAction>
-                  <Link
-                    href={`/inventory?tab=journal&product=${data.id}`}
-                    className="text-sm font-medium text-primary hover:underline"
-                  >
-                    {labels.products.seeJournal}
-                  </Link>
-                </CardAction>
-              </CardHeader>
-              <CardContent>
-                {!movements.data ? (
-                  <Skeleton className="h-24 w-full" />
-                ) : movements.data.items.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">{labels.products.noMovements}</p>
-                ) : (
-                  <ul className="divide-y">
-                    {movements.data.items.map((movement) => {
-                      const positive = compareDecimal(movement.qty_delta, "0") === 1;
-                      return (
-                        <li
-                          key={movement.id}
-                          className="flex items-center justify-between gap-3 py-2"
-                        >
-                          <div className="min-w-0">
-                            <p className="font-medium">
-                              {labels.stock.movementTypes[movement.type]}
-                            </p>
-                            <p className="truncate text-sm text-muted-foreground">
-                              <span className="numeric">
-                                {formatDateTime(movement.occurred_at, timeZone)}
-                              </span>
-                              {movement.reason_code
-                                ? ` · ${labels.stock.reasons[movement.reason_code]}`
-                                : movement.note && ` · ${movement.note}`}
-                            </p>
-                          </div>
-                          <span
-                            className={cn(
-                              "font-medium numeric",
-                              positive ? "text-success-ink" : "text-danger-ink",
-                            )}
-                          >
-                            {positive ? "+" : ""}
-                            {formatQty(movement.qty_delta)}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
+      <div className="flex flex-wrap items-center gap-4">
+        <span
+          aria-hidden
+          className={cn(
+            "flex size-[72px] shrink-0 items-center justify-center rounded-tuile text-3xl font-extrabold text-blanc",
+            SQUARE_TONES[(articleTone(data.name) - 1) % SQUARE_TONES.length],
           )}
+        >
+          {data.name.trim().charAt(0).toLocaleUpperCase("fr-FR")}
+        </span>
+        <div className="flex-[1_1_240px]">
+          <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{data.name}</h1>
+          <p className="text-lg text-muted-foreground">{t.subtitle(shelf ?? null, unit)}</p>
         </div>
-
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>{labels.products.sheet}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <Row label={labels.products.unitPrice}>
-                {data.unit_price ? (
-                  <Money value={data.unit_price} currency={currency} className="font-semibold" />
-                ) : (
-                  labels.products.noPrice
-                )}
-              </Row>
-              <Row label={labels.products.category}>
-                {(data.category_id && categoryPath.get(data.category_id)) ?? "—"}
-              </Row>
-              <Row label={labels.products.unit}>{labels.units[data.unit]}</Row>
-              <Row label={labels.products.reorderPoint}>
-                <span className="numeric">{formatQty(data.reorder_point)}</span>
-              </Row>
-              {/* Les champs avancés, fermés par défaut (lot 1). */}
-              <details className="pt-2">
-                <summary className="min-h-cible cursor-pointer content-center font-bold">
-                  {labels.products.moreInfo}
-                </summary>
-                <div className="space-y-2">
-                  <Row label={labels.products.sku}>
-                    <span className="numeric">{data.sku}</span>
-                  </Row>
-                  <Row label={labels.products.barcode}>
-                    <span className="numeric">{data.barcode ?? "—"}</span>
-                  </Row>
-                  <Row label={labels.products.taxRate}>
-                    <span className="numeric">{rateToPercent(data.default_tax_rate)} %</span>
-                  </Row>
-                  <Row label={labels.products.stockTracked}>
-                    {data.is_stock_tracked ? labels.products.yes : labels.products.no}
-                  </Row>
-                  <Row label={labels.products.createdAt}>
-                    <span className="numeric">{formatDate(data.created_at, timeZone)}</span>
-                  </Row>
-                </div>
-              </details>
-            </CardContent>
-          </Card>
-
-          {data.is_stock_tracked && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{labels.products.stock}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {line ? (
-                  <>
-                    <Row label={labels.products.qtyOnHand}>
-                      <span className="text-figure-sm numeric">
-                        {spacedGroups(
-                          formatQtyWithUnit(
-                            line.qty_on_hand,
-                            labels.units[data.unit],
-                            labels.unitsPlural[data.unit],
-                          ),
-                        )}
-                      </span>
-                    </Row>
-                    <Row label={labels.products.avgCost}>
-                      <Money value={line.avg_cost} currency={currency} />
-                    </Row>
-                    <Row label={labels.products.stockValue}>
-                      <Money value={line.stock_value} currency={currency} />
-                    </Row>
-                  </>
-                ) : (
-                  <p className="text-muted-foreground">{labels.products.noMovement}</p>
-                )}
-              </CardContent>
-            </Card>
-          )}
+        <div className="flex flex-wrap gap-2">
+          <Can permission="prices:create">
+            <button type="button" className={SECONDARY} onClick={() => setEditing((on) => !on)}>
+              {t.changePrices}
+            </button>
+          </Can>
+          <Can permission="inventory:update">
+            <Link href={`/inventory/adjust?product=${data.id}`} className={SECONDARY}>
+              {t.adjust}
+            </Link>
+          </Can>
+          <Can permission="inventory:create">
+            <Link href={`/inventory/receive?product=${data.id}`} className={PRIMARY}>
+              {t.order}
+            </Link>
+          </Can>
         </div>
       </div>
 
-      <PriceDialog product={data} open={priceOpen} onOpenChange={setPriceOpen} />
-      <StockCorrectionDialog open={adjustOpen} onOpenChange={setAdjustOpen} productId={data.id} />
-    </>
+      {editing && <PriceEditor product={data} onDone={() => setEditing(false)} />}
+
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
+        <Tile
+          tone="bg-stock-teinte"
+          ink={low ? "text-stock-encre" : "text-foreground"}
+          label={t.inStock}
+          value={data.is_stock_tracked ? qtyWithUnit(qty, data.unit) : "—"}
+          detail={
+            !data.is_stock_tracked
+              ? t.notTracked
+              : data.reorder_point
+                ? t.alertAt(qtyWithUnit(data.reorder_point, data.unit))
+                : t.noAlert
+          }
+          detailInk={low ? "text-stock-encre font-semibold" : "text-muted-foreground"}
+        />
+        <Tile
+          tone="bg-ventes-teinte"
+          ink="text-ventes-encre"
+          label={t.price}
+          value={formatAmount(data.unit_price, currency)}
+          detail={cost ? t.bought(formatAmount(cost, currency)) : " "}
+        />
+        <Tile
+          tone={gainNegative ? "bg-depenses-teinte" : "bg-ventes-teinte"}
+          ink={gainNegative ? "text-depenses-encre" : "text-ventes-encre"}
+          label={t.gain(unit)}
+          value={gain ? formatAmount(gain, currency).replace("-", "−") : "—"}
+          detail={t.gainHint}
+        />
+        <Tile
+          tone="bg-argent-teinte"
+          ink="text-argent-encre"
+          label={t.soldMonth}
+          value={qtyWithUnit(monthSold, data.unit)}
+          detail={t.perDay(qtyWithUnit(perDay, data.unit))}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-start gap-5">
+        {canSeeHistory && (
+          <section className="min-w-0 flex-[3_1_460px] rounded-carte border border-border bg-card p-carte">
+            <h2 className="text-titre-carte">{t.history.title}</h2>
+            <div className="mt-2">
+              {history.isPending ? (
+                <Skeleton className="h-48 w-full" />
+              ) : (history.data?.items.length ?? 0) === 0 ? (
+                <p className="border-t border-filet pt-3 text-muted-foreground">
+                  {t.history.empty}
+                </p>
+              ) : (
+                history.data?.items.slice(0, HISTORY_SHOWN).map((item) => {
+                  const kind = historyKind(item);
+                  return (
+                    <div
+                      key={item.movement_id}
+                      className="flex items-center gap-3 border-t border-filet py-3"
+                    >
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "flex size-10 shrink-0 items-center justify-center rounded-mini text-lg font-extrabold",
+                          KIND_TONE[kind],
+                        )}
+                      >
+                        {KIND_SIGN[kind]}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-bold">{historyPhrase(item)}</span>
+                        <span className="block text-muted-foreground">
+                          {historyWhen(item.occurred_at, timeZone)}
+                        </span>
+                      </span>
+                      <span className={cn("text-lg font-extrabold numeric", KIND_INK[kind])}>
+                        {historyQty(item, data.unit)}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </section>
+        )}
+
+        <section className="flex min-w-0 flex-[2_1_320px] flex-col gap-3.5 rounded-carte border border-border bg-card p-carte">
+          <h2 className="text-titre-carte">{t.label}</h2>
+          <div className="flex flex-col items-center gap-1.5 rounded-touche border-2 border-dashed border-input bg-recu-papier p-4 text-recu-encre">
+            <p className="font-bold">{data.name}</p>
+            <p className="text-[30px] leading-tight font-extrabold numeric">
+              {formatAmount(data.unit_price, currency)}
+            </p>
+            {data.barcode && <Ean13Barcode code={data.barcode} className="h-[76px] w-auto" />}
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="flex-[1_1_140px] font-bold">{t.howManyLabels}</span>
+            <button
+              type="button"
+              className="flex size-[52px] items-center justify-center rounded-touche border-2 border-input bg-card outline-none hover:bg-voile focus-visible:ring-3 focus-visible:ring-ring/50"
+              onClick={() => setLabelsCount(String(Math.max(1, copies - 1)))}
+              aria-label={t.oneLess}
+            >
+              <Minus className="size-5" aria-hidden />
+            </button>
+            <input
+              inputMode="numeric"
+              autoComplete="off"
+              aria-label={t.labelsCount}
+              value={labelsCount}
+              onChange={(event) => setLabelsCount(cleanAmount(event.target.value).slice(0, 3))}
+              className={cn(
+                fieldClasses("stock"),
+                "min-h-[52px] w-20 text-center text-[22px] font-bold numeric",
+              )}
+            />
+            <button
+              type="button"
+              className="flex size-[52px] items-center justify-center rounded-touche border-2 border-input bg-card outline-none hover:bg-voile focus-visible:ring-3 focus-visible:ring-ring/50"
+              onClick={() => setLabelsCount(String(Math.min(MAX_LABELS, copies + 1)))}
+              aria-label={t.oneMore}
+            >
+              <Plus className="size-5" aria-hidden />
+            </button>
+          </div>
+          <Link
+            href={`/products/${data.id}/etiquette?count=${copies}`}
+            aria-disabled={copies === 0}
+            className={cn(PRIMARY, copies === 0 && "pointer-events-none opacity-50")}
+          >
+            {t.print(copies)}
+          </Link>
+          <button
+            type="button"
+            onClick={() => setMore((open) => !open)}
+            aria-expanded={more}
+            className="min-h-12 text-left font-bold text-encre-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            {more ? t.less : t.more}
+          </button>
+          {more && (
+            <dl className="flex flex-col gap-1.5 rounded-touche bg-muted px-3.5 py-3">
+              <Info label={t.sku} value={data.sku} />
+              <Info label={t.barcode} value={data.barcode ?? "—"} />
+              <Info
+                label={t.tax}
+                value={
+                  compareDecimal(data.default_tax_rate ?? "0", "0") === 1
+                    ? `${formatQty(String(Number(data.default_tax_rate) * 100))} %`
+                    : t.noTax
+                }
+              />
+              <Info label={t.createdAt} value={formatDateLong(data.created_at, timeZone)} />
+            </dl>
+          )}
+        </section>
+      </div>
+    </div>
   );
 }
 
-function PriceDialog({
-  product,
-  open,
-  onOpenChange,
+function Tile({
+  tone,
+  ink,
+  label,
+  value,
+  detail,
+  detailInk = "text-muted-foreground",
 }: {
-  product: Product;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  tone: string;
+  ink: string;
+  label: string;
+  value: ReactNode;
+  detail: ReactNode;
+  detailInk?: string;
 }) {
+  return (
+    <div className={cn("flex flex-col gap-1 rounded-tuile p-[18px]", tone)}>
+      <span className="font-semibold">{label}</span>
+      <span className={cn("text-[32px] leading-tight font-extrabold numeric", ink)}>{value}</span>
+      <span className={detailInk}>{detail}</span>
+    </div>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="font-bold numeric">{value}</dd>
+    </div>
+  );
+}
+
+/** « Changer les prix » : vente et achat tapés librement, un nouvel intervalle de prix. */
+function PriceEditor({ product, onDone }: { product: Product; onDone: () => void }) {
   const queryClient = useQueryClient();
-  const [price, setPrice] = useState("");
-  const [cost, setCost] = useState("");
-  const [errors, setErrors] = useState<{ price?: string; cost?: string; form?: string }>({});
+  const [price, setPrice] = useState(wholeUnits(product.unit_price).toString());
+  const [cost, setCost] = useState(
+    product.cost_price ? wholeUnits(product.cost_price).toString() : "",
+  );
+  const [error, setError] = useState<string | null>(null);
 
   const change = useMutation({
     meta: { toastError: false },
-    mutationFn: (body: Schemas["ProductPriceCreate"]) =>
+    mutationFn: () =>
       unwrap(
         api.POST("/api/v1/products/{product_id}/prices", {
           params: { path: { product_id: product.id } },
-          body,
+          body: { unit_price: price, cost_price: cost || null },
         }),
       ),
     onSuccess: () => {
-      for (const key of [queryKeys.products.all]) {
+      for (const key of [queryKeys.products.all, queryKeys.stock.all]) {
         void queryClient.invalidateQueries({ queryKey: key });
       }
-      toast.success(labels.products.priceSaved);
-      setPrice("");
-      setCost("");
-      onOpenChange(false);
+      toast.success(t.saved);
+      onDone();
     },
-    onError: (error) => setErrors({ form: errorMessage(error) }),
+    onError: (failure) => setError(errorMessage(failure)),
   });
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) setErrors({});
-        onOpenChange(next);
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{labels.products.priceTitle}</DialogTitle>
-          <DialogDescription>{labels.products.priceDescription}</DialogDescription>
-        </DialogHeader>
-        <form
-          noValidate
-          className="space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const unitPrice = parseDecimalInput(price);
-            const costPrice = cost.trim() ? parseDecimalInput(cost) : null;
-            const next: typeof errors = {};
-            if (unitPrice === null || compareDecimal(unitPrice, "0") !== 1) {
-              next.price = labels.sales.invalidNumber;
-            }
-            if (cost.trim() && costPrice === null) next.cost = labels.sales.invalidNumber;
-            setErrors(next);
-            if (Object.keys(next).length > 0 || unitPrice === null) return;
-            change.mutate({ unit_price: unitPrice, cost_price: costPrice });
-          }}
-        >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="new-price">{labels.products.newPrice}</Label>
-              <Input
-                id="new-price"
-                inputMode="decimal"
-                value={price}
-                aria-invalid={Boolean(errors.price)}
-                onChange={(event) => setPrice(event.target.value)}
-                className="text-right numeric"
-              />
-              <FieldError message={errors.price} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="new-cost">{labels.products.newCost}</Label>
-              <Input
-                id="new-cost"
-                inputMode="decimal"
-                value={cost}
-                aria-invalid={Boolean(errors.cost)}
-                onChange={(event) => setCost(event.target.value)}
-                className="text-right numeric"
-              />
-              <FieldError message={errors.cost} />
-            </div>
-          </div>
-          <FieldError message={errors.form} />
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              {labels.common.close}
-            </Button>
-            <Button type="submit" disabled={change.isPending}>
-              {labels.common.save}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="text-right">{children}</span>
-    </div>
+    <section className="flex flex-wrap items-end gap-4 rounded-carte border-2 border-stock-anneau bg-card p-carte">
+      <label className="flex-[1_1_200px]">
+        <span className="mb-1.5 block font-bold">{t.salePrice}</span>
+        <input
+          inputMode="numeric"
+          autoComplete="off"
+          value={price}
+          onChange={(event) => setPrice(cleanAmount(event.target.value))}
+          className={cn(fieldClasses("stock"), "min-h-[58px] px-4 text-[22px] font-bold numeric")}
+        />
+      </label>
+      <label className="flex-[1_1_200px]">
+        <span className="mb-1.5 block font-bold">{t.buyPrice}</span>
+        <input
+          inputMode="numeric"
+          autoComplete="off"
+          value={cost}
+          onChange={(event) => setCost(cleanAmount(event.target.value))}
+          className={cn(fieldClasses("stock"), "min-h-[58px] px-4 text-[22px] font-bold numeric")}
+        />
+      </label>
+      <button
+        type="button"
+        className={PRIMARY}
+        disabled={!price || change.isPending}
+        onClick={() => {
+          setError(null);
+          change.mutate();
+        }}
+      >
+        {t.save}
+      </button>
+      <FieldError message={error} />
+    </section>
   );
 }

@@ -277,6 +277,16 @@ vente), `lib/units.ts` (« 2 sacs », « Vente n° 1044 »), `lib/whatsapp.ts` (
 lien `wa.me`), `lib/number-words.ts` (montant en toutes lettres), `lib/refund.ts` (valeur
 rendue, même formule que le serveur).
 
+Écrans du lot 3b (ADR 0071) : Stock (`products/products-list-view.tsx` : valeur du stock,
+raccourcis, puces d'état et de rayon, barre de niveau verte, orange ou vide), fiche article
+(`products/[id]/` : prix changés sur place, historique en phrases, étiquettes), nouvel
+article avec écran de succès (`products/new/`), Rayons (`products/categories/` : huit
+couleurs, suppression d'un rayon vide seulement), correction (`components/inventory/
+stock-correction.tsx`, `/inventory/adjust`), livraison (`components/inventory/
+delivery-form.tsx`, `/inventory/receive`) et « Tous les mouvements » (`/inventory`). Aides :
+`lib/shelf-colors.ts` (couleur d'un rayon, la sienne ou tirée du nom), `lib/stock-history.ts`
+(phrase, genre, date et quantité d'une ligne d'historique).
+
 ## Do's and Don'ts
 
 ### Do:

@@ -70,7 +70,8 @@ export function formatDayLong(day: string): string {
     day: "numeric",
     month: "long",
   }).format(new Date(`${day}T12:00:00Z`));
-  return capitalise(text);
+  // « Jeudi 1er octobre » : le premier du mois s'écrit avec « er ».
+  return capitalise(text.replace(/(^|\s)1(\s)/, "$11er$2"));
 }
 
 /** Jour de la semaine abrégé sous une barre de graphique : « Mer », « Jeu ». */

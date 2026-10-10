@@ -102,7 +102,7 @@ export function ProductSquare({
   name: string;
   /** 1 à 12 ; par défaut tiré du nom. */
   tone?: number;
-  size?: "petit" | "normal" | "grand";
+  size?: "petit" | "normal" | "moyen" | "grand" | "tres-grand";
 }) {
   const index = (tone ?? articleTone(name)) - 1;
   return (
@@ -111,11 +111,15 @@ export function ProductSquare({
       className={cn(
         "flex shrink-0 items-center justify-center font-extrabold text-blanc",
         ARTICLE_TONES[index % ARTICLE_TONES.length],
-        size === "grand"
-          ? "size-[52px] rounded-touche text-xl"
-          : size === "petit"
-            ? "size-11 rounded-mini"
-            : "size-12 rounded-touche text-[19px]",
+        size === "tres-grand"
+          ? "size-16 rounded-touche text-[26px]"
+          : size === "grand"
+            ? "size-[52px] rounded-touche text-xl"
+            : size === "moyen"
+              ? "size-[50px] rounded-touche text-[19px]"
+              : size === "petit"
+                ? "size-11 rounded-mini"
+                : "size-12 rounded-touche text-[19px]",
       )}
     >
       {name.trim().charAt(0).toLocaleUpperCase("fr-FR")}

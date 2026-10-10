@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
@@ -20,6 +21,7 @@ from app.modules.analytics import service
 from app.modules.analytics.schemas import (
     MAX_RANKING_LIMIT,
     FinanceOverview,
+    ProductHistory,
     ProductMetric,
     ProductRanking,
     Timeseries,
@@ -86,3 +88,13 @@ def timeseries(
         period_from=period_from,
         period_to=period_to,
     )
+
+
+@router.get("/products/{product_id}/history", response_model=ProductHistory)
+def product_history(
+    product_id: UUID,
+    tenant: Annotated[TenantSession, Depends(require_permission("inventory:read"))],
+) -> ProductHistory:
+    """« Ce qui s'est passé » sur la fiche d'un article : ventes, livraisons, retours et
+    corrections, avec le client, le fournisseur ou la raison (ADR 0071)."""
+    return service.product_history(tenant.session, tenant.ctx, product_id)

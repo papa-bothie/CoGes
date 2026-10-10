@@ -31,9 +31,9 @@ export type NavItem = {
  * (prompt de phase 15). Il lit les articles et la caisse pour vendre, mais ne gère ni le
  * stock (`products:create`) ni l'argent (`debts:read`, `expenses:read`).
  *
- * Liens provisoires (ADR 0070) : Stock s'allume aussi sur `/inventory`, Clients sur
- * `/suppliers`, Conseils sur `/analytics`, jusqu'à la fusion de ces pages aux lots 3b, 3c
- * et 3e.
+ * Stock s'allume aussi sur `/inventory` : correction, livraison et « Tous les mouvements »
+ * (ADR 0071). Liens provisoires (ADR 0070) : Clients sur `/suppliers`, Conseils sur
+ * `/analytics`, jusqu'à la fusion de ces pages aux lots 3c et 3e.
  */
 export const MAIN_NAV: readonly NavItem[] = [
   {

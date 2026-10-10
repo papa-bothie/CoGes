@@ -216,3 +216,20 @@ class CurrentPrice(BaseModel):
     unit_price: SellingPrice
     cost_price: CostPrice | None
     valid_from: datetime
+
+
+class CategoryCount(BaseModel):
+    """Nombre d'articles vivants d'un rayon."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    category_id: UUID
+    product_count: int
+
+
+class CategoryCounts(BaseModel):
+    """Articles par rayon (écran 12 « Rayons », ADR 0071). Un rayon vide est absent."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[CategoryCount]

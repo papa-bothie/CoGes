@@ -12,7 +12,7 @@ Ces deux types appartiennent aux flux de vente (phases 05-06), qui passent par
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Literal, Self
 from uuid import UUID
@@ -20,6 +20,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.core.money import Amount, Quantity, UnitCost
+from app.modules.finance.schemas import PaymentMethod
 from app.modules.products.schemas import ProductCreate, ProductRead, ProductUnit
 
 NOTE_MAX_LENGTH = 500
@@ -201,6 +202,12 @@ class StockLine(BaseModel):
     reorder_point: Quantity | None
     status: StockStatus
     last_movement_at: datetime | None
+    #: Prix de vente courant (« vendu 15 500 F », écran 07, ADR 0071).
+    unit_price: Amount | None
+    #: Stock rapporté au plus haut des 90 derniers jours, de 0 à 1 : la barre de niveau.
+    level: Decimal
+    #: Un article non suivi (service, recharge) figure sans quantité à compter.
+    is_stock_tracked: bool
 
 
 class StockPage(BaseModel):
@@ -251,3 +258,87 @@ class NewProductRead(BaseModel):
     product: ProductRead
     #: Le mouvement `initial`, ou rien si la quantité était nulle.
     opening_movement: MovementRead | None
+
+
+class StockSummary(BaseModel):
+    """En tête de l'écran Stock (maquette v2, écran 07, ADR 0071)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Articles qui ont une ligne de stock (un article jamais entré n'en a pas).
+    product_count: int
+    #: Valeur au prix d'achat moyen (CMP), comme la valorisation du § 5.6.
+    stock_value: Amount
+    low_count: int
+    out_count: int
+
+
+#: Moments de paiement d'une livraison (maquette v2, écran 11) : tout maintenant, une
+#: partie, plus tard.
+type DeliveryPaymentMode = Literal["now", "part", "later"]
+#: Plafond de lignes d'une livraison : une boutique reçoit rarement plus de cent articles
+#: d'un coup, et la borne protège la transaction.
+MAX_DELIVERY_LINES = 100
+
+
+class DeliveryLineCreate(BaseModel):
+    """Un article livré : quantité et prix d'achat unitaire, tous deux tapés librement."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    qty: Annotated[Quantity, Field(gt=Decimal("0"))]
+    unit_cost: Annotated[UnitCost, Field(ge=Decimal("0"))]
+
+
+class DeliveryCreate(BaseModel):
+    """Une livraison fournisseur (ADR 0071) : le stock entre, la dette s'ouvre, le paiement
+    éventuel la règle, dans une seule transaction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    supplier_id: UUID
+    lines: Annotated[list[DeliveryLineCreate], Field(min_length=1, max_length=MAX_DELIVERY_LINES)]
+    payment_mode: DeliveryPaymentMode
+    #: Ce qui est payé tout de suite, pour « Une partie » seulement : plus que 0, moins que
+    #: le total (vérifié par le service, qui calcule le total).
+    paid_amount: Annotated[Amount, Field(gt=Decimal("0"))] | None = None
+    method: PaymentMethod = "cash"
+    #: Échéance du reste (« À payer avant »), pour « Une partie » ou « Plus tard ».
+    due_date: date | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        products = [line.product_id for line in self.lines]
+        if len(set(products)) != len(products):
+            raise ValueError("Un article ne figure qu'une fois dans une livraison.")
+        if self.payment_mode == "part" and self.paid_amount is None:
+            raise ValueError("« Une partie » demande le montant payé maintenant.")
+        if self.payment_mode != "part" and self.paid_amount is not None:
+            raise ValueError("Le montant payé ne se donne que pour « Une partie ».")
+        return self
+
+
+class DeliveryLineRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    movement_id: UUID
+    qty: Quantity
+    unit_cost: UnitCost
+
+
+class DeliveryRead(BaseModel):
+    """Ce que la livraison a écrit : la dette qui la porte, ce qui est payé et ce qui reste."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    debt_id: UUID
+    supplier_id: UUID
+    #: Décaissement lettré sur la dette, s'il y en a un.
+    payment_id: UUID | None
+    total: Amount
+    paid: Amount
+    balance: Amount
+    due_date: date | None
+    lines: list[DeliveryLineRead]

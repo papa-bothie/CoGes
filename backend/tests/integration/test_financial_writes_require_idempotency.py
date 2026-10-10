@@ -28,6 +28,7 @@ FINANCIAL_WRITES = (
     "/api/v1/sales/{sale_id}/returns",
     "/api/v1/sale-returns/{return_id}/refunds",
     "/api/v1/imports/{kind}",
+    "/api/v1/inventory/deliveries",
 )
 
 

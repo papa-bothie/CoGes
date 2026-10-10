@@ -11,6 +11,8 @@ from app.core.deps import TenantSession, client_ip, require_permission
 from app.core.repository import MAX_PAGE_SIZE
 from app.modules.products import service
 from app.modules.products.schemas import (
+    CategoryCount,
+    CategoryCounts,
     ProductCreate,
     ProductPage,
     ProductPriceCreate,
@@ -51,6 +53,20 @@ def list_products(
         page=page,
         page_size=page_size,
         total=total,
+    )
+
+
+@router.get("/category-counts", response_model=CategoryCounts)
+def category_counts(
+    tenant: Annotated[TenantSession, Depends(require_permission("products:read"))],
+) -> CategoryCounts:
+    """Nombre d'articles de chaque rayon. Déclarée avant `/{product_id}`."""
+    counts = service.counts_by_category(tenant.session, tenant.ctx)
+    return CategoryCounts(
+        items=[
+            CategoryCount(category_id=category_id, product_count=count)
+            for category_id, count in counts.items()
+        ]
     )
 
 

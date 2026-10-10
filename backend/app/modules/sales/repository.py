@@ -258,6 +258,38 @@ class SaleItemRepository(TenantRepository[SaleItem]):
 
     model = SaleItem
 
+    def customer_ids_by_item(self, item_ids: Sequence[UUID]) -> dict[UUID, UUID | None]:
+        """Client de la vente de chaque ligne (historique d'un article, ADR 0071)."""
+        if not item_ids:
+            return {}
+        stmt = (
+            select(SaleItem.id, Sale.customer_id)
+            .join(Sale, (Sale.id == SaleItem.sale_id) & (Sale.company_id == SaleItem.company_id))
+            .where(SaleItem.company_id == self.ctx.company_id, SaleItem.id.in_(list(item_ids)))
+        )
+        return {row[0]: row[1] for row in self.session.execute(stmt).all()}
+
+    def customer_ids_by_return_item(
+        self, return_item_ids: Sequence[UUID]
+    ) -> dict[UUID, UUID | None]:
+        """Client de la vente d'origine de chaque ligne de retour."""
+        if not return_item_ids:
+            return {}
+        stmt = (
+            select(SaleReturnItem.id, Sale.customer_id)
+            .join(
+                SaleItem,
+                (SaleItem.id == SaleReturnItem.sale_item_id)
+                & (SaleItem.company_id == SaleReturnItem.company_id),
+            )
+            .join(Sale, (Sale.id == SaleItem.sale_id) & (Sale.company_id == SaleItem.company_id))
+            .where(
+                SaleReturnItem.company_id == self.ctx.company_id,
+                SaleReturnItem.id.in_(list(return_item_ids)),
+            )
+        )
+        return {row[0]: row[1] for row in self.session.execute(stmt).all()}
+
     def counts_by_sale(self, sale_ids: Sequence[UUID]) -> dict[UUID, int]:
         """Nombre de lignes de chaque vente : une requête pour toute une page."""
         if not sale_ids:

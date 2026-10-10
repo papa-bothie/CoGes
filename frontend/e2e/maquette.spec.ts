@@ -55,6 +55,12 @@ const DONE = new Set<string>([
   "05",
   "05b",
   "06",
+  "07",
+  "08",
+  "09",
+  "10",
+  "11",
+  "12",
   "26",
 ]);
 
@@ -76,6 +82,12 @@ const ALLOWED = new Set<string>([
   "05",
   "05b",
   "06",
+  "07",
+  "08",
+  "09",
+  "10",
+  "11",
+  "12",
   "26",
 ]);
 
@@ -149,6 +161,28 @@ const STATES: Record<string, (page: Page, request: APIRequestContext) => Promise
   "06": async (page) => {
     await page.getByLabel("Quantité rendue de Huile Dinor 1 L").fill("2");
     await expect(page.getByText("2 800 F")).toBeVisible();
+  },
+  "09": async (page) => {
+    await page.getByLabel("Nom de l'article").fill("Riz brisé 25 kg");
+    await page.getByLabel("Prix de vente (F)").fill("15500");
+    await page.getByLabel("Prix d'achat (F)").fill("14000");
+    await page.getByRole("button", { name: "Sac", exact: true }).click();
+    await page.getByRole("button", { name: "Céréales", exact: true }).click();
+    await page.getByLabel("Quantité en stock").fill("10");
+    await page.getByLabel("Seuil d’alerte").fill("3");
+    await page.getByLabel("Nom de l'article").blur();
+  },
+  "11": async (page) => {
+    await page.getByRole("button", { name: "Grossiste Sandaga", exact: true }).click();
+    for (const [name, qty, cost] of [
+      ["Riz brisé 25 kg", "10", "14000"],
+      ["Huile Dinor 1 L", "24", "1150"],
+    ] as const) {
+      await page.getByRole("button", { name: `+ ${name}`, exact: true }).click();
+      await page.getByLabel(`Quantité : ${name}`).fill(qty);
+      await page.getByLabel(`Prix d'achat (F) : ${name}`).fill(cost);
+    }
+    await expect(page.getByText("167 600 F")).toBeVisible();
   },
   "04b": async (page) => {
     await page.getByRole("button", { name: "Annuler la vente" }).click();

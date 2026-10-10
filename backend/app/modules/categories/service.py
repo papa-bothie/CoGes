@@ -162,7 +162,12 @@ def create_category(
     _assert_name_is_free(repository, payload.name, payload.parent_id)
 
     category = repository.add(
-        Category(company_id=ctx.company_id, name=payload.name, parent_id=payload.parent_id)
+        Category(
+            company_id=ctx.company_id,
+            name=payload.name,
+            parent_id=payload.parent_id,
+            color=payload.color,
+        )
     )
     session.flush()
     return category
@@ -192,6 +197,8 @@ def update_category(
 
     category.name = name
     category.parent_id = parent_id
+    if "color" in changes:
+        category.color = changes["color"]
     session.flush()
     return category
 

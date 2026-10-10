@@ -56,7 +56,7 @@ from app.modules.expenses.schemas import (
 from app.modules.finance import service as finance_service
 from app.modules.finance.schemas import AllocationInput, DebtCreate, PaymentCreate
 from app.modules.inventory import service as inventory_service
-from app.modules.inventory.schemas import MovementCreate
+from app.modules.inventory.schemas import DeliveryCreate, DeliveryLineCreate, MovementCreate
 from app.modules.products import service as products_service
 from app.modules.products.schemas import ProductCreate
 from app.modules.rbac import service as rbac_service
@@ -140,7 +140,16 @@ ARTICLES: tuple[Article, ...] = (
 )
 BY_KEY = {article.key: article for article in ARTICLES}
 #: L'écran « Rayons » (12) montre aussi un rayon vide.
-CATEGORIES = ("Céréales", "Huiles", "Boissons", "Hygiène", "Épicerie", "Produits frais")
+#: Rayons et leur couleur dans la palette de la maquette 12 (1 brun, 2 moutarde, 3 bleu,
+#: 4 violet, 5 bleu-vert, 6 vert, 7 rose, 8 rouge).
+CATEGORIES: tuple[tuple[str, int], ...] = (
+    ("Céréales", 1),
+    ("Huiles", 2),
+    ("Boissons", 3),
+    ("Hygiène", 4),
+    ("Épicerie", 5),
+    ("Produits frais", 6),
+)
 
 #: Clients de la maquette 13 : nom, téléphone.
 CUSTOMERS: tuple[tuple[str, str, str], ...] = (
@@ -592,8 +601,10 @@ def _catalogue(shop: Shop, plan: list[PlannedSale]) -> None:
     ctx = shop.manager
     with tenant_transaction(ctx) as session:
         categories = {
-            name: categories_service.create_category(session, ctx, CategoryCreate(name=name)).id
-            for name in CATEGORIES
+            name: categories_service.create_category(
+                session, ctx, CategoryCreate(name=name, color=color)
+            ).id
+            for name, color in CATEGORIES
         }
         for index, article in enumerate(ARTICLES, start=1):
             product, _ = products_service.create_product(
@@ -700,46 +711,33 @@ def _cancel(shop: Shop, sale_id: UUID) -> None:
 
 def _delivery(shop: Shop) -> None:
     """Livraison du Grossiste Sandaga du 3 octobre (maquettes 11 et 16) : 10 sacs de riz,
-    24 huiles, 167 600 F ; 47 600 F payés en espèces, 120 000 F à payer avant le 10."""
+    24 huiles, 167 600 F ; 47 600 F payés en espèces, 120 000 F à payer avant le 10.
+    Passe par la livraison de l'écran 11 (ADR 0071) : la fiche du riz dit « Livraison de
+    Grossiste Sandaga »."""
     ctx = shop.manager
     with tenant_transaction(ctx) as session:
-        for key, qty, cost in (("riz", 10, 14000), ("huile", 24, 1150)):
-            movement = inventory_service.record_movement(
-                session,
-                ctx,
-                MovementCreate(
-                    product_id=shop.products[key],
-                    type="purchase_in",
-                    qty_delta=Decimal(qty),
-                    unit_cost=Decimal(cost),
-                    supplier_id=shop.suppliers["sandaga"],
-                    note="Livraison du 03/10/2026",
-                ),
-                idempotency_key=uuid4(),
-            )
-            shop.moments[movement.id] = DELIVERY_AT
-        debt = finance_service.create_debt(
+        delivery = inventory_service.receive_delivery(
             session,
             ctx,
-            DebtCreate(
-                party_type="supplier",
+            DeliveryCreate(
                 supplier_id=shop.suppliers["sandaga"],
-                principal=Decimal(167600),
+                lines=[
+                    DeliveryLineCreate(
+                        product_id=shop.products[key], qty=Decimal(qty), unit_cost=Decimal(cost)
+                    )
+                    for key, qty, cost in (("riz", 10, 14000), ("huile", 24, 1150))
+                ],
+                payment_mode="part",
+                paid_amount=Decimal(47600),
+                method="cash",
                 due_date=date(2026, 10, 10),
             ),
         )
-        shop.moments[debt.id] = DELIVERY_AT
-        finance_service.record_payment(
-            session,
-            ctx,
-            PaymentCreate(
-                direction="outflow",
-                method="cash",
-                amount=Decimal(47600),
-                paid_at=_at(date(2026, 10, 3), 11, 30),
-                allocations=[AllocationInput(debt_id=debt.id, amount=Decimal(47600))],
-            ),
-        )
+        shop.moments[delivery.debt_id] = DELIVERY_AT
+        for line in delivery.lines:
+            shop.moments[line.movement_id] = DELIVERY_AT
+        if delivery.payment_id is not None:
+            shop.moments[delivery.payment_id] = _at(date(2026, 10, 3), 11, 30)
 
 
 def _suppliers(shop: Shop) -> None:
@@ -900,6 +898,11 @@ _RESTAMP_SQL = (
     FROM payments o, sales s
     WHERE r.company_id = :co AND o.company_id = :co AND s.company_id = :co
         AND o.id = r.reversal_of_payment_id AND s.id = o.sale_id;
+    """,
+    """
+    UPDATE payments SET paid_at = CAST(m.value AS timestamptz)
+    FROM jsonb_each_text(CAST(:moments AS jsonb)) m
+    WHERE company_id = :co AND id = CAST(m.key AS uuid);
     """,
     """
     UPDATE payments SET created_at = paid_at WHERE company_id = :co;

@@ -198,3 +198,62 @@ def test_day_totals_count_only_the_readers_sales(
     _customer_with_debt(api_client, beta_token, _stocked_product(api_client, beta_token))
     assert counts(alpha_token) == alpha_before
     assert counts(beta_token) == beta_before + 1
+
+
+def test_the_stock_list_and_summary_never_show_another_company(
+    api_client: TestClient, alpha_token: str, beta_token: str
+) -> None:
+    """`GET /inventory/stock?search=` et le résumé (ADR 0071) restent dans le tenant."""
+    foreign = _stocked_product(api_client, beta_token)
+    name = api_client.get(f"/api/v1/products/{foreign}", headers=auth_headers(beta_token)).json()[
+        "name"
+    ]
+    seen = api_client.get(
+        "/api/v1/inventory/stock",
+        headers=auth_headers(alpha_token),
+        params={"search": name, "page_size": 100},
+    ).json()
+    assert foreign not in {item["product_id"] for item in seen["items"]}
+    own = api_client.get(
+        "/api/v1/inventory/stock",
+        headers=auth_headers(beta_token),
+        params={"search": name, "page_size": 100},
+    ).json()
+    assert foreign in {item["product_id"] for item in own["items"]}
+
+    before = api_client.get(
+        "/api/v1/inventory/stock/summary", headers=auth_headers(alpha_token)
+    ).json()
+    _stocked_product(api_client, beta_token)
+    after = api_client.get(
+        "/api/v1/inventory/stock/summary", headers=auth_headers(alpha_token)
+    ).json()
+    assert after["product_count"] == before["product_count"]
+
+
+def test_a_delivery_of_another_company_s_article_is_refused(
+    api_client: TestClient, alpha_token: str, beta_token: str
+) -> None:
+    """Article de beta livré chez alpha : 404, et ni dette ni mouvement ne restent."""
+    foreign = _stocked_product(api_client, beta_token)
+    supplier = api_client.post(
+        "/api/v1/suppliers",
+        headers=auth_headers(alpha_token),
+        json={"name": f"Fournisseur {uuid4().hex[:8]}"},
+    ).json()["id"]
+    refused = api_client.post(
+        "/api/v1/inventory/deliveries",
+        headers=write_headers(alpha_token),
+        json={
+            "supplier_id": supplier,
+            "lines": [{"product_id": foreign, "qty": "5", "unit_cost": "100"}],
+            "payment_mode": "later",
+        },
+    )
+    assert refused.status_code == 404, refused.text
+    debts = api_client.get(
+        "/api/v1/debts",
+        headers=auth_headers(alpha_token),
+        params={"party_type": "supplier", "supplier_id": supplier},
+    ).json()
+    assert debts["total"] == 0

@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 #: Longueur maximale d'un nom de catégorie. La base n'impose que « non vide » ;
 #: la borne haute est une règle de saisie, elle appartient au schéma.
@@ -24,6 +24,10 @@ type CategoryName = Annotated[
 ]
 
 
+#: Couleur d'un rayon : l'une des huit de la maquette v2 (écran 12), dans l'ordre de sa palette.
+type CategoryColor = Annotated[int, Field(ge=1, le=8)]
+
+
 class CategoryRead(BaseModel):
     """Vue publique d'une catégorie."""
 
@@ -32,6 +36,7 @@ class CategoryRead(BaseModel):
     id: UUID
     parent_id: UUID | None
     name: str
+    color: int | None
     created_at: datetime
 
 
@@ -40,6 +45,7 @@ class CategoryCreate(BaseModel):
 
     name: CategoryName
     parent_id: UUID | None = None
+    color: CategoryColor | None = None
 
 
 class CategoryUpdate(BaseModel):
@@ -53,6 +59,8 @@ class CategoryUpdate(BaseModel):
 
     name: CategoryName | None = None
     parent_id: UUID | None = None
+    #: `null` explicite efface la couleur : le front la tire alors du nom.
+    color: CategoryColor | None = None
 
 
 class CategoryPage(BaseModel):

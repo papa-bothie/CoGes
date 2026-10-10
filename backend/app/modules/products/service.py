@@ -220,6 +220,27 @@ def reorder_points(session: Session, ctx: TenantContext) -> dict[UUID, Decimal]:
     return ProductRepository(session, ctx).reorder_points()
 
 
+def counts_by_category(session: Session, ctx: TenantContext) -> dict[UUID, int]:
+    """Nombre d'articles de chaque rayon (écran 12, ADR 0071)."""
+    return ProductRepository(session, ctx).counts_by_category()
+
+
+def ids_matching(session: Session, ctx: TenantContext, search: str) -> list[UUID] | None:
+    """Articles qui répondent à une recherche ; `None` si le terme est trop court."""
+    term = normalise_term(search)
+    if term is None:
+        return None
+    return ProductRepository(session, ctx).ids_matching(term)
+
+
+def current_unit_prices(
+    session: Session, ctx: TenantContext, product_ids: Sequence[UUID]
+) -> dict[UUID, Decimal]:
+    """Prix de vente courant de chaque article du lot (liste du stock, ADR 0071)."""
+    prices = ProductPriceRepository(session, ctx).current_by_product(list(product_ids))
+    return {product_id: price.unit_price for product_id, price in prices.items()}
+
+
 def count_active_in_category(session: Session, ctx: TenantContext, category_id: UUID) -> int:
     """Nombre de produits actifs dans une catégorie."""
     return ProductRepository(session, ctx).count_live_in_category(category_id)

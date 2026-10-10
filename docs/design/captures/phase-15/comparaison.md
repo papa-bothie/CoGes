@@ -7,23 +7,23 @@ page HTML). Images : maquette | front | différences.
 
 | N° | Écran | Lot | 1280 px | 390 px | Textes manquants | Images |
 |---|---|---|---|---|---|---|
-| 01 | Accueil | 3a | 4.9 % | 9.1 % | 0 | [1280](comparaison/01-accueil.png) [390](comparaison/01-accueil-390.png) |
+| 01 | Accueil | 3a | 3.0 % | 9.1 % | 0 | [1280](comparaison/01-accueil.png) [390](comparaison/01-accueil-390.png) |
 | 02 | Nouvelle vente | 3a | 10.9 % | 15.9 % | 0 | [1280](comparaison/02-nouvelle-vente.png) [390](comparaison/02-nouvelle-vente-390.png) |
 | 02b | paiement d'une partie (montant tapé + pavé) | 3a | 9.3 % | 15.2 % | — | [1280](comparaison/02b-nouvelle-vente-une-partie.png) [390](comparaison/02b-nouvelle-vente-une-partie-390.png) |
-| 02c | rendu de monnaie | 3a | 10.5 % | 15.8 % | — | [1280](comparaison/02c-nouvelle-vente-rendu-monnaie.png) [390](comparaison/02c-nouvelle-vente-rendu-monnaie-390.png) |
+| 02c | rendu de monnaie | 3a | 10.4 % | 15.7 % | — | [1280](comparaison/02c-nouvelle-vente-rendu-monnaie.png) [390](comparaison/02c-nouvelle-vente-rendu-monnaie-390.png) |
 | 02d | écran de succès | 3a | 2.9 % | 16.2 % | — | [1280](comparaison/02d-nouvelle-vente-succes.png) [390](comparaison/02d-nouvelle-vente-succes-390.png) |
-| 03 | Liste des ventes | 3a | 2.1 % | 5.8 % | 0 | [1280](comparaison/03-liste-des-ventes.png) [390](comparaison/03-liste-des-ventes-390.png) |
-| 04 | Détail d'une vente | 3a | 4.9 % | 8.5 % | 0 | [1280](comparaison/04-detail-vente.png) [390](comparaison/04-detail-vente-390.png) |
-| 04b | annulation (raison) | 3a | 5.5 % | 13.9 % | — | [1280](comparaison/04b-detail-vente-annulation.png) [390](comparaison/04b-detail-vente-annulation-390.png) |
-| 05 | Reçu, petit ticket 80 mm | 3a | 5.6 % | 16.5 % | 0 | [1280](comparaison/05-recu-ticket.png) [390](comparaison/05-recu-ticket-390.png) |
-| 05b | Reçu, facture A4 | 3a | 4.4 % | 13.8 % | — | [1280](comparaison/05b-recu-facture-a4.png) [390](comparaison/05b-recu-facture-a4-390.png) |
-| 06 | Retour d'articles | 3a | 4.3 % | 12.1 % | 0 | [1280](comparaison/06-retour-articles.png) [390](comparaison/06-retour-articles-390.png) |
-| 07 | Liste des articles (Stock) (à faire) | 3b | 6.5 % | 10.3 % | — | [1280](comparaison/07-liste-articles.png) [390](comparaison/07-liste-articles-390.png) |
-| 08 | Fiche article et étiquette (à faire) | 3b | 8.1 % | 7.8 % | — | [1280](comparaison/08-fiche-article.png) [390](comparaison/08-fiche-article-390.png) |
-| 09 | Nouvel article (à faire) | 3b | 7.7 % | 8.7 % | — | [1280](comparaison/09-nouvel-article.png) [390](comparaison/09-nouvel-article-390.png) |
-| 10 | Corriger le stock (à faire) | 3b | 9.0 % | 9.7 % | — | [1280](comparaison/10-corriger-stock.png) [390](comparaison/10-corriger-stock-390.png) |
-| 11 | Recevoir une livraison (à faire) | 3b | 7.9 % | 10.2 % | — | [1280](comparaison/11-recevoir-livraison.png) [390](comparaison/11-recevoir-livraison-390.png) |
-| 12 | Rayons (à faire) | 3b | 5.3 % | 10.3 % | — | [1280](comparaison/12-rayons.png) [390](comparaison/12-rayons-390.png) |
+| 03 | Liste des ventes | 3a | 1.9 % | 5.8 % | 0 | [1280](comparaison/03-liste-des-ventes.png) [390](comparaison/03-liste-des-ventes-390.png) |
+| 04 | Détail d'une vente | 3a | 4.4 % | 8.6 % | 0 | [1280](comparaison/04-detail-vente.png) [390](comparaison/04-detail-vente-390.png) |
+| 04b | annulation (raison) | 3a | 4.3 % | 14.1 % | — | [1280](comparaison/04b-detail-vente-annulation.png) [390](comparaison/04b-detail-vente-annulation-390.png) |
+| 05 | Reçu, petit ticket 80 mm | 3a | 5.1 % | 16.6 % | 0 | [1280](comparaison/05-recu-ticket.png) [390](comparaison/05-recu-ticket-390.png) |
+| 05b | Reçu, facture A4 | 3a | 4.0 % | 13.8 % | — | [1280](comparaison/05b-recu-facture-a4.png) [390](comparaison/05b-recu-facture-a4-390.png) |
+| 06 | Retour d'articles | 3a | 3.2 % | 12.0 % | 0 | [1280](comparaison/06-retour-articles.png) [390](comparaison/06-retour-articles-390.png) |
+| 07 | Liste des articles (Stock) | 3b | 4.1 % | 12.4 % | 0 | [1280](comparaison/07-liste-articles.png) [390](comparaison/07-liste-articles-390.png) |
+| 08 | Fiche article et étiquette | 3b | 5.4 % | 12.4 % | 0 | [1280](comparaison/08-fiche-article.png) [390](comparaison/08-fiche-article-390.png) |
+| 09 | Nouvel article | 3b | 8.0 % | 11.7 % | 0 | [1280](comparaison/09-nouvel-article.png) [390](comparaison/09-nouvel-article-390.png) |
+| 10 | Corriger le stock | 3b | 6.2 % | 16.9 % | 0 | [1280](comparaison/10-corriger-stock.png) [390](comparaison/10-corriger-stock-390.png) |
+| 11 | Recevoir une livraison | 3b | 5.6 % | 10.6 % | 0 | [1280](comparaison/11-recevoir-livraison.png) [390](comparaison/11-recevoir-livraison-390.png) |
+| 12 | Rayons | 3b | 2.7 % | 15.4 % | 0 | [1280](comparaison/12-rayons.png) [390](comparaison/12-rayons-390.png) |
 | 13 | Clients et fournisseurs (à faire) | 3c | 7.4 % | 8.0 % | — | [1280](comparaison/13-clients-fournisseurs.png) [390](comparaison/13-clients-fournisseurs-390.png) |
 | 14 | Fiche client (à faire) | 3c | 8.5 % | 6.2 % | — | [1280](comparaison/14-fiche-client.png) [390](comparaison/14-fiche-client-390.png) |
 | 14b | rappel WhatsApp (à faire) | 3c | 11.6 % | 13.9 % | — | [1280](comparaison/14b-fiche-client-rappel.png) [390](comparaison/14b-fiche-client-rappel-390.png) |

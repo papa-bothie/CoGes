@@ -46,6 +46,8 @@ describe("dates de la maquette v2", () => {
 
   it("écrit le jour en toutes lettres et l'abrège sous une barre", () => {
     expect(formatDayLong("2026-10-06")).toBe("Mardi 6 octobre");
+    expect(formatDayLong("2026-10-01")).toBe("Jeudi 1er octobre");
+    expect(formatDayLong("2026-10-11")).toBe("Dimanche 11 octobre");
     expect(formatWeekdayShort("2026-09-30")).toBe("Mer");
     expect(formatWeekdayShort("2026-10-04")).toBe("Dim");
     expect(formatDayMonth("2026-10-20")).toBe("20 octobre");

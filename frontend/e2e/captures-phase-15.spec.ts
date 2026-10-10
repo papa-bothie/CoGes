@@ -28,6 +28,12 @@ const LOT_2 = [
   "intelligence-panneau",
 ];
 const LOT_3A = ["tableau-de-bord", "ventes", "nouvelle-vente", "vente-detail"];
+const LOT_3B = ["produits", "produit-detail", "stock", "stock-correction", "stock-livraison"];
+/** Lot 3b : pages sans entrée dans `SCREENS`. */
+const LOT_3B_PAGES = [
+  { name: "article-nouveau", path: "/products/new" },
+  { name: "rayons", path: "/products/categories" },
+];
 /** Lot 3a : les pages d'une vente confirmée (reçu, retour), relatives à sa fiche. */
 const LOT_3A_SALE_PAGES = [
   { name: "vente-recu", suffix: "/receipt" },
@@ -148,7 +154,7 @@ test.describe("captures de la phase 15", () => {
       test("écrans du lot", async ({ page, request }) => {
         test.skip(LOT === "1", "lot 1 : formulaires seulement");
         test.setTimeout(400_000);
-        const chosen = LOT === "0" ? LOT_0 : LOT === "2" ? LOT_2 : LOT === "3a" ? LOT_3A : null;
+        const chosen = { "0": LOT_0, "2": LOT_2, "3a": LOT_3A, "3b": LOT_3B }[LOT] ?? null;
         const screens = chosen ? SCREENS.filter((s) => chosen.includes(s.name)) : SCREENS;
         for (const screen of screens) {
           await screen.open(page, request);
@@ -170,6 +176,25 @@ test.describe("captures de la phase 15", () => {
             await screen.open(page, request);
             await settle(page);
             await shoot(page, `${screen.name}-390`);
+          }
+          return;
+        }
+        if (LOT === "3b") {
+          for (const width of [1280, 390]) {
+            await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+            const suffix = width === 390 ? "-390" : "";
+            if (width === 390) {
+              for (const screen of screens) {
+                await screen.open(page, request);
+                await settle(page);
+                await shoot(page, `${screen.name}${suffix}`);
+              }
+            }
+            for (const extra of LOT_3B_PAGES) {
+              await page.goto(extra.path);
+              await settle(page);
+              await shoot(page, `${extra.name}${suffix}`);
+            }
           }
           return;
         }

@@ -86,6 +86,9 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
     "/api/v1/roles/{role_id}": CrossTenantCase(parameters={"role_id": "role"}),
     "/api/v1/categories/{category_id}": CrossTenantCase(parameters={"category_id": "category"}),
     "/api/v1/products/{product_id}": CrossTenantCase(parameters={"product_id": "product"}),
+    "/api/v1/analytics/products/{product_id}/history": CrossTenantCase(
+        parameters={"product_id": "product"}
+    ),
     "/api/v1/products/{product_id}/prices": CrossTenantCase(
         parameters={"product_id": "product"}, body={"unit_price": "1500.00"}
     ),

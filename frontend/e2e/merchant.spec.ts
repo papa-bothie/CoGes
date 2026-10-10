@@ -10,20 +10,28 @@ import { DEMO, emptyMyDrafts, loginThroughUi } from "./fixtures";
  */
 test.describe.configure({ mode: "serial", timeout: 90_000 });
 
-/** Compteur : chaque `tap` est une touche ; aucune saisie clavier n'est faite ici. */
+/** Compteur : chaque `tap` est une touche, chaque `type` une saisie au clavier. */
 function counter(page: Page) {
   let taps = 0;
+  let typed = 0;
   const started = Date.now();
   return {
     tap: async (target: Locator) => {
       taps += 1;
       await target.click();
     },
+    type: async (target: Locator, text: string) => {
+      typed += 1;
+      await target.fill(text);
+    },
+    get typed() {
+      return typed;
+    },
     report: (name: string) => {
       const seconds = ((Date.now() - started) / 1000).toFixed(1);
       test.info().annotations.push({
         type: "commerçant",
-        description: `${name} : ${taps} touches, 0 frappe, ${seconds} s`,
+        description: `${name} : ${taps} touches, ${typed} frappe${typed > 1 ? "s" : ""}, ${seconds} s`,
       });
       return taps;
     },
@@ -72,16 +80,56 @@ test("vente à crédit à un client existant : 8 touches au plus", async ({ page
   await run.tap(page.getByRole("link", { name: "Nouvelle vente" }).first());
   await addTile(page, run.tap, "Sucre en poudre");
   await run.tap(page.getByRole("button", { name: /Changer$/ }));
-  // Le premier client après « Client de passage » : les plus récents viennent en tête.
-  const customer = page.getByRole("option").nth(1);
+  // Un client qui a droit au crédit (le plus récent du seed peut avoir un plafond nul).
+  const customer = page.getByRole("option", { name: /Dibiterie Chez Modou/ });
   await expect(customer).toBeVisible();
   await run.tap(customer);
-  await expect(page.getByRole("button", { name: /Changer$/ })).not.toContainText(
-    "Client de passage",
+  await expect(page.getByRole("button", { name: /Changer$/ })).toContainText(
+    "Dibiterie Chez Modou",
   );
   await run.tap(page.getByRole("button", { name: "À crédit", exact: true }));
   await run.tap(page.getByRole("button", { name: "Enregistrer le crédit" }));
   await expect(page.getByRole("heading", { name: "Vente enregistrée" })).toBeVisible();
   await expect(page.getByText(/doit 750\sF$/)).toBeVisible();
   expect(run.report("vente à crédit")).toBeLessThanOrEqual(8);
+});
+
+test("créer un article : seuls le nom et les deux prix se tapent", async ({ page }) => {
+  const name = `Savon de Marseille ${crypto.randomUUID().slice(0, 4)}`;
+  const run = counter(page);
+  await run.tap(page.getByRole("link", { name: "Stock", exact: true }).first());
+  await run.tap(page.getByRole("link", { name: "Nouvel article" }));
+  await run.type(page.getByLabel("Nom de l'article"), name);
+  await run.type(page.getByLabel("Prix de vente (F)"), "500");
+  await run.type(page.getByLabel("Prix d'achat (F)"), "350");
+  // Le stock d'ouverture au compteur, sans clavier.
+  for (let i = 0; i < 3; i += 1) {
+    await run.tap(page.getByRole("button", { name: `Ajouter un ${name}` }).first());
+  }
+  await run.tap(page.getByRole("button", { name: "Enregistrer l'article" }));
+  await expect(page.getByRole("heading", { name: `${name} est ajouté` })).toBeVisible();
+  await expect(page.getByText(/3 pièces en stock · vendu 500\sF/)).toBeVisible();
+  expect(run.typed).toBe(3);
+  expect(run.report("créer un article")).toBeLessThanOrEqual(6);
+});
+
+test("corriger le stock, 2 sacs abîmés : 5 touches au plus, aucune frappe", async ({ page }) => {
+  const name = "Riz brisé parfumé, sac 25 kg";
+  const run = counter(page);
+  await run.tap(page.getByRole("link", { name: "Stock", exact: true }).first());
+  await run.tap(page.getByRole("link", { name: "Corriger le stock" }));
+  await run.tap(page.getByRole("radio", { name: new RegExp(`^${name}`) }));
+  await expect(page.getByLabel(`Quantité : ${name}`)).toHaveValue("1");
+  // « Moins » et « Abîmé ou cassé » sont déjà choisis : 1 devient 2 au compteur.
+  await run.tap(page.getByRole("button", { name: `Ajouter un ${name}` }));
+  await expect(page.getByRole("radio", { name: "Abîmé ou cassé" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await run.tap(page.getByRole("button", { name: "Valider la correction" }));
+  await expect(
+    page.getByText(new RegExp(`^${name} : .* maintenant \\(abîmé ou cassé\\)\\.$`)),
+  ).toBeVisible();
+  expect(run.typed).toBe(0);
+  expect(run.report("corriger le stock")).toBeLessThanOrEqual(5);
 });
