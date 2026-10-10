@@ -63,10 +63,11 @@ describe("Nouvel article", { timeout: 15_000 }, () => {
     await userEvent.type(screen.getByLabelText("Prix d'achat (F)"), "14000");
     await userEvent.click(screen.getByRole("button", { name: "Sac" }));
     await userEvent.click(await screen.findByRole("button", { name: "Céréales" }));
-    const [stock, warn] = screen.getAllByLabelText("Quantité : Riz brisé 25 kg");
-    await userEvent.clear(stock!);
-    await userEvent.type(stock!, "12");
-    await userEvent.type(warn!, "3");
+    const stock = screen.getByLabelText("Quantité en stock");
+    const warn = screen.getByLabelText("Seuil d’alerte");
+    await userEvent.clear(stock);
+    await userEvent.type(stock, "12");
+    await userEvent.type(warn, "3");
     await userEvent.click(screen.getByRole("button", { name: "Enregistrer l'article" }));
 
     expect(api.POST).toHaveBeenCalledWith("/api/v1/inventory/products", {
@@ -89,9 +90,9 @@ describe("Nouvel article", { timeout: 15_000 }, () => {
     renderWithClient(<NewProductForm />);
     await userEvent.type(screen.getByLabelText("Nom de l'article"), "Savon");
     await userEvent.type(screen.getByLabelText("Prix de vente (F)"), "300");
-    const [stock] = screen.getAllByLabelText("Quantité : Savon");
-    await userEvent.clear(stock!);
-    await userEvent.type(stock!, "10");
+    const stock = screen.getByLabelText("Quantité en stock");
+    await userEvent.clear(stock);
+    await userEvent.type(stock, "10");
     expect(screen.getByRole("button", { name: "Enregistrer l'article" })).toBeDisabled();
     expect(screen.getByText("Indiquez le prix d'achat pour compter ce stock")).toBeInTheDocument();
   });

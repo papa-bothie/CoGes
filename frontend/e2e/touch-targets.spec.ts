@@ -106,11 +106,19 @@ test("Nouvelle vente : tuiles, ligne du ticket et paiement", async ({ page, requ
   await expectTouchFriendly(page);
 });
 
-test("Stock : onglets, lignes et pagination", async ({ page }) => {
-  await page.goto("/inventory");
-  await settle(page);
-  await expectTouchFriendly(page);
-});
+for (const [title, path] of [
+  ["Stock : raccourcis, puces et lignes", "/products"],
+  ["Corriger le stock : articles, tuiles et compteur", "/inventory/adjust"],
+  ["Recevoir une livraison : fournisseurs et lignes", "/inventory/receive"],
+  ["Rayons : couleurs et boutons", "/products/categories"],
+  ["Tous les mouvements : filtres et pagination", "/inventory"],
+] as const) {
+  test(title, async ({ page }) => {
+    await page.goto(path);
+    await settle(page);
+    await expectTouchFriendly(page);
+  });
+}
 
 test("Ventes : filtres, lignes cliquables et pagination", async ({ page }) => {
   await page.goto("/sales");

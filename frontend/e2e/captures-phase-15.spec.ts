@@ -28,7 +28,7 @@ const LOT_2 = [
   "intelligence-panneau",
 ];
 const LOT_3A = ["tableau-de-bord", "ventes", "nouvelle-vente", "vente-detail"];
-const LOT_3B = ["produits", "produit-detail", "stock"];
+const LOT_3B = ["produits", "produit-detail", "stock", "stock-correction", "stock-livraison"];
 /** Lot 3b : pages sans entrée dans `SCREENS`. */
 const LOT_3B_PAGES = [
   { name: "article-nouveau", path: "/products/new" },

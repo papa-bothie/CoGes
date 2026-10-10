@@ -39,6 +39,16 @@ export const SCREENS: Screen[] = [
     },
   },
   { name: "stock", open: (page) => page.goto("/inventory").then(() => undefined) },
+  {
+    name: "stock-correction",
+    open: (page) => page.goto("/inventory/adjust").then(() => undefined),
+  },
+  {
+    name: "stock-livraison",
+    open: (page) => page.goto("/inventory/receive").then(() => undefined),
+  },
+  { name: "rayons", open: (page) => page.goto("/products/categories").then(() => undefined) },
+  { name: "nouvel-article", open: (page) => page.goto("/products/new").then(() => undefined) },
   { name: "produits", open: (page) => page.goto("/products").then(() => undefined) },
   {
     name: "produit-detail",
