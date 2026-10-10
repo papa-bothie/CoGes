@@ -160,6 +160,18 @@ const STATES: Record<string, (page: Page, request: APIRequestContext) => Promise
     await page.getByLabel("Seuil d’alerte").fill("3");
     await page.getByLabel("Nom de l'article").blur();
   },
+  "11": async (page) => {
+    await page.getByRole("button", { name: "Grossiste Sandaga", exact: true }).click();
+    for (const [name, qty, cost] of [
+      ["Riz brisé 25 kg", "10", "14000"],
+      ["Huile Dinor 1 L", "24", "1150"],
+    ] as const) {
+      await page.getByRole("button", { name: `+ ${name}`, exact: true }).click();
+      await page.getByLabel(`Quantité : ${name}`).fill(qty);
+      await page.getByLabel(`Prix d'achat (F) : ${name}`).fill(cost);
+    }
+    await expect(page.getByText("167 600 F")).toBeVisible();
+  },
   "04b": async (page) => {
     await page.getByRole("button", { name: "Annuler la vente" }).click();
     await expect(
