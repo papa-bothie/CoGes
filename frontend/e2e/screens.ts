@@ -57,7 +57,22 @@ export const SCREENS: Screen[] = [
     },
   },
   { name: "clients", open: (page) => page.goto("/customers").then(() => undefined) },
+  {
+    name: "fiche-client",
+    open: async (page, request) => {
+      // Un client qui doit : la fiche montre alors sa dette.
+      const api = await managerApi(request, DEMO);
+      const debts = await api.get("/debts?party_type=customer&status=open&page_size=1");
+      await page.goto(`/customers/${debts.items[0].customer_id as string}`);
+    },
+  },
   { name: "fournisseurs", open: (page) => page.goto("/suppliers").then(() => undefined) },
+  {
+    name: "fiche-fournisseur",
+    open: async (page, request) => {
+      await page.goto(`/suppliers/${await firstId(request, "/suppliers")}`);
+    },
+  },
   { name: "finance", open: (page) => page.goto("/finance").then(() => undefined) },
   { name: "analytics", open: (page) => page.goto("/analytics").then(() => undefined) },
   { name: "intelligence", open: (page) => page.goto("/insights?status=all").then(() => undefined) },
