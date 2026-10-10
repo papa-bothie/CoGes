@@ -103,6 +103,55 @@ class SaleRepository(TenantRepository[Sale]):
         )
         return [row for row in self.session.execute(stmt).scalars().all() if row is not None]
 
+    def last_sale_at_by_customer(self) -> dict[UUID, datetime]:
+        """Dernière vente confirmée de chaque client qui en a une (ADR 0072)."""
+        stmt = (
+            select(Sale.customer_id, func.max(Sale.sold_at))
+            .where(
+                Sale.company_id == self.ctx.company_id,
+                Sale.status == "confirmed",
+                Sale.customer_id.is_not(None),
+            )
+            .group_by(Sale.customer_id)
+        )
+        return {
+            customer_id: sold_at
+            for customer_id, sold_at in self.session.execute(stmt).all()
+            if customer_id is not None
+        }
+
+    def customer_totals_since(
+        self, customer_id: UUID, since: datetime
+    ) -> tuple[Decimal, int, datetime | None]:
+        """Ventes confirmées d'un client depuis `since` : montant, nombre ; et sa dernière."""
+        mine = [
+            Sale.company_id == self.ctx.company_id,
+            Sale.customer_id == customer_id,
+            Sale.status == "confirmed",
+        ]
+        total, count = self.session.execute(
+            select(func.coalesce(func.sum(Sale.total), 0), func.count()).where(
+                *mine, Sale.sold_at >= since
+            )
+        ).one()
+        last = self.session.execute(select(func.max(Sale.sold_at)).where(*mine)).scalar_one()
+        return Decimal(total), int(count), last
+
+    def by_ids(self, sale_ids: Sequence[UUID]) -> Sequence[Sale]:
+        """Ventes d'un lot d'identifiants, en une requête."""
+        return (
+            self.session.execute(self._select().where(Sale.id.in_(list(sale_ids)))).scalars().all()
+        )
+
+    def ids_of_customer(self, customer_id: UUID) -> list[UUID]:
+        """Ventes d'un client qui ont eu lieu (confirmées ou annulées, jamais un brouillon)."""
+        stmt = select(Sale.id).where(
+            Sale.company_id == self.ctx.company_id,
+            Sale.customer_id == customer_id,
+            Sale.status != "draft",
+        )
+        return list(self.session.execute(stmt).scalars().all())
+
     def page_filtered(
         self,
         *,
@@ -257,6 +306,20 @@ class SaleItemRepository(TenantRepository[SaleItem]):
     """Lignes de vente. Figées par `sale_items_no_change` dès la confirmation."""
 
     model = SaleItem
+
+    def product_ids_by_sale(self, sale_ids: Sequence[UUID]) -> dict[UUID, list[UUID]]:
+        """Articles de chaque vente, dans l'ordre de saisie des lignes (ADR 0072)."""
+        if not sale_ids:
+            return {}
+        stmt = (
+            select(SaleItem.sale_id, SaleItem.product_id)
+            .where(SaleItem.company_id == self.ctx.company_id, SaleItem.sale_id.in_(sale_ids))
+            .order_by(SaleItem.created_at.asc(), SaleItem.id.asc())
+        )
+        result: dict[UUID, list[UUID]] = {}
+        for sale_id, product_id in self.session.execute(stmt).all():
+            result.setdefault(sale_id, []).append(product_id)
+        return result
 
     def customer_ids_by_item(self, item_ids: Sequence[UUID]) -> dict[UUID, UUID | None]:
         """Client de la vente de chaque ligne (historique d'un article, ADR 0071)."""

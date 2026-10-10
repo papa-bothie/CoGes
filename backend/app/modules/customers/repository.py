@@ -9,7 +9,7 @@ from sqlalchemy import ColumnElement, Integer, Select, cast, func, or_, select
 
 from app.core.codes import number_pattern
 from app.core.repository import TenantRepository
-from app.core.search import code_matches, name_matches, relevance_order
+from app.core.search import code_matches, name_matches, phone_matches, relevance_order
 from app.modules.customers.models import Customer
 
 
@@ -27,7 +27,11 @@ class CustomerRepository(TenantRepository[Customer]):
         filters: list[ColumnElement[bool]] = []
         if search is not None:
             filters.append(
-                or_(name_matches(Customer.name, search), code_matches((Customer.code,), search))
+                or_(
+                    name_matches(Customer.name, search),
+                    code_matches((Customer.code,), search),
+                    phone_matches(Customer.phone, search),
+                )
             )
         if exclude_ids:
             filters.append(Customer.id.not_in(list(exclude_ids)))

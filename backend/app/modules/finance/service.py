@@ -1446,3 +1446,114 @@ def debts_due(
     return DebtRepository(session, ctx).due_on_or_before(
         reference, limit=limit or DUE_DEBT_SCAN_LIMIT
     )
+
+
+# ------------------------------------------------- clients et fournisseurs (ADR 0072)
+
+
+class PartyDebtSummary(NamedTuple):
+    """Ce qu'une personne doit (ou ce qu'on lui doit), pour les écrans 13 à 16."""
+
+    owed: Decimal
+    oldest_open_at: datetime | None
+    nearest_due: date | None
+    last_at: datetime
+
+
+class PersonPayment(NamedTuple):
+    """Un versement d'une personne, et la dette qu'il règle s'il en règle une."""
+
+    payment: Payment
+    debt_id: UUID | None
+    debt_sale_id: UUID | None
+    debt_created_at: datetime | None
+
+
+def debt_summaries(
+    session: Session, ctx: TenantContext, party_type: str
+) -> dict[UUID, PartyDebtSummary]:
+    """Résumé des dettes de chaque client (ou fournisseur) qui en a eu une."""
+    rows = DebtRepository(session, ctx).summaries_by_party(party_type)
+    return {
+        party_id: PartyDebtSummary(
+            owed=Decimal(row.owed),
+            oldest_open_at=row.oldest_open_at,
+            nearest_due=row.nearest_due,
+            last_at=row.last_at,
+        )
+        for party_id, row in rows.items()
+    }
+
+
+def supplier_totals_since(
+    session: Session, ctx: TenantContext, supplier_id: UUID, since: datetime
+) -> tuple[Decimal, int]:
+    """Acheté chez ce fournisseur depuis `since` : montant et nombre de dettes ouvertes."""
+    return DebtRepository(session, ctx).supplier_totals_since(supplier_id, since)
+
+
+def supplier_debts_page(
+    session: Session, ctx: TenantContext, supplier_id: UUID, *, page: int, page_size: int
+) -> tuple[Sequence[Debt], int]:
+    """Dettes d'un fournisseur, la plus récente d'abord."""
+    return DebtRepository(session, ctx).page_of_supplier(
+        supplier_id, page=page, page_size=page_size
+    )
+
+
+def supplier_debt_ids(session: Session, ctx: TenantContext, supplier_id: UUID) -> list[UUID]:
+    """Toutes les dettes d'un fournisseur, pour retrouver ses livraisons."""
+    return DebtRepository(session, ctx).ids_of_supplier(supplier_id)
+
+
+def person_payments_page(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    customer_id: UUID | None = None,
+    supplier_id: UUID | None = None,
+    sale_ids: Sequence[UUID] = (),
+    page: int,
+    page_size: int,
+) -> tuple[list[PersonPayment], int]:
+    """Versements vivants d'un client (entrées) ou d'un fournisseur (sorties).
+
+    Ceux d'un client portent une de ses ventes (`sale_ids`) ou règlent une de ses
+    dettes ; ceux d'un fournisseur règlent une de ses dettes. Chacun dit la première
+    dette qu'il règle, pour que l'écran nomme la vente ou la livraison payée.
+    """
+    if (customer_id is None) == (supplier_id is None):
+        raise ValueError("un client ou un fournisseur, l'un des deux")
+    debt_filter = (
+        Debt.customer_id == customer_id
+        if customer_id is not None
+        else Debt.supplier_id == supplier_id
+    )
+    payments, total = PaymentRepository(session, ctx).page_of_person(
+        direction="inflow" if customer_id is not None else "outflow",
+        debt_filter=debt_filter,
+        sale_ids=sale_ids if customer_id is not None else (),
+        page=page,
+        page_size=page_size,
+    )
+    allocations = PaymentAllocationRepository(session, ctx).for_payments([p.id for p in payments])
+    first_debt: dict[UUID, UUID] = {}
+    for allocation in allocations:
+        first_debt.setdefault(allocation.payment_id, allocation.debt_id)
+    debts = {
+        debt.id: debt
+        for debt in DebtRepository(session, ctx).by_ids(list(set(first_debt.values())))
+    }
+    rows = []
+    for payment in payments:
+        debt_id = first_debt.get(payment.id)
+        debt = debts.get(debt_id) if debt_id is not None else None
+        rows.append(
+            PersonPayment(
+                payment=payment,
+                debt_id=debt.id if debt else None,
+                debt_sale_id=debt.sale_id if debt else None,
+                debt_created_at=debt.created_at if debt else None,
+            )
+        )
+    return rows, total

@@ -64,7 +64,7 @@ from app.modules.rbac.matrix import SALESPERSON
 from app.modules.sales import service as sales_service
 from app.modules.sales.schemas import SaleCancel, SaleConfirm, SaleCreate, SaleItemCreate
 from app.modules.suppliers import service as suppliers_service
-from app.modules.suppliers.schemas import SupplierCreate
+from app.modules.suppliers.schemas import SupplierCreate, SupplierUpdate
 from app.modules.users import service as users_service
 from app.modules.users.schemas import UserCreate, UserUpdate
 
@@ -531,6 +531,13 @@ def _fill(manager: TenantContext, plan: list[PlannedSale], *, slug: str, passwor
             shop.suppliers[key] = suppliers_service.create_supplier(
                 session, manager, SupplierCreate(name=name, phone=phone, payment_terms_days=terms)
             ).id
+        # Écran 16 : l'adresse se règle dans « Modifier », comme dans la boutique (ADR 0072).
+        suppliers_service.update_supplier(
+            session,
+            manager,
+            shop.suppliers["sandaga"],
+            SupplierUpdate(address="Marché Sandaga, Dakar"),
+        )
 
     _catalogue(shop, plan)
     # Les mouvements de stock portent la date du remplissage jusqu'au recalage : la

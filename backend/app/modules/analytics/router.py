@@ -1,6 +1,6 @@
 """Routes HTTP du module Analytics. Aucune requête SQL ici.
 
-Trois routes, toutes en lecture seule et toutes servies par des agrégats **déjà
+Des routes en lecture seule et toutes servies par des agrégats **déjà
 calculés** : l'état de l'argent sur une période, un classement de produits pour une
 métrique nommée, une série journalière. Aucun calcul long dans une requête HTTP.
 
@@ -17,13 +17,22 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 
 from app.core.deps import TenantSession, require_permission
+from app.core.errors import PermissionDeniedError
+from app.core.repository import MAX_PAGE_SIZE
 from app.modules.analytics import service
 from app.modules.analytics.schemas import (
     MAX_RANKING_LIMIT,
+    PEOPLE_PAGE_SIZE,
+    CustomerSalePage,
+    CustomerSheet,
     FinanceOverview,
+    PeoplePage,
+    PersonPaymentPage,
     ProductHistory,
     ProductMetric,
     ProductRanking,
+    SupplierDeliveryPage,
+    SupplierSheet,
     Timeseries,
     TimeseriesMeasure,
 )
@@ -98,3 +107,132 @@ def product_history(
     """« Ce qui s'est passé » sur la fiche d'un article : ventes, livraisons, retours et
     corrections, avec le client, le fournisseur ou la raison (ADR 0071)."""
     return service.product_history(tenant.session, tenant.ctx, product_id)
+
+
+# ------------------------------------------- clients et fournisseurs (écrans 13 à 16)
+#
+# Lisibles par qui lit les personnes (le vendeur aussi) ; les montants dus ne sortent
+# qu'avec `debts:read` (ADR 0072). Ce qui ne parle que d'argent dû l'exige d'entrée.
+
+Page = Annotated[int, Query(ge=1)]
+PageSize = Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)]
+Search = Annotated[str | None, Query(max_length=120)]
+
+
+def _require_money(tenant: TenantSession) -> None:
+    if not tenant.ctx.has_permission(service.MONEY_PERMISSION):
+        raise PermissionDeniedError(details={"permission": service.MONEY_PERMISSION})
+
+
+@router.get("/customers", response_model=PeoplePage)
+def customers(
+    tenant: Annotated[TenantSession, Depends(require_permission("customers:read"))],
+    owing: Annotated[bool, Query()] = False,
+    search: Search = None,
+    page: Page = 1,
+    page_size: PageSize = PEOPLE_PAGE_SIZE,
+) -> PeoplePage:
+    """Liste des clients : qui vous doit d'abord, puis la dernière visite (écran 13)."""
+    if owing:
+        _require_money(tenant)
+    return service.list_people(
+        tenant.session,
+        tenant.ctx,
+        kind="customer",
+        owing=owing,
+        search=search,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/customers/{customer_id}", response_model=CustomerSheet)
+def customer_sheet(
+    customer_id: UUID,
+    tenant: Annotated[TenantSession, Depends(require_permission("customers:read"))],
+) -> CustomerSheet:
+    """Tuiles de la fiche client : sa dette, ses achats du mois, sa dernière visite."""
+    return service.customer_sheet(tenant.session, tenant.ctx, customer_id)
+
+
+@router.get("/customers/{customer_id}/sales", response_model=CustomerSalePage)
+def customer_sales(
+    customer_id: UUID,
+    tenant: Annotated[TenantSession, Depends(require_permission("sales:read"))],
+    page: Page = 1,
+    page_size: PageSize = PEOPLE_PAGE_SIZE,
+) -> CustomerSalePage:
+    """« Ses achats » : ses ventes avec leurs premiers articles."""
+    return service.customer_sales(
+        tenant.session, tenant.ctx, customer_id, page=page, page_size=page_size
+    )
+
+
+@router.get("/customers/{customer_id}/payments", response_model=PersonPaymentPage)
+def customer_payments(
+    customer_id: UUID,
+    tenant: Annotated[TenantSession, Depends(require_permission("payments:read"))],
+    page: Page = 1,
+    page_size: PageSize = PEOPLE_PAGE_SIZE,
+) -> PersonPaymentPage:
+    """« Ses paiements » : à la vente ou sur une dette."""
+    return service.customer_payments(
+        tenant.session, tenant.ctx, customer_id, page=page, page_size=page_size
+    )
+
+
+@router.get("/suppliers", response_model=PeoplePage)
+def suppliers(
+    tenant: Annotated[TenantSession, Depends(require_permission("suppliers:read"))],
+    owing: Annotated[bool, Query()] = False,
+    search: Search = None,
+    page: Page = 1,
+    page_size: PageSize = PEOPLE_PAGE_SIZE,
+) -> PeoplePage:
+    """Liste des fournisseurs : à qui vous devez d'abord, puis la dernière livraison."""
+    if owing:
+        _require_money(tenant)
+    return service.list_people(
+        tenant.session,
+        tenant.ctx,
+        kind="supplier",
+        owing=owing,
+        search=search,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/suppliers/{supplier_id}", response_model=SupplierSheet)
+def supplier_sheet(
+    supplier_id: UUID,
+    tenant: Annotated[TenantSession, Depends(require_permission("suppliers:read"))],
+) -> SupplierSheet:
+    """Tuiles de la fiche fournisseur : ce que vous lui devez, ses livraisons, ses articles."""
+    return service.supplier_sheet(tenant.session, tenant.ctx, supplier_id)
+
+
+@router.get("/suppliers/{supplier_id}/deliveries", response_model=SupplierDeliveryPage)
+def supplier_deliveries(
+    supplier_id: UUID,
+    tenant: Annotated[TenantSession, Depends(require_permission("debts:read"))],
+    page: Page = 1,
+    page_size: PageSize = PEOPLE_PAGE_SIZE,
+) -> SupplierDeliveryPage:
+    """« Ses livraisons » : chaque dette fournisseur et ses principaux articles."""
+    return service.supplier_deliveries(
+        tenant.session, tenant.ctx, supplier_id, page=page, page_size=page_size
+    )
+
+
+@router.get("/suppliers/{supplier_id}/payments", response_model=PersonPaymentPage)
+def supplier_payments(
+    supplier_id: UUID,
+    tenant: Annotated[TenantSession, Depends(require_permission("payments:read"))],
+    page: Page = 1,
+    page_size: PageSize = PEOPLE_PAGE_SIZE,
+) -> PersonPaymentPage:
+    """« Vos paiements » : ce que vous lui avez versé."""
+    return service.supplier_payments(
+        tenant.session, tenant.ctx, supplier_id, page=page, page_size=page_size
+    )

@@ -211,3 +211,24 @@ def delete_customer(
         ip_address=ip_address,
     )
     return customer
+
+
+#: Plafond de la liste des écrans 13 à 16 : une boutique compte quelques centaines de
+#: clients, la liste entière se lit donc en une requête (ADR 0072).
+DIRECTORY_LIMIT = 5000
+
+
+def directory(
+    session: Session, ctx: TenantContext, *, search: str | None = None
+) -> tuple[Sequence[Customer], int]:
+    """Tous les clients vivants qui répondent à la recherche ; leur nombre sans recherche.
+
+    Restitution les classe elle-même (ceux qui doivent d'abord) : elle a besoin de toute
+    la liste, pas d'une page déjà triée par nom.
+    """
+    repository = CustomerRepository(session, ctx)
+    term = normalise_term(search)
+    return (
+        repository.page_live(page=1, page_size=DIRECTORY_LIMIT, search=term),
+        repository.count_live(),
+    )

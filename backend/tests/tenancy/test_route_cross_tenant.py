@@ -94,6 +94,24 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
     ),
     "/api/v1/customers/{customer_id}": CrossTenantCase(parameters={"customer_id": "customer"}),
     "/api/v1/suppliers/{supplier_id}": CrossTenantCase(parameters={"supplier_id": "supplier"}),
+    "/api/v1/analytics/customers/{customer_id}": CrossTenantCase(
+        parameters={"customer_id": "customer"}
+    ),
+    "/api/v1/analytics/customers/{customer_id}/sales": CrossTenantCase(
+        parameters={"customer_id": "customer"}
+    ),
+    "/api/v1/analytics/customers/{customer_id}/payments": CrossTenantCase(
+        parameters={"customer_id": "customer"}
+    ),
+    "/api/v1/analytics/suppliers/{supplier_id}": CrossTenantCase(
+        parameters={"supplier_id": "supplier"}
+    ),
+    "/api/v1/analytics/suppliers/{supplier_id}/deliveries": CrossTenantCase(
+        parameters={"supplier_id": "supplier"}
+    ),
+    "/api/v1/analytics/suppliers/{supplier_id}/payments": CrossTenantCase(
+        parameters={"supplier_id": "supplier"}
+    ),
     "/api/v1/inventory/movements/{movement_id}/reverse": CrossTenantCase(
         parameters={"movement_id": "movement"}
     ),
