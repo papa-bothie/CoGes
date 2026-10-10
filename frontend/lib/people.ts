@@ -72,11 +72,13 @@ export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? name;
 }
 
-/** Initiales d'un nom : « MF » pour Moussa Fall, « G » pour Grossiste. */
+const CIVILITIES = new Set(["m.", "m", "mme", "mme.", "mlle", "mlle.", "mr", "mr."]);
+
+/** Initiales d'un nom : « MF » pour Moussa Fall, « CD » pour M. Cheikh Diop (sans civilité). */
 export function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
+  const words = name.split(/\s+/).filter(Boolean);
+  const named = words.filter((word) => !CIVILITIES.has(word.toLocaleLowerCase("fr-FR")));
+  return (named.length ? named : words)
     .slice(0, 2)
     .map((word) => word.charAt(0).toLocaleUpperCase("fr-FR"))
     .join("");

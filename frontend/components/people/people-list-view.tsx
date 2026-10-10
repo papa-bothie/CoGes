@@ -256,7 +256,7 @@ function PersonCard({
     <Link
       href={`${PATH[kind]}/${row.id}`}
       className={cn(
-        "flex min-h-[88px] items-center gap-3.5 rounded-[20px] border border-border bg-card p-4 text-foreground",
+        "flex min-h-[88px] flex-wrap items-center gap-x-3.5 gap-y-1 rounded-[20px] border border-border bg-card p-4 text-foreground",
         "outline-none hover:bg-voile focus-visible:ring-3 focus-visible:ring-ring/50",
       )}
     >
@@ -270,13 +270,11 @@ function PersonCard({
       >
         {initials(row.name)}
       </span>
-      <span className="min-w-0 flex-1">
+      <span className="min-w-[140px] flex-1">
         <span className="block text-[17px] font-bold break-words">{row.name}</span>
-        {row.phone && (
-          <span className="block numeric whitespace-nowrap text-muted-foreground">{row.phone}</span>
-        )}
+        {row.phone && <span className="block numeric text-muted-foreground">{row.phone}</span>}
       </span>
-      <span className="max-w-[55%] shrink-0 text-right">
+      <span className="ml-auto text-right">
         {amount && (
           <span
             className={cn(

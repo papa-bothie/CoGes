@@ -39,6 +39,8 @@ describe("personnes", () => {
     expect(initials("Moussa Fall")).toBe("MF");
     expect(initials("Grossiste Sandaga du marché")).toBe("GS");
     expect(initials("Awa")).toBe("A");
+    expect(initials("M. Cheikh Diop")).toBe("CD");
+    expect(initials("Mme Ndèye Fall")).toBe("NF");
   });
 });
 
