@@ -68,6 +68,10 @@ export const SCREENS: Screen[] = [
   },
   { name: "fournisseurs", open: (page) => page.goto("/suppliers").then(() => undefined) },
   {
+    name: "personne-nouvelle",
+    open: (page) => page.goto("/customers/new").then(() => undefined),
+  },
+  {
     name: "fiche-fournisseur",
     open: async (page, request) => {
       await page.goto(`/suppliers/${await firstId(request, "/suppliers")}`);

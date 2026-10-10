@@ -112,6 +112,9 @@ for (const [title, path] of [
   ["Recevoir une livraison : fournisseurs et lignes", "/inventory/receive"],
   ["Rayons : couleurs et boutons", "/products/categories"],
   ["Tous les mouvements : filtres et pagination", "/inventory"],
+  ["Clients : sélecteur, puces et cartes", "/customers"],
+  ["Fournisseurs : sélecteur, puces et cartes", "/suppliers"],
+  ["Ajouter une personne : tuiles et champs", "/customers/new"],
 ] as const) {
   test(title, async ({ page }) => {
     await page.goto(path);
