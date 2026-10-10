@@ -42,48 +42,52 @@
     {
       "file": "13-clients-fournisseurs.png",
       "width": 1280,
-      "percent": 7.352777777777778
+      "percent": 4.7672271728515625,
+      "missing": []
     },
     {
       "file": "13-clients-fournisseurs-390.png",
       "width": 390,
-      "percent": 8.029919220918122
+      "percent": 11.390192812436908
     }
   ],
   "14": [
     {
       "file": "14-fiche-client.png",
       "width": 1280,
-      "percent": 8.54989759513742
+      "percent": 3.944982858649789,
+      "missing": []
     },
     {
       "file": "14-fiche-client-390.png",
       "width": 390,
-      "percent": 6.241539712884572
+      "percent": 12.239972177138883
     }
   ],
   "15": [
     {
       "file": "15-ajouter-personne.png",
       "width": 1280,
-      "percent": 5.718229166666667
+      "percent": 2.4749131944444445,
+      "missing": []
     },
     {
       "file": "15-ajouter-personne-390.png",
       "width": 390,
-      "percent": 10.334310681844313
+      "percent": 18.18098194779809
     }
   ],
   "16": [
     {
       "file": "16-fiche-fournisseur.png",
       "width": 1280,
-      "percent": 9.509809027777779
+      "percent": 3.6612847222222222,
+      "missing": []
     },
     {
       "file": "16-fiche-fournisseur-390.png",
       "width": 390,
-      "percent": 5.590582587670532
+      "percent": 14.231126889187584
     }
   ],
   "17": [
@@ -232,7 +236,7 @@
     {
       "file": "02b-nouvelle-vente-une-partie.png",
       "width": 1280,
-      "percent": 9.254992655288193
+      "percent": 9.163358631785115
     },
     {
       "file": "02b-nouvelle-vente-une-partie-390.png",
@@ -244,7 +248,7 @@
     {
       "file": "02c-nouvelle-vente-rendu-monnaie.png",
       "width": 1280,
-      "percent": 10.401624742445055
+      "percent": 10.547894488324177
     },
     {
       "file": "02c-nouvelle-vente-rendu-monnaie-390.png",
@@ -268,13 +272,13 @@
     {
       "file": "03-liste-des-ventes.png",
       "width": 1280,
-      "percent": 1.9155474204809932,
+      "percent": 1.9156080294802171,
       "missing": []
     },
     {
       "file": "03-liste-des-ventes-390.png",
       "width": 390,
-      "percent": 5.790792872466179
+      "percent": 5.791340133969617
     }
   ],
   "04": [
@@ -383,12 +387,12 @@
     {
       "file": "14b-fiche-client-rappel.png",
       "width": 1280,
-      "percent": 11.621330205811137
+      "percent": 5.235822925060435
     },
     {
       "file": "14b-fiche-client-rappel-390.png",
       "width": 390,
-      "percent": 13.9429413498379
+      "percent": 14.600750151240169
     }
   ],
   "17b": [

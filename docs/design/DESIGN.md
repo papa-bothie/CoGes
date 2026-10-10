@@ -287,6 +287,15 @@ delivery-form.tsx`, `/inventory/receive`) et « Tous les mouvements » (`/invent
 `lib/shelf-colors.ts` (couleur d'un rayon, la sienne ou tirée du nom), `lib/stock-history.ts`
 (phrase, genre, date et quantité d'une ligne d'historique).
 
+Écrans du lot 3c (ADR 0072) : clients et fournisseurs (`components/people/people-list-view.tsx`,
+une liste pour les deux, sélecteur en liens), « Ajouter une personne » en page
+(`person-page.tsx`, formulaire partagé `person-form.tsx`, la fenêtre ne restant que dans la
+vente et la livraison), fiches client et fournisseur (`customers/[id]/`, `suppliers/[id]/`,
+pièces communes `person-sheet.tsx` : en-tête à initiales, tuiles, onglets d'historique). Le
+client est violet (`clients`), le fournisseur bleu (`argent`). Aides : `lib/people.ts`
+(articles en quelques mots, « Depuis 12 jours », « samedi », initiales, prénom). Mots neutres :
+on ne connaît pas le genre d'une personne.
+
 ## Do's and Don'ts
 
 ### Do:

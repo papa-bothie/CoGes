@@ -9,8 +9,8 @@ page HTML). Images : maquette | front | différences.
 |---|---|---|---|---|---|---|
 | 01 | Accueil | 3a | 3.0 % | 9.1 % | 0 | [1280](comparaison/01-accueil.png) [390](comparaison/01-accueil-390.png) |
 | 02 | Nouvelle vente | 3a | 10.9 % | 15.9 % | 0 | [1280](comparaison/02-nouvelle-vente.png) [390](comparaison/02-nouvelle-vente-390.png) |
-| 02b | paiement d'une partie (montant tapé + pavé) | 3a | 9.3 % | 15.2 % | — | [1280](comparaison/02b-nouvelle-vente-une-partie.png) [390](comparaison/02b-nouvelle-vente-une-partie-390.png) |
-| 02c | rendu de monnaie | 3a | 10.4 % | 15.7 % | — | [1280](comparaison/02c-nouvelle-vente-rendu-monnaie.png) [390](comparaison/02c-nouvelle-vente-rendu-monnaie-390.png) |
+| 02b | paiement d'une partie (montant tapé + pavé) | 3a | 9.2 % | 15.2 % | — | [1280](comparaison/02b-nouvelle-vente-une-partie.png) [390](comparaison/02b-nouvelle-vente-une-partie-390.png) |
+| 02c | rendu de monnaie | 3a | 10.5 % | 15.7 % | — | [1280](comparaison/02c-nouvelle-vente-rendu-monnaie.png) [390](comparaison/02c-nouvelle-vente-rendu-monnaie-390.png) |
 | 02d | écran de succès | 3a | 2.9 % | 16.2 % | — | [1280](comparaison/02d-nouvelle-vente-succes.png) [390](comparaison/02d-nouvelle-vente-succes-390.png) |
 | 03 | Liste des ventes | 3a | 1.9 % | 5.8 % | 0 | [1280](comparaison/03-liste-des-ventes.png) [390](comparaison/03-liste-des-ventes-390.png) |
 | 04 | Détail d'une vente | 3a | 4.4 % | 8.6 % | 0 | [1280](comparaison/04-detail-vente.png) [390](comparaison/04-detail-vente-390.png) |
@@ -24,11 +24,11 @@ page HTML). Images : maquette | front | différences.
 | 10 | Corriger le stock | 3b | 6.2 % | 16.9 % | 0 | [1280](comparaison/10-corriger-stock.png) [390](comparaison/10-corriger-stock-390.png) |
 | 11 | Recevoir une livraison | 3b | 5.6 % | 10.6 % | 0 | [1280](comparaison/11-recevoir-livraison.png) [390](comparaison/11-recevoir-livraison-390.png) |
 | 12 | Rayons | 3b | 2.7 % | 15.4 % | 0 | [1280](comparaison/12-rayons.png) [390](comparaison/12-rayons-390.png) |
-| 13 | Clients et fournisseurs (à faire) | 3c | 7.4 % | 8.0 % | — | [1280](comparaison/13-clients-fournisseurs.png) [390](comparaison/13-clients-fournisseurs-390.png) |
-| 14 | Fiche client (à faire) | 3c | 8.5 % | 6.2 % | — | [1280](comparaison/14-fiche-client.png) [390](comparaison/14-fiche-client-390.png) |
-| 14b | rappel WhatsApp (à faire) | 3c | 11.6 % | 13.9 % | — | [1280](comparaison/14b-fiche-client-rappel.png) [390](comparaison/14b-fiche-client-rappel-390.png) |
-| 15 | Ajouter une personne (à faire) | 3c | 5.7 % | 10.3 % | — | [1280](comparaison/15-ajouter-personne.png) [390](comparaison/15-ajouter-personne-390.png) |
-| 16 | Fiche fournisseur (à faire) | 3c | 9.5 % | 5.6 % | — | [1280](comparaison/16-fiche-fournisseur.png) [390](comparaison/16-fiche-fournisseur-390.png) |
+| 13 | Clients et fournisseurs | 3c | 4.8 % | 11.4 % | 0 | [1280](comparaison/13-clients-fournisseurs.png) [390](comparaison/13-clients-fournisseurs-390.png) |
+| 14 | Fiche client | 3c | 3.9 % | 12.2 % | 0 | [1280](comparaison/14-fiche-client.png) [390](comparaison/14-fiche-client-390.png) |
+| 14b | rappel WhatsApp | 3c | 5.2 % | 14.6 % | — | [1280](comparaison/14b-fiche-client-rappel.png) [390](comparaison/14b-fiche-client-rappel-390.png) |
+| 15 | Ajouter une personne | 3c | 2.5 % | 18.2 % | 0 | [1280](comparaison/15-ajouter-personne.png) [390](comparaison/15-ajouter-personne-390.png) |
+| 16 | Fiche fournisseur | 3c | 3.7 % | 14.2 % | 0 | [1280](comparaison/16-fiche-fournisseur.png) [390](comparaison/16-fiche-fournisseur-390.png) |
 | 17 | L'argent (à faire) | 3d | 14.2 % | 13.2 % | — | [1280](comparaison/17-argent.png) [390](comparaison/17-argent-390.png) |
 | 17b | journée en perte (à faire) | 3d | 13.4 % | 15.5 % | — | [1280](comparaison/17b-argent-journee-en-perte.png) [390](comparaison/17b-argent-journee-en-perte-390.png) |
 | 18 | Encaisser une dette (à faire) | 3d | 6.3 % | 8.9 % | — | [1280](comparaison/18-encaisser-dette.png) [390](comparaison/18-encaisser-dette-390.png) |
