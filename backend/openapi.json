@@ -4605,6 +4605,209 @@
         }
       }
     },
+    "/api/v1/analytics/money": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Money Overview",
+        "description": "Écran 17 « L'argent » : gagné ou perdu, la caisse et son graphique, ce qui est dû.\n\n`period` (aujourd'hui, les 7 derniers jours, le mois en cours) ou bien `from` et\n`to` (« Choisir des dates »). Les cartes de ce qui est dû sont `null` sans\n`debts:read` (ADR 0073).",
+        "operationId": "money_overview_api_v1_analytics_money_get",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/MoneyPeriod"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Period"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyOverview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/cash": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Cash Journal",
+        "description": "Écran 21 « Entrées et sorties » d'un jour (aujourd'hui par défaut).\n\n`analytics:read` comme l'écran 17 : la caisse nomme les dépenses, que le vendeur\nne lit pas.\n\nLes paiements annulés et leurs annulations sont listés, jamais comptés : rien ne\ns'efface (ADR 0038). Les compensations, qui ne touchent pas la caisse, sont écartées.",
+        "operationId": "cash_journal_api_v1_analytics_cash_get",
+        "parameters": [
+          {
+            "name": "day",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Day"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashJournal"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/expenses-summary": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Expenses Summary",
+        "description": "Écran 20, à droite : les dépenses par type (le mois en cours par défaut) et les\ncinq dernières, avec leur moyen de paiement.",
+        "operationId": "expenses_summary_api_v1_analytics_expenses_summary_get",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpensesSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/analytics/products": {
       "get": {
         "tags": [
@@ -6526,6 +6729,47 @@
         "maxLength": 64,
         "minLength": 1
       },
+      "BiggestExpense": {
+        "properties": {
+          "expense_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Expense Id"
+          },
+          "expense_no": {
+            "type": "string",
+            "title": "Expense No"
+          },
+          "category_name": {
+            "type": "string",
+            "title": "Category Name"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "spent_at": {
+            "type": "string",
+            "format": "date",
+            "title": "Spent At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expense_id",
+          "expense_no",
+          "category_name",
+          "label",
+          "amount",
+          "spent_at"
+        ],
+        "title": "BiggestExpense",
+        "description": "La plus grosse dépense de la période : la raison d'une perte."
+      },
       "Body_import_file_api_v1_imports__kind__post": {
         "properties": {
           "file": {
@@ -6552,6 +6796,206 @@
           "inflow",
           "outflow"
         ]
+      },
+      "CashJournal": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "cash_in": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "cash_out": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "net_cash": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "by_method": {
+            "items": {
+              "$ref": "#/components/schemas/CashMethodTotal"
+            },
+            "type": "array",
+            "title": "By Method"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/CashJournalLine"
+            },
+            "type": "array",
+            "title": "Lines"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "day",
+          "cash_in",
+          "cash_out",
+          "net_cash",
+          "by_method",
+          "lines",
+          "truncated"
+        ],
+        "title": "CashJournal",
+        "description": "Écran 21 « Entrées et sorties » d'un jour."
+      },
+      "CashJournalLine": {
+        "properties": {
+          "payment_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Payment Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CashLineKind"
+          },
+          "paid_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Paid At"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "signed_amount": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "cancelled": {
+            "type": "boolean",
+            "title": "Cancelled"
+          },
+          "is_reversal": {
+            "type": "boolean",
+            "title": "Is Reversal"
+          },
+          "reversal_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reversal Of"
+          },
+          "cancel_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel Reason"
+          },
+          "document_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document No"
+          },
+          "sale_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sale Id"
+          },
+          "party_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Party Name"
+          },
+          "expense_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expense Label"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "payment_id",
+          "kind",
+          "paid_at",
+          "method",
+          "signed_amount",
+          "cancelled",
+          "is_reversal",
+          "reversal_of",
+          "cancel_reason",
+          "document_no",
+          "sale_id",
+          "party_name",
+          "expense_label"
+        ],
+        "title": "CashJournalLine",
+        "description": "Une ligne de l'écran 21. Une annulation (`is_reversal`) décrit le paiement\nqu'elle contre-passe : mêmes `kind` et noms, montant de sens opposé."
+      },
+      "CashLineKind": {
+        "type": "string",
+        "enum": [
+          "sale",
+          "debt_in",
+          "debt_out",
+          "expense",
+          "refund",
+          "other_in",
+          "other_out"
+        ],
+        "title": "CashLineKind",
+        "description": "De quoi parle une ligne de caisse (écran 21)."
+      },
+      "CashMethodTotal": {
+        "properties": {
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "net": {
+            "$ref": "#/components/schemas/Amount-Output"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "method",
+          "net"
+        ],
+        "title": "CashMethodTotal"
       },
       "CategoryColor": {
         "type": "integer",
@@ -8326,6 +8770,30 @@
         ],
         "title": "ExpenseCategoryRead"
       },
+      "ExpenseCategoryTotal": {
+        "properties": {
+          "category_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Category Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Amount-Output"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "category_id",
+          "name",
+          "total"
+        ],
+        "title": "ExpenseCategoryTotal"
+      },
       "ExpenseCategoryUpdate": {
         "properties": {
           "name": {
@@ -8624,6 +9092,48 @@
         "type": "object",
         "title": "ExpenseUpdate",
         "description": "Modification partielle.\n\n`supplier_id: null` explicitement transmis détache le fournisseur ; champ\nabsent = inchangé. Le montant reste modifiable : une dépense est une saisie,\npas une pièce émise à un tiers."
+      },
+      "ExpensesSummary": {
+        "properties": {
+          "period_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Period From"
+          },
+          "period_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Period To"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "by_category": {
+            "items": {
+              "$ref": "#/components/schemas/ExpenseCategoryTotal"
+            },
+            "type": "array",
+            "title": "By Category"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/RecentExpense"
+            },
+            "type": "array",
+            "title": "Recent"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "period_from",
+          "period_to",
+          "total",
+          "by_category",
+          "recent"
+        ],
+        "title": "ExpensesSummary",
+        "description": "Écran 20, colonne de droite : ce mois-ci par type et les dernières dépenses."
       },
       "ExportFormat": {
         "type": "string",
@@ -9638,6 +10148,163 @@
         ],
         "title": "MeUser"
       },
+      "MoneyBucket": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "title": "End"
+          },
+          "cash_in": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "cash_out": {
+            "$ref": "#/components/schemas/Amount-Output"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "start",
+          "end",
+          "cash_in",
+          "cash_out"
+        ],
+        "title": "MoneyBucket",
+        "description": "Une paire de barres du graphique « Entrées et sorties ».\n\n`key` dit le découpage : moment de la journée (`morning`, `noon`, `afternoon`,\n`evening`), jour (`2026-10-06`) ou semaine (`week-1` à `week-5`). Le front en tire le\nmot affiché ; `start` et `end` sont les jours couverts."
+      },
+      "MoneyOverview": {
+        "properties": {
+          "period": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MoneyPeriod"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "period_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Period From"
+          },
+          "period_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Period To"
+          },
+          "sold": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "cogs": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "expenses": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "result": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "cash_in": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "cash_out": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "net_cash": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "grain": {
+            "type": "string",
+            "enum": [
+              "moment",
+              "day",
+              "week"
+            ],
+            "title": "Grain"
+          },
+          "buckets": {
+            "items": {
+              "$ref": "#/components/schemas/MoneyBucket"
+            },
+            "type": "array",
+            "title": "Buckets"
+          },
+          "biggest_expense": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BiggestExpense"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "receivables": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OwedSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "payables": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OwedSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "period",
+          "period_from",
+          "period_to",
+          "sold",
+          "cogs",
+          "expenses",
+          "result",
+          "cash_in",
+          "cash_out",
+          "net_cash",
+          "grain",
+          "buckets",
+          "biggest_expense",
+          "receivables",
+          "payables"
+        ],
+        "title": "MoneyOverview",
+        "description": "Écran 17 « L'argent » : gagné ou perdu, la caisse, le graphique, ce qui est dû.\n\nLe résultat suit les définitions de `FinanceOverview` (§ 4.10) : vendu = chiffre\nd'affaires net hors taxe, prix d'achat = coût des ventes net, gagné = vendu − prix\nd'achat − dépenses. Les cartes du bas sont `null` sans le droit de lire les dettes."
+      },
+      "MoneyPeriod": {
+        "type": "string",
+        "enum": [
+          "today",
+          "week",
+          "month"
+        ],
+        "title": "MoneyPeriod",
+        "description": "Les trois puces de l'écran 17. « Choisir des dates » passe par `from` et `to`."
+      },
       "MovementCreate": {
         "properties": {
           "product_id": {
@@ -10213,6 +10880,83 @@
         ],
         "title": "OutboxHealth",
         "description": "État de l'outbox pour l'entreprise du contexte.\n\nLes trois compteurs se lisent ensemble : `pending` qui monte sans que `published`\nbouge signale un relais arrêté ; `dead_lettered` non nul signale des événements\nqu'aucune reprise ne rattrapera plus."
+      },
+      "OwedRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "owed": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "owed_since": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owed Since"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "owed",
+          "owed_since",
+          "due_date"
+        ],
+        "title": "OwedRow",
+        "description": "Une personne qui doit, ou à qui l'on doit, dans les cartes du bas de l'écran 17."
+      },
+      "OwedSummary": {
+        "properties": {
+          "total": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/OwedRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "total",
+          "count",
+          "rows"
+        ],
+        "title": "OwedSummary"
       },
       "PaidAmount": {
         "$ref": "#/components/schemas/Amount-Input",
@@ -12035,6 +12779,58 @@
         ],
         "title": "ReceiptRead",
         "description": "Reçu simple d'une vente confirmée.\n\nUn JSON complet, que le frontend met en page : l'API ne rend ni PDF ni HTML\n(ADR 0022). Tout y est figé — le reçu d'une vente de l'an dernier reste exact\nmême si les prix, les taux et les noms ont changé depuis."
+      },
+      "RecentExpense": {
+        "properties": {
+          "expense_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Expense Id"
+          },
+          "expense_no": {
+            "type": "string",
+            "title": "Expense No"
+          },
+          "category_name": {
+            "type": "string",
+            "title": "Category Name"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "spent_at": {
+            "type": "string",
+            "format": "date",
+            "title": "Spent At"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expense_id",
+          "expense_no",
+          "category_name",
+          "label",
+          "amount",
+          "spent_at",
+          "method"
+        ],
+        "title": "RecentExpense"
       },
       "RecentSale": {
         "properties": {

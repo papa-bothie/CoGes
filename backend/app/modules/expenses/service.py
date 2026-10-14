@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import NamedTuple
 from uuid import UUID
 
 from sqlalchemy import Row
@@ -388,3 +389,59 @@ def totals_by_kind(
     return ExpenseTotalsRepository(session, ctx).totals_by_kind(
         period_from=period_from, period_to=period_to
     )
+
+
+class ExpenseHead(NamedTuple):
+    """Ce que l'argent dit d'une dépense : sa pièce, sa catégorie, son libellé."""
+
+    expense_id: UUID
+    expense_no: str
+    category_name: str
+    label: str
+    amount: Decimal
+    spent_at: date
+
+
+def _head(expense: Expense, category_name: str) -> ExpenseHead:
+    return ExpenseHead(
+        expense.id,
+        expense.expense_no,
+        category_name,
+        expense.label,
+        expense.amount,
+        expense.spent_at,
+    )
+
+
+def totals_by_category(
+    session: Session, ctx: TenantContext, *, period_from: date, period_to: date
+) -> list[tuple[UUID, str, Decimal]]:
+    """Charges de la période par catégorie, la plus lourde d'abord (écran 20)."""
+    rows = ExpenseTotalsRepository(session, ctx).totals_by_category(
+        period_from=period_from, period_to=period_to
+    )
+    return [(row[0], row[1], Decimal(row[2])) for row in rows]
+
+
+def largest(
+    session: Session, ctx: TenantContext, *, period_from: date, period_to: date
+) -> ExpenseHead | None:
+    """La plus grosse charge de la période, ou rien (écran 17)."""
+    row = ExpenseTotalsRepository(session, ctx).largest(
+        period_from=period_from, period_to=period_to
+    )
+    return _head(row[0], row[1]) if row else None
+
+
+def heads(
+    session: Session, ctx: TenantContext, expense_ids: Sequence[UUID]
+) -> dict[UUID, ExpenseHead]:
+    """Pièce, catégorie et libellé de chaque dépense du lot (écran 21)."""
+    rows = ExpenseTotalsRepository(session, ctx).heads(list(set(expense_ids)))
+    return {row[0].id: _head(row[0], row[1]) for row in rows}
+
+
+def recent(session: Session, ctx: TenantContext, *, limit: int) -> list[ExpenseHead]:
+    """Les dernières dépenses, la plus récente d'abord (écran 20)."""
+    rows = ExpenseRepository(session, ctx).page_live(page=1, page_size=limit)
+    return [_head(row[0], row[1]) for row in rows]

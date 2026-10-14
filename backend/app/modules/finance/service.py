@@ -1557,3 +1557,113 @@ def person_payments_page(
             )
         )
     return rows, total
+
+
+# ------------------------------------------------ l'argent et la caisse (écrans 17 et 21)
+
+
+def hourly_cash(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    period_from: datetime,
+    period_to: datetime,
+    timezone: str,
+) -> list[tuple[datetime, str, Decimal]]:
+    """Série heure locale × sens, hors compensations et annulations (écran 17)."""
+    rows = PaymentRepository(session, ctx).hourly_cash(
+        period_from=period_from, period_to=period_to, timezone=timezone
+    )
+    return [(row[0], row[1], Decimal(row[2])) for row in rows]
+
+
+def cash_by_method(
+    session: Session, ctx: TenantContext, *, period_from: datetime, period_to: datetime
+) -> dict[str, Decimal]:
+    """Entré moins sorti de la période, par moyen de paiement (écran 21)."""
+    net: dict[str, Decimal] = {}
+    for method, direction, total in PaymentRepository(session, ctx).cash_by_method(
+        period_from=period_from, period_to=period_to
+    ):
+        signed = Decimal(total) if direction == "inflow" else -Decimal(total)
+        net[method] = net.get(method, Decimal("0")) + signed
+    return net
+
+
+class CashLine(NamedTuple):
+    """Une ligne de la caisse, et ce qu'elle concerne (écran 21).
+
+    `source` est le paiement qui dit de quoi il s'agit : le paiement lui-même, ou
+    celui qu'une annulation contre-passe — l'annulation n'a pas d'autre sujet que lui.
+    """
+
+    payment: Payment
+    source: Payment
+    cancelled: bool
+    debt_party: str | None
+    party_id: UUID | None
+    debt_sale_id: UUID | None
+
+
+def cash_journal(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    period_from: datetime,
+    period_to: datetime,
+    limit: int,
+) -> list[CashLine]:
+    """Mouvements de la période, annulés et annulations compris, le plus récent d'abord."""
+    repository = PaymentRepository(session, ctx)
+    payments = list(repository.journal(period_from=period_from, period_to=period_to, limit=limit))
+    cancelled = {
+        reversal.reversal_of_payment_id
+        for reversal in repository.reversals_for([p.id for p in payments])
+    }
+    missing = {
+        p.reversal_of_payment_id
+        for p in payments
+        if p.reversal_of_payment_id is not None
+        and p.reversal_of_payment_id not in {q.id for q in payments}
+    }
+    originals = {p.id: p for p in payments}
+    originals.update({p.id: p for p in repository.by_ids([i for i in missing if i])})
+
+    def source_of(payment: Payment) -> Payment:
+        if payment.reversal_of_payment_id is None:
+            return payment
+        return originals.get(payment.reversal_of_payment_id, payment)
+
+    sources = [source_of(p) for p in payments]
+    allocations = PaymentAllocationRepository(session, ctx).for_payments(
+        list({s.id for s in sources})
+    )
+    first_debt: dict[UUID, UUID] = {}
+    for allocation in allocations:
+        first_debt.setdefault(allocation.payment_id, allocation.debt_id)
+    debts = {
+        debt.id: debt
+        for debt in DebtRepository(session, ctx).by_ids(list(set(first_debt.values())))
+    }
+    lines = []
+    for payment, source in zip(payments, sources, strict=True):
+        debt_id = first_debt.get(source.id)
+        debt = debts.get(debt_id) if debt_id is not None else None
+        lines.append(
+            CashLine(
+                payment=payment,
+                source=source,
+                cancelled=payment.id in cancelled,
+                debt_party=debt.party_type if debt else None,
+                party_id=(debt.customer_id or debt.supplier_id) if debt else None,
+                debt_sale_id=debt.sale_id if debt else None,
+            )
+        )
+    return lines
+
+
+def methods_of_expenses(
+    session: Session, ctx: TenantContext, expense_ids: Sequence[UUID]
+) -> dict[UUID, str]:
+    """Moyen du premier paiement vivant de chaque dépense (« Payé avec »)."""
+    return PaymentRepository(session, ctx).methods_of_expenses(expense_ids)

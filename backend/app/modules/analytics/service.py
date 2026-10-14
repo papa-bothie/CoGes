@@ -37,12 +37,24 @@ from app.modules.analytics.schemas import (
     PEOPLE_PAGE_SIZE,
     SERIES_LABELS,
     SUPPLIER_NAMED_PRODUCTS,
+    BiggestExpense,
+    CashJournal,
+    CashJournalLine,
+    CashLineKind,
+    CashMethodTotal,
     CustomerSalePage,
     CustomerSaleRow,
     CustomerSheet,
     DailyCashPoint,
     DeliveryLineRow,
+    ExpenseCategoryTotal,
+    ExpensesSummary,
     FinanceOverview,
+    MoneyBucket,
+    MoneyOverview,
+    MoneyPeriod,
+    OwedRow,
+    OwedSummary,
     PeoplePage,
     PersonPaymentPage,
     PersonPaymentRow,
@@ -52,6 +64,7 @@ from app.modules.analytics.schemas import (
     ProductMetric,
     ProductRanking,
     ProductRankRow,
+    RecentExpense,
     SupplierDeliveryPage,
     SupplierDeliveryRow,
     SupplierSheet,
@@ -910,4 +923,368 @@ def supplier_payments(
     )
     return PersonPaymentPage(
         items=_payment_rows(rows, {}), page=page, page_size=page_size, total=total
+    )
+
+
+# ------------------------------------------------------------- l'argent (écrans 17 à 21)
+#
+# Lectures composées, en lecture seule : Finance donne la caisse et ce qui est dû, Expenses
+# les dépenses, Sales les numéros et les clients des ventes (ADR 0073). Encaisser, payer,
+# dépenser et annuler passent par les routes d'écriture existantes.
+
+#: Lignes servies au plus pour un jour de caisse : une boutique en fait quelques dizaines.
+CASH_JOURNAL_LIMIT = 500
+#: Clients montrés dans « Les clients vous doivent ».
+TOP_DEBTORS = 3
+#: Dernières dépenses de l'écran 20.
+RECENT_EXPENSES = 5
+#: Au-delà de cette plage choisie, le graphique se découpe par semaine plutôt que par jour.
+DAILY_GRAIN_MAX_DAYS = 31
+
+#: Moments de la journée, à l'heure de la boutique : [début, fin[ en heures.
+_MOMENTS = (("morning", 0, 12), ("noon", 12, 14), ("afternoon", 14, 18), ("evening", 18, 24))
+
+
+#: Ordre des moyens de paiement à l'écran : ceux de la caisse d'abord (lot 1).
+_METHODS = ("cash", "wave", "orange_money", "mobile_money", "bank_transfer", "card", "cheque")
+
+
+def _method_rank(method: str) -> int:
+    return _METHODS.index(method) if method in _METHODS else len(_METHODS)
+
+
+def _money_period(
+    today: date, period: MoneyPeriod | None, period_from: date | None, period_to: date | None
+) -> tuple[date, date]:
+    if period is None:
+        if period_from is None or period_to is None:
+            raise ValidationFailedError(
+                "Choisissez une période, ou une date de début et une date de fin.",
+                details={"period": None},
+            )
+        _check_period(period_from, period_to)
+        return period_from, period_to
+    if period is MoneyPeriod.TODAY:
+        return today, today
+    if period is MoneyPeriod.WEEK:
+        return today - timedelta(days=6), today
+    return today.replace(day=1), today
+
+
+def _month_end(day: date) -> date:
+    following = (day.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return following - timedelta(days=1)
+
+
+def _bucket_frames(
+    period: MoneyPeriod | None, period_from: date, period_to: date
+) -> tuple[str, list[tuple[str, date, date]]]:
+    """Les cases du graphique (ADR 0073) : moments, jours ou semaines.
+
+    « Ce mois » garde ses quatre semaines jusqu'à la fin du mois, même vides : le
+    graphique ne change pas de forme d'un jour à l'autre.
+    """
+    if period is MoneyPeriod.TODAY or (period is None and period_from == period_to):
+        return "moment", [(key, period_from, period_from) for key, _, _ in _MOMENTS]
+    if period is MoneyPeriod.MONTH:
+        first, last = period_from, _month_end(period_from)
+        weeks = [(1, 7), (8, 14), (15, 21), (22, last.day)]
+        return "week", [
+            (f"week-{n}", first.replace(day=a), first.replace(day=b))
+            for n, (a, b) in enumerate(weeks, start=1)
+        ]
+    days = (period_to - period_from).days + 1
+    if period is MoneyPeriod.WEEK or days <= DAILY_GRAIN_MAX_DAYS:
+        return "day", [
+            ((d := period_from + timedelta(days=i)).isoformat(), d, d) for i in range(days)
+        ]
+    frames = []
+    start, n = period_from, 1
+    while start <= period_to:
+        end = min(start + timedelta(days=6), period_to)
+        frames.append((f"week-{n}", start, end))
+        start, n = end + timedelta(days=1), n + 1
+    return "week", frames
+
+
+def _owed_summary(session: Session, ctx: TenantContext, kind: str) -> OwedSummary:
+    debts = finance_service.debt_summaries(session, ctx, kind)
+    owing = {pid: s for pid, s in debts.items() if s.owed > 0}
+    names = (
+        customers_service.names_by_ids(session, ctx, list(owing))
+        if kind == "customer"
+        else suppliers_service.names_by_ids(session, ctx, list(owing))
+    )
+    if kind == "customer":
+        order = sorted(owing, key=lambda pid: (-owing[pid].owed, names.get(pid, "")))
+        chosen = order[:TOP_DEBTORS]
+    else:
+        chosen = sorted(
+            owing,
+            key=lambda pid: (
+                owing[pid].nearest_due is None,
+                owing[pid].nearest_due or date.max,
+                -owing[pid].owed,
+            ),
+        )
+    return OwedSummary(
+        total=to_amount(sum((s.owed for s in owing.values()), Decimal("0"))),
+        count=len(owing),
+        rows=[
+            OwedRow(
+                id=pid,
+                name=names.get(pid, ""),
+                owed=to_amount(owing[pid].owed),
+                owed_since=owing[pid].oldest_open_at,
+                due_date=owing[pid].nearest_due,
+            )
+            for pid in chosen
+        ],
+    )
+
+
+def money_overview(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    period: MoneyPeriod | None,
+    period_from: date | None = None,
+    period_to: date | None = None,
+) -> MoneyOverview:
+    """Écran 17 : gagné ou perdu, la caisse et son graphique, ce qui est dû.
+
+    Vendu et prix d'achat : les jours passés viennent des faits, le jour en cours est
+    lu en direct sur les ventes, comme l'accueil (ADR 0061) ; sans cela, la vente de
+    l'instant n'apparaîtrait qu'au passage du worker.
+    """
+    timezone = companies_service.get_timezone(session, ctx)
+    today = clock.today_in(timezone)
+    first, last = _money_period(today, period, period_from, period_to)
+    grain, frames = _bucket_frames(period, first, last)
+    start, end = _bounds(first, last, timezone)
+
+    zero = Decimal("0")
+    sold, cogs = zero, zero
+    past_end = min(last, today - timedelta(days=1))
+    if first <= past_end:
+        facts = DailySalesFactRepository(session, ctx).period_totals(
+            period_from=first, period_to=past_end
+        )
+        sold, cogs = facts["net_revenue"], facts["cogs_net"]
+    if first <= today <= last:
+        day_start, day_end = _bounds(today, today, timezone)
+        live = sales_service.revenue_totals(session, ctx, period_from=day_start, period_to=day_end)
+        sold, cogs = sold + live["net_revenue"], cogs + live["cogs_net"]
+    by_kind = expenses_service.totals_by_kind(session, ctx, period_from=first, period_to=last)
+    expenses = by_kind["fixed"] + by_kind["variable"]
+    cash = finance_service.cash_summary(session, ctx, period_from=start, period_to=end)
+
+    totals: dict[str, dict[str, Decimal]] = {key: {} for key, _, _ in frames}
+    for hour, direction, total in finance_service.hourly_cash(
+        session, ctx, period_from=start, period_to=end, timezone=timezone
+    ):
+        if grain == "moment":
+            key = next(k for k, a, b in _MOMENTS if a <= hour.hour < b)
+        else:
+            key = next(k for k, a, b in frames if a <= hour.date() <= b)
+        bucket = totals[key]
+        bucket[direction] = bucket.get(direction, Decimal("0")) + total
+
+    biggest = expenses_service.largest(session, ctx, period_from=first, period_to=last)
+    money = ctx.has_permission(MONEY_PERMISSION)
+    return MoneyOverview(
+        period=period,
+        period_from=first,
+        period_to=last,
+        sold=to_amount(sold),
+        cogs=to_amount(cogs),
+        expenses=to_amount(expenses),
+        result=to_amount(sold - cogs - expenses),
+        cash_in=to_amount(cash["inflow"]),
+        cash_out=to_amount(cash["outflow"]),
+        net_cash=to_amount(cash["inflow"] - cash["outflow"]),
+        grain=grain,
+        buckets=[
+            MoneyBucket(
+                key=key,
+                start=a,
+                end=b,
+                cash_in=to_amount(totals[key].get("inflow", Decimal("0"))),
+                cash_out=to_amount(totals[key].get("outflow", Decimal("0"))),
+            )
+            for key, a, b in frames
+        ],
+        biggest_expense=(
+            BiggestExpense(
+                expense_id=biggest.expense_id,
+                expense_no=biggest.expense_no,
+                category_name=biggest.category_name,
+                label=biggest.label,
+                amount=to_amount(biggest.amount),
+                spent_at=biggest.spent_at,
+            )
+            if biggest
+            else None
+        ),
+        receivables=_owed_summary(session, ctx, "customer") if money else None,
+        payables=_owed_summary(session, ctx, "supplier") if money else None,
+    )
+
+
+def _line_kind(line: finance_service.CashLine) -> CashLineKind:
+    source = line.source
+    inflow = source.direction == "inflow"
+    if source.sale_return_id is not None:
+        return CashLineKind.REFUND
+    if source.expense_id is not None:
+        return CashLineKind.EXPENSE
+    if source.sale_id is not None:
+        return CashLineKind.SALE
+    if line.debt_party == "customer" and inflow:
+        return CashLineKind.DEBT_IN
+    if line.debt_party == "supplier" and not inflow:
+        return CashLineKind.DEBT_OUT
+    return CashLineKind.OTHER_IN if inflow else CashLineKind.OTHER_OUT
+
+
+def cash_journal(session: Session, ctx: TenantContext, *, day: date | None) -> CashJournal:
+    """Écran 21 : les entrées et sorties d'un jour, annulées et annulations comprises."""
+    timezone = companies_service.get_timezone(session, ctx)
+    chosen = day or clock.today_in(timezone)
+    start, end = _bounds(chosen, chosen, timezone)
+    lines = finance_service.cash_journal(
+        session, ctx, period_from=start, period_to=end, limit=CASH_JOURNAL_LIMIT + 1
+    )
+    truncated = len(lines) > CASH_JOURNAL_LIMIT
+    lines = lines[:CASH_JOURNAL_LIMIT]
+
+    returns = sales_service.return_heads(
+        session, ctx, [r for line in lines if (r := line.source.sale_return_id)]
+    )
+    sale_ids = [s for line in lines if (s := line.source.sale_id or line.debt_sale_id)] + [
+        sale_id for _, sale_id in returns.values()
+    ]
+    sales = sales_service.sale_heads(session, ctx, sale_ids)
+    expenses = expenses_service.heads(
+        session, ctx, [e for line in lines if (e := line.source.expense_id)]
+    )
+    customer_ids = {head.customer_id for head in sales.values() if head.customer_id}
+    customer_ids |= {
+        line.party_id for line in lines if line.debt_party == "customer" and line.party_id
+    }
+    customers = customers_service.names_by_ids(session, ctx, list(customer_ids))
+    suppliers = suppliers_service.names_by_ids(
+        session,
+        ctx,
+        [line.party_id for line in lines if line.debt_party == "supplier" and line.party_id],
+    )
+
+    def describe(line: finance_service.CashLine) -> dict[str, Any]:
+        source = line.source
+        kind = _line_kind(line)
+        fields: dict[str, Any] = {
+            "kind": kind,
+            "document_no": None,
+            "sale_id": None,
+            "party_name": None,
+            "expense_label": None,
+        }
+        if kind is CashLineKind.REFUND and source.sale_return_id in returns:
+            return_no, sale_id = returns[source.sale_return_id]
+            head = sales.get(sale_id)
+            fields.update(
+                document_no=return_no,
+                sale_id=sale_id,
+                party_name=customers.get(head.customer_id) if head and head.customer_id else None,
+            )
+        elif kind is CashLineKind.EXPENSE and source.expense_id in expenses:
+            expense = expenses[source.expense_id]
+            fields.update(
+                document_no=expense.expense_no,
+                party_name=expense.category_name,
+                expense_label=expense.label,
+            )
+        else:
+            debt_sale = source.sale_id or line.debt_sale_id
+            head = sales.get(debt_sale) if debt_sale else None
+            if head:
+                fields.update(document_no=head.sale_no, sale_id=debt_sale)
+            if line.debt_party == "supplier" and line.party_id:
+                fields["party_name"] = suppliers.get(line.party_id)
+            elif line.debt_party == "customer" and line.party_id:
+                fields["party_name"] = customers.get(line.party_id)
+            elif head and head.customer_id:
+                fields["party_name"] = customers.get(head.customer_id)
+        return fields
+
+    cash = finance_service.cash_summary(session, ctx, period_from=start, period_to=end)
+    by_method = finance_service.cash_by_method(session, ctx, period_from=start, period_to=end)
+    return CashJournal(
+        day=chosen,
+        cash_in=to_amount(cash["inflow"]),
+        cash_out=to_amount(cash["outflow"]),
+        net_cash=to_amount(cash["inflow"] - cash["outflow"]),
+        by_method=[
+            CashMethodTotal(method=method, net=to_amount(net))
+            for method, net in sorted(by_method.items(), key=lambda item: _method_rank(item[0]))
+        ],
+        lines=[
+            CashJournalLine(
+                payment_id=line.payment.id,
+                paid_at=line.payment.paid_at,
+                method=line.payment.method,
+                signed_amount=to_amount(
+                    line.payment.amount
+                    if line.payment.direction == "inflow"
+                    else -line.payment.amount
+                ),
+                cancelled=line.cancelled,
+                is_reversal=line.payment.reversal_of_payment_id is not None,
+                reversal_of=line.payment.reversal_of_payment_id,
+                cancel_reason=line.payment.cancel_reason,
+                **describe(line),
+            )
+            for line in lines
+        ],
+        truncated=truncated,
+    )
+
+
+def expenses_summary(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    period_from: date | None = None,
+    period_to: date | None = None,
+) -> ExpensesSummary:
+    """Écran 20, à droite : ce mois-ci par type (par défaut), et les dernières dépenses."""
+    today = clock.today_in(companies_service.get_timezone(session, ctx))
+    first = period_from or today.replace(day=1)
+    last = period_to or today
+    _check_period(first, last)
+    by_category = expenses_service.totals_by_category(
+        session, ctx, period_from=first, period_to=last
+    )
+    recent = expenses_service.recent(session, ctx, limit=RECENT_EXPENSES)
+    methods = finance_service.methods_of_expenses(session, ctx, [e.expense_id for e in recent])
+    return ExpensesSummary(
+        period_from=first,
+        period_to=last,
+        total=to_amount(sum((total for _, _, total in by_category), Decimal("0"))),
+        by_category=[
+            ExpenseCategoryTotal(category_id=cid, name=name, total=to_amount(total))
+            for cid, name, total in by_category
+        ],
+        recent=[
+            RecentExpense(
+                expense_id=e.expense_id,
+                expense_no=e.expense_no,
+                category_name=e.category_name,
+                label=e.label,
+                amount=to_amount(e.amount),
+                spent_at=e.spent_at,
+                method=methods.get(e.expense_id),
+            )
+            for e in recent
+        ],
     )

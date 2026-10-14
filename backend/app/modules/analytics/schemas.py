@@ -401,3 +401,183 @@ class SupplierDeliveryPage(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+# ------------------------------------------------------------- l'argent (écrans 17 à 21)
+
+
+class MoneyPeriod(StrEnum):
+    """Les trois puces de l'écran 17. « Choisir des dates » passe par `from` et `to`."""
+
+    TODAY = "today"
+    WEEK = "week"
+    MONTH = "month"
+
+
+class MoneyBucket(BaseModel):
+    """Une paire de barres du graphique « Entrées et sorties ».
+
+    `key` dit le découpage : moment de la journée (`morning`, `noon`, `afternoon`,
+    `evening`), jour (`2026-10-06`) ou semaine (`week-1` à `week-5`). Le front en tire le
+    mot affiché ; `start` et `end` sont les jours couverts.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str
+    start: date
+    end: date
+    cash_in: Amount
+    cash_out: Amount
+
+
+class BiggestExpense(BaseModel):
+    """La plus grosse dépense de la période : la raison d'une perte."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expense_id: UUID
+    expense_no: str
+    category_name: str
+    label: str
+    amount: Amount
+    spent_at: date
+
+
+class OwedRow(BaseModel):
+    """Une personne qui doit, ou à qui l'on doit, dans les cartes du bas de l'écran 17."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    name: str
+    owed: Amount
+    owed_since: datetime | None
+    due_date: date | None
+
+
+class OwedSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    total: Amount
+    count: int
+    #: Clients : les trois qui doivent le plus ; fournisseurs : tous, échéance proche d'abord.
+    rows: list[OwedRow]
+
+
+class MoneyOverview(BaseModel):
+    """Écran 17 « L'argent » : gagné ou perdu, la caisse, le graphique, ce qui est dû.
+
+    Le résultat suit les définitions de `FinanceOverview` (§ 4.10) : vendu = chiffre
+    d'affaires net hors taxe, prix d'achat = coût des ventes net, gagné = vendu − prix
+    d'achat − dépenses. Les cartes du bas sont `null` sans le droit de lire les dettes.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    period: MoneyPeriod | None
+    period_from: date
+    period_to: date
+    sold: Amount
+    cogs: Amount
+    expenses: Amount
+    result: Amount
+    cash_in: Amount
+    cash_out: Amount
+    net_cash: Amount
+    grain: Literal["moment", "day", "week"]
+    buckets: list[MoneyBucket]
+    biggest_expense: BiggestExpense | None
+    receivables: OwedSummary | None
+    payables: OwedSummary | None
+
+
+class CashLineKind(StrEnum):
+    """De quoi parle une ligne de caisse (écran 21)."""
+
+    SALE = "sale"
+    DEBT_IN = "debt_in"
+    DEBT_OUT = "debt_out"
+    EXPENSE = "expense"
+    REFUND = "refund"
+    OTHER_IN = "other_in"
+    OTHER_OUT = "other_out"
+
+
+class CashJournalLine(BaseModel):
+    """Une ligne de l'écran 21. Une annulation (`is_reversal`) décrit le paiement
+    qu'elle contre-passe : mêmes `kind` et noms, montant de sens opposé."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    payment_id: UUID
+    kind: CashLineKind
+    paid_at: datetime
+    method: str
+    #: Positif pour une entrée, négatif pour une sortie.
+    signed_amount: Amount
+    cancelled: bool
+    is_reversal: bool
+    reversal_of: UUID | None
+    cancel_reason: str | None
+    #: « V-001046 », « R-000003 », « D-000012 » : la pièce concernée, s'il y en a une.
+    document_no: str | None
+    sale_id: UUID | None
+    #: Le client, le fournisseur ou la catégorie de dépense ; `null` pour un client de passage.
+    party_name: str | None
+    expense_label: str | None
+
+
+class CashMethodTotal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    method: str
+    net: Amount
+
+
+class CashJournal(BaseModel):
+    """Écran 21 « Entrées et sorties » d'un jour."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    day: date
+    cash_in: Amount
+    cash_out: Amount
+    net_cash: Amount
+    by_method: list[CashMethodTotal]
+    lines: list[CashJournalLine]
+    #: Vrai si la journée compte plus de lignes que la limite servie.
+    truncated: bool
+
+
+class ExpenseCategoryTotal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    category_id: UUID
+    name: str
+    total: Amount
+
+
+class RecentExpense(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expense_id: UUID
+    expense_no: str
+    category_name: str
+    label: str
+    amount: Amount
+    spent_at: date
+    #: Le moyen du paiement de la dépense ; `null` si elle n'est pas payée.
+    method: str | None
+
+
+class ExpensesSummary(BaseModel):
+    """Écran 20, colonne de droite : ce mois-ci par type et les dernières dépenses."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    period_from: date
+    period_to: date
+    total: Amount
+    by_category: list[ExpenseCategoryTotal]
+    recent: list[RecentExpense]

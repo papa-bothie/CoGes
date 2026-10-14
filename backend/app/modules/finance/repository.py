@@ -240,6 +240,91 @@ class PaymentRepository(TenantRepository[Payment]):
         )
         return self.session.execute(stmt).all()
 
+    def hourly_cash(
+        self, *, period_from: datetime, period_to: datetime, timezone: str
+    ) -> Sequence[Row[tuple[datetime, str, Decimal]]]:
+        """Série heure locale × sens, même règle que la série quotidienne (écran 17).
+
+        L'heure suffit à tout découpage de l'écran : moments de la journée, jours,
+        semaines du mois. Une année compte au plus 8 784 heures par sens.
+        """
+        hour = func.date_trunc("hour", func.timezone(timezone, Payment.paid_at)).label("hour")
+        stmt = (
+            select(hour, Payment.direction, func.coalesce(func.sum(Payment.amount), 0))
+            .where(
+                Payment.company_id == self.ctx.company_id,
+                *_counts_as_cash(),
+                Payment.paid_at >= period_from,
+                Payment.paid_at <= period_to,
+            )
+            .group_by(hour, Payment.direction)
+            .order_by(hour)
+        )
+        return self.session.execute(stmt).all()
+
+    def cash_by_method(
+        self, *, period_from: datetime, period_to: datetime
+    ) -> Sequence[Row[tuple[str, str, Decimal]]]:
+        """Encaissé et décaissé de la période par moyen de paiement (écran 21)."""
+        stmt = (
+            select(Payment.method, Payment.direction, func.coalesce(func.sum(Payment.amount), 0))
+            .where(
+                Payment.company_id == self.ctx.company_id,
+                *_counts_as_cash(),
+                Payment.paid_at >= period_from,
+                Payment.paid_at <= period_to,
+            )
+            .group_by(Payment.method, Payment.direction)
+        )
+        return self.session.execute(stmt).all()
+
+    def journal(
+        self, *, period_from: datetime, period_to: datetime, limit: int
+    ) -> Sequence[Payment]:
+        """Mouvements de caisse de la période, le plus récent d'abord (écran 21).
+
+        Contrairement aux totaux, un paiement annulé **et** son annulation restent
+        listés : rien ne s'efface, la ligne barrée et sa ligne inverse se lisent
+        ensemble (ADR 0038). Seules les compensations, qui ne touchent pas la
+        caisse, sont écartées (ADR 0024).
+        """
+        stmt = (
+            self._select()
+            .where(
+                Payment.method != OFFSET_METHOD,
+                Payment.paid_at >= period_from,
+                Payment.paid_at <= period_to,
+            )
+            .order_by(Payment.paid_at.desc(), Payment.created_at.desc(), Payment.id.desc())
+            .limit(limit)
+        )
+        return self.session.execute(stmt).scalars().all()
+
+    def methods_of_expenses(self, expense_ids: Sequence[UUID]) -> dict[UUID, str]:
+        """Moyen du premier paiement vivant de chaque dépense, en une requête."""
+        if not expense_ids:
+            return {}
+        stmt = (
+            select(Payment.expense_id, Payment.method)
+            .where(
+                Payment.company_id == self.ctx.company_id,
+                Payment.expense_id.in_(list(expense_ids)),
+                *_counts_as_cash(),
+            )
+            .order_by(Payment.paid_at.asc(), Payment.id.asc())
+        )
+        methods: dict[UUID, str] = {}
+        for expense_id, method in self.session.execute(stmt):
+            methods.setdefault(expense_id, method)
+        return methods
+
+    def by_ids(self, payment_ids: Sequence[UUID]) -> Sequence[Payment]:
+        """Paiements d'un lot d'identifiants, en une requête."""
+        if not payment_ids:
+            return []
+        stmt = self._select().where(Payment.id.in_(list(payment_ids)))
+        return self.session.execute(stmt).scalars().all()
+
     def page_of_person(
         self,
         *,

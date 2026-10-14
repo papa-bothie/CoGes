@@ -428,6 +428,13 @@ class SaleReturnRepository(TenantRepository[SaleReturn]):
         stmt = self._select().where(SaleReturn.id == return_id).with_for_update()
         return self.session.execute(stmt).scalar_one_or_none()
 
+    def by_ids(self, return_ids: Sequence[UUID]) -> Sequence[SaleReturn]:
+        """Retours d'un lot d'identifiants, en une requête."""
+        if not return_ids:
+            return []
+        stmt = self._select().where(SaleReturn.id.in_(list(return_ids)))
+        return self.session.execute(stmt).scalars().all()
+
     def for_sale(self, sale_id: UUID) -> Sequence[SaleReturn]:
         """Retours d'une vente, du plus récent au plus ancien."""
         stmt = (

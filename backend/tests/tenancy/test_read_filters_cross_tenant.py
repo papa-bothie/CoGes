@@ -294,3 +294,56 @@ def test_the_people_lists_never_show_another_company(
         params={"owing": "true", "page_size": 100},
     ).json()
     assert foreign not in {row["id"] for row in owing["items"]}
+
+
+def test_the_money_screens_never_show_another_company(
+    api_client: TestClient, alpha_token: str, beta_token: str
+) -> None:
+    """Écrans 17, 20 et 21 (ADR 0073) : ni la dette, ni la ligne de caisse, ni la dépense."""
+    product = _stocked_product(api_client, beta_token)
+    foreign = _customer_with_debt(api_client, beta_token, product)
+    category = api_client.post(
+        "/api/v1/expense-categories",
+        headers=auth_headers(beta_token),
+        json={"name": f"Loyer {uuid4().hex[:8]}", "kind": "fixed"},
+    ).json()["id"]
+    today = api_client.get("/api/v1/analytics/cash", headers=auth_headers(beta_token)).json()["day"]
+    expense = api_client.post(
+        "/api/v1/expenses",
+        headers=write_headers(beta_token),
+        json={
+            "category_id": category,
+            "label": "Loyer de la boutique bêta",
+            "amount": "987654",
+            "spent_at": today,
+            "payment": {"method": "cash"},
+        },
+    )
+    assert expense.status_code == 201, expense.text
+
+    def read(token: str, path: str, **params: str) -> dict[str, Any]:
+        response = api_client.get(f"/api/v1{path}", headers=auth_headers(token), params=params)
+        assert response.status_code == 200, response.text
+        body: dict[str, Any] = response.json()
+        return body
+
+    own_cash = read(beta_token, "/analytics/cash")
+    beta_payments = {line["payment_id"] for line in own_cash["lines"]}
+    assert beta_payments
+    seen_cash = read(alpha_token, "/analytics/cash")
+    assert not beta_payments & {line["payment_id"] for line in seen_cash["lines"]}
+
+    own_month = read(beta_token, "/analytics/money", period="month")
+    assert foreign in {row["id"] for row in own_month["receivables"]["rows"]} or (
+        own_month["receivables"]["count"] > 3
+    )
+    seen_month = read(alpha_token, "/analytics/money", period="month")
+    assert foreign not in {row["id"] for row in seen_month["receivables"]["rows"]}
+    assert (seen_month["biggest_expense"] or {}).get("label") != "Loyer de la boutique bêta"
+
+    assert category in {
+        row["category_id"] for row in read(beta_token, "/analytics/expenses-summary")["by_category"]
+    }
+    seen = read(alpha_token, "/analytics/expenses-summary")
+    assert category not in {row["category_id"] for row in seen["by_category"]}
+    assert "Loyer de la boutique bêta" not in {row["label"] for row in seen["recent"]}
