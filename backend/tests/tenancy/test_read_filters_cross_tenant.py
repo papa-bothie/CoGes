@@ -257,3 +257,40 @@ def test_a_delivery_of_another_company_s_article_is_refused(
         params={"party_type": "supplier", "supplier_id": supplier},
     ).json()
     assert debts["total"] == 0
+
+
+def test_the_people_lists_never_show_another_company(
+    api_client: TestClient, alpha_token: str, beta_token: str
+) -> None:
+    """Listes des écrans 13 (ADR 0072) : ni la personne, ni sa dette, ni son téléphone."""
+    product = _stocked_product(api_client, beta_token)
+    foreign = _customer_with_debt(api_client, beta_token, product)
+    phone = f"77 {uuid4().int % 1000:03d} {uuid4().int % 100:02d} 11"
+    api_client.patch(
+        f"/api/v1/customers/{foreign}", headers=auth_headers(beta_token), json={"phone": phone}
+    )
+    supplier = api_client.post(
+        "/api/v1/suppliers", headers=auth_headers(beta_token), json={"name": "Grossiste Bêta"}
+    ).json()["id"]
+    for kind, search, person in (
+        ("customers", phone, foreign),
+        ("customers", None, foreign),
+        ("suppliers", "Grossiste Bêta", supplier),
+    ):
+        params: dict[str, Any] = {"page_size": 100}
+        if search:
+            params["search"] = search
+        own = api_client.get(
+            f"/api/v1/analytics/{kind}", headers=auth_headers(beta_token), params=params
+        ).json()
+        assert person in {row["id"] for row in own["items"]}
+        seen = api_client.get(
+            f"/api/v1/analytics/{kind}", headers=auth_headers(alpha_token), params=params
+        ).json()
+        assert person not in {row["id"] for row in seen["items"]}
+    owing = api_client.get(
+        "/api/v1/analytics/customers",
+        headers=auth_headers(alpha_token),
+        params={"owing": "true", "page_size": 100},
+    ).json()
+    assert foreign not in {row["id"] for row in owing["items"]}

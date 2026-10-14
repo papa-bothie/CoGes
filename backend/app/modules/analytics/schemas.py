@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -227,3 +228,176 @@ class ProductHistory(BaseModel):
     #: Jours écoulés du mois, aujourd'hui compris (« Environ 1 sac par jour »).
     month_days: int
     items: list[ProductHistoryItem]
+
+
+# ------------------------------------------- clients et fournisseurs (écrans 13 à 16)
+
+#: Taille par défaut des listes de personnes et de leurs historiques (ADR 0072).
+PEOPLE_PAGE_SIZE = 50
+#: Articles nommés sur une ligne d'achat ou de livraison, et sur la fiche fournisseur.
+NAMED_ITEMS = 3
+SUPPLIER_NAMED_PRODUCTS = 4
+
+
+class PersonRow(BaseModel):
+    """Un client ou un fournisseur dans la liste de l'écran 13.
+
+    `owed` est `null` pour qui n'a pas le droit de lire les dettes (un vendeur) : il voit
+    les personnes, jamais l'argent qu'elles doivent.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    name: str
+    phone: str | None
+    #: Client : ce qu'il vous doit ; fournisseur : ce que vous lui devez.
+    owed: Amount | None
+    #: La plus ancienne dette encore ouverte (« Depuis 12 jours »).
+    owed_since: datetime | None
+    #: L'échéance ouverte la plus proche (« Avant le 10 octobre »).
+    due_date: date | None
+    #: Client : sa dernière vente confirmée ; fournisseur : sa dernière livraison.
+    last_seen_at: datetime | None
+
+
+class PeoplePage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[PersonRow]
+    page: int
+    page_size: int
+    total: int
+    #: Combien doivent (ou à combien on doit), et combien en tout ; `null` sans le droit.
+    owing_count: int | None
+    owed_total: Amount | None
+    #: Les deux compteurs du sélecteur « Clients (15) · Fournisseurs (5) ».
+    customer_count: int
+    supplier_count: int
+
+
+class CustomerSheet(BaseModel):
+    """Les tuiles de la fiche client (écran 14)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    name: str
+    phone: str | None
+    created_at: datetime
+    owed: Amount | None
+    owed_since: datetime | None
+    #: Ventes confirmées depuis le 1er du mois, dans le fuseau de l'entreprise.
+    month_total: Amount
+    month_visits: int
+    last_visit_at: datetime | None
+
+
+class CustomerSaleRow(BaseModel):
+    """Un achat du client : la vente, ses premiers articles et ce qu'il en reste dû."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sale_id: UUID
+    sale_no: str
+    sold_at: datetime
+    status: Literal["confirmed", "cancelled"]
+    total: Amount
+    balance: Amount
+    debt_status: Literal["open", "partially_paid", "paid", "written_off"] | None
+    has_returns: bool
+    returned_total: Amount
+    #: Les trois premiers articles, dans l'ordre de saisie, et le nombre de lignes.
+    item_names: list[str]
+    item_count: int
+
+
+class CustomerSalePage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[CustomerSaleRow]
+    page: int
+    page_size: int
+    total: int
+
+
+class PersonPaymentRow(BaseModel):
+    """Un versement d'un client, ou à un fournisseur, et ce qu'il paie."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    payment_id: UUID
+    paid_at: datetime
+    amount: Amount
+    method: str
+    #: Client : vrai si le versement règle une dette, faux s'il est payé à la vente.
+    on_debt: bool
+    #: La vente payée (client), directement ou par sa dette.
+    sale_id: UUID | None
+    sale_no: str | None
+    #: La dette réglée et sa date (fournisseur : « Livraison du 3 oct. »).
+    debt_id: UUID | None
+    debt_created_at: datetime | None
+
+
+class PersonPaymentPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[PersonPaymentRow]
+    page: int
+    page_size: int
+    total: int
+
+
+class SupplierSheet(BaseModel):
+    """Les tuiles de la fiche fournisseur (écran 16)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    name: str
+    phone: str | None
+    address: str | None
+    created_at: datetime
+    owed: Amount | None
+    due_date: date | None
+    #: Livré depuis le 1er du mois (montant `null` sans le droit de lire les dettes).
+    month_total: Amount | None
+    month_deliveries: int
+    #: Ce qu'il livre : quatre articles nommés, et combien en tout.
+    product_names: list[str]
+    product_count: int
+
+
+class DeliveryLineRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    name: str
+    qty: Quantity
+    unit: str
+
+
+class SupplierDeliveryRow(BaseModel):
+    """Une livraison (une dette fournisseur) et ses principaux articles."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    debt_id: UUID
+    created_at: datetime
+    total: Amount
+    balance: Amount
+    status: Literal["open", "partially_paid", "paid", "written_off"]
+    due_date: date | None
+    #: Les trois plus grosses lignes ; une dette saisie à la main n'en a aucune.
+    lines: list[DeliveryLineRow]
+    line_count: int
+
+
+class SupplierDeliveryPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[SupplierDeliveryRow]
+    page: int
+    page_size: int
+    total: int

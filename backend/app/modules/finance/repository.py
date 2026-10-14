@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Row, case, exists, func, select
+from sqlalchemy import ColumnElement, Row, case, exists, func, or_, select
 from sqlalchemy.orm import aliased
 
 from app.core.repository import TenantRepository
@@ -239,6 +240,53 @@ class PaymentRepository(TenantRepository[Payment]):
         )
         return self.session.execute(stmt).all()
 
+    def page_of_person(
+        self,
+        *,
+        direction: str,
+        debt_filter: ColumnElement[bool],
+        sale_ids: Sequence[UUID] = (),
+        page: int,
+        page_size: int,
+    ) -> tuple[Sequence[Payment], int]:
+        """Versements vivants d'une personne, les plus récents d'abord (ADR 0072).
+
+        Un versement est à elle s'il porte une de ses ventes, ou s'il est lettré sur une
+        de ses dettes (`debt_filter`). Un versement annulé et son annulation n'ont jamais
+        eu lieu : ils n'apparaissent pas (ADR 0038).
+        """
+        on_debts = (
+            select(PaymentAllocation.payment_id)
+            .join(
+                Debt,
+                (Debt.company_id == PaymentAllocation.company_id)
+                & (Debt.id == PaymentAllocation.debt_id),
+            )
+            .where(PaymentAllocation.company_id == self.ctx.company_id, debt_filter)
+        )
+        mine: ColumnElement[bool] = Payment.id.in_(on_debts)
+        if sale_ids:
+            mine = or_(mine, Payment.sale_id.in_(list(sale_ids)))
+        filters = [
+            Payment.direction == direction,
+            Payment.reversal_of_payment_id.is_(None),
+            ~_is_cancelled(),
+            mine,
+        ]
+        total = self.session.execute(
+            select(func.count())
+            .select_from(Payment)
+            .where(Payment.company_id == self.ctx.company_id, *filters)
+        ).scalar_one()
+        stmt = (
+            self._select()
+            .where(*filters)
+            .order_by(Payment.paid_at.desc(), Payment.created_at.desc(), Payment.id.desc())
+            .limit(page_size)
+            .offset((page - 1) * page_size)
+        )
+        return self.session.execute(stmt).scalars().all(), int(total)
+
 
 class DebtRepository(TenantRepository[Debt]):
     model = Debt
@@ -315,6 +363,74 @@ class DebtRepository(TenantRepository[Debt]):
             for customer_id, balance in self.session.execute(stmt).all()
             if customer_id is not None
         }
+
+    def summaries_by_party(self, party_type: str) -> dict[UUID, Row[Any]]:
+        """Pour chaque client (ou fournisseur) : ce qu'il reste dû, depuis quand, avant quand.
+
+        Une ligne par personne qui a eu au moins une dette : `owed` (soldes ouverts),
+        `oldest_open_at` (la plus ancienne dette encore ouverte), `nearest_due` (l'échéance
+        ouverte la plus proche) et `last_at` (la dette la plus récente, ouverte ou non).
+        """
+        column = Debt.customer_id if party_type == "customer" else Debt.supplier_id
+        is_open = Debt.status.in_(OPEN_STATUSES)
+        stmt = (
+            select(
+                column.label("party_id"),
+                func.coalesce(func.sum(Debt.balance).filter(is_open), 0).label("owed"),
+                func.min(Debt.created_at).filter(is_open).label("oldest_open_at"),
+                func.min(Debt.due_date).filter(is_open).label("nearest_due"),
+                func.max(Debt.created_at).label("last_at"),
+            )
+            .where(
+                Debt.company_id == self.ctx.company_id,
+                Debt.party_type == party_type,
+                column.is_not(None),
+            )
+            .group_by(column)
+        )
+        return {row.party_id: row for row in self.session.execute(stmt).all()}
+
+    def supplier_totals_since(self, supplier_id: UUID, since: datetime) -> tuple[Decimal, int]:
+        """Montant et nombre des dettes ouvertes chez ce fournisseur depuis `since`."""
+        stmt = select(func.coalesce(func.sum(Debt.principal), 0), func.count()).where(
+            Debt.company_id == self.ctx.company_id,
+            Debt.supplier_id == supplier_id,
+            Debt.created_at >= since,
+        )
+        total, count = self.session.execute(stmt).one()
+        return Decimal(total), int(count)
+
+    def page_of_supplier(
+        self, supplier_id: UUID, *, page: int, page_size: int
+    ) -> tuple[Sequence[Debt], int]:
+        """Dettes d'un fournisseur, la plus récente d'abord : ses livraisons (ADR 0072)."""
+        filters = [Debt.supplier_id == supplier_id]
+        total = self.session.execute(
+            select(func.count())
+            .select_from(Debt)
+            .where(Debt.company_id == self.ctx.company_id, *filters)
+        ).scalar_one()
+        stmt = (
+            self._select()
+            .where(*filters)
+            .order_by(Debt.created_at.desc(), Debt.id.desc())
+            .limit(page_size)
+            .offset((page - 1) * page_size)
+        )
+        return self.session.execute(stmt).scalars().all(), int(total)
+
+    def by_ids(self, debt_ids: Sequence[UUID]) -> Sequence[Debt]:
+        """Dettes d'un lot d'identifiants, en une requête."""
+        if not debt_ids:
+            return []
+        return self.session.execute(self._select().where(Debt.id.in_(debt_ids))).scalars().all()
+
+    def ids_of_supplier(self, supplier_id: UUID) -> list[UUID]:
+        """Toutes les dettes d'un fournisseur : ses livraisons, pour lire leurs articles."""
+        stmt = select(Debt.id).where(
+            Debt.company_id == self.ctx.company_id, Debt.supplier_id == supplier_id
+        )
+        return list(self.session.execute(stmt).scalars().all())
 
     def get_for_update(self, debt_id: UUID) -> Debt | None:
         """Dette du tenant, verrouillée pour la durée de la transaction.

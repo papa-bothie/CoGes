@@ -34,7 +34,7 @@ describe("Ajouter une personne", { timeout: 15_000 }, () => {
     await userEvent.click(screen.getByRole("button", { name: "Enregistrer le client" }));
 
     expect(api.POST).toHaveBeenCalledWith("/api/v1/customers", {
-      body: { name: "Aminata Sow", phone: "77 655 90 21", email: null },
+      body: { name: "Aminata Sow", phone: "77 655 90 21" },
     });
   });
 

@@ -12,6 +12,7 @@ import { SCREENS, settle } from "./screens";
  * (article, personne, stock, paiements), dialogues ouverts, dans `lot-1/`. `CAPTURES_LOT=2` :
  * les écrans dont les mots changent (chiffres, stock, argent, Intelligence), dans `lot-2/`.
  * `CAPTURES_LOT=3a` : accueil et écrans de vente (maquette 01 à 06), aussi à 390 px, dans `lot-3a/`.
+ * `CAPTURES_LOT=3b` et `3c` : stock (07 à 12), puis clients et fournisseurs (13 à 16), idem.
  */
 const STAGE = process.env.CAPTURES_STAGE;
 const LOT = process.env.CAPTURES_LOT ?? "0";
@@ -34,6 +35,18 @@ const LOT_3B_PAGES = [
   { name: "article-nouveau", path: "/products/new" },
   { name: "rayons", path: "/products/categories" },
 ];
+const LOT_3C = ["clients", "fournisseurs", "fiche-client", "fiche-fournisseur"];
+/** Lot 3c : le formulaire d'ajout, ouvert depuis la liste (fenêtre avant, page après). */
+async function openNewPerson(page: Page) {
+  await page.goto("/customers");
+  await settle(page);
+  await page
+    .getByRole("main")
+    .getByRole("link", { name: "Nouveau client" })
+    .or(page.getByRole("button", { name: "Ajouter une personne" }))
+    .first()
+    .click();
+}
 /** Lot 3a : les pages d'une vente confirmée (reçu, retour), relatives à sa fiche. */
 const LOT_3A_SALE_PAGES = [
   { name: "vente-recu", suffix: "/receipt" },
@@ -154,7 +167,8 @@ test.describe("captures de la phase 15", () => {
       test("écrans du lot", async ({ page, request }) => {
         test.skip(LOT === "1", "lot 1 : formulaires seulement");
         test.setTimeout(400_000);
-        const chosen = { "0": LOT_0, "2": LOT_2, "3a": LOT_3A, "3b": LOT_3B }[LOT] ?? null;
+        const chosen =
+          { "0": LOT_0, "2": LOT_2, "3a": LOT_3A, "3b": LOT_3B, "3c": LOT_3C }[LOT] ?? null;
         const screens = chosen ? SCREENS.filter((s) => chosen.includes(s.name)) : SCREENS;
         for (const screen of screens) {
           await screen.open(page, request);
@@ -195,6 +209,23 @@ test.describe("captures de la phase 15", () => {
               await settle(page);
               await shoot(page, `${extra.name}${suffix}`);
             }
+          }
+          return;
+        }
+        if (LOT === "3c") {
+          for (const width of [1280, 390]) {
+            await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+            const suffix = width === 390 ? "-390" : "";
+            if (width === 390) {
+              for (const screen of screens) {
+                await screen.open(page, request);
+                await settle(page);
+                await shoot(page, `${screen.name}${suffix}`);
+              }
+            }
+            await openNewPerson(page);
+            await settle(page);
+            await shoot(page, `personne-nouvelle${suffix}`);
           }
           return;
         }

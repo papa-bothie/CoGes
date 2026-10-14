@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { E2E, loginThroughUi, managerApi } from "./fixtures";
+import { E2E, loginThroughUi, managerApi, stockedProduct } from "./fixtures";
 
 const CAPTURES = "../docs/design/captures/phase-12";
 
@@ -12,58 +12,64 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 }
 
-test("ajouter un fournisseur ; sa fiche montre charges et dettes", async ({ page, request }) => {
+test("ajouter un fournisseur ; sa fiche dit ce qu'on lui doit et ce qu'il livre", async ({
+  page,
+  request,
+}) => {
   const client = await managerApi(request);
   const marker = crypto.randomUUID().slice(0, 6);
   const name = `Grossiste ${marker}`;
+  const product = await stockedProduct(client, { stock: "2" });
   await login(page);
 
+  // Écran 15, ouvert depuis la liste des fournisseurs : déjà sur « Un fournisseur ».
   await page.goto("/suppliers");
-  await page.getByRole("button", { name: "Ajouter une personne" }).click();
-  const dialog = page.getByRole("dialog");
-  // La liste des fournisseurs ouvre le formulaire sur « Un fournisseur » ; plus de délai.
-  await expect(dialog.getByRole("radio", { name: "Un fournisseur" })).toBeChecked();
-  await dialog.getByLabel("Nom du fournisseur").fill(name);
-  await dialog.getByRole("button", { name: "Enregistrer le fournisseur" }).click();
+  await page.getByRole("main").getByRole("link", { name: "Nouveau fournisseur" }).click();
+  await expect(page.getByRole("radio", { name: "Un fournisseur" })).toBeChecked();
+  await page.getByLabel("Nom du fournisseur").fill(name);
+  await page.getByRole("button", { name: "Enregistrer le fournisseur" }).click();
+  await expect(page.getByText("Fournisseur ajouté")).toBeVisible();
 
-  await expect(page).toHaveURL(/\/suppliers\/[0-9a-f-]+$/);
-  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
-  const supplierId = page.url().split("/").pop()!;
-
-  // Une charge et une dette rattachées, saisies par l'API.
-  const category = await client.post("/expense-categories", {
-    name: `Achats ${marker}`,
-    kind: "variable",
-  });
-  await client.post("/expenses", {
-    category_id: category.id,
-    label: `Livraison ${marker}`,
-    amount: "25000",
-    spent_at: new Date().toISOString().slice(0, 10),
-    supplier_id: supplierId,
-  });
-  await client.post("/debts", {
-    party_type: "supplier",
-    supplier_id: supplierId,
-    principal: "80000",
-  });
-
-  await page.reload();
-  await expect(page.getByRole("row").filter({ hasText: `Livraison ${marker}` })).toContainText(
-    /25\s000\sFCFA/,
+  // « Recevoir une livraison » depuis le succès : le fournisseur est déjà choisi.
+  await page.getByRole("link", { name: "Recevoir une livraison" }).click();
+  await expect(page.getByRole("button", { name, exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
   );
-  await expect(
-    page.getByRole("row").filter({ has: page.getByRole("cell", { name: "Ouverte", exact: true }) }),
-  ).toContainText(/80\s000\sFCFA/);
+  await page.getByLabel("Chercher un autre article").fill(product.name);
+  await page.getByRole("button", { name: `+ ${product.name}` }).click();
+  await page.getByLabel(`Quantité : ${product.name}`).fill("10");
+  await page.getByLabel(`Prix d'achat (F) : ${product.name}`).fill("700");
+  await page.getByRole("button", { name: "Enregistrer la livraison" }).click();
+  await expect(page.getByRole("heading", { name: "Livraison enregistrée" })).toBeVisible();
+
+  // Écran 16 : ce qu'on lui doit, ce qu'il livre, sa livraison.
+  const found = await client.get(`/suppliers?search=${encodeURIComponent(name)}`);
+  const supplierId = found.items[0].id as string;
+  await page.goto(`/suppliers/${supplierId}`);
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  await expect(page.getByText(/^7\s000\sF$/).first()).toBeVisible();
+  await expect(page.getByText("1 article")).toBeVisible();
+  await expect(page.getByRole("tabpanel")).toContainText(/Reste 7\s000\sF/);
+
+  // « Modifier » : l'adresse attend dans « Plus d'infos », puis s'affiche sous le nom.
+  await page.getByRole("link", { name: "Modifier" }).click();
+  await page.getByText("Plus d'infos").click();
+  await page.getByLabel("Adresse").fill("Marché Sandaga, Dakar");
+  await page.getByRole("button", { name: "Enregistrer le fournisseur" }).click();
+  await expect(page.getByText(/Marché Sandaga, Dakar/)).toBeVisible();
   await page.screenshot({
     path: `${CAPTURES}/fiche-fournisseur.png`,
     fullPage: true,
     animations: "disabled",
   });
 
+  // La liste : à qui je dois.
   await page.goto("/suppliers");
-  await expect(page.getByText(/\d+ fournisseurs?/)).toBeVisible();
-  await expect(page.getByRole("row").filter({ hasText: name })).toBeVisible();
+  await page.getByRole("button", { name: "À qui je dois" }).click();
+  await expect(page.getByRole("link", { name: new RegExp(name) })).toContainText(
+    /Vous devez 7\s000\sF/,
+  );
   await page.screenshot({
     path: `${CAPTURES}/fournisseurs.png`,
     fullPage: true,

@@ -1492,3 +1492,37 @@ def first_sale_days_as_of(
 ) -> dict[UUID, date]:
     """Premier jour de vente connu à `as_of`, par produit."""
     return SaleHistoryRepository(session, ctx).first_sale_days(as_of=as_of, timezone=timezone)
+
+
+# ------------------------------------------------- clients (écrans 13 et 14, ADR 0072)
+
+
+def last_sale_at_by_customer(session: Session, ctx: TenantContext) -> dict[UUID, datetime]:
+    """Dernière visite de chaque client : sa dernière vente confirmée."""
+    return SaleRepository(session, ctx).last_sale_at_by_customer()
+
+
+def customer_totals_since(
+    session: Session, ctx: TenantContext, customer_id: UUID, since: datetime
+) -> tuple[Decimal, int, datetime | None]:
+    """Acheté par un client depuis `since` (montant, nombre de visites) ; sa dernière visite."""
+    return SaleRepository(session, ctx).customer_totals_since(customer_id, since)
+
+
+def sale_ids_of_customer(session: Session, ctx: TenantContext, customer_id: UUID) -> list[UUID]:
+    """Ventes d'un client, pour retrouver ce qu'il a payé dessus."""
+    return SaleRepository(session, ctx).ids_of_customer(customer_id)
+
+
+def product_ids_by_sale(
+    session: Session, ctx: TenantContext, sale_ids: Sequence[UUID]
+) -> dict[UUID, list[UUID]]:
+    """Articles de chaque vente, dans l'ordre de saisie."""
+    return SaleItemRepository(session, ctx).product_ids_by_sale(sale_ids)
+
+
+def sale_numbers(session: Session, ctx: TenantContext, sale_ids: Sequence[UUID]) -> dict[UUID, str]:
+    """Numéro de chaque vente du lot (« V-001044 »)."""
+    if not sale_ids:
+        return {}
+    return {sale.id: sale.sale_no for sale in SaleRepository(session, ctx).by_ids(sale_ids)}

@@ -20,6 +20,8 @@ class Supplier(IdentifiedTenantBase):
     phone: Mapped[str | None] = mapped_column(Text, nullable=True)
     #: Indicatif : la V1 ne calcule aucune échéance d'achat (pas de module Achats).
     payment_terms_days: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    #: Révision 0018 : « Marché Sandaga, Dakar », facultative (ADR 0072).
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

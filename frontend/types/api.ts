@@ -1357,6 +1357,166 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/analytics/customers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Customers
+     * @description Liste des clients : qui vous doit d'abord, puis la dernière visite (écran 13).
+     */
+    get: operations["customers_api_v1_analytics_customers_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/analytics/customers/{customer_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Customer Sheet
+     * @description Tuiles de la fiche client : sa dette, ses achats du mois, sa dernière visite.
+     */
+    get: operations["customer_sheet_api_v1_analytics_customers__customer_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/analytics/customers/{customer_id}/sales": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Customer Sales
+     * @description « Ses achats » : ses ventes avec leurs premiers articles.
+     */
+    get: operations["customer_sales_api_v1_analytics_customers__customer_id__sales_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/analytics/customers/{customer_id}/payments": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Customer Payments
+     * @description « Ses paiements » : à la vente ou sur une dette.
+     */
+    get: operations["customer_payments_api_v1_analytics_customers__customer_id__payments_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/analytics/suppliers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Suppliers
+     * @description Liste des fournisseurs : à qui vous devez d'abord, puis la dernière livraison.
+     */
+    get: operations["suppliers_api_v1_analytics_suppliers_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/analytics/suppliers/{supplier_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Supplier Sheet
+     * @description Tuiles de la fiche fournisseur : ce que vous lui devez, ses livraisons, ses articles.
+     */
+    get: operations["supplier_sheet_api_v1_analytics_suppliers__supplier_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/analytics/suppliers/{supplier_id}/deliveries": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Supplier Deliveries
+     * @description « Ses livraisons » : chaque dette fournisseur et ses principaux articles.
+     */
+    get: operations["supplier_deliveries_api_v1_analytics_suppliers__supplier_id__deliveries_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/analytics/suppliers/{supplier_id}/payments": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Supplier Payments
+     * @description « Vos paiements » : ce que vous lui avez versé.
+     */
+    get: operations["supplier_payments_api_v1_analytics_suppliers__supplier_id__payments_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/notifications": {
     parameters: {
       query?: never;
@@ -1743,6 +1903,7 @@ export interface components {
        */
       created_at: string;
     };
+    Address: string;
     /**
      * AllocationInput
      * @description Part d'un versement affectée à une dette.
@@ -2074,6 +2235,79 @@ export interface components {
        */
       created_at: string;
     };
+    /** CustomerSalePage */
+    CustomerSalePage: {
+      /** Items */
+      items: components["schemas"]["CustomerSaleRow"][];
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Total */
+      total: number;
+    };
+    /**
+     * CustomerSaleRow
+     * @description Un achat du client : la vente, ses premiers articles et ce qu'il en reste dû.
+     */
+    CustomerSaleRow: {
+      /**
+       * Sale Id
+       * Format: uuid
+       */
+      sale_id: string;
+      /** Sale No */
+      sale_no: string;
+      /**
+       * Sold At
+       * Format: date-time
+       */
+      sold_at: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "confirmed" | "cancelled";
+      total: components["schemas"]["Amount-Output"];
+      balance: components["schemas"]["Amount-Output"];
+      /** Debt Status */
+      debt_status: ("open" | "partially_paid" | "paid" | "written_off") | null;
+      /** Has Returns */
+      has_returns: boolean;
+      returned_total: components["schemas"]["Amount-Output"];
+      /** Item Names */
+      item_names: string[];
+      /** Item Count */
+      item_count: number;
+    };
+    /**
+     * CustomerSheet
+     * @description Les tuiles de la fiche client (écran 14).
+     */
+    CustomerSheet: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Name */
+      name: string;
+      /** Phone */
+      phone: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      owed: components["schemas"]["Amount-Output"] | null;
+      /** Owed Since */
+      owed_since: string | null;
+      month_total: components["schemas"]["Amount-Output"];
+      /** Month Visits */
+      month_visits: number;
+      /** Last Visit At */
+      last_visit_at: string | null;
+    };
     /** CustomerUpdate */
     CustomerUpdate: {
       name?: components["schemas"]["CustomerName"] | null;
@@ -2301,6 +2535,19 @@ export interface components {
       movement_id: string;
       qty: components["schemas"]["Quantity-Output"];
       unit_cost: components["schemas"]["UnitCost-Output"];
+    };
+    /** DeliveryLineRow */
+    DeliveryLineRow: {
+      /**
+       * Product Id
+       * Format: uuid
+       */
+      product_id: string;
+      /** Name */
+      name: string;
+      qty: components["schemas"]["Quantity-Output"];
+      /** Unit */
+      unit: string;
     };
     /** @enum {string} */
     DeliveryPaymentMode: "now" | "part" | "later";
@@ -3233,6 +3480,24 @@ export interface components {
       reversal_of_payment_id?: string | null;
     };
     PaymentTermsDays: number;
+    /** PeoplePage */
+    PeoplePage: {
+      /** Items */
+      items: components["schemas"]["PersonRow"][];
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Total */
+      total: number;
+      /** Owing Count */
+      owing_count: number | null;
+      owed_total: components["schemas"]["Amount-Output"] | null;
+      /** Customer Count */
+      customer_count: number;
+      /** Supplier Count */
+      supplier_count: number;
+    };
     /** PermissionRead */
     PermissionRead: {
       /**
@@ -3246,6 +3511,71 @@ export interface components {
       resource: string;
       /** Action */
       action: string;
+    };
+    /** PersonPaymentPage */
+    PersonPaymentPage: {
+      /** Items */
+      items: components["schemas"]["PersonPaymentRow"][];
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Total */
+      total: number;
+    };
+    /**
+     * PersonPaymentRow
+     * @description Un versement d'un client, ou à un fournisseur, et ce qu'il paie.
+     */
+    PersonPaymentRow: {
+      /**
+       * Payment Id
+       * Format: uuid
+       */
+      payment_id: string;
+      /**
+       * Paid At
+       * Format: date-time
+       */
+      paid_at: string;
+      amount: components["schemas"]["Amount-Output"];
+      /** Method */
+      method: string;
+      /** On Debt */
+      on_debt: boolean;
+      /** Sale Id */
+      sale_id: string | null;
+      /** Sale No */
+      sale_no: string | null;
+      /** Debt Id */
+      debt_id: string | null;
+      /** Debt Created At */
+      debt_created_at: string | null;
+    };
+    /**
+     * PersonRow
+     * @description Un client ou un fournisseur dans la liste de l'écran 13.
+     *
+     *     `owed` est `null` pour qui n'a pas le droit de lire les dettes (un vendeur) : il voit
+     *     les personnes, jamais l'argent qu'elles doivent.
+     */
+    PersonRow: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Name */
+      name: string;
+      /** Phone */
+      phone: string | null;
+      owed: components["schemas"]["Amount-Output"] | null;
+      /** Owed Since */
+      owed_since: string | null;
+      /** Due Date */
+      due_date: string | null;
+      /** Last Seen At */
+      last_seen_at: string | null;
     };
     Phone: string;
     PositiveAmount: components["schemas"]["Amount-Input"];
@@ -4208,6 +4538,46 @@ export interface components {
       phone?: components["schemas"]["Phone"] | null;
       payment_terms_days?: components["schemas"]["PaymentTermsDays"] | null;
     };
+    /** SupplierDeliveryPage */
+    SupplierDeliveryPage: {
+      /** Items */
+      items: components["schemas"]["SupplierDeliveryRow"][];
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Total */
+      total: number;
+    };
+    /**
+     * SupplierDeliveryRow
+     * @description Une livraison (une dette fournisseur) et ses principaux articles.
+     */
+    SupplierDeliveryRow: {
+      /**
+       * Debt Id
+       * Format: uuid
+       */
+      debt_id: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      total: components["schemas"]["Amount-Output"];
+      balance: components["schemas"]["Amount-Output"];
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "open" | "partially_paid" | "paid" | "written_off";
+      /** Due Date */
+      due_date: string | null;
+      /** Lines */
+      lines: components["schemas"]["DeliveryLineRow"][];
+      /** Line Count */
+      line_count: number;
+    };
     SupplierName: string;
     /** SupplierPage */
     SupplierPage: {
@@ -4233,6 +4603,8 @@ export interface components {
       name: string;
       /** Phone */
       phone: string | null;
+      /** Address */
+      address: string | null;
       /** Payment Terms Days */
       payment_terms_days: number | null;
       /**
@@ -4241,11 +4613,47 @@ export interface components {
        */
       created_at: string;
     };
-    /** SupplierUpdate */
+    /**
+     * SupplierSheet
+     * @description Les tuiles de la fiche fournisseur (écran 16).
+     */
+    SupplierSheet: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Name */
+      name: string;
+      /** Phone */
+      phone: string | null;
+      /** Address */
+      address: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      owed: components["schemas"]["Amount-Output"] | null;
+      /** Due Date */
+      due_date: string | null;
+      month_total: components["schemas"]["Amount-Output"] | null;
+      /** Month Deliveries */
+      month_deliveries: number;
+      /** Product Names */
+      product_names: string[];
+      /** Product Count */
+      product_count: number;
+    };
+    /**
+     * SupplierUpdate
+     * @description `address` se règle ici seulement : la création reste le nom et le téléphone.
+     */
     SupplierUpdate: {
       name?: components["schemas"]["SupplierName"] | null;
       code?: components["schemas"]["SupplierCode"] | null;
       phone?: components["schemas"]["Phone"] | null;
+      address?: components["schemas"]["Address"] | null;
       payment_terms_days?: components["schemas"]["PaymentTermsDays"] | null;
     };
     "TaxRate-Input": components["schemas"]["Rate-Input"];
@@ -7295,6 +7703,272 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ProductHistory"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  customers_api_v1_analytics_customers_get: {
+    parameters: {
+      query?: {
+        owing?: boolean;
+        search?: string | null;
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PeoplePage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  customer_sheet_api_v1_analytics_customers__customer_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        customer_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CustomerSheet"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  customer_sales_api_v1_analytics_customers__customer_id__sales_get: {
+    parameters: {
+      query?: {
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path: {
+        customer_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CustomerSalePage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  customer_payments_api_v1_analytics_customers__customer_id__payments_get: {
+    parameters: {
+      query?: {
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path: {
+        customer_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PersonPaymentPage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  suppliers_api_v1_analytics_suppliers_get: {
+    parameters: {
+      query?: {
+        owing?: boolean;
+        search?: string | null;
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PeoplePage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  supplier_sheet_api_v1_analytics_suppliers__supplier_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        supplier_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupplierSheet"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  supplier_deliveries_api_v1_analytics_suppliers__supplier_id__deliveries_get: {
+    parameters: {
+      query?: {
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path: {
+        supplier_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupplierDeliveryPage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  supplier_payments_api_v1_analytics_suppliers__supplier_id__payments_get: {
+    parameters: {
+      query?: {
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path: {
+        supplier_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PersonPaymentPage"];
         };
       };
       /** @description Validation Error */

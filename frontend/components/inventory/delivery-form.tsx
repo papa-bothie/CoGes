@@ -59,11 +59,18 @@ function lineTotal(line: Line): bigint {
  * partie, ou plus tard avec une échéance. Une seule écriture, sous clé d'idempotence : le
  * stock, la dette fournisseur et le paiement partent ensemble (ADR 0071).
  */
-export function DeliveryForm({ productId }: { productId?: string }) {
+export function DeliveryForm({
+  productId,
+  supplierId: askedSupplierId,
+}: {
+  productId?: string;
+  /** « Recevoir une livraison » depuis une fiche fournisseur (écran 16) : déjà choisi. */
+  supplierId?: string;
+}) {
   const queryClient = useQueryClient();
   const { currency, timeZone } = useCompanyLocale();
   const idempotency = useIdempotencyKey();
-  const [supplierId, setSupplierId] = useState<string | null>(null);
+  const [supplierId, setSupplierId] = useState<string | null>(askedSupplierId ?? null);
   const [lines, setLines] = useState<Line[]>([]);
   const [seeded, setSeeded] = useState(false);
   const [mode, setMode] = useState<Mode>("later");
@@ -135,9 +142,26 @@ export function DeliveryForm({ productId }: { productId?: string }) {
 
   const total = lines.reduce((sum, line) => sum + lineTotal(line), 0n);
   const paidAmount = typedAmount(paid);
+  // Le fournisseur venu de sa fiche peut être au-delà des 100 premiers : on le lit à part.
+  const asked = useQuery({
+    queryKey: queryKeys.suppliers.detail(askedSupplierId ?? "none"),
+    enabled: Boolean(askedSupplierId),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/suppliers/{supplier_id}", {
+          params: { path: { supplier_id: askedSupplierId! } },
+        }),
+      ),
+  });
+  const extraSuppliers = [created, asked.data ?? null].filter(
+    (item): item is { id: string; name: string } =>
+      item !== null && !suppliers.data?.items.some((listed) => listed.id === item.id),
+  );
   const supplierChoices = [
     ...(suppliers.data?.items ?? []),
-    ...(created && !suppliers.data?.items.some((item) => item.id === created.id) ? [created] : []),
+    ...extraSuppliers.filter(
+      (item, index) => extraSuppliers.findIndex((o) => o.id === item.id) === index,
+    ),
   ];
   const supplier = supplierChoices.find((item) => item.id === supplierId);
   const validLines = lines.filter((line) => {

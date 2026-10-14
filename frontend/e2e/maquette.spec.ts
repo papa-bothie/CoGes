@@ -61,6 +61,11 @@ const DONE = new Set<string>([
   "10",
   "11",
   "12",
+  "13",
+  "14",
+  "14b",
+  "15",
+  "16",
   "26",
 ]);
 
@@ -88,6 +93,11 @@ const ALLOWED = new Set<string>([
   "10",
   "11",
   "12",
+  "13",
+  "14",
+  "14b",
+  "15",
+  "16",
   "26",
 ]);
 
@@ -171,6 +181,14 @@ const STATES: Record<string, (page: Page, request: APIRequestContext) => Promise
     await page.getByLabel("Quantité en stock").fill("10");
     await page.getByLabel("Seuil d’alerte").fill("3");
     await page.getByLabel("Nom de l'article").blur();
+  },
+  "14b": async (page) => {
+    await page.getByRole("button", { name: "Lui rappeler sa dette" }).click();
+    await expect(page.getByLabel("Message WhatsApp")).not.toHaveValue("");
+  },
+  "15": async (page) => {
+    await page.getByLabel("Nom du client").fill("Aminata Sow");
+    await page.getByLabel("Téléphone").fill("77 655 90 21");
   },
   "11": async (page) => {
     await page.getByRole("button", { name: "Grossiste Sandaga", exact: true }).click();

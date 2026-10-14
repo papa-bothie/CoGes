@@ -4785,6 +4785,530 @@
         }
       }
     },
+    "/api/v1/analytics/customers": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Customers",
+        "description": "Liste des clients : qui vous doit d'abord, puis la dernière visite (écran 13).",
+        "operationId": "customers_api_v1_analytics_customers_get",
+        "parameters": [
+          {
+            "name": "owing",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Owing"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeoplePage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/customers/{customer_id}": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Customer Sheet",
+        "description": "Tuiles de la fiche client : sa dette, ses achats du mois, sa dernière visite.",
+        "operationId": "customer_sheet_api_v1_analytics_customers__customer_id__get",
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Customer Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerSheet"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/customers/{customer_id}/sales": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Customer Sales",
+        "description": "« Ses achats » : ses ventes avec leurs premiers articles.",
+        "operationId": "customer_sales_api_v1_analytics_customers__customer_id__sales_get",
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Customer Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerSalePage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/customers/{customer_id}/payments": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Customer Payments",
+        "description": "« Ses paiements » : à la vente ou sur une dette.",
+        "operationId": "customer_payments_api_v1_analytics_customers__customer_id__payments_get",
+        "parameters": [
+          {
+            "name": "customer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Customer Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonPaymentPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/suppliers": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Suppliers",
+        "description": "Liste des fournisseurs : à qui vous devez d'abord, puis la dernière livraison.",
+        "operationId": "suppliers_api_v1_analytics_suppliers_get",
+        "parameters": [
+          {
+            "name": "owing",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Owing"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeoplePage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/suppliers/{supplier_id}": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Supplier Sheet",
+        "description": "Tuiles de la fiche fournisseur : ce que vous lui devez, ses livraisons, ses articles.",
+        "operationId": "supplier_sheet_api_v1_analytics_suppliers__supplier_id__get",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierSheet"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/suppliers/{supplier_id}/deliveries": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Supplier Deliveries",
+        "description": "« Ses livraisons » : chaque dette fournisseur et ses principaux articles.",
+        "operationId": "supplier_deliveries_api_v1_analytics_suppliers__supplier_id__deliveries_get",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Supplier Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierDeliveryPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/suppliers/{supplier_id}/payments": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Supplier Payments",
+        "description": "« Vos paiements » : ce que vous lui avez versé.",
+        "operationId": "supplier_payments_api_v1_analytics_suppliers__supplier_id__payments_get",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Supplier Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonPaymentPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/notifications": {
       "get": {
         "tags": [
@@ -5782,6 +6306,11 @@
         "title": "ActiveAlert",
         "description": "Une alerte non lue de l'utilisateur courant."
       },
+      "Address": {
+        "type": "string",
+        "maxLength": 200,
+        "minLength": 1
+      },
       "AllocationInput": {
         "properties": {
           "debt_id": {
@@ -6751,6 +7280,207 @@
         ],
         "title": "CustomerRead"
       },
+      "CustomerSalePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CustomerSaleRow"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "CustomerSalePage"
+      },
+      "CustomerSaleRow": {
+        "properties": {
+          "sale_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Sale Id"
+          },
+          "sale_no": {
+            "type": "string",
+            "title": "Sale No"
+          },
+          "sold_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Sold At"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "balance": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "debt_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "open",
+                  "partially_paid",
+                  "paid",
+                  "written_off"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Debt Status"
+          },
+          "has_returns": {
+            "type": "boolean",
+            "title": "Has Returns"
+          },
+          "returned_total": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "item_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Item Names"
+          },
+          "item_count": {
+            "type": "integer",
+            "title": "Item Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sale_id",
+          "sale_no",
+          "sold_at",
+          "status",
+          "total",
+          "balance",
+          "debt_status",
+          "has_returns",
+          "returned_total",
+          "item_names",
+          "item_count"
+        ],
+        "title": "CustomerSaleRow",
+        "description": "Un achat du client : la vente, ses premiers articles et ce qu'il en reste dû."
+      },
+      "CustomerSheet": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "owed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Amount-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "owed_since": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owed Since"
+          },
+          "month_total": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "month_visits": {
+            "type": "integer",
+            "title": "Month Visits"
+          },
+          "last_visit_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Visit At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "phone",
+          "created_at",
+          "owed",
+          "owed_since",
+          "month_total",
+          "month_visits",
+          "last_visit_at"
+        ],
+        "title": "CustomerSheet",
+        "description": "Les tuiles de la fiche client (écran 14)."
+      },
       "CustomerUpdate": {
         "properties": {
           "name": {
@@ -7407,6 +8137,35 @@
           "unit_cost"
         ],
         "title": "DeliveryLineRead"
+      },
+      "DeliveryLineRow": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "qty": {
+            "$ref": "#/components/schemas/Quantity-Output"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "name",
+          "qty",
+          "unit"
+        ],
+        "title": "DeliveryLineRow"
       },
       "DeliveryPaymentMode": {
         "type": "string",
@@ -9905,6 +10664,71 @@
         "maximum": 365.0,
         "minimum": 0.0
       },
+      "PeoplePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PersonRow"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "owing_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owing Count"
+          },
+          "owed_total": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Amount-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "customer_count": {
+            "type": "integer",
+            "title": "Customer Count"
+          },
+          "supplier_count": {
+            "type": "integer",
+            "title": "Supplier Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total",
+          "owing_count",
+          "owed_total",
+          "customer_count",
+          "supplier_count"
+        ],
+        "title": "PeoplePage"
+      },
       "PermissionRead": {
         "properties": {
           "id": {
@@ -9934,6 +10758,208 @@
           "action"
         ],
         "title": "PermissionRead"
+      },
+      "PersonPaymentPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PersonPaymentRow"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "PersonPaymentPage"
+      },
+      "PersonPaymentRow": {
+        "properties": {
+          "payment_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Payment Id"
+          },
+          "paid_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Paid At"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "on_debt": {
+            "type": "boolean",
+            "title": "On Debt"
+          },
+          "sale_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sale Id"
+          },
+          "sale_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sale No"
+          },
+          "debt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Debt Id"
+          },
+          "debt_created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Debt Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "payment_id",
+          "paid_at",
+          "amount",
+          "method",
+          "on_debt",
+          "sale_id",
+          "sale_no",
+          "debt_id",
+          "debt_created_at"
+        ],
+        "title": "PersonPaymentRow",
+        "description": "Un versement d'un client, ou à un fournisseur, et ce qu'il paie."
+      },
+      "PersonRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "owed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Amount-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "owed_since": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owed Since"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "phone",
+          "owed",
+          "owed_since",
+          "due_date",
+          "last_seen_at"
+        ],
+        "title": "PersonRow",
+        "description": "Un client ou un fournisseur dans la liste de l'écran 13.\n\n`owed` est `null` pour qui n'a pas le droit de lire les dettes (un vendeur) : il voit\nles personnes, jamais l'argent qu'elles doivent."
       },
       "Phone": {
         "type": "string",
@@ -12658,6 +13684,105 @@
         "title": "SupplierCreate",
         "description": "`code` omis : le serveur en attribue un (`FRN-0001`), modifiable ensuite."
       },
+      "SupplierDeliveryPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SupplierDeliveryRow"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "SupplierDeliveryPage"
+      },
+      "SupplierDeliveryRow": {
+        "properties": {
+          "debt_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Debt Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "balance": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "partially_paid",
+              "paid",
+              "written_off"
+            ],
+            "title": "Status"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/DeliveryLineRow"
+            },
+            "type": "array",
+            "title": "Lines"
+          },
+          "line_count": {
+            "type": "integer",
+            "title": "Line Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "debt_id",
+          "created_at",
+          "total",
+          "balance",
+          "status",
+          "due_date",
+          "lines",
+          "line_count"
+        ],
+        "title": "SupplierDeliveryRow",
+        "description": "Une livraison (une dette fournisseur) et ses principaux articles."
+      },
       "SupplierName": {
         "type": "string",
         "maxLength": 200,
@@ -12728,6 +13853,17 @@
             ],
             "title": "Phone"
           },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
           "payment_terms_days": {
             "anyOf": [
               {
@@ -12752,10 +13888,115 @@
           "code",
           "name",
           "phone",
+          "address",
           "payment_terms_days",
           "created_at"
         ],
         "title": "SupplierRead"
+      },
+      "SupplierSheet": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "owed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Amount-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "month_total": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Amount-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "month_deliveries": {
+            "type": "integer",
+            "title": "Month Deliveries"
+          },
+          "product_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Product Names"
+          },
+          "product_count": {
+            "type": "integer",
+            "title": "Product Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "phone",
+          "address",
+          "created_at",
+          "owed",
+          "due_date",
+          "month_total",
+          "month_deliveries",
+          "product_names",
+          "product_count"
+        ],
+        "title": "SupplierSheet",
+        "description": "Les tuiles de la fiche fournisseur (écran 16)."
       },
       "SupplierUpdate": {
         "properties": {
@@ -12789,6 +14030,16 @@
               }
             ]
           },
+          "address": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "payment_terms_days": {
             "anyOf": [
               {
@@ -12802,7 +14053,8 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "title": "SupplierUpdate"
+        "title": "SupplierUpdate",
+        "description": "`address` se règle ici seulement : la création reste le nom et le téléphone."
       },
       "TaxRate-Input": {
         "$ref": "#/components/schemas/Rate-Input",

@@ -9,7 +9,7 @@ from sqlalchemy import ColumnElement, Integer, Select, cast, func, or_, select
 
 from app.core.codes import number_pattern
 from app.core.repository import TenantRepository
-from app.core.search import code_matches, name_matches, relevance_order
+from app.core.search import code_matches, name_matches, phone_matches, relevance_order
 from app.modules.suppliers.models import Supplier
 
 
@@ -24,7 +24,13 @@ class SupplierRepository(TenantRepository[Supplier]):
     def _filters(self, *, search: str | None) -> list[ColumnElement[bool]]:
         if search is None:
             return []
-        return [or_(name_matches(Supplier.name, search), code_matches((Supplier.code,), search))]
+        return [
+            or_(
+                name_matches(Supplier.name, search),
+                code_matches((Supplier.code,), search),
+                phone_matches(Supplier.phone, search),
+            )
+        ]
 
     def get_live(self, supplier_id: UUID) -> Supplier | None:
         return self.session.execute(

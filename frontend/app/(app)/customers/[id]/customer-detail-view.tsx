@@ -1,183 +1,361 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, MessageCircle } from "lucide-react";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 
 import { ErrorState } from "@/components/error-state";
-import { DebtsCard } from "@/components/finance/debts-card";
-import { Money } from "@/components/money";
-import { PageHeader } from "@/components/page-header";
-import { SaleStatusBadge } from "@/components/status/status-badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RUBRIQUE_CLASSES } from "@/components/kit/rubrique";
+import { StatusPill } from "@/components/kit/status-pill";
+import { HistoryTabs, PersonHeader, SheetTile } from "@/components/people/person-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCompanyLocale } from "@/hooks/use-me";
-import { Can } from "@/hooks/use-permission";
+import { SettleDialog } from "@/app/(app)/finance/settle-dialog";
+import { useCompanyLocale, useMe } from "@/hooks/use-me";
+import { usePermission } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queries/keys";
-import { formatDate } from "@/lib/format";
+import type { Schemas } from "@/lib/api/schema";
+import { compareDecimal } from "@/lib/decimal";
+import { formatAmount, formatClock } from "@/lib/format";
 import { labels } from "@/lib/labels";
+import { firstName, monthYear, shortNames, sinceText, visitDay } from "@/lib/people";
+import { salePill } from "@/lib/sale-status";
+import { displayNumber } from "@/lib/units";
+import { whatsappLink } from "@/lib/whatsapp";
+import { cn } from "@/lib/utils";
 
-import { PersonFormDialog } from "@/components/people/person-form-dialog";
+type Debt = Schemas["DebtDetail"];
 
+const t = labels.peopleScreens.customer;
+const methods = labels.peopleScreens.methods;
+const ACTION = cn(
+  "inline-flex min-h-bouton flex-[1_1_220px] items-center justify-center gap-2.5 rounded-bouton px-5 text-[17px] font-bold",
+  "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+);
+
+/**
+ * La fiche client, maquette v2 (écrans 14 et 14b) : qui il est, ce qu'il doit et depuis
+ * quand, ce qu'il a acheté ce mois, sa dernière visite ; encaisser sa dette, lui vendre,
+ * lui rappeler sa dette par WhatsApp ; puis ses achats et ses paiements. L'encaissement
+ * ouvre la fenêtre de L'argent jusqu'au lot 3d (ADR 0072).
+ */
 export function CustomerDetailView({ customerId }: { customerId: string }) {
   const { timeZone, currency } = useCompanyLocale();
-  const [editing, setEditing] = useState(false);
-  const customer = useQuery({
-    queryKey: queryKeys.customers.detail(customerId),
+  const money = usePermission("debts:read");
+  const canReadPayments = usePermission("payments:read");
+  const [reminding, setReminding] = useState(false);
+  const [settling, setSettling] = useState<Debt | null>(null);
+  const sheet = useQuery({
+    queryKey: queryKeys.people.sheet("customer", customerId),
     queryFn: () =>
       unwrap(
-        api.GET("/api/v1/customers/{customer_id}", {
+        api.GET("/api/v1/analytics/customers/{customer_id}", {
           params: { path: { customer_id: customerId } },
         }),
       ),
   });
-
-  if (customer.isError) {
-    return <ErrorState error={customer.error} onRetry={() => void customer.refetch()} />;
-  }
-  if (!customer.data) return <Skeleton className="h-96 w-full" />;
-  const data = customer.data;
-
-  return (
-    <>
-      <Link
-        href="/customers"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-4" aria-hidden />
-        {labels.customers.backToList}
-      </Link>
-      <PageHeader
-        title={data.name}
-        actions={
-          <Can permission="customers:update">
-            <Button variant="outline" onClick={() => setEditing(true)}>
-              <Pencil aria-hidden />
-              {labels.customers.edit}
-            </Button>
-          </Can>
-        }
-      />
-
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="space-y-6">
-          <Purchases customerId={customerId} timeZone={timeZone} currency={currency} />
-          <Can permission="debts:read">
-            <DebtsCard
-              title={labels.customers.debts}
-              empty={labels.customers.noDebts}
-              filter={{ customer_id: customerId }}
-            />
-          </Can>
-        </div>
-        <Card>
-          <CardHeader>
-            <CardTitle>{labels.customers.contact}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <Row label={labels.customers.phone}>
-              <span className="numeric">{data.phone ?? "—"}</span>
-            </Row>
-            <Row label={labels.customers.since}>
-              <span className="numeric">{formatDate(data.created_at, timeZone)}</span>
-            </Row>
-            {/* Plus saisi depuis le lot 1 ; une limite posée avant reste visible, elle s'applique. */}
-            {data.credit_limit && (
-              <Row label={labels.customers.creditLimit}>
-                <Money value={data.credit_limit} currency={currency} className="font-semibold" />
-              </Row>
-            )}
-            <details className="pt-2">
-              <summary className="min-h-cible cursor-pointer content-center font-bold">
-                {labels.people.moreInfo}
-              </summary>
-              <Row label={labels.customers.email}>{data.email ?? "—"}</Row>
-            </details>
-          </CardContent>
-        </Card>
-      </div>
-
-      <PersonFormDialog
-        key={String(editing)}
-        kind="customer"
-        person={data}
-        open={editing}
-        onOpenChange={setEditing}
-      />
-    </>
-  );
-}
-
-function Purchases({
-  customerId,
-  timeZone,
-  currency,
-}: {
-  customerId: string;
-  timeZone: string;
-  currency: string;
-}) {
-  const params = { customer_id: customerId, page_size: 10 };
-  const sales = useQuery({
-    queryKey: queryKeys.sales.list(params),
-    queryFn: () => unwrap(api.GET("/api/v1/sales", { params: { query: params } })),
+  const openDebt = useQuery({
+    queryKey: queryKeys.debts.list({ customer_id: customerId, oldest: true }),
+    enabled: money,
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/debts", {
+          params: { query: { customer_id: customerId, page_size: 100 } },
+        }),
+      ),
   });
 
+  if (sheet.isError) {
+    return <ErrorState error={sheet.error} onRetry={() => void sheet.refetch()} />;
+  }
+  if (!sheet.data) return <Skeleton className="mx-auto h-96 w-full max-w-page rounded-carte" />;
+  const data = sheet.data;
+  const owes = data.owed !== null && compareDecimal(data.owed, "0") === 1;
+  const firstOpen = (openDebt.data?.items ?? []).find(
+    (debt) => debt.status === "open" || debt.status === "partially_paid",
+  );
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{labels.customers.purchases}</CardTitle>
-        {sales.data && sales.data.total > 0 && (
-          <CardAction>
-            <span className="text-sm text-muted-foreground">
-              {labels.sales.count(sales.data.total)}
-            </span>
-          </CardAction>
+    <div className="mx-auto flex max-w-page flex-col gap-5">
+      <Link
+        href="/customers"
+        className="inline-flex min-h-11 items-center gap-2 self-start font-bold text-foreground hover:underline pointer-coarse:min-h-12"
+      >
+        <ArrowLeft className="size-[22px]" aria-hidden />
+        {labels.people.back.customer}
+      </Link>
+
+      <PersonHeader
+        name={data.name}
+        rubrique="clients"
+        subtitle={t.subtitle(data.phone, monthYear(data.created_at, timeZone))}
+        phone={data.phone}
+        editHref={`/customers/${customerId}/edit`}
+        editPermission="customers:update"
+      />
+
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
+        {data.owed !== null && (
+          <SheetTile
+            rubrique="clients"
+            label={t.owed}
+            value={owes ? formatAmount(data.owed, currency) : t.owesNothing}
+            detail={owes && data.owed_since ? sinceText(data.owed_since, timeZone) : null}
+            detailInk="text-clients-encre"
+          />
         )}
-      </CardHeader>
-      <CardContent>
-        {sales.isError ? (
-          <ErrorState error={sales.error} onRetry={() => void sales.refetch()} />
-        ) : !sales.data ? (
-          <Skeleton className="h-32 w-full" />
-        ) : sales.data.items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{labels.customers.noPurchases}</p>
-        ) : (
-          <ul className="-mx-2 divide-y">
-            {sales.data.items.map((sale) => (
-              <li key={sale.id}>
-                <Link
-                  href={sale.status === "draft" ? `/sales/${sale.id}/edit` : `/sales/${sale.id}`}
-                  className="flex items-center justify-between gap-3 rounded-md px-2 py-2.5 hover:bg-muted/60"
-                >
-                  <div>
-                    <p className="font-medium numeric">{sale.sale_no}</p>
-                    <p className="text-sm numeric text-muted-foreground">
-                      {formatDate(sale.sold_at, timeZone)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <SaleStatusBadge status={sale.status} hasReturns={sale.has_returns} />
-                    <Money value={sale.total} currency={currency} className="font-medium" />
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
+        <SheetTile
+          rubrique="ventes"
+          label={t.month}
+          value={formatAmount(data.month_total, currency)}
+          detail={t.visits(data.month_visits)}
+        />
+        <SheetTile
+          rubrique="argent"
+          label={t.last}
+          value={data.last_visit_at ? visitDay(data.last_visit_at, timeZone) : t.never}
+          detail={data.last_visit_at ? t.at(formatClock(data.last_visit_at, timeZone)) : null}
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-2.5">
+        {money && owes && firstOpen && (
+          <button
+            type="button"
+            className={cn(ACTION, RUBRIQUE_CLASSES.clients.solid)}
+            onClick={() => setSettling(firstOpen)}
+          >
+            {t.collect}
+          </button>
         )}
-      </CardContent>
-    </Card>
+        <Link
+          href={`/sales/new?customer=${customerId}`}
+          className={cn(ACTION, RUBRIQUE_CLASSES.ventes.solid)}
+        >
+          {t.sell}
+        </Link>
+        {money && owes && (
+          <button
+            type="button"
+            aria-expanded={reminding}
+            className={cn(ACTION, "border-2 border-input bg-card text-foreground hover:bg-voile")}
+            onClick={() => setReminding((on) => !on)}
+          >
+            <MessageCircle className="size-[22px]" aria-hidden />
+            {t.remind}
+          </button>
+        )}
+      </div>
+
+      {reminding && data.owed && (
+        <Reminder
+          name={data.name}
+          phone={data.phone}
+          amount={formatAmount(data.owed, currency)}
+          onClose={() => setReminding(false)}
+        />
+      )}
+
+      <HistoryTabs
+        rubrique="clients"
+        label={t.tabs}
+        tabs={[
+          { id: "sales", label: t.sales, content: <Purchases customerId={customerId} /> },
+          ...(canReadPayments
+            ? [{ id: "payments", label: t.payments, content: <Payments customerId={customerId} /> }]
+            : []),
+        ]}
+      />
+
+      {settling && (
+        <SettleDialog key={settling.id} debt={settling} onClose={() => setSettling(null)} />
+      )}
+    </div>
   );
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
+/** Le rappel WhatsApp (écran 14b) : un message prêt, modifiable, puis `wa.me`. */
+function Reminder({
+  name,
+  phone,
+  amount,
+  onClose,
+}: {
+  name: string;
+  phone: string | null;
+  amount: string;
+  onClose: () => void;
+}) {
+  const me = useMe();
+  const canReadShop = usePermission("company:read");
+  const shop = useQuery({
+    queryKey: ["companies", "me"],
+    enabled: canReadShop,
+    queryFn: () => unwrap(api.GET("/api/v1/companies/me")),
+  });
+  const ready = me.data && (!canReadShop || shop.data || shop.isError);
+  const initial = ready
+    ? t.reminder(
+        firstName(name),
+        firstName(me.data!.user.full_name),
+        shop.data?.name ?? me.data!.company.name,
+        amount,
+        shop.data?.wave_number ?? null,
+      )
+    : null;
+  const [edited, setEdited] = useState<string | null>(null);
+  const text = edited ?? initial ?? "";
+
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="text-right">{children}</span>
-    </div>
+    <section className="flex flex-col gap-3 rounded-carte border-2 border-clients-anneau bg-card p-carte">
+      <label htmlFor="reminder" className="text-[17px] font-bold">
+        {t.message}
+      </label>
+      <textarea
+        id="reminder"
+        value={text}
+        onChange={(event) => setEdited(event.target.value)}
+        className="min-h-[120px] w-full resize-y rounded-champ border-2 border-input bg-card p-3.5 text-[17px] text-foreground outline-none focus-visible:border-clients focus-visible:outline-3 focus-visible:outline-clients-anneau"
+      />
+      <div className="flex flex-wrap gap-2.5">
+        <a
+          href={whatsappLink(text, phone)}
+          target="_blank"
+          rel="noreferrer"
+          className={cn(ACTION, RUBRIQUE_CLASSES.ventes.solid)}
+        >
+          {t.openWhatsapp}
+        </a>
+        <button
+          type="button"
+          onClick={onClose}
+          className={cn(
+            ACTION,
+            "flex-[0_1_160px] border-2 border-input bg-card text-foreground hover:bg-voile",
+          )}
+        >
+          {t.close}
+        </button>
+      </div>
+    </section>
   );
+}
+
+function Purchases({ customerId }: { customerId: string }) {
+  const { timeZone, currency } = useCompanyLocale();
+  const sales = useQuery({
+    queryKey: queryKeys.people.history("customer", customerId, "sales"),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/analytics/customers/{customer_id}/sales", {
+          params: { path: { customer_id: customerId } },
+        }),
+      ),
+  });
+  if (sales.isError) return <ErrorState error={sales.error} onRetry={() => void sales.refetch()} />;
+  if (!sales.data) return <Skeleton className="h-40 w-full" />;
+  if (sales.data.items.length === 0) {
+    return <p className="border-t border-filet py-4 text-muted-foreground">{t.noSales}</p>;
+  }
+  return (
+    <ul>
+      {sales.data.items.map((sale) => {
+        const pill = salePill(sale, currency);
+        return (
+          <li key={sale.sale_id}>
+            <Link href={`/sales/${sale.sale_id}`} className={ROW}>
+              <span className="min-w-0 flex-[1_1_220px]">
+                <span className="block font-bold">
+                  {t.saleLine(displayNumber(sale.sale_no), shortNames(sale.item_names))}
+                </span>
+                <span className="block text-muted-foreground">
+                  {historyDay(sale.sold_at, timeZone)}
+                </span>
+              </span>
+              <span className="text-lg font-extrabold numeric">
+                {formatAmount(sale.total, currency)}
+              </span>
+              {pill && (
+                <StatusPill
+                  status={pill.status}
+                  amount={pill.amount}
+                  className="min-w-[130px] text-[15px]"
+                />
+              )}
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function Payments({ customerId }: { customerId: string }) {
+  const { timeZone, currency } = useCompanyLocale();
+  const payments = useQuery({
+    queryKey: queryKeys.people.history("customer", customerId, "payments"),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/analytics/customers/{customer_id}/payments", {
+          params: { path: { customer_id: customerId } },
+        }),
+      ),
+  });
+  if (payments.isError) {
+    return <ErrorState error={payments.error} onRetry={() => void payments.refetch()} />;
+  }
+  if (!payments.data) return <Skeleton className="h-40 w-full" />;
+  if (payments.data.items.length === 0) {
+    return <p className="border-t border-filet py-4 text-muted-foreground">{t.noPayments}</p>;
+  }
+  return (
+    <ul>
+      {payments.data.items.map((payment) => {
+        const how = methods[payment.method] ?? "";
+        const body = (
+          <>
+            <span className="min-w-0 flex-[1_1_220px]">
+              <span className="block font-bold">
+                {payment.on_debt ? t.collected(how) : t.paidAt(how)}
+              </span>
+              <span className="block text-muted-foreground">
+                {historyDay(payment.paid_at, timeZone)}
+              </span>
+            </span>
+            <span className="text-lg font-extrabold numeric">
+              {formatAmount(payment.amount, currency)}
+            </span>
+            {payment.sale_no && (
+              <span className="inline-flex min-w-[130px] items-center justify-center rounded-full bg-argent-teinte px-3 py-1.5 text-[15px] font-bold text-argent-encre">
+                {t.saleNo(displayNumber(payment.sale_no))}
+              </span>
+            )}
+          </>
+        );
+        return (
+          <li key={payment.payment_id}>
+            {payment.sale_id ? (
+              <Link href={`/sales/${payment.sale_id}`} className={ROW}>
+                {body}
+              </Link>
+            ) : (
+              <div className={ROW}>{body}</div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+const ROW = cn(
+  "flex flex-wrap items-center gap-x-3.5 gap-y-2.5 border-t border-filet py-3.5 text-foreground",
+  "outline-none hover:bg-voile/60 focus-visible:ring-3 focus-visible:ring-ring/50",
+);
+
+/** « Aujourd'hui, 9 h 58 », « Jeudi 24 septembre » : le jour d'une ligne d'historique. */
+function historyDay(value: string, timeZone: string): string {
+  const day = visitDay(value, timeZone);
+  return day === "Aujourd'hui" || day === "Hier" ? `${day}, ${formatClock(value, timeZone)}` : day;
 }

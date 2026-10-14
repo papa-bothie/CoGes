@@ -18,10 +18,11 @@ caisse.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import ColumnElement, case, func, or_
+from sqlalchemy import ColumnElement, case, false, func, or_
 from sqlalchemy.orm import InstrumentedAttribute
 
 #: Un terme plus court ne discrimine rien et ne franchit pas le seuil de
@@ -53,6 +54,25 @@ def name_matches(column: InstrumentedAttribute[str], term: str) -> ColumnElement
         column.op("%", is_comparison=True)(term),
         column.ilike(f"%{_escape_like(term)}%", escape=_LIKE_ESCAPE),
     )
+
+
+#: Assez de chiffres pour désigner un téléphone (« 77 655 » : 5 chiffres).
+MIN_PHONE_DIGITS = 4
+
+
+def phone_matches(column: InstrumentedAttribute[str | None], term: str) -> ColumnElement[bool]:
+    """Les chiffres tapés apparaissent dans le téléphone, espaces et signes ignorés.
+
+    « 77655 », « 655 90 » et « +221 77 655 90 21 » trouvent « 77 655 90 21 ». Un terme
+    sans assez de chiffres ne cherche pas de téléphone. Les listes de personnes d'une
+    boutique comptent quelques centaines de lignes : aucun index n'est nécessaire.
+    """
+    digits = re.sub(r"\D", "", term)
+    if len(digits) < MIN_PHONE_DIGITS:
+        return false()
+    if digits.startswith("221") and len(digits) > 9:
+        digits = digits[3:]
+    return func.regexp_replace(column, r"\D", "", "g").contains(digits)
 
 
 def code_matches(

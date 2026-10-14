@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 NAME_MAX_LENGTH = 200
 CODE_MAX_LENGTH = 32
 PHONE_MAX_LENGTH = 40
+#: Borne du `CHECK suppliers_address_length` (révision 0018).
+ADDRESS_MAX_LENGTH = 200
 #: Bornes du `CHECK (payment_terms_days BETWEEN 0 AND 365)` du § 8.3.
 MIN_PAYMENT_TERMS_DAYS = 0
 MAX_PAYMENT_TERMS_DAYS = 365
@@ -27,6 +29,9 @@ type SupplierCode = Annotated[
 type Phone = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=PHONE_MAX_LENGTH)
 ]
+type Address = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=ADDRESS_MAX_LENGTH)
+]
 type PaymentTermsDays = Annotated[int, Field(ge=MIN_PAYMENT_TERMS_DAYS, le=MAX_PAYMENT_TERMS_DAYS)]
 
 
@@ -37,6 +42,7 @@ class SupplierRead(BaseModel):
     code: str | None
     name: str
     phone: str | None
+    address: str | None
     payment_terms_days: int | None
     created_at: datetime
 
@@ -53,11 +59,14 @@ class SupplierCreate(BaseModel):
 
 
 class SupplierUpdate(BaseModel):
+    """`address` se règle ici seulement : la création reste le nom et le téléphone."""
+
     model_config = ConfigDict(extra="forbid")
 
     name: SupplierName | None = None
     code: SupplierCode | None = None
     phone: Phone | None = None
+    address: Address | None = None
     payment_terms_days: PaymentTermsDays | None = None
 
 

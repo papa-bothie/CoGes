@@ -33,19 +33,34 @@ from app.modules.analytics.schemas import (
     MAX_PERIOD_DAYS,
     MAX_RANKING_LIMIT,
     METRIC_LABELS,
+    NAMED_ITEMS,
+    PEOPLE_PAGE_SIZE,
     SERIES_LABELS,
+    SUPPLIER_NAMED_PRODUCTS,
+    CustomerSalePage,
+    CustomerSaleRow,
+    CustomerSheet,
     DailyCashPoint,
+    DeliveryLineRow,
     FinanceOverview,
+    PeoplePage,
+    PersonPaymentPage,
+    PersonPaymentRow,
+    PersonRow,
     ProductHistory,
     ProductHistoryItem,
     ProductMetric,
     ProductRanking,
     ProductRankRow,
+    SupplierDeliveryPage,
+    SupplierDeliveryRow,
+    SupplierSheet,
     Timeseries,
     TimeseriesMeasure,
     TimeseriesPoint,
 )
 from app.modules.companies import service as companies_service
+from app.modules.customers import service as customers_service
 from app.modules.expenses import service as expenses_service
 from app.modules.finance import service as finance_service
 from app.modules.intelligence import serving as intelligence_serving
@@ -582,4 +597,317 @@ def product_history(
             )
             for movement in movements
         ],
+    )
+
+
+# ------------------------------------------- clients et fournisseurs (écrans 13 à 16)
+#
+# Composés ici parce que Restitution peut lire toutes les façades (ADR 0030) : Customers
+# et Suppliers donnent les personnes, Finance ce qu'elles doivent et ce qu'elles ont
+# payé, Sales les visites et les achats, Inventory et Products les articles livrés. La
+# liste se classe en mémoire : une boutique compte quelques centaines de personnes
+# (ADR 0072). Sans le droit `debts:read`, aucun montant dû ne sort.
+
+MONEY_PERMISSION = "debts:read"
+_EPOCH = datetime.min.replace(tzinfo=ZoneInfo("UTC"))
+
+
+def _month_start(session: Session, ctx: TenantContext) -> datetime:
+    zone = ZoneInfo(companies_service.get_timezone(session, ctx))
+    now = clock.now_in(zone.key)
+    return datetime.combine(now.date().replace(day=1), time.min, tzinfo=zone)
+
+
+def _page(rows: Sequence[Any], page: int, page_size: int) -> list[Any]:
+    return list(rows[(page - 1) * page_size : page * page_size])
+
+
+def list_people(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    kind: str,
+    owing: bool = False,
+    search: str | None = None,
+    page: int = 1,
+    page_size: int = PEOPLE_PAGE_SIZE,
+) -> PeoplePage:
+    """Liste de l'écran 13 : qui doit d'abord (le plus gros montant), puis la dernière
+    visite ou livraison la plus récente, puis le nom ; jamais venu à la fin."""
+    money = ctx.has_permission(MONEY_PERMISSION)
+    customers, customer_count = customers_service.directory(
+        session, ctx, search=search if kind == "customer" else None
+    )
+    suppliers, supplier_count = suppliers_service.directory(
+        session, ctx, search=search if kind == "supplier" else None
+    )
+    people: Sequence[Any] = customers if kind == "customer" else suppliers
+    debts = finance_service.debt_summaries(session, ctx, kind)
+    last_seen: dict[UUID, datetime] = (
+        sales_service.last_sale_at_by_customer(session, ctx)
+        if kind == "customer"
+        else {party_id: summary.last_at for party_id, summary in debts.items()}
+    )
+    zero = Decimal("0")
+
+    def owed(person_id: UUID) -> Decimal:
+        summary = debts.get(person_id)
+        return summary.owed if summary else zero
+
+    rows = [person for person in people if not owing or owed(person.id) > 0]
+    rows.sort(
+        key=lambda person: (
+            -(owed(person.id) if money else zero),
+            last_seen.get(person.id) is None,
+            -(last_seen.get(person.id, _EPOCH) - _EPOCH).total_seconds(),
+            person.name.casefold(),
+        )
+    )
+    owing_people = [person for person in people if owed(person.id) > 0]
+
+    def row(person: Any) -> PersonRow:
+        summary = debts.get(person.id)
+        return PersonRow(
+            id=person.id,
+            name=person.name,
+            phone=person.phone,
+            owed=to_amount(owed(person.id)) if money else None,
+            owed_since=summary.oldest_open_at if money and summary else None,
+            due_date=summary.nearest_due if money and summary else None,
+            last_seen_at=last_seen.get(person.id),
+        )
+
+    return PeoplePage(
+        items=[row(person) for person in _page(rows, page, page_size)],
+        page=page,
+        page_size=page_size,
+        total=len(rows),
+        owing_count=len(owing_people) if money else None,
+        owed_total=to_amount(sum((owed(p.id) for p in owing_people), zero)) if money else None,
+        customer_count=customer_count,
+        supplier_count=supplier_count,
+    )
+
+
+def customer_sheet(session: Session, ctx: TenantContext, customer_id: UUID) -> CustomerSheet:
+    """Tuiles de la fiche client. Un client d'une autre entreprise donne 404."""
+    customer = customers_service.get_customer(session, ctx, customer_id)
+    money = ctx.has_permission(MONEY_PERMISSION)
+    summary = finance_service.debt_summaries(session, ctx, "customer").get(customer_id)
+    month_total, visits, last_visit = sales_service.customer_totals_since(
+        session, ctx, customer_id, _month_start(session, ctx)
+    )
+    return CustomerSheet(
+        id=customer.id,
+        name=customer.name,
+        phone=customer.phone,
+        created_at=customer.created_at,
+        owed=to_amount(summary.owed if summary else Decimal("0")) if money else None,
+        owed_since=summary.oldest_open_at if money and summary else None,
+        month_total=to_amount(month_total),
+        month_visits=visits,
+        last_visit_at=last_visit,
+    )
+
+
+def _names(session: Session, ctx: TenantContext, product_ids: Sequence[UUID]) -> dict[UUID, Any]:
+    return products_service.get_summaries(session, ctx, list(set(product_ids)))
+
+
+def customer_sales(
+    session: Session,
+    ctx: TenantContext,
+    customer_id: UUID,
+    *,
+    page: int = 1,
+    page_size: int = PEOPLE_PAGE_SIZE,
+) -> CustomerSalePage:
+    """« Ses achats » : les ventes du client, la plus récente d'abord, sans brouillon."""
+    customers_service.get_customer(session, ctx, customer_id)
+    sales, total, returned = sales_service.list_sales(
+        session,
+        ctx,
+        page=page,
+        page_size=page_size,
+        customer_id=customer_id,
+        include_drafts=False,
+    )
+    sale_ids = [sale.id for sale in sales]
+    products = sales_service.product_ids_by_sale(session, ctx, sale_ids)
+    summaries = _names(session, ctx, [pid for ids in products.values() for pid in ids])
+    statuses = finance_service.debt_statuses_for_sales(session, ctx, sale_ids)
+
+    def names(sale_id: UUID) -> list[str]:
+        ids = products.get(sale_id, [])
+        return [summaries[pid].name for pid in ids if pid in summaries][:NAMED_ITEMS]
+
+    return CustomerSalePage(
+        items=[
+            CustomerSaleRow(
+                sale_id=sale.id,
+                sale_no=sale.sale_no,
+                sold_at=sale.sold_at,
+                status=sale.status,
+                total=to_amount(sale.total),
+                balance=to_amount(sale.total - sale.paid_total),
+                debt_status=statuses.get(sale.id),
+                has_returns=sale.id in returned,
+                returned_total=to_amount(returned.get(sale.id, Decimal("0"))),
+                item_names=names(sale.id),
+                item_count=len(products.get(sale.id, [])),
+            )
+            for sale in sales
+        ],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
+
+
+def _payment_rows(
+    rows: Sequence[finance_service.PersonPayment], sale_numbers: dict[UUID, str]
+) -> list[PersonPaymentRow]:
+    result = []
+    for row in rows:
+        sale_id = row.payment.sale_id or row.debt_sale_id
+        result.append(
+            PersonPaymentRow(
+                payment_id=row.payment.id,
+                paid_at=row.payment.paid_at,
+                amount=to_amount(row.payment.amount),
+                method=row.payment.method,
+                on_debt=row.debt_id is not None,
+                sale_id=sale_id,
+                sale_no=sale_numbers.get(sale_id) if sale_id else None,
+                debt_id=row.debt_id,
+                debt_created_at=row.debt_created_at,
+            )
+        )
+    return result
+
+
+def customer_payments(
+    session: Session,
+    ctx: TenantContext,
+    customer_id: UUID,
+    *,
+    page: int = 1,
+    page_size: int = PEOPLE_PAGE_SIZE,
+) -> PersonPaymentPage:
+    """« Ses paiements » : payé à la vente ou sur une dette, le plus récent d'abord."""
+    customers_service.get_customer(session, ctx, customer_id)
+    rows, total = finance_service.person_payments_page(
+        session,
+        ctx,
+        customer_id=customer_id,
+        sale_ids=sales_service.sale_ids_of_customer(session, ctx, customer_id),
+        page=page,
+        page_size=page_size,
+    )
+    sale_ids = {sale_id for row in rows if (sale_id := row.payment.sale_id or row.debt_sale_id)}
+    numbers = sales_service.sale_numbers(session, ctx, list(sale_ids))
+    return PersonPaymentPage(
+        items=_payment_rows(rows, numbers), page=page, page_size=page_size, total=total
+    )
+
+
+def supplier_sheet(session: Session, ctx: TenantContext, supplier_id: UUID) -> SupplierSheet:
+    """Tuiles de la fiche fournisseur. Un fournisseur d'une autre entreprise donne 404."""
+    supplier = suppliers_service.get_supplier(session, ctx, supplier_id)
+    money = ctx.has_permission(MONEY_PERMISSION)
+    summary = finance_service.debt_summaries(session, ctx, "supplier").get(supplier_id)
+    month_total, deliveries = finance_service.supplier_totals_since(
+        session, ctx, supplier_id, _month_start(session, ctx)
+    )
+    lines = inventory_service.delivery_lines(
+        session, ctx, finance_service.supplier_debt_ids(session, ctx, supplier_id)
+    )
+    # Ce qu'il livre : les articles des livraisons, les plus livrés (en valeur) d'abord.
+    value: dict[UUID, Decimal] = {}
+    for delivery in lines.values():
+        for line in delivery:
+            value[line.product_id] = value.get(line.product_id, Decimal("0")) + (
+                line.qty * line.unit_cost
+            )
+    ranked = sorted(value, key=lambda pid: (-value[pid], str(pid)))
+    summaries = _names(session, ctx, ranked)
+    named = [summaries[pid].name for pid in ranked if pid in summaries]
+    return SupplierSheet(
+        id=supplier.id,
+        name=supplier.name,
+        phone=supplier.phone,
+        address=supplier.address,
+        created_at=supplier.created_at,
+        owed=to_amount(summary.owed if summary else Decimal("0")) if money else None,
+        due_date=summary.nearest_due if money and summary else None,
+        month_total=to_amount(month_total) if money else None,
+        month_deliveries=deliveries,
+        product_names=named[:SUPPLIER_NAMED_PRODUCTS],
+        product_count=len(named),
+    )
+
+
+def supplier_deliveries(
+    session: Session,
+    ctx: TenantContext,
+    supplier_id: UUID,
+    *,
+    page: int = 1,
+    page_size: int = PEOPLE_PAGE_SIZE,
+) -> SupplierDeliveryPage:
+    """« Ses livraisons » : chaque dette du fournisseur, la plus récente d'abord."""
+    suppliers_service.get_supplier(session, ctx, supplier_id)
+    debts, total = finance_service.supplier_debts_page(
+        session, ctx, supplier_id, page=page, page_size=page_size
+    )
+    lines = inventory_service.delivery_lines(session, ctx, [debt.id for debt in debts])
+    summaries = _names(session, ctx, [line.product_id for rows in lines.values() for line in rows])
+
+    def line_rows(debt_id: UUID) -> list[DeliveryLineRow]:
+        return [
+            DeliveryLineRow(
+                product_id=line.product_id,
+                name=summaries[line.product_id].name,
+                qty=to_quantity(line.qty),
+                unit=summaries[line.product_id].unit,
+            )
+            for line in lines.get(debt_id, [])
+            if line.product_id in summaries
+        ][:NAMED_ITEMS]
+
+    return SupplierDeliveryPage(
+        items=[
+            SupplierDeliveryRow(
+                debt_id=debt.id,
+                created_at=debt.created_at,
+                total=to_amount(debt.principal),
+                balance=to_amount(debt.balance),
+                status=debt.status,
+                due_date=debt.due_date,
+                lines=line_rows(debt.id),
+                line_count=len(lines.get(debt.id, [])),
+            )
+            for debt in debts
+        ],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
+
+
+def supplier_payments(
+    session: Session,
+    ctx: TenantContext,
+    supplier_id: UUID,
+    *,
+    page: int = 1,
+    page_size: int = PEOPLE_PAGE_SIZE,
+) -> PersonPaymentPage:
+    """« Vos paiements » : ce que vous lui avez versé, le plus récent d'abord."""
+    suppliers_service.get_supplier(session, ctx, supplier_id)
+    rows, total = finance_service.person_payments_page(
+        session, ctx, supplier_id=supplier_id, page=page, page_size=page_size
+    )
+    return PersonPaymentPage(
+        items=_payment_rows(rows, {}), page=page, page_size=page_size, total=total
     )

@@ -3,7 +3,7 @@
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ErrorState } from "@/components/error-state";
 import { FieldError } from "@/components/field-error";
@@ -66,7 +66,14 @@ const SETTLEMENT_ERRORS = new Set([
  * de vente. Seule la confirmation touche au stock et à l'argent, sous une clé d'idempotence
  * gardée jusqu'au succès. Après la confirmation, l'écran de succès (02d).
  */
-export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
+export function SaleEditor({
+  saleId: initialId,
+  customerId: askedCustomerId,
+}: {
+  saleId?: string;
+  /** « Lui vendre » depuis une fiche client (écran 14) : ce client est déjà choisi. */
+  customerId?: string;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: me } = useMe();
@@ -224,6 +231,27 @@ export function SaleEditor({ saleId: initialId }: { saleId?: string }) {
     if (saleId) setCustomer.mutate(customer);
     else setPendingCustomer(customer);
   };
+
+  // Le client venu de sa fiche se pose une fois le brouillon du jour repris (ou non).
+  const asked = useQuery({
+    queryKey: queryKeys.customers.detail(askedCustomerId ?? "none"),
+    enabled: Boolean(askedCustomerId),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/customers/{customer_id}", {
+          params: { path: { customer_id: askedCustomerId! } },
+        }),
+      ),
+  });
+  const askedApplied = useRef(false);
+  const saleLoaded = Boolean(sale.data);
+  useEffect(() => {
+    if (askedApplied.current || resuming || !asked.data || (saleId && !saleLoaded)) return;
+    askedApplied.current = true;
+    chooseCustomer({ id: asked.data.id, name: asked.data.name, phone: asked.data.phone });
+    // `chooseCustomer` change à chaque rendu ; seule l'arrivée du client compte.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resuming, asked.data, saleId, saleLoaded]);
 
   /** Toucher une tuile : 1 de plus, ou une nouvelle ligne. */
   const addProduct = (product: Product) => {

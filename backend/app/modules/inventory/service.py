@@ -1042,3 +1042,35 @@ def _emit_stock_updated(session: Session, ctx: TenantContext, movement: Inventor
             below_reorder_point=(reorder_point is not None and stock.qty_on_hand <= reorder_point),
         ),
     )
+
+
+class DeliveryLine(NamedTuple):
+    """Un article d'une livraison, telle que la fiche fournisseur la raconte (ADR 0072)."""
+
+    product_id: UUID
+    qty: Decimal
+    unit_cost: Decimal
+
+
+def delivery_lines(
+    session: Session, ctx: TenantContext, debt_ids: Sequence[UUID]
+) -> dict[UUID, list[DeliveryLine]]:
+    """Articles de chaque livraison, la plus grosse ligne (en valeur) d'abord.
+
+    Une livraison écrit ses entrées dans le même instant : l'ordre de saisie n'est pas
+    gardé, la valeur classe donc les lignes (« 10 sacs de riz, 24 huiles »). Une dette
+    saisie à la main n'a aucune ligne.
+    """
+    movements = InventoryMovementRepository(session, ctx).for_references(
+        DELIVERY_REF_TYPE, debt_ids
+    )
+    result: dict[UUID, list[DeliveryLine]] = {}
+    for movement in movements:
+        if movement.ref_id is None:
+            continue
+        result.setdefault(movement.ref_id, []).append(
+            DeliveryLine(movement.product_id, movement.qty_delta, movement.unit_cost)
+        )
+    for lines in result.values():
+        lines.sort(key=lambda line: (-(line.qty * line.unit_cost), str(line.product_id)))
+    return result
