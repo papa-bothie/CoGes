@@ -14,6 +14,7 @@ import { SCREENS, settle } from "./screens";
  * `CAPTURES_LOT=3a` : accueil et écrans de vente (maquette 01 à 06), aussi à 390 px, dans `lot-3a/`.
  * `CAPTURES_LOT=3b` et `3c` : stock (07 à 12), puis clients et fournisseurs (13 à 16), idem.
  * `CAPTURES_LOT=3d` : L'argent (17 à 21) ; avant, les onglets de `/finance`, après, ses pages.
+ * `CAPTURES_LOT=3e` : Conseils, Alertes, Réglages (22 à 24) ; la connexion (25) est toujours prise.
  */
 const STAGE = process.env.CAPTURES_STAGE;
 const LOT = process.env.CAPTURES_LOT ?? "0";
@@ -63,6 +64,30 @@ const LOT_3D_PAGES =
         { name: "payer-fournisseur", path: "/finance/pay" },
         { name: "depenses", path: "/finance/expenses" },
         { name: "entrees-sorties", path: "/finance/cash" },
+      ];
+/** Lot 3e : Conseils, Alertes, Réglages ; avant, les anciens écrans et leurs onglets. */
+const LOT_3E_PAGES =
+  STAGE === "avant"
+    ? [
+        { name: "conseils", path: "/insights?status=all" },
+        { name: "conseils-previsions", path: "/insights?tab=forecasts" },
+        { name: "analyses", path: "/analytics" },
+        { name: "alertes", path: "/notifications" },
+        { name: "reglages", path: "/settings" },
+        { name: "reglages-utilisateurs", path: "/settings?tab=users" },
+        { name: "reglages-roles", path: "/settings?tab=roles" },
+        { name: "reglages-journal", path: "/settings?tab=audit" },
+      ]
+    : [
+        { name: "conseils", path: "/insights" },
+        { name: "meilleurs-articles", path: "/insights?view=best" },
+        { name: "previsions", path: "/insights?view=forecasts" },
+        { name: "alertes", path: "/notifications" },
+        { name: "reglages", path: "/settings" },
+        { name: "reglages-personnes", path: "/settings/people" },
+        { name: "reglages-droits", path: "/settings/rights" },
+        { name: "reglages-historique", path: "/settings/history" },
+        { name: "reglages-fichiers", path: "/settings/files" },
       ];
 /** Lot 3a : les pages d'une vente confirmée (reçu, retour), relatives à sa fiche. */
 const LOT_3A_SALE_PAGES = [
@@ -185,8 +210,9 @@ test.describe("captures de la phase 15", () => {
         test.skip(LOT === "1", "lot 1 : formulaires seulement");
         test.setTimeout(400_000);
         const chosen =
-          { "0": LOT_0, "2": LOT_2, "3a": LOT_3A, "3b": LOT_3B, "3c": LOT_3C, "3d": [] }[LOT] ??
-          null;
+          { "0": LOT_0, "2": LOT_2, "3a": LOT_3A, "3b": LOT_3B, "3c": LOT_3C, "3d": [], "3e": [] }[
+            LOT
+          ] ?? null;
         const screens = chosen ? SCREENS.filter((s) => chosen.includes(s.name)) : SCREENS;
         for (const screen of screens) {
           await screen.open(page, request);
@@ -223,6 +249,18 @@ test.describe("captures de la phase 15", () => {
               }
             }
             for (const extra of LOT_3B_PAGES) {
+              await page.goto(extra.path);
+              await settle(page);
+              await shoot(page, `${extra.name}${suffix}`);
+            }
+          }
+          return;
+        }
+        if (LOT === "3e") {
+          for (const width of [1280, 390]) {
+            await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+            const suffix = width === 390 ? "-390" : "";
+            for (const extra of LOT_3E_PAGES) {
               await page.goto(extra.path);
               await settle(page);
               await shoot(page, `${extra.name}${suffix}`);
