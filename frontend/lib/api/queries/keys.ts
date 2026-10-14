@@ -75,6 +75,10 @@ export const queryKeys = {
     overview: (params: Record<string, unknown>) => ["analytics", "overview", params] as const,
     products: (params: Record<string, unknown>) => ["analytics", "products", params] as const,
     series: (params: Record<string, unknown>) => ["analytics", "series", params] as const,
+    /** Écrans 17, 20 et 21 (ADR 0073). */
+    money: (params: Record<string, unknown>) => ["analytics", "money", params] as const,
+    cash: (day: string | null) => ["analytics", "cash", day] as const,
+    expenses: ["analytics", "expenses-summary"] as const,
   },
   intelligence: {
     all: ["intelligence"] as const,
@@ -105,4 +109,6 @@ export const MONEY_KEYS = [
   queryKeys.analytics.all,
   queryKeys.sales.all,
   queryKeys.dashboard,
+  // Ce que doit chaque personne (écrans 13 à 16) suit ses dettes.
+  queryKeys.people.all,
 ] as const;

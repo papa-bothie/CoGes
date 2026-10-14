@@ -1,20 +1,7 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Droplet,
-  Ellipsis,
-  House,
-  Landmark,
-  Loader2,
-  Receipt,
-  Smartphone,
-  Truck,
-  Users,
-  Wrench,
-  Zap,
-  type LucideIcon,
-} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -38,6 +25,7 @@ import { errorMessage } from "@/lib/api/errors";
 import { useIdempotencyKey } from "@/lib/api/idempotency";
 import { MONEY_KEYS } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
+import { expenseIcon } from "@/lib/expense-icons";
 import { labels } from "@/lib/labels";
 import { typedAmount } from "@/lib/payment-amount";
 
@@ -45,21 +33,6 @@ type Category = Schemas["ExpenseCategoryRead"];
 type Method = Schemas["PaymentMethod"];
 
 /** Icône d'une catégorie de la maquette (20), par son nom ; un reçu pour les autres. */
-const ICONS: Record<string, LucideIcon> = {
-  loyer: House,
-  électricité: Zap,
-  eau: Droplet,
-  transport: Truck,
-  salaires: Users,
-  "téléphone et internet": Smartphone,
-  réparations: Wrench,
-  "taxes et impôts": Landmark,
-  autre: Ellipsis,
-};
-
-function categoryIcon(name: string): LucideIcon {
-  return ICONS[name.trim().toLowerCase()] ?? Receipt;
-}
 
 /**
  * Nouvelle dépense (maquette 20) : « Pour quoi ? » en tuiles, « Combien ? » tapé avec le
@@ -157,7 +130,7 @@ export function ExpenseDialog({
                 choices={categories.map((item) => ({
                   value: item.id,
                   label: item.name,
-                  icon: categoryIcon(item.name),
+                  icon: expenseIcon(item.name),
                 }))}
               />
             )}

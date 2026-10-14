@@ -10,12 +10,10 @@ import { RUBRIQUE_CLASSES } from "@/components/kit/rubrique";
 import { StatusPill } from "@/components/kit/status-pill";
 import { HistoryTabs, PersonHeader, SheetTile } from "@/components/people/person-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SettleDialog } from "@/app/(app)/finance/settle-dialog";
 import { useCompanyLocale, useMe } from "@/hooks/use-me";
 import { usePermission } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queries/keys";
-import type { Schemas } from "@/lib/api/schema";
 import { compareDecimal } from "@/lib/decimal";
 import { formatAmount, formatClock } from "@/lib/format";
 import { labels } from "@/lib/labels";
@@ -24,8 +22,6 @@ import { salePill } from "@/lib/sale-status";
 import { displayNumber } from "@/lib/units";
 import { whatsappLink } from "@/lib/whatsapp";
 import { cn } from "@/lib/utils";
-
-type Debt = Schemas["DebtDetail"];
 
 const t = labels.peopleScreens.customer;
 const methods = labels.peopleScreens.methods;
@@ -37,31 +33,21 @@ const ACTION = cn(
 /**
  * La fiche client, maquette v2 (écrans 14 et 14b) : qui il est, ce qu'il doit et depuis
  * quand, ce qu'il a acheté ce mois, sa dernière visite ; encaisser sa dette, lui vendre,
- * lui rappeler sa dette par WhatsApp ; puis ses achats et ses paiements. L'encaissement
- * ouvre la fenêtre de L'argent jusqu'au lot 3d (ADR 0072).
+ * lui rappeler sa dette par WhatsApp ; puis ses achats et ses paiements. « Encaisser sa
+ * dette » ouvre l'écran 18, la personne choisie (ADR 0073).
  */
 export function CustomerDetailView({ customerId }: { customerId: string }) {
   const { timeZone, currency } = useCompanyLocale();
   const money = usePermission("debts:read");
   const canReadPayments = usePermission("payments:read");
   const [reminding, setReminding] = useState(false);
-  const [settling, setSettling] = useState<Debt | null>(null);
+  const canPay = usePermission("payments:create");
   const sheet = useQuery({
     queryKey: queryKeys.people.sheet("customer", customerId),
     queryFn: () =>
       unwrap(
         api.GET("/api/v1/analytics/customers/{customer_id}", {
           params: { path: { customer_id: customerId } },
-        }),
-      ),
-  });
-  const openDebt = useQuery({
-    queryKey: queryKeys.debts.list({ customer_id: customerId, oldest: true }),
-    enabled: money,
-    queryFn: () =>
-      unwrap(
-        api.GET("/api/v1/debts", {
-          params: { query: { customer_id: customerId, page_size: 100 } },
         }),
       ),
   });
@@ -72,9 +58,6 @@ export function CustomerDetailView({ customerId }: { customerId: string }) {
   if (!sheet.data) return <Skeleton className="mx-auto h-96 w-full max-w-page rounded-carte" />;
   const data = sheet.data;
   const owes = data.owed !== null && compareDecimal(data.owed, "0") === 1;
-  const firstOpen = (openDebt.data?.items ?? []).find(
-    (debt) => debt.status === "open" || debt.status === "partially_paid",
-  );
 
   return (
     <div className="mx-auto flex max-w-page flex-col gap-5">
@@ -120,14 +103,13 @@ export function CustomerDetailView({ customerId }: { customerId: string }) {
       </div>
 
       <div className="flex flex-wrap gap-2.5">
-        {money && owes && firstOpen && (
-          <button
-            type="button"
+        {money && owes && canPay && (
+          <Link
+            href={`/finance/collect?customer=${customerId}`}
             className={cn(ACTION, RUBRIQUE_CLASSES.clients.solid)}
-            onClick={() => setSettling(firstOpen)}
           >
             {t.collect}
-          </button>
+          </Link>
         )}
         <Link
           href={`/sales/new?customer=${customerId}`}
@@ -167,10 +149,6 @@ export function CustomerDetailView({ customerId }: { customerId: string }) {
             : []),
         ]}
       />
-
-      {settling && (
-        <SettleDialog key={settling.id} debt={settling} onClose={() => setSettling(null)} />
-      )}
     </div>
   );
 }

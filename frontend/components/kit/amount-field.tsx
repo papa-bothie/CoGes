@@ -107,19 +107,22 @@ export function NumericPad({
   rubrique = "ventes",
   label = labels.kit.numericPad,
   eraseLabel = labels.kit.eraseDigit,
+  className,
 }: {
   value: string;
   onChange: (value: string) => void;
   rubrique?: Rubrique;
   label?: string;
   eraseLabel?: string;
+  /** Largeur du pavé (maquette 18 à 20 : 420 px au plus). */
+  className?: string;
 }) {
   const press = (key: (typeof KEYS)[number]) => {
     if (key === "effacer") onChange(value.slice(0, -1));
     else onChange(cleanAmount(value + key));
   };
   return (
-    <div role="group" aria-label={label} className="grid grid-cols-3 gap-2.5">
+    <div role="group" aria-label={label} className={cn("grid grid-cols-3 gap-2.5", className)}>
       {KEYS.map((key) => (
         <button
           key={key}
@@ -143,12 +146,15 @@ export function NumericPad({
 export function AmountShortcuts({
   shortcuts,
   onPick,
+  className,
 }: {
   shortcuts: readonly { label: string; value: string }[];
   onPick: (value: string) => void;
+  /** Maquette 18 : les raccourcis sur une ligne (`grid-cols-3`). */
+  className?: string;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-2.5">
+    <div className={cn("grid grid-cols-2 gap-2.5", className)}>
       {shortcuts.map((shortcut) => (
         <button
           key={shortcut.label}

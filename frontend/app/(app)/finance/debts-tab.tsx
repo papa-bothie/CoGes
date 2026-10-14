@@ -111,7 +111,10 @@ export function DebtsTab() {
             : null;
         const name = debt.party_name ?? t.deletedParty;
         return href && debt.party_name ? (
-          <Link href={href} className="font-medium hover:underline">
+          <Link
+            href={href}
+            className="inline-flex min-h-11 items-center font-medium hover:underline pointer-coarse:min-h-12"
+          >
             {name}
           </Link>
         ) : (
@@ -125,7 +128,10 @@ export function DebtsTab() {
       header: t.columns.created,
       cell: (debt) =>
         debt.sale_id ? (
-          <Link href={`/sales/${debt.sale_id}`} className="numeric hover:underline">
+          <Link
+            href={`/sales/${debt.sale_id}`}
+            className="inline-flex min-h-11 items-center numeric hover:underline pointer-coarse:min-h-12"
+          >
             {formatDate(debt.created_at, timeZone)}
           </Link>
         ) : (
@@ -237,7 +243,7 @@ export function DebtsTab() {
                   ))}
                 </SelectContent>
               </Select>
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex min-h-11 items-center gap-2 text-sm pointer-coarse:min-h-12">
                 <input
                   type="checkbox"
                   className="size-4 accent-primary"

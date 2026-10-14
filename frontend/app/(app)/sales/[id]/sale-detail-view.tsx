@@ -156,7 +156,7 @@ export function SaleDetailView({ saleId }: { saleId: string }) {
           </a>
           {owing && canCollect && (
             <Link
-              href="/finance?tab=debts&party=customer&status=open"
+              href={`/finance/collect?customer=${data.customer_id ?? ""}`}
               className={cn(TILE, "border-clients-anneau bg-clients-teinte text-clients-encre")}
             >
               <CreditCard className="size-7" aria-hidden />

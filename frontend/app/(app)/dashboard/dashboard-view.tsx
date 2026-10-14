@@ -42,7 +42,7 @@ const PHONE_RECENT = 3;
 const TILE_LINKS = {
   sales: "/sales",
   cash: "/finance",
-  receivables: "/finance?tab=debts&party=customer&status=open",
+  receivables: "/finance/collect",
   stock: "/inventory",
 } as const;
 
