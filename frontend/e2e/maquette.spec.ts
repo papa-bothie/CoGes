@@ -66,6 +66,14 @@ const DONE = new Set<string>([
   "14b",
   "15",
   "16",
+  "17",
+  "17b",
+  "18",
+  "18b",
+  "19",
+  "20",
+  "21",
+  "21b",
   "26",
 ]);
 
@@ -98,6 +106,14 @@ const ALLOWED = new Set<string>([
   "14b",
   "15",
   "16",
+  "17",
+  "17b",
+  "18",
+  "18b",
+  "19",
+  "20",
+  "21",
+  "21b",
   "26",
 ]);
 
@@ -207,6 +223,21 @@ const STATES: Record<string, (page: Page, request: APIRequestContext) => Promise
     await expect(
       page.getByRole("heading", { name: "Pourquoi annuler cette vente ?" }),
     ).toBeVisible();
+  },
+  "17b": async (page) => {
+    await page.getByRole("button", { name: "Aujourd'hui", exact: true }).click();
+    await expect(page.getByText("Aujourd'hui, vous avez")).toBeVisible();
+  },
+  "18b": async (page) => {
+    await page.getByLabel("Combien il paie ?").fill("7500");
+  },
+  "20": async (page) => {
+    await page.getByRole("radio", { name: "Électricité" }).click();
+  },
+  "21b": async (page) => {
+    // Seulement la question : choisir une raison annulerait vraiment la ligne.
+    await page.getByRole("button", { name: "Annuler", exact: true }).first().click();
+    await expect(page.getByRole("group", { name: "Pourquoi ?" })).toBeVisible();
   },
   "02d": async (page, request) => {
     await mockupCart(page, request);

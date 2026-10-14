@@ -33,7 +33,7 @@ test("un paiement réparti solde deux dettes du même client", async ({ page, re
   expect(before.items).toHaveLength(2);
 
   await login(page);
-  await page.goto("/finance?tab=debts&party=customer&status=open&page_size=100");
+  await page.goto("/finance/debts?party=customer&status=open&page_size=100");
   const row = page.getByRole("row", { name: new RegExp(customer.name) }).first();
   await row.getByRole("button", { name: "Régler" }).click();
 

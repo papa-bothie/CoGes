@@ -69,7 +69,7 @@ test("B2 — une dette encaissée fait passer la vente à « Payé »", async ({
     /Reste\s2\s000\sF/,
   );
 
-  await page.goto("/finance?tab=debts&party=customer&status=open&page_size=100");
+  await page.goto("/finance/debts?party=customer&status=open&page_size=100");
   await page
     .getByRole("row", { name: new RegExp(customer.name) })
     .first()

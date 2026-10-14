@@ -433,3 +433,13 @@ def test_the_seller_does_not_read_the_money(api_client: TestClient) -> None:
     ):
         response = api_client.get(f"/api/v1{path}", headers=auth_headers(seller), params=params)
         assert response.status_code == 403, (path, response.text)
+
+
+def test_a_stock_search_puts_the_exact_name_first(api_client: TestClient) -> None:
+    """La livraison cherche un article parmi beaucoup de noms voisins (ADR 0050)."""
+    _, token = _fresh(api_client)
+    for suffix in ("a", "b", "c", "d"):
+        _product(api_client, token, f"Riz {suffix}")
+    _product(api_client, token, "Riz")
+    found = _get(api_client, token, "/inventory/stock", search="Riz", page_size="2")
+    assert found["items"][0]["name"] == "Riz"

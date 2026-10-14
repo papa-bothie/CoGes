@@ -78,6 +78,14 @@ export const SCREENS: Screen[] = [
     },
   },
   { name: "finance", open: (page) => page.goto("/finance").then(() => undefined) },
+  {
+    name: "encaisser-dette",
+    open: (page) => page.goto("/finance/collect").then(() => undefined),
+  },
+  { name: "payer-fournisseur", open: (page) => page.goto("/finance/pay").then(() => undefined) },
+  { name: "depenses", open: (page) => page.goto("/finance/expenses").then(() => undefined) },
+  { name: "entrees-sorties", open: (page) => page.goto("/finance/cash").then(() => undefined) },
+  { name: "dettes", open: (page) => page.goto("/finance/debts").then(() => undefined) },
   { name: "analytics", open: (page) => page.goto("/analytics").then(() => undefined) },
   { name: "intelligence", open: (page) => page.goto("/insights?status=all").then(() => undefined) },
   {
