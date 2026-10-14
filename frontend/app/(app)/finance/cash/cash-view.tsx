@@ -25,6 +25,8 @@ import { cn } from "@/lib/utils";
 type Line = Schemas["CashJournalLine"];
 const t = labels.moneyScreens.cash;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** Lignes montrées d'un coup : une journée chargée en compte des centaines. */
+const STEP = 50;
 
 /**
  * Entrées et sorties d'un jour, maquette v2 (écrans 21 et 21b) : les totaux, le net par
@@ -120,6 +122,8 @@ function CashBody({
   timeZone: string;
 }) {
   const canCancel = usePermission("payments:cancel");
+  const [shown, setShown] = useState(STEP);
+  const rest = data.lines.length - shown;
   return (
     <>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
@@ -152,7 +156,7 @@ function CashBody({
           <p className="py-4 text-muted-foreground">{t.empty}</p>
         ) : (
           <ul aria-label={t.list}>
-            {data.lines.map((line) => (
+            {data.lines.slice(0, shown).map((line) => (
               <CashRow
                 key={line.payment_id}
                 line={line}
@@ -162,6 +166,15 @@ function CashBody({
               />
             ))}
           </ul>
+        )}
+        {rest > 0 && (
+          <button
+            type="button"
+            onClick={() => setShown((count) => count + STEP)}
+            className="my-2 min-h-cible w-full rounded-champ border-2 border-input bg-card font-bold outline-none hover:bg-voile focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            {t.more(Math.min(rest, STEP))}
+          </button>
         )}
         {data.truncated && <p className="py-3 text-muted-foreground">{t.truncated}</p>}
       </section>

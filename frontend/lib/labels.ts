@@ -1692,6 +1692,7 @@ export const labels = {
         "Annuler ne supprime rien : une ligne inverse est ajoutée et l'historique reste visible.",
       empty: "Aucune entrée ni sortie ce jour-là.",
       truncated: "Seules les 500 dernières lignes de la journée sont affichées.",
+      more: (count: number) => `Voir ${count} ligne${count > 1 ? "s" : ""} de plus`,
       cancelledToast: "Ligne annulée : une ligne inverse a été ajoutée.",
       list: "Entrées et sorties du jour",
     },
