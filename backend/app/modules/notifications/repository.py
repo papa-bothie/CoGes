@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, select, update
 
 from app.core.repository import MAX_PAGE_SIZE, TenantRepository
 from app.modules.notifications.models import Notification
@@ -64,6 +64,19 @@ class NotificationRepository(TenantRepository[Notification]):
         if types is not None:
             stmt = stmt.where(Notification.type.in_(list(types)))
         return int(self.session.execute(stmt).scalar_one())
+
+    def mark_all_read(self, user_id: UUID, at: dt.datetime) -> int:
+        """Toutes les alertes non lues de cet utilisateur, lues à `at`."""
+        stmt = (
+            update(Notification)
+            .where(
+                Notification.company_id == self.ctx.company_id,
+                Notification.user_id == user_id,
+                Notification.read_at.is_(None),
+            )
+            .values(read_at=at)
+        )
+        return int(self.session.execute(stmt).rowcount or 0)  # type: ignore[attr-defined]
 
     def get_for_user(self, user_id: UUID, notification_id: UUID) -> Notification | None:
         stmt = self._for_user(user_id).where(Notification.id == notification_id)

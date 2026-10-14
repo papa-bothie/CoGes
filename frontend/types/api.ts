@@ -35,7 +35,7 @@ export interface paths {
     put?: never;
     /**
      * Login
-     * @description Connexion par (slug d'entreprise, e-mail, mot de passe).
+     * @description Connexion par (slug d'entreprise, e-mail ou téléphone, mot de passe).
      */
     post: operations["login_api_v1_auth_login_post"];
     delete?: never;
@@ -107,6 +107,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/auth/password": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Change Password
+     * @description Le titulaire remplace son mot de passe ; l'obligation de le changer tombe.
+     *
+     *     Ouvert à un compte qui doit changer son mot de passe provisoire (ADR 0074) :
+     *     c'est la seule écriture qu'il puisse faire.
+     */
+    post: operations["change_password_api_v1_auth_password_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/companies/me": {
     parameters: {
       query?: never;
@@ -146,7 +169,10 @@ export interface paths {
     put?: never;
     /**
      * Create User
-     * @description Crée un compte dans l'entreprise du contexte.
+     * @description Crée un compte avec un e-mail, un téléphone ou les deux (ADR 0074).
+     *
+     *     Sans mot de passe, le serveur en tire un provisoire lisible et le rend ici, **une
+     *     seule fois** ; le compte devra le changer à sa première connexion.
      */
     post: operations["create_user_api_v1_users_post"];
     delete?: never;
@@ -1362,6 +1388,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/analytics/next-week": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Next Week
+     * @description Écran 22c « Prévisions » : la semaine prochaine, article par article, avec sa
+     *     fourchette, le modèle et la date du calcul, et le stock qui reste (ADR 0074).
+     */
+    get: operations["next_week_api_v1_analytics_next_week_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/analytics/products": {
     parameters: {
       query?: never;
@@ -1622,6 +1669,27 @@ export interface paths {
     get: operations["count_unread_api_v1_notifications_unread_count_get"];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/notifications/read-all": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Mark All Read
+     * @description « Tout marquer comme lu » : le fil de l'utilisateur courant, jamais celui d'un
+     *     collègue. Rend le compteur, désormais à zéro.
+     */
+    post: operations["mark_all_read_api_v1_notifications_read_all_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -3235,19 +3303,20 @@ export interface components {
     LineDiscount: components["schemas"]["Amount-Input"];
     /**
      * LoginRequest
-     * @description L'identifiant de connexion est le **couple** (slug d'entreprise, e-mail).
+     * @description L'identifiant de connexion est le **couple** (slug d'entreprise, e-mail ou
+     *     téléphone) (ADR 0074).
      *
-     *     Un e-mail seul serait ambigu : il est unique par entreprise, pas globalement
-     *     (§ 2.2). C'est ce couple qui rend le `company_id` du jeton déterministe.
+     *     Un e-mail ou un numéro seul serait ambigu : il est unique par entreprise, pas
+     *     globalement (§ 2.2). C'est ce couple qui rend le `company_id` du jeton
+     *     déterministe. `email` reste accepté pour les clients d'avant le lot 3e.
      */
     LoginRequest: {
       /** Company Slug */
       company_slug: string;
-      /**
-       * Email
-       * Format: email
-       */
-      email: string;
+      /** Identifier */
+      identifier?: string | null;
+      /** Email */
+      email?: string | null;
       /** Password */
       password: string;
     };
@@ -3313,9 +3382,13 @@ export interface components {
        */
       id: string;
       /** Email */
-      email: string;
+      email: string | null;
+      /** Phone */
+      phone: string | null;
       /** Full Name */
       full_name: string;
+      /** Must Change Password */
+      must_change_password: boolean;
     };
     /**
      * MoneyBucket
@@ -3502,6 +3575,47 @@ export interface components {
       opening_movement: components["schemas"]["MovementRead"] | null;
     };
     /**
+     * NextWeekForecast
+     * @description Écran 22c. `enabled` faux : l'Intelligence est coupée ; `items` vide sans prévision.
+     */
+    NextWeekForecast: {
+      /** Enabled */
+      enabled: boolean;
+      /** As Of */
+      as_of: string | null;
+      /** Computed At */
+      computed_at: string | null;
+      /** Model Name */
+      model_name: string | null;
+      /** Model Version */
+      model_version: string | null;
+      /** Items */
+      items: components["schemas"]["NextWeekRow"][];
+      /** Insufficient Count */
+      insufficient_count: number;
+    };
+    /**
+     * NextWeekRow
+     * @description « La semaine prochaine, vous devriez vendre environ 7 sacs (entre 5 et 9) ».
+     */
+    NextWeekRow: {
+      /**
+       * Product Id
+       * Format: uuid
+       */
+      product_id: string;
+      /** Product Name */
+      product_name: string;
+      /** Unit */
+      unit: string;
+      expected: components["schemas"]["Quantity-Output"];
+      lower: components["schemas"]["Quantity-Output"] | null;
+      upper: components["schemas"]["Quantity-Output"] | null;
+      on_hand: components["schemas"]["Quantity-Output"];
+      /** Low */
+      low: boolean;
+    };
+    /**
      * NotificationPage
      * @description Page de fil d'alertes, les plus récentes d'abord.
      */
@@ -3629,6 +3743,16 @@ export interface components {
     PartyType: "customer" | "supplier";
     /** PasswordChange */
     PasswordChange: {
+      /** New Password */
+      new_password: string;
+    };
+    /**
+     * PasswordUpdate
+     * @description Le titulaire remplace son mot de passe (écran « Choisissez votre mot de passe »).
+     */
+    PasswordUpdate: {
+      /** Current Password */
+      current_password: string;
       /** New Password */
       new_password: string;
     };
@@ -3934,7 +4058,8 @@ export interface components {
     };
     /**
      * ProductMetric
-     * @description Les huit métriques du Diagramme 7, **jamais équivalentes**.
+     * @description Les huit métriques du Diagramme 7, et « jours sans vente » (ADR 0074), **jamais
+     *     équivalentes**.
      *
      *     Un « produit à forte valeur » n'existe pas comme mesure unique. Chaque classement
      *     porte donc le nom de sa métrique, et aucune n'est fusionnée avec une autre dans un
@@ -3949,7 +4074,8 @@ export interface components {
       | "rotation"
       | "velocity"
       | "demand_trend"
-      | "future_potential";
+      | "future_potential"
+      | "days_since_last_sale";
     ProductName: string;
     /** ProductPage */
     ProductPage: {
@@ -5050,19 +5176,58 @@ export interface components {
       /** Critical */
       critical: number;
     };
-    /** UserCreate */
+    /**
+     * UserCreate
+     * @description Un compte se crée avec un e-mail, un téléphone, ou les deux (ADR 0074).
+     *
+     *     Sans mot de passe, le serveur en tire un provisoire lisible, le rend **une seule
+     *     fois** dans la réponse et oblige à le changer à la première connexion.
+     */
     UserCreate: {
-      /**
-       * Email
-       * Format: email
-       */
-      email: string;
+      /** Email */
+      email?: string | null;
+      /** Phone */
+      phone?: string | null;
       /** Full Name */
       full_name: string;
       /** Password */
-      password: string;
+      password?: string | null;
       /** Role Ids */
       role_ids?: string[];
+    };
+    /**
+     * UserCreated
+     * @description Le compte créé, et son mot de passe provisoire s'il a été tiré par le serveur.
+     *
+     *     C'est la seule fois où ce mot de passe sort : il n'est stocké que haché.
+     */
+    UserCreated: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Email */
+      email: string | null;
+      /** Phone */
+      phone: string | null;
+      /** Full Name */
+      full_name: string;
+      /** Is Active */
+      is_active: boolean;
+      /** Must Change Password */
+      must_change_password: boolean;
+      /** Last Login At */
+      last_login_at: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Roles */
+      roles?: components["schemas"]["UserRoleRead"][];
+      /** Temporary Password */
+      temporary_password?: string | null;
     };
     /**
      * UserPage
@@ -5089,11 +5254,15 @@ export interface components {
        */
       id: string;
       /** Email */
-      email: string;
+      email: string | null;
+      /** Phone */
+      phone: string | null;
       /** Full Name */
       full_name: string;
       /** Is Active */
       is_active: boolean;
+      /** Must Change Password */
+      must_change_password: boolean;
       /** Last Login At */
       last_login_at: string | null;
       /**
@@ -5296,6 +5465,37 @@ export interface operations {
       };
     };
   };
+  change_password_api_v1_auth_password_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PasswordUpdate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   read_current_company_api_v1_companies_me_get: {
     parameters: {
       query?: never;
@@ -5400,7 +5600,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["UserRead"];
+          "application/json": components["schemas"]["UserCreated"];
         };
       };
       /** @description Validation Error */
@@ -8025,6 +8225,26 @@ export interface operations {
       };
     };
   };
+  next_week_api_v1_analytics_next_week_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["NextWeekForecast"];
+        };
+      };
+    };
+  };
   product_ranking_api_v1_analytics_products_get: {
     parameters: {
       query: {
@@ -8423,6 +8643,26 @@ export interface operations {
     };
   };
   count_unread_api_v1_notifications_unread_count_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["UnreadCount"];
+        };
+      };
+    };
+  };
+  mark_all_read_api_v1_notifications_read_all_post: {
     parameters: {
       query?: never;
       header?: never;

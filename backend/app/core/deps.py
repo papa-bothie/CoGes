@@ -32,7 +32,11 @@ from sqlalchemy.sql import text
 
 from app.core import rate_limit
 from app.core.config import get_settings
-from app.core.errors import AuthenticationRequiredError, PermissionDeniedError
+from app.core.errors import (
+    AuthenticationRequiredError,
+    PasswordChangeRequiredError,
+    PermissionDeniedError,
+)
 from app.core.observability import tag_tenant
 from app.core.security import AccessClaims, decode_access_token
 from app.core.tenancy import TenantContext, tenant_transaction
@@ -41,6 +45,7 @@ _LOAD_IDENTITY = text(
     """
     SELECT u.company_id AS company_id,
            u.is_active  AS is_active,
+           u.must_change_password AS must_change_password,
            COALESCE(
              array_agg(p.code) FILTER (WHERE p.code IS NOT NULL),
              ARRAY[]::text[]
@@ -51,9 +56,12 @@ _LOAD_IDENTITY = text(
     LEFT JOIN permissions       p ON p.id = rp.permission_id
     WHERE u.id = :user_id
       AND u.deleted_at IS NULL
-    GROUP BY u.company_id, u.is_active
+    GROUP BY u.company_id, u.is_active, u.must_change_password
     """
 )
+
+#: Les seules routes ouvertes à un compte qui doit changer son mot de passe (ADR 0074).
+PASSWORD_CHANGE_PATHS = frozenset({"/api/v1/auth/me", "/api/v1/auth/password"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +95,8 @@ def get_tenant_session(
             raise AuthenticationRequiredError("Session invalide.")
         if not row.is_active:
             raise AuthenticationRequiredError("Ce compte est désactivé.")
+        if row.must_change_password and request.url.path not in PASSWORD_CHANGE_PATHS:
+            raise PasswordChangeRequiredError()
 
         company_id: UUID = row.company_id
         ctx = TenantContext(

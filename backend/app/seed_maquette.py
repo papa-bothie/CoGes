@@ -499,7 +499,7 @@ def _fill(manager: TenantContext, plan: list[PlannedSale], *, slug: str, passwor
         companies_service.update_current_company(session, manager, SHOP_DETAILS)
         role_id = rbac_service.system_role_id(session, manager, SALESPERSON)
         roles = [] if role_id is None else [role_id]
-        modou = users_service.create_user(
+        modou, _ = users_service.create_user(
             session,
             manager,
             UserCreate(
@@ -509,7 +509,7 @@ def _fill(manager: TenantContext, plan: list[PlannedSale], *, slug: str, passwor
                 role_ids=roles,
             ),
         )
-        awa = users_service.create_user(
+        awa, _ = users_service.create_user(
             session,
             manager,
             UserCreate(

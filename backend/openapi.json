@@ -37,7 +37,7 @@
           "auth"
         ],
         "summary": "Login",
-        "description": "Connexion par (slug d'entreprise, e-mail, mot de passe).",
+        "description": "Connexion par (slug d'entreprise, e-mail ou téléphone, mot de passe).",
         "operationId": "login_api_v1_auth_login_post",
         "requestBody": {
           "content": {
@@ -125,6 +125,41 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Change Password",
+        "description": "Le titulaire remplace son mot de passe ; l'obligation de le changer tombe.\n\nOuvert à un compte qui doit changer son mot de passe provisoire (ADR 0074) :\nc'est la seule écriture qu'il puisse faire.",
+        "operationId": "change_password_api_v1_auth_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -255,7 +290,7 @@
           "users"
         ],
         "summary": "Create User",
-        "description": "Crée un compte dans l'entreprise du contexte.",
+        "description": "Crée un compte avec un e-mail, un téléphone ou les deux (ADR 0074).\n\nSans mot de passe, le serveur en tire un provisoire lisible et le rend ici, **une\nseule fois** ; le compte devra le changer à sa première connexion.",
         "operationId": "create_user_api_v1_users_post",
         "requestBody": {
           "required": true,
@@ -273,7 +308,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserRead"
+                  "$ref": "#/components/schemas/UserCreated"
                 }
               }
             }
@@ -4808,6 +4843,28 @@
         }
       }
     },
+    "/api/v1/analytics/next-week": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Next Week",
+        "description": "Écran 22c « Prévisions » : la semaine prochaine, article par article, avec sa\nfourchette, le modèle et la date du calcul, et le stock qui reste (ADR 0074).",
+        "operationId": "next_week_api_v1_analytics_next_week_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NextWeekForecast"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/analytics/products": {
       "get": {
         "tags": [
@@ -5587,6 +5644,28 @@
         "summary": "Count Unread",
         "description": "Compteur de non-lus, pour la pastille de l'interface.",
         "operationId": "count_unread_api_v1_notifications_unread_count_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadCount"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/read-all": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Mark All Read",
+        "description": "« Tout marquer comme lu » : le fil de l'utilisateur courant, jamais celui d'un\ncollègue. Rend le compteur, désormais à zéro.",
+        "operationId": "mark_all_read_api_v1_notifications_read_all_post",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -9979,9 +10058,30 @@
             "pattern": "^[a-z0-9-]{3,40}$",
             "title": "Company Slug"
           },
+          "identifier": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 254,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identifier"
+          },
           "email": {
-            "type": "string",
-            "format": "email",
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 254,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Email"
           },
           "password": {
@@ -9995,11 +10095,10 @@
         "type": "object",
         "required": [
           "company_slug",
-          "email",
           "password"
         ],
         "title": "LoginRequest",
-        "description": "L'identifiant de connexion est le **couple** (slug d'entreprise, e-mail).\n\nUn e-mail seul serait ambigu : il est unique par entreprise, pas globalement\n(§ 2.2). C'est ce couple qui rend le `company_id` du jeton déterministe."
+        "description": "L'identifiant de connexion est le **couple** (slug d'entreprise, e-mail ou\ntéléphone) (ADR 0074).\n\nUn e-mail ou un numéro seul serait ambigu : il est unique par entreprise, pas\nglobalement (§ 2.2). C'est ce couple qui rend le `company_id` du jeton\ndéterministe. `email` reste accepté pour les clients d'avant le lot 3e."
       },
       "ManualMovementType": {
         "type": "string",
@@ -10131,12 +10230,34 @@
             "title": "Id"
           },
           "email": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Email"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
           },
           "full_name": {
             "type": "string",
             "title": "Full Name"
+          },
+          "must_change_password": {
+            "type": "boolean",
+            "title": "Must Change Password"
           }
         },
         "additionalProperties": false,
@@ -10144,7 +10265,9 @@
         "required": [
           "id",
           "email",
-          "full_name"
+          "phone",
+          "full_name",
+          "must_change_password"
         ],
         "title": "MeUser"
       },
@@ -10693,6 +10816,145 @@
         ],
         "title": "NewProductRead"
       },
+      "NextWeekForecast": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "computed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Computed At"
+          },
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NextWeekRow"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "insufficient_count": {
+            "type": "integer",
+            "title": "Insufficient Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled",
+          "as_of",
+          "computed_at",
+          "model_name",
+          "model_version",
+          "items",
+          "insufficient_count"
+        ],
+        "title": "NextWeekForecast",
+        "description": "Écran 22c. `enabled` faux : l'Intelligence est coupée ; `items` vide sans prévision."
+      },
+      "NextWeekRow": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "product_name": {
+            "type": "string",
+            "title": "Product Name"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "expected": {
+            "$ref": "#/components/schemas/Quantity-Output"
+          },
+          "lower": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Quantity-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "upper": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Quantity-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "on_hand": {
+            "$ref": "#/components/schemas/Quantity-Output"
+          },
+          "low": {
+            "type": "boolean",
+            "title": "Low"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "product_name",
+          "unit",
+          "expected",
+          "lower",
+          "upper",
+          "on_hand",
+          "low"
+        ],
+        "title": "NextWeekRow",
+        "description": "« La semaine prochaine, vous devriez vendre environ 7 sacs (entre 5 et 9) »."
+      },
       "NotificationPage": {
         "properties": {
           "items": {
@@ -10984,6 +11246,30 @@
           "new_password"
         ],
         "title": "PasswordChange"
+      },
+      "PasswordUpdate": {
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Current Password"
+          },
+          "new_password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 12,
+            "title": "New Password"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "PasswordUpdate",
+        "description": "Le titulaire remplace son mot de passe (écran « Choisissez votre mot de passe »)."
       },
       "PaymentCancel": {
         "properties": {
@@ -11904,10 +12190,11 @@
           "rotation",
           "velocity",
           "demand_trend",
-          "future_potential"
+          "future_potential",
+          "days_since_last_sale"
         ],
         "title": "ProductMetric",
-        "description": "Les huit métriques du Diagramme 7, **jamais équivalentes**.\n\nUn « produit à forte valeur » n'existe pas comme mesure unique. Chaque classement\nporte donc le nom de sa métrique, et aucune n'est fusionnée avec une autre dans un\nscore opaque (décision 12)."
+        "description": "Les huit métriques du Diagramme 7, et « jours sans vente » (ADR 0074), **jamais\néquivalentes**.\n\nUn « produit à forte valeur » n'existe pas comme mesure unique. Chaque classement\nporte donc le nom de sa métrique, et aucune n'est fusionnée avec une autre dans un\nscore opaque (décision 12)."
       },
       "ProductName": {
         "type": "string",
@@ -15033,9 +15320,28 @@
       "UserCreate": {
         "properties": {
           "email": {
-            "type": "string",
-            "format": "email",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Email"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
           },
           "full_name": {
             "type": "string",
@@ -15044,9 +15350,16 @@
             "title": "Full Name"
           },
           "password": {
-            "type": "string",
-            "maxLength": 128,
-            "minLength": 12,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 12
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Password"
           },
           "role_ids": {
@@ -15061,11 +15374,102 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "email",
-          "full_name",
-          "password"
+          "full_name"
         ],
-        "title": "UserCreate"
+        "title": "UserCreate",
+        "description": "Un compte se crée avec un e-mail, un téléphone, ou les deux (ADR 0074).\n\nSans mot de passe, le serveur en tire un provisoire lisible, le rend **une seule\nfois** dans la réponse et oblige à le changer à la première connexion."
+      },
+      "UserCreated": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "must_change_password": {
+            "type": "boolean",
+            "title": "Must Change Password"
+          },
+          "last_login_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/UserRoleRead"
+            },
+            "type": "array",
+            "title": "Roles"
+          },
+          "temporary_password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temporary Password"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "phone",
+          "full_name",
+          "is_active",
+          "must_change_password",
+          "last_login_at",
+          "created_at"
+        ],
+        "title": "UserCreated",
+        "description": "Le compte créé, et son mot de passe provisoire s'il a été tiré par le serveur.\n\nC'est la seule fois où ce mot de passe sort : il n'est stocké que haché."
       },
       "UserPage": {
         "properties": {
@@ -15108,8 +15512,26 @@
             "title": "Id"
           },
           "email": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Email"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
           },
           "full_name": {
             "type": "string",
@@ -15118,6 +15540,10 @@
           "is_active": {
             "type": "boolean",
             "title": "Is Active"
+          },
+          "must_change_password": {
+            "type": "boolean",
+            "title": "Must Change Password"
           },
           "last_login_at": {
             "anyOf": [
@@ -15149,8 +15575,10 @@
         "required": [
           "id",
           "email",
+          "phone",
           "full_name",
           "is_active",
+          "must_change_password",
           "last_login_at",
           "created_at"
         ],

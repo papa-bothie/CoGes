@@ -401,7 +401,7 @@ def _salesperson(session: Session, ctx: TenantContext, *, slug: str, password: s
         if user.email == email:
             return user.id
     role_id = rbac_service.system_role_id(session, ctx, SALESPERSON)
-    user = users_service.create_user(
+    user, _ = users_service.create_user(
         session,
         ctx,
         UserCreate(

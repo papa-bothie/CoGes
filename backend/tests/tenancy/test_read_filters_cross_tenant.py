@@ -6,13 +6,19 @@ réponse est vide, exactement comme pour un identifiant qui n'existe nulle part.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.conftest import auth_headers, write_headers
+from app.core.events.inbox import Event
+from app.core.events.types import EventType
+from app.modules.inventory.events import stock_updated_payload
+from app.workers.tasks.notifications import on_stock_updated
+from tests.conftest import DemoCompany, auth_headers, write_headers
 
 pytestmark = pytest.mark.tenancy
 
@@ -347,3 +353,37 @@ def test_the_money_screens_never_show_another_company(
     seen = read(alpha_token, "/analytics/expenses-summary")
     assert category not in {row["category_id"] for row in seen["by_category"]}
     assert "Loyer de la boutique bêta" not in {row["label"] for row in seen["recent"]}
+
+
+def test_mark_all_read_never_reaches_another_company(
+    api_client: TestClient, alpha_token: str, beta_token: str, company_beta: DemoCompany
+) -> None:
+    """« Tout marquer comme lu » (ADR 0074) : le fil d'une autre entreprise reste intact."""
+    product = _stocked_product(api_client, beta_token)
+    on_stock_updated(
+        **Event(
+            id=990_000_000 + uuid4().int % 1_000_000,
+            company_id=company_beta.company_id,
+            event_type=EventType.STOCK_UPDATED,
+            aggregate_type="product",
+            aggregate_id=UUID(product),
+            payload=stock_updated_payload(
+                product_id=UUID(product),
+                qty_on_hand=Decimal("0"),
+                avg_cost=Decimal("300.0000"),
+                movement_id=uuid4(),
+                below_reorder_point=True,
+            ),
+            occurred_at=datetime.now(UTC),
+        ).as_message()
+    )
+    before = api_client.get(
+        "/api/v1/notifications/unread-count", headers=auth_headers(beta_token)
+    ).json()["unread"]
+    assert before > 0
+    done = api_client.post("/api/v1/notifications/read-all", headers=auth_headers(alpha_token))
+    assert done.status_code == 200, done.text
+    after = api_client.get(
+        "/api/v1/notifications/unread-count", headers=auth_headers(beta_token)
+    ).json()["unread"]
+    assert after == before

@@ -1557,3 +1557,8 @@ def return_heads(
         sale_return.id: (sale_return.return_no, sale_return.sale_id)
         for sale_return in SaleReturnRepository(session, ctx).by_ids(list(set(return_ids)))
     }
+
+
+def last_sale_at_by_product(session: Session, ctx: TenantContext) -> dict[UUID, datetime]:
+    """Dernière vente confirmée de chaque article, pour « Vente rare » (ADR 0074)."""
+    return SaleItemRepository(session, ctx).last_sale_at_by_product()

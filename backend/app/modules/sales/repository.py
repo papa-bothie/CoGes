@@ -321,6 +321,16 @@ class SaleItemRepository(TenantRepository[SaleItem]):
             result.setdefault(sale_id, []).append(product_id)
         return result
 
+    def last_sale_at_by_product(self) -> dict[UUID, datetime]:
+        """Dernière vente confirmée de chaque article (métrique « jours sans vente »)."""
+        stmt = (
+            select(SaleItem.product_id, func.max(Sale.sold_at))
+            .join(Sale, (Sale.id == SaleItem.sale_id) & (Sale.company_id == SaleItem.company_id))
+            .where(SaleItem.company_id == self.ctx.company_id, Sale.status == "confirmed")
+            .group_by(SaleItem.product_id)
+        )
+        return {row[0]: row[1] for row in self.session.execute(stmt).all()}
+
     def customer_ids_by_item(self, item_ids: Sequence[UUID]) -> dict[UUID, UUID | None]:
         """Client de la vente de chaque ligne (historique d'un article, ADR 0071)."""
         if not item_ids:

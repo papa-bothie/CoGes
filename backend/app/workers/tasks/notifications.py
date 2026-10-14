@@ -62,14 +62,21 @@ def on_stock_updated(**message: Any) -> str:
         summary = names.get(product_id)
         label = summary.name if summary is not None else "Produit"
 
+        # Mots de la maquette v2 (écran 23, ADR 0074), sans accord : on ne connaît pas
+        # le genre d'un article (« Huile », « Riz »).
         if on_hand <= 0:
             kind = NotificationType.STOCK_OUT
-            title = f"Rupture de stock — {label}"
-            body = f"{label} n'est plus disponible."
+            title = f"{label} : plus en stock"
+            body = "Vous ne pouvez plus en vendre."
         else:
             kind = NotificationType.STOCK_LOW
-            title = f"Stock bas — {label}"
-            body = f"Il reste {qty(on_hand)} de {label}, au niveau du seuil d'alerte."
+            threshold = summary.reorder_point if summary is not None else None
+            title = f"{label} : plus que {qty(on_hand)}"
+            body = (
+                f"Sous votre seuil d'alerte de {qty(threshold)}"
+                if threshold is not None
+                else "Sous votre seuil d'alerte"
+            )
 
         sent = notifications_service.notify(
             session,
@@ -105,14 +112,13 @@ def on_sale_cancelled(**message: Any) -> str:
         amount = Decimal(str(payload.get("total", "0")))
         total = serialize(amount)
         reason = str(payload.get("reason", "")).strip()
+        number = sale_no.split("-")[-1].lstrip("0") or sale_no
         notifications_service.notify(
             session,
             ctx,
             notification_type=NotificationType.SALE_CANCELLED,
-            title=f"Vente annulée — {sale_no}",
-            body=f"La vente {sale_no} ({fcfa(amount)}) a été annulée. Pourquoi : {reason}"
-            if reason
-            else f"La vente {sale_no} ({fcfa(amount)}) a été annulée.",
+            title=f"Vente n° {number} annulée ({fcfa(amount)})",
+            body=f"Raison : {reason[:1].lower()}{reason[1:]}" if reason else "Sans raison donnée",
             entity_id=str(received.aggregate_id),
             data={"sale_id": str(received.aggregate_id), "sale_no": sale_no, "total": total},
         )
@@ -133,23 +139,39 @@ def scan_due_debts(company_id: str, today: str | None = None) -> int:
     reference = date.fromisoformat(today) if today else None
     sent = 0
     with tenant_transaction(ctx) as session:
-        for debt in finance_service.debts_due(session, ctx, on=reference):
+        debts = list(finance_service.debts_due(session, ctx, on=reference))
+        names = finance_service.party_names_of_debts(session, ctx, debts)
+        for debt in debts:
             due_date = debt.due_date.isoformat() if debt.due_date else ""
+            name = names.get(debt.id)
+            customer = debt.party_type == "customer"
+            # Maquette v2, écran 23 (ADR 0074) : la personne d'abord, en mots simples.
+            if customer:
+                title = f"{name} n'a pas payé à temps" if name else "Un client n'a pas payé à temps"
+                body = (
+                    f"{fcfa(debt.balance)} attendus depuis le {dmy(debt.due_date)}"
+                    if debt.due_date
+                    else f"{fcfa(debt.balance)} attendus"
+                )
+            else:
+                title = f"{name} : à payer, date dépassée" if name else "Fournisseur à payer"
+                body = (
+                    f"{fcfa(debt.balance)} à payer avant le {dmy(debt.due_date)}"
+                    if debt.due_date
+                    else f"{fcfa(debt.balance)} à payer"
+                )
+            party_id = debt.customer_id or debt.supplier_id
             sent += notifications_service.notify(
                 session,
                 ctx,
                 notification_type=NotificationType.DEBT_DUE,
-                title="Dette à payer : date dépassée",
-                body=(
-                    f"Une dette de {fcfa(debt.balance)} devait être payée "
-                    f"avant le {dmy(debt.due_date)}."
-                    if debt.due_date
-                    else f"Une dette de {fcfa(debt.balance)} n'est pas encore payée."
-                ),
+                title=title,
+                body=body,
                 entity_id=str(debt.id),
                 data={
                     "debt_id": str(debt.id),
                     "party_type": debt.party_type,
+                    "party_id": str(party_id) if party_id else None,
                     "balance": serialize(debt.balance),
                     "due_date": due_date,
                 },

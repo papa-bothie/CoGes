@@ -55,6 +55,16 @@ def count_unread(
     )
 
 
+@router.post("/read-all", response_model=UnreadCount)
+def mark_all_read(
+    tenant: Annotated[TenantSession, Depends(require_permission("notifications:update"))],
+) -> UnreadCount:
+    """« Tout marquer comme lu » : le fil de l'utilisateur courant, jamais celui d'un
+    collègue. Rend le compteur, désormais à zéro."""
+    service.mark_all_read(tenant.session, tenant.ctx)
+    return UnreadCount(unread=0, critical=0)
+
+
 @router.patch("/{notification_id}", response_model=NotificationRead)
 def update_notification(
     notification_id: UUID,

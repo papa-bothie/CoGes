@@ -139,3 +139,16 @@ class PayloadTooLargeError(CogesError):
     code = "payload_too_large"
     status_code = 413
     default_message = "La requête dépasse la taille maximale autorisée."
+
+
+class PasswordChangeRequiredError(CogesError):
+    """Le compte doit d'abord remplacer son mot de passe provisoire (ADR 0074).
+
+    Tant que c'est le cas, seules l'identité (`/auth/me`) et le changement de mot de
+    passe (`/auth/password`) répondent : le gérant qui a donné le mot de passe le
+    connaît, il ne doit pas servir à travailler.
+    """
+
+    code = "password_change_required"
+    status_code = 409
+    default_message = "Choisissez d'abord votre propre mot de passe."

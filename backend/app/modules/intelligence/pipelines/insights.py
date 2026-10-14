@@ -146,7 +146,11 @@ def build_drafts(
         features = by_product[product_id]
         when = as_of + timedelta(days=stockout.days)
         title, body = templates.stockout_risk(
-            str(features.get("product_name", "Produit")), stockout.days, stockout.on_hand, when
+            str(features.get("product_name", "Produit")),
+            stockout.days,
+            stockout.on_hand,
+            when,
+            stockout.daily_demand,
         )
         drafts.append(
             Draft(

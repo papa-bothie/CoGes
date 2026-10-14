@@ -14,6 +14,7 @@ from app.modules.users.models import User
 from app.modules.users.schemas import (
     PasswordChange,
     UserCreate,
+    UserCreated,
     UserPage,
     UserRead,
     UserUpdate,
@@ -45,15 +46,21 @@ def list_users(
     )
 
 
-@router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UserCreated, status_code=status.HTTP_201_CREATED)
 def create_user(
     payload: UserCreate,
     request: Request,
     tenant: Annotated[TenantSession, Depends(require_permission("users:create"))],
-) -> UserRead:
-    """Crée un compte dans l'entreprise du contexte."""
-    user = service.create_user(tenant.session, tenant.ctx, payload, ip_address=client_ip(request))
-    return _read(tenant, user)
+) -> UserCreated:
+    """Crée un compte avec un e-mail, un téléphone ou les deux (ADR 0074).
+
+    Sans mot de passe, le serveur en tire un provisoire lisible et le rend ici, **une
+    seule fois** ; le compte devra le changer à sa première connexion.
+    """
+    user, temporary = service.create_user(
+        tenant.session, tenant.ctx, payload, ip_address=client_ip(request)
+    )
+    return UserCreated(**_read(tenant, user).model_dump(), temporary_password=temporary)
 
 
 @router.get("/{user_id}", response_model=UserRead)

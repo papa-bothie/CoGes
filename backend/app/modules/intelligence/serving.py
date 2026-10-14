@@ -228,11 +228,15 @@ def summary(
     )
 
 
-def future_potential(session: Session, ctx: TenantContext) -> FuturePotential | None:
-    """Métrique 8 « potentiel futur estimé » : quantité prévue sur les 14 jours qui viennent.
+def future_potential(
+    session: Session, ctx: TenantContext, *, horizon_days: int = FUTURE_POTENTIAL_HORIZON_DAYS
+) -> FuturePotential | None:
+    """Quantité prévue sur les `horizon_days` jours qui viennent, par produit.
 
-    Façade pour le classement d'Analytics. `None` quand l'Intelligence est coupée ou
-    n'a encore rien produit : l'appelant le dit plutôt que d'inventer une valeur.
+    Métrique 8 « potentiel futur estimé » sur 14 jours ; « la semaine prochaine » de
+    l'écran 22c sur 7 (ADR 0074). Les bornes sont la somme des bornes journalières :
+    une fourchette prudente. `None` quand l'Intelligence est coupée ou n'a encore rien
+    produit : l'appelant le dit plutôt que d'inventer une valeur.
     """
     if not is_enabled(session, ctx):
         return None
@@ -240,14 +244,12 @@ def future_potential(session: Session, ctx: TenantContext) -> FuturePotential | 
     as_of = repository.latest_as_of()
     if as_of is None:
         return None
-    rows = repository.demand_totals(
-        as_of, horizon_to=as_of + timedelta(days=FUTURE_POTENTIAL_HORIZON_DAYS)
-    )
+    rows = repository.demand_totals(as_of, horizon_to=as_of + timedelta(days=horizon_days))
     if not rows:
         return None
     return FuturePotential(
         as_of=as_of,
-        horizon_days=FUTURE_POTENTIAL_HORIZON_DAYS,
+        horizon_days=horizon_days,
         computed_at=max(row["generated_at"] for row in rows),
         rows=[
             FuturePotentialRow(
