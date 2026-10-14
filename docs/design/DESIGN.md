@@ -296,6 +296,19 @@ client est violet (`clients`), le fournisseur bleu (`argent`). Aides : `lib/peop
 (articles en quelques mots, « Depuis 12 jours », « samedi », initiales, prénom). Mots neutres :
 on ne connaît pas le genre d'une personne.
 
+Écrans du lot 3d (ADR 0073) : L'argent (`finance/money-view.tsx` : puces de période,
+« Choisir des dates » en lien, quatre raccourcis teintés, phrase « gagné / perdu » avec la
+cause, équation en blocs, trois cartes de caisse, barres groupées `components/finance/
+money-bars.tsx`, cartes de ce qui est dû), « Encaisser une dette » et « Payer un
+fournisseur » (`components/finance/settle-screen.tsx`, un écran pour les deux : violet
+`clients` ou bleu `argent`, pavé de 420 px au plus), Dépenses (`finance/expenses/` : tuiles
+à icône déduite du nom, `lib/expense-icons.ts`), Entrées et sorties (`finance/cash/` :
+annulation par raison en boutons, ligne inverse grise, ligne d'origine barrée). Pages
+secondaires : « Toutes les dettes » (`/finance/debts`) et « Toutes les dépenses »
+(`/finance/expenses/all`). Aides : `lib/money.ts` (vrai signe moins U+2212, mot de chaque
+barre, phrase d'une ligne de caisse). Les entrées sont vertes, les sorties orange, la
+différence bleu plein.
+
 ## Do's and Don'ts
 
 ### Do:

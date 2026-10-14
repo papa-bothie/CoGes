@@ -322,7 +322,23 @@ def get_stock(
         if matching is not None and row.product_id not in matching:
             continue
         selected.append((row, summary, state))
-    selected.sort(key=lambda item: (_STATUS_ORDER[item[2]], item[1].name.casefold()))
+    # Une recherche met d'abord le nom exact, puis ceux qui commencent par le terme
+    # (ADR 0050) : parmi trente « Riz … », « Riz brisé 25 kg » tapé en entier vient en tête.
+    wanted = (search or "").strip().casefold()
+
+    def closeness(name: str) -> int:
+        if not wanted:
+            return 0
+        folded = name.casefold()
+        return 0 if folded == wanted else 1 if folded.startswith(wanted) else 2
+
+    selected.sort(
+        key=lambda item: (
+            closeness(item[1].name),
+            _STATUS_ORDER[item[2]],
+            item[1].name.casefold(),
+        )
+    )
     shown = selected[(page - 1) * page_size : page * page_size]
 
     shown_ids = [row.product_id for row, _, _ in shown]

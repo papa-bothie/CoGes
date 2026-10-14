@@ -23,9 +23,13 @@ from app.modules.analytics import service
 from app.modules.analytics.schemas import (
     MAX_RANKING_LIMIT,
     PEOPLE_PAGE_SIZE,
+    CashJournal,
     CustomerSalePage,
     CustomerSheet,
+    ExpensesSummary,
     FinanceOverview,
+    MoneyOverview,
+    MoneyPeriod,
     PeoplePage,
     PersonPaymentPage,
     ProductHistory,
@@ -53,6 +57,56 @@ def finance_overview(
     l'historique ».
     """
     return service.finance_overview(
+        tenant.session, tenant.ctx, period_from=period_from, period_to=period_to
+    )
+
+
+# ------------------------------------------------------------- l'argent (écrans 17 à 21)
+
+
+@router.get("/money", response_model=MoneyOverview)
+def money_overview(
+    tenant: Annotated[TenantSession, Depends(require_permission("analytics:read"))],
+    period: Annotated[MoneyPeriod | None, Query()] = None,
+    period_from: Annotated[date | None, Query(alias="from")] = None,
+    period_to: Annotated[date | None, Query(alias="to")] = None,
+) -> MoneyOverview:
+    """Écran 17 « L'argent » : gagné ou perdu, la caisse et son graphique, ce qui est dû.
+
+    `period` (aujourd'hui, les 7 derniers jours, le mois en cours) ou bien `from` et
+    `to` (« Choisir des dates »). Les cartes de ce qui est dû sont `null` sans
+    `debts:read` (ADR 0073).
+    """
+    return service.money_overview(
+        tenant.session, tenant.ctx, period=period, period_from=period_from, period_to=period_to
+    )
+
+
+@router.get("/cash", response_model=CashJournal)
+def cash_journal(
+    tenant: Annotated[TenantSession, Depends(require_permission("analytics:read"))],
+    day: Annotated[date | None, Query()] = None,
+) -> CashJournal:
+    """Écran 21 « Entrées et sorties » d'un jour (aujourd'hui par défaut).
+
+    `analytics:read` comme l'écran 17 : la caisse nomme les dépenses, que le vendeur
+    ne lit pas.
+
+    Les paiements annulés et leurs annulations sont listés, jamais comptés : rien ne
+    s'efface (ADR 0038). Les compensations, qui ne touchent pas la caisse, sont écartées.
+    """
+    return service.cash_journal(tenant.session, tenant.ctx, day=day)
+
+
+@router.get("/expenses-summary", response_model=ExpensesSummary)
+def expenses_summary(
+    tenant: Annotated[TenantSession, Depends(require_permission("expenses:read"))],
+    period_from: Annotated[date | None, Query(alias="from")] = None,
+    period_to: Annotated[date | None, Query(alias="to")] = None,
+) -> ExpensesSummary:
+    """Écran 20, à droite : les dépenses par type (le mois en cours par défaut) et les
+    cinq dernières, avec leur moyen de paiement."""
+    return service.expenses_summary(
         tenant.session, tenant.ctx, period_from=period_from, period_to=period_to
     )
 

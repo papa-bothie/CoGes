@@ -115,6 +115,12 @@ for (const [title, path] of [
   ["Clients : sélecteur, puces et cartes", "/customers"],
   ["Fournisseurs : sélecteur, puces et cartes", "/suppliers"],
   ["Ajouter une personne : tuiles et champs", "/customers/new"],
+  ["L'argent : puces, raccourcis et cartes", "/finance"],
+  ["Encaisser une dette : liste, pavé et puces", "/finance/collect"],
+  ["Payer un fournisseur : liste, pavé et puces", "/finance/pay"],
+  ["Dépenses : tuiles, pavé et puces", "/finance/expenses"],
+  ["Entrées et sorties : puces et lignes", "/finance/cash"],
+  ["Toutes les dettes : filtres et lignes", "/finance/debts"],
 ] as const) {
   test(title, async ({ page }) => {
     await page.goto(path);

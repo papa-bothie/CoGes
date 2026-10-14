@@ -80,10 +80,11 @@ test("ajouter un client en deux champs ; sa fiche dit ce qu'il doit et le lui ra
     animations: "disabled",
   });
 
-  // « Encaisser sa dette » ouvre l'encaissement de L'argent (jusqu'au lot 3d).
-  await page.getByRole("button", { name: "Encaisser sa dette" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await page.keyboard.press("Escape");
+  // « Encaisser sa dette » ouvre l'écran 18, ce client déjà choisi (ADR 0073).
+  await page.getByRole("link", { name: "Encaisser sa dette" }).click();
+  await expect(page).toHaveURL(new RegExp(`/finance/collect\\?customer=${customerId}$`));
+  await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
+  await page.goBack();
 
   // « Lui vendre » : la vente s'ouvre avec ce client déjà choisi.
   await page.getByRole("link", { name: "Lui vendre" }).click();

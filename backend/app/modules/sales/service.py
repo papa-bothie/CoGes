@@ -1526,3 +1526,34 @@ def sale_numbers(session: Session, ctx: TenantContext, sale_ids: Sequence[UUID])
     if not sale_ids:
         return {}
     return {sale.id: sale.sale_no for sale in SaleRepository(session, ctx).by_ids(sale_ids)}
+
+
+class SaleHead(NamedTuple):
+    """Ce qu'une ligne de caisse dit d'une vente : son numéro et son client."""
+
+    sale_no: str
+    customer_id: UUID | None
+
+
+def sale_heads(
+    session: Session, ctx: TenantContext, sale_ids: Sequence[UUID]
+) -> dict[UUID, SaleHead]:
+    """Numéro et client de chaque vente du lot (écran 21)."""
+    if not sale_ids:
+        return {}
+    return {
+        sale.id: SaleHead(sale.sale_no, sale.customer_id)
+        for sale in SaleRepository(session, ctx).by_ids(list(set(sale_ids)))
+    }
+
+
+def return_heads(
+    session: Session, ctx: TenantContext, return_ids: Sequence[UUID]
+) -> dict[UUID, tuple[str, UUID]]:
+    """Numéro et vente d'origine de chaque retour du lot (écran 21)."""
+    if not return_ids:
+        return {}
+    return {
+        sale_return.id: (sale_return.return_no, sale_return.sale_id)
+        for sale_return in SaleReturnRepository(session, ctx).by_ids(list(set(return_ids)))
+    }

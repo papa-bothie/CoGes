@@ -89,11 +89,13 @@ export function formatDayMonth(value: string | null | undefined, timeZone = "UTC
   const day = DATE_ONLY.test(value) ? `${value}T12:00:00Z` : value;
   const date = new Date(day);
   if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("fr-FR", {
+  const text = new Intl.DateTimeFormat("fr-FR", {
     timeZone: DATE_ONLY.test(value) ? "UTC" : timeZone,
     day: "numeric",
     month: "long",
   }).format(date);
+  // « 1er octobre » : le premier du mois s'écrit avec « er », comme `formatDayLong`.
+  return text.replace(/^1(\s)/, "1er$1");
 }
 
 /** Date en lettres avec l'année : « 6 octobre 2026 » (facture A4). */

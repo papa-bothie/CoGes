@@ -25,6 +25,8 @@ export function PaymentAmount({
   autoFocus,
   placeholder,
   okRubrique,
+  shortcutsClassName,
+  padClassName,
 }: {
   label: ReactNode;
   value: string;
@@ -37,6 +39,8 @@ export function PaymentAmount({
   placeholder?: string;
   /** Couleur du message quand le montant va (vente en partie : orange, il restera à payer). */
   okRubrique?: Rubrique;
+  shortcutsClassName?: string;
+  padClassName?: string;
 }) {
   return (
     <div className="space-y-3">
@@ -50,8 +54,10 @@ export function PaymentAmount({
         placeholder={placeholder}
         invalid={check.tone === "trop"}
       />
-      {shortcuts.length > 0 && <AmountShortcuts shortcuts={shortcuts} onPick={onChange} />}
-      <NumericPad value={value} onChange={onChange} rubrique={rubrique} />
+      {shortcuts.length > 0 && (
+        <AmountShortcuts shortcuts={shortcuts} onPick={onChange} className={shortcutsClassName} />
+      )}
+      <NumericPad value={value} onChange={onChange} rubrique={rubrique} className={padClassName} />
       {/* Sous le pavé, comme la maquette : la phrase change à chaque chiffre. */}
       <p
         role="status"

@@ -1291,6 +1291,77 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/analytics/money": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Money Overview
+     * @description Écran 17 « L'argent » : gagné ou perdu, la caisse et son graphique, ce qui est dû.
+     *
+     *     `period` (aujourd'hui, les 7 derniers jours, le mois en cours) ou bien `from` et
+     *     `to` (« Choisir des dates »). Les cartes de ce qui est dû sont `null` sans
+     *     `debts:read` (ADR 0073).
+     */
+    get: operations["money_overview_api_v1_analytics_money_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/analytics/cash": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Cash Journal
+     * @description Écran 21 « Entrées et sorties » d'un jour (aujourd'hui par défaut).
+     *
+     *     `analytics:read` comme l'écran 17 : la caisse nomme les dépenses, que le vendeur
+     *     ne lit pas.
+     *
+     *     Les paiements annulés et leurs annulations sont listés, jamais comptés : rien ne
+     *     s'efface (ADR 0038). Les compensations, qui ne touchent pas la caisse, sont écartées.
+     */
+    get: operations["cash_journal_api_v1_analytics_cash_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/analytics/expenses-summary": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Expenses Summary
+     * @description Écran 20, à droite : les dépenses par type (le mois en cours par défaut) et les
+     *     cinq dernières, avec leur moyen de paiement.
+     */
+    get: operations["expenses_summary_api_v1_analytics_expenses_summary_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/analytics/products": {
     parameters: {
       query?: never;
@@ -1988,6 +2059,29 @@ export interface components {
       occurred_at: string;
     };
     Barcode: string;
+    /**
+     * BiggestExpense
+     * @description La plus grosse dépense de la période : la raison d'une perte.
+     */
+    BiggestExpense: {
+      /**
+       * Expense Id
+       * Format: uuid
+       */
+      expense_id: string;
+      /** Expense No */
+      expense_no: string;
+      /** Category Name */
+      category_name: string;
+      /** Label */
+      label: string;
+      amount: components["schemas"]["Amount-Output"];
+      /**
+       * Spent At
+       * Format: date
+       */
+      spent_at: string;
+    };
     /** Body_import_file_api_v1_imports__kind__post */
     Body_import_file_api_v1_imports__kind__post: {
       /**
@@ -1999,6 +2093,75 @@ export interface components {
     CancelReason: string;
     /** @enum {string} */
     CashDirection: "inflow" | "outflow";
+    /**
+     * CashJournal
+     * @description Écran 21 « Entrées et sorties » d'un jour.
+     */
+    CashJournal: {
+      /**
+       * Day
+       * Format: date
+       */
+      day: string;
+      cash_in: components["schemas"]["Amount-Output"];
+      cash_out: components["schemas"]["Amount-Output"];
+      net_cash: components["schemas"]["Amount-Output"];
+      /** By Method */
+      by_method: components["schemas"]["CashMethodTotal"][];
+      /** Lines */
+      lines: components["schemas"]["CashJournalLine"][];
+      /** Truncated */
+      truncated: boolean;
+    };
+    /**
+     * CashJournalLine
+     * @description Une ligne de l'écran 21. Une annulation (`is_reversal`) décrit le paiement
+     *     qu'elle contre-passe : mêmes `kind` et noms, montant de sens opposé.
+     */
+    CashJournalLine: {
+      /**
+       * Payment Id
+       * Format: uuid
+       */
+      payment_id: string;
+      kind: components["schemas"]["CashLineKind"];
+      /**
+       * Paid At
+       * Format: date-time
+       */
+      paid_at: string;
+      /** Method */
+      method: string;
+      signed_amount: components["schemas"]["Amount-Output"];
+      /** Cancelled */
+      cancelled: boolean;
+      /** Is Reversal */
+      is_reversal: boolean;
+      /** Reversal Of */
+      reversal_of: string | null;
+      /** Cancel Reason */
+      cancel_reason: string | null;
+      /** Document No */
+      document_no: string | null;
+      /** Sale Id */
+      sale_id: string | null;
+      /** Party Name */
+      party_name: string | null;
+      /** Expense Label */
+      expense_label: string | null;
+    };
+    /**
+     * CashLineKind
+     * @description De quoi parle une ligne de caisse (écran 21).
+     * @enum {string}
+     */
+    CashLineKind: "sale" | "debt_in" | "debt_out" | "expense" | "refund" | "other_in" | "other_out";
+    /** CashMethodTotal */
+    CashMethodTotal: {
+      /** Method */
+      method: string;
+      net: components["schemas"]["Amount-Output"];
+    };
     CategoryColor: number;
     /**
      * CategoryCount
@@ -2609,6 +2772,17 @@ export interface components {
        */
       created_at: string;
     };
+    /** ExpenseCategoryTotal */
+    ExpenseCategoryTotal: {
+      /**
+       * Category Id
+       * Format: uuid
+       */
+      category_id: string;
+      /** Name */
+      name: string;
+      total: components["schemas"]["Amount-Output"];
+    };
     /**
      * ExpenseCategoryUpdate
      * @description Modification partielle : champ absent = inchangé (`exclude_unset`).
@@ -2718,6 +2892,27 @@ export interface components {
       spent_at?: string | null;
       /** Supplier Id */
       supplier_id?: string | null;
+    };
+    /**
+     * ExpensesSummary
+     * @description Écran 20, colonne de droite : ce mois-ci par type et les dernières dépenses.
+     */
+    ExpensesSummary: {
+      /**
+       * Period From
+       * Format: date
+       */
+      period_from: string;
+      /**
+       * Period To
+       * Format: date
+       */
+      period_to: string;
+      total: components["schemas"]["Amount-Output"];
+      /** By Category */
+      by_category: components["schemas"]["ExpenseCategoryTotal"][];
+      /** Recent */
+      recent: components["schemas"]["RecentExpense"][];
     };
     /** @enum {string} */
     ExportFormat: "csv" | "xlsx";
@@ -3123,6 +3318,74 @@ export interface components {
       full_name: string;
     };
     /**
+     * MoneyBucket
+     * @description Une paire de barres du graphique « Entrées et sorties ».
+     *
+     *     `key` dit le découpage : moment de la journée (`morning`, `noon`, `afternoon`,
+     *     `evening`), jour (`2026-10-06`) ou semaine (`week-1` à `week-5`). Le front en tire le
+     *     mot affiché ; `start` et `end` sont les jours couverts.
+     */
+    MoneyBucket: {
+      /** Key */
+      key: string;
+      /**
+       * Start
+       * Format: date
+       */
+      start: string;
+      /**
+       * End
+       * Format: date
+       */
+      end: string;
+      cash_in: components["schemas"]["Amount-Output"];
+      cash_out: components["schemas"]["Amount-Output"];
+    };
+    /**
+     * MoneyOverview
+     * @description Écran 17 « L'argent » : gagné ou perdu, la caisse, le graphique, ce qui est dû.
+     *
+     *     Le résultat suit les définitions de `FinanceOverview` (§ 4.10) : vendu = chiffre
+     *     d'affaires net hors taxe, prix d'achat = coût des ventes net, gagné = vendu − prix
+     *     d'achat − dépenses. Les cartes du bas sont `null` sans le droit de lire les dettes.
+     */
+    MoneyOverview: {
+      period: components["schemas"]["MoneyPeriod"] | null;
+      /**
+       * Period From
+       * Format: date
+       */
+      period_from: string;
+      /**
+       * Period To
+       * Format: date
+       */
+      period_to: string;
+      sold: components["schemas"]["Amount-Output"];
+      cogs: components["schemas"]["Amount-Output"];
+      expenses: components["schemas"]["Amount-Output"];
+      result: components["schemas"]["Amount-Output"];
+      cash_in: components["schemas"]["Amount-Output"];
+      cash_out: components["schemas"]["Amount-Output"];
+      net_cash: components["schemas"]["Amount-Output"];
+      /**
+       * Grain
+       * @enum {string}
+       */
+      grain: "moment" | "day" | "week";
+      /** Buckets */
+      buckets: components["schemas"]["MoneyBucket"][];
+      biggest_expense: components["schemas"]["BiggestExpense"] | null;
+      receivables: components["schemas"]["OwedSummary"] | null;
+      payables: components["schemas"]["OwedSummary"] | null;
+    };
+    /**
+     * MoneyPeriod
+     * @description Les trois puces de l'écran 17. « Choisir des dates » passe par `from` et `to`.
+     * @enum {string}
+     */
+    MoneyPeriod: "today" | "week" | "month";
+    /**
      * MovementCreate
      * @description Saisie d'un mouvement manuel.
      */
@@ -3334,6 +3597,32 @@ export interface components {
       oldest_pending_at: string | null;
       /** Last Published At */
       last_published_at: string | null;
+    };
+    /**
+     * OwedRow
+     * @description Une personne qui doit, ou à qui l'on doit, dans les cartes du bas de l'écran 17.
+     */
+    OwedRow: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Name */
+      name: string;
+      owed: components["schemas"]["Amount-Output"];
+      /** Owed Since */
+      owed_since: string | null;
+      /** Due Date */
+      due_date: string | null;
+    };
+    /** OwedSummary */
+    OwedSummary: {
+      total: components["schemas"]["Amount-Output"];
+      /** Count */
+      count: number;
+      /** Rows */
+      rows: components["schemas"]["OwedRow"][];
     };
     PaidAmount: components["schemas"]["Amount-Input"];
     /** @enum {string} */
@@ -3928,6 +4217,28 @@ export interface components {
       balance: components["schemas"]["Amount-Output"];
       /** Payments */
       payments: components["schemas"]["PaymentRead"][];
+    };
+    /** RecentExpense */
+    RecentExpense: {
+      /**
+       * Expense Id
+       * Format: uuid
+       */
+      expense_id: string;
+      /** Expense No */
+      expense_no: string;
+      /** Category Name */
+      category_name: string;
+      /** Label */
+      label: string;
+      amount: components["schemas"]["Amount-Output"];
+      /**
+       * Spent At
+       * Format: date
+       */
+      spent_at: string;
+      /** Method */
+      method: string | null;
     };
     /**
      * RecentSale
@@ -7605,6 +7916,102 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["FinanceOverview"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  money_overview_api_v1_analytics_money_get: {
+    parameters: {
+      query?: {
+        period?: components["schemas"]["MoneyPeriod"] | null;
+        from?: string | null;
+        to?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MoneyOverview"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  cash_journal_api_v1_analytics_cash_get: {
+    parameters: {
+      query?: {
+        day?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CashJournal"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  expenses_summary_api_v1_analytics_expenses_summary_get: {
+    parameters: {
+      query?: {
+        from?: string | null;
+        to?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExpensesSummary"];
         };
       };
       /** @description Validation Error */

@@ -3,25 +3,20 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
 
 import { ErrorState } from "@/components/error-state";
 import { RUBRIQUE_CLASSES } from "@/components/kit/rubrique";
 import { HistoryTabs, PersonHeader, SheetTile } from "@/components/people/person-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SettleDialog } from "@/app/(app)/finance/settle-dialog";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { usePermission } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queries/keys";
-import type { Schemas } from "@/lib/api/schema";
 import { compareDecimal } from "@/lib/decimal";
 import { formatAmount, formatClock } from "@/lib/format";
 import { labels } from "@/lib/labels";
 import { dueDay, monthYear, shortNames, visitDay } from "@/lib/people";
 import { cn } from "@/lib/utils";
-
-type Debt = Schemas["DebtDetail"];
 
 const t = labels.peopleScreens.supplier;
 const methods = labels.peopleScreens.methods;
@@ -36,30 +31,20 @@ const PILL =
 /**
  * La fiche fournisseur, maquette v2 (écran 16) : ce que vous lui devez et avant quand, ce
  * que vous lui avez acheté ce mois, ce qu'il livre ; le payer, recevoir une livraison ;
- * puis ses livraisons et vos paiements. « Le payer » ouvre la fenêtre de L'argent jusqu'au
- * lot 3d (ADR 0072).
+ * puis ses livraisons et vos paiements. « Le payer » ouvre l'écran 19, le
+ * fournisseur choisi (ADR 0073).
  */
 export function SupplierDetailView({ supplierId }: { supplierId: string }) {
   const { timeZone, currency } = useCompanyLocale();
   const money = usePermission("debts:read");
   const canReadPayments = usePermission("payments:read");
-  const [settling, setSettling] = useState<Debt | null>(null);
+  const canPay = usePermission("payments:create");
   const sheet = useQuery({
     queryKey: queryKeys.people.sheet("supplier", supplierId),
     queryFn: () =>
       unwrap(
         api.GET("/api/v1/analytics/suppliers/{supplier_id}", {
           params: { path: { supplier_id: supplierId } },
-        }),
-      ),
-  });
-  const debts = useQuery({
-    queryKey: queryKeys.debts.list({ supplier_id: supplierId, page_size: 100 }),
-    enabled: money,
-    queryFn: () =>
-      unwrap(
-        api.GET("/api/v1/debts", {
-          params: { query: { supplier_id: supplierId, page_size: 100 } },
         }),
       ),
   });
@@ -70,9 +55,6 @@ export function SupplierDetailView({ supplierId }: { supplierId: string }) {
   if (!sheet.data) return <Skeleton className="mx-auto h-96 w-full max-w-page rounded-carte" />;
   const data = sheet.data;
   const owes = data.owed !== null && compareDecimal(data.owed, "0") === 1;
-  const firstOpen = (debts.data?.items ?? []).find(
-    (debt) => debt.status === "open" || debt.status === "partially_paid",
-  );
 
   return (
     <div className="mx-auto flex max-w-page flex-col gap-5">
@@ -122,14 +104,13 @@ export function SupplierDetailView({ supplierId }: { supplierId: string }) {
       </div>
 
       <div className="flex flex-wrap gap-2.5">
-        {money && owes && firstOpen && (
-          <button
-            type="button"
+        {money && owes && canPay && (
+          <Link
+            href={`/finance/pay?supplier=${supplierId}`}
             className={cn(ACTION, RUBRIQUE_CLASSES.argent.solid)}
-            onClick={() => setSettling(firstOpen)}
           >
             {t.pay}
-          </button>
+          </Link>
         )}
         <Link
           href={`/inventory/receive?supplier=${supplierId}`}
@@ -168,10 +149,6 @@ export function SupplierDetailView({ supplierId }: { supplierId: string }) {
               : []),
           ]}
         />
-      )}
-
-      {settling && (
-        <SettleDialog key={settling.id} debt={settling} onClose={() => setSettling(null)} />
       )}
     </div>
   );

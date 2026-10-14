@@ -187,3 +187,67 @@ class ExpenseTotalsRepository(TenantRepository[Expense]):
         for kind, total in self.session.execute(stmt):
             totals[kind] = Decimal(total)
         return totals
+
+    def _joined(self) -> Select[tuple[Expense, str]]:
+        return (
+            select(Expense, ExpenseCategory.name)
+            .join(
+                ExpenseCategory,
+                (ExpenseCategory.company_id == Expense.company_id)
+                & (ExpenseCategory.id == Expense.category_id),
+            )
+            .where(Expense.company_id == self.ctx.company_id, Expense.deleted_at.is_(None))
+        )
+
+    def totals_by_category(
+        self, *, period_from: date, period_to: date
+    ) -> Sequence[Row[tuple[UUID, str, Decimal]]]:
+        """Charges vivantes de la période par catégorie, la plus lourde d'abord."""
+        total = func.sum(Expense.amount)
+        stmt = (
+            select(ExpenseCategory.id, ExpenseCategory.name, total)
+            .select_from(Expense)
+            .join(
+                ExpenseCategory,
+                (ExpenseCategory.company_id == Expense.company_id)
+                & (ExpenseCategory.id == Expense.category_id),
+            )
+            .where(
+                Expense.company_id == self.ctx.company_id,
+                Expense.deleted_at.is_(None),
+                Expense.spent_at >= period_from,
+                Expense.spent_at <= period_to,
+            )
+            .group_by(ExpenseCategory.id, ExpenseCategory.name)
+            .order_by(total.desc(), ExpenseCategory.name)
+        )
+        return self.session.execute(stmt).all()
+
+    def largest(self, *, period_from: date, period_to: date) -> Row[tuple[Expense, str]] | None:
+        """La plus grosse charge vivante de la période (la cause d'une perte, écran 17)."""
+        stmt = (
+            self._joined()
+            .where(Expense.spent_at >= period_from, Expense.spent_at <= period_to)
+            .order_by(Expense.amount.desc(), Expense.spent_at.desc(), Expense.expense_no.desc())
+            .limit(1)
+        )
+        return self.session.execute(stmt).first()
+
+    def heads(self, expense_ids: Sequence[UUID]) -> Sequence[Row[tuple[Expense, str]]]:
+        """Dépenses d'un lot, supprimées comprises, jointes au nom de leur catégorie.
+
+        Une dépense supprimée garde son paiement dans la caisse (écran 21) : son nom
+        doit rester lisible.
+        """
+        if not expense_ids:
+            return []
+        stmt = (
+            select(Expense, ExpenseCategory.name)
+            .join(
+                ExpenseCategory,
+                (ExpenseCategory.company_id == Expense.company_id)
+                & (ExpenseCategory.id == Expense.category_id),
+            )
+            .where(Expense.company_id == self.ctx.company_id, Expense.id.in_(list(expense_ids)))
+        )
+        return self.session.execute(stmt).all()
