@@ -330,8 +330,8 @@ def test_a_cancelled_sale_reaches_those_who_may_cancel(
     alerts = _about(_feed(api_client, alpha_token), sale_id)
     assert len(alerts) == 1
     assert alerts[0]["type"] == "sale_cancelled"
-    assert "V-000777" in alerts[0]["title"]
-    assert "Erreur de caisse" in (alerts[0]["body"] or "")
+    assert alerts[0]["title"].startswith("Vente n° 777 annulée")
+    assert alerts[0]["body"] == "Raison : erreur de caisse"
 
 
 # ----------------------------------------------------- textes à la française
@@ -354,7 +354,8 @@ def test_alert_texts_read_like_the_screen(
         ).as_message()
     )
     stock = _about(_feed(api_client, alpha_token), product_id)[0]
-    assert f"Il reste 1{nnbsp}500,5 de " in stock["body"]
+    assert stock["title"].endswith(f" : plus que 1{nnbsp}500,5")
+    assert stock["body"] == "Sous votre seuil d'alerte de 5"
     assert stock["data"]["qty_on_hand"] == "1500.500"
 
     sale_id = uuid4()
@@ -370,7 +371,8 @@ def test_alert_texts_read_like_the_screen(
         ).as_message()
     )
     cancelled = _about(_feed(api_client, alpha_token), sale_id)[0]
-    assert cancelled["body"] == f"La vente V-000888 (12{nnbsp}000{nbsp}FCFA) a été annulée."
+    assert cancelled["title"] == f"Vente n° 888 annulée (12{nnbsp}000{nbsp}FCFA)"
+    assert cancelled["body"] == "Sans raison donnée"
     assert cancelled["data"]["total"] == "12000.00"
 
     supplier = api_client.post(
@@ -393,9 +395,9 @@ def test_alert_texts_read_like_the_screen(
     assert debt.status_code == 201, debt.text
     scan_due_debts(str(company_alpha.company_id), date.today().isoformat())
     due = _about(_feed(api_client, alpha_token), UUID(debt.json()["id"]))[0]
-    assert due["body"] == (
-        f"Une dette de 21{nnbsp}830{nbsp}FCFA devait être payée avant le {due_on:%d/%m/%Y}."
-    )
+    assert due["title"] == f"{supplier.json()['name']} : à payer, date dépassée"
+    assert due["body"] == f"21{nnbsp}830{nbsp}FCFA à payer avant le {due_on:%d/%m/%Y}"
+    assert due["data"]["party_id"] == supplier.json()["id"]
     assert due["data"]["due_date"] == due_on.isoformat()
 
 
@@ -532,3 +534,27 @@ def test_the_counter_says_how_many_unread_alerts_are_critical(
         f"{NOTIFICATIONS}/{alert_id}", headers=auth_headers(alpha_token), json={"read": True}
     )
     assert counter()["critical"] == before["critical"]
+
+
+def test_mark_all_read_only_touches_my_feed(
+    api_client: TestClient, alpha_token: str, company_alpha: DemoCompany
+) -> None:
+    """« Tout marquer comme lu » (écran 23, ADR 0074) : mon fil, jamais celui d'un collègue."""
+    colleague = create_user_with_role(
+        api_client,
+        alpha_token,
+        company_alpha,
+        role="gerant",
+        email=f"gerant-fil-{uuid4().hex[:8]}@alpha.example.com",
+    )
+    product_id = _product(api_client, alpha_token)
+    on_stock_updated(
+        **_stock_event(company_alpha.company_id, product_id, qty="0.000", below=True).as_message()
+    )
+    assert _about(_feed(api_client, colleague, unread="true"), product_id)
+
+    done = api_client.post(f"{NOTIFICATIONS}/read-all", headers=auth_headers(alpha_token))
+    assert done.status_code == 200, done.text
+    assert done.json() == {"unread": 0, "critical": 0}
+    assert _unread(api_client, alpha_token) == 0
+    assert _about(_feed(api_client, colleague, unread="true"), product_id)

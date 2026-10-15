@@ -28,7 +28,9 @@ def test_manager_sees_self_company_and_every_permission(
     assert body["user"] == {
         "id": str(company_alpha.manager_id),
         "email": company_alpha.email,
+        "phone": None,
         "full_name": "Gérante de test",
+        "must_change_password": False,
     }
     assert [(role["name"], role["description"]) for role in body["roles"]] == [("gerant", "Gérant")]
     assert body["company"] == {

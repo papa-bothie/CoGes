@@ -15,7 +15,8 @@ from app.core.config import get_settings
 from app.core.deps import CurrentTenant, client_ip
 from app.core.errors import AuthenticationRequiredError
 from app.modules.auth import service
-from app.modules.auth.schemas import LoginRequest, MeResponse, TokenResponse
+from app.modules.auth.schemas import LoginRequest, MeResponse, PasswordUpdate, TokenResponse
+from app.modules.users import service as users_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -46,7 +47,7 @@ def _read_refresh_cookie(request: Request) -> str:
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, request: Request, response: Response) -> TokenResponse:
-    """Connexion par (slug d'entreprise, e-mail, mot de passe)."""
+    """Connexion par (slug d'entreprise, e-mail ou téléphone, mot de passe)."""
     tokens = service.login(
         payload,
         user_agent=request.headers.get("user-agent"),
@@ -85,3 +86,19 @@ def me(tenant: CurrentTenant) -> MeResponse:
     actions interdites. Le serveur reste seul juge à chaque appel.
     """
     return service.current_identity(tenant.session, tenant.ctx)
+
+
+@router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(payload: PasswordUpdate, request: Request, tenant: CurrentTenant) -> None:
+    """Le titulaire remplace son mot de passe ; l'obligation de le changer tombe.
+
+    Ouvert à un compte qui doit changer son mot de passe provisoire (ADR 0074) :
+    c'est la seule écriture qu'il puisse faire.
+    """
+    users_service.change_own_password(
+        tenant.session,
+        tenant.ctx,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+        ip_address=client_ip(request),
+    )

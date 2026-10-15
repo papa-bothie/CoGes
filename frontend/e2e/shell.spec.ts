@@ -70,22 +70,21 @@ test("connexion → coquille → navigation → rechargement → déconnexion", 
   await expect(page).toHaveURL(/\/login/);
 });
 
-test("identifiants faux : message générique de l'API", async ({ page }) => {
+test("identifiants faux : une phrase, la même quel que soit le champ faux", async ({ page }) => {
   await page.goto("/login");
   await loginThroughUi(page, { ...DEMO, password: "mauvais-mot-de-passe" });
   // `filter` : Next ajoute sa propre région `alert` (annonce des changements de route).
   await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveText(
-    "Identifiants invalides.",
+    "Le code de la boutique, l'identifiant ou le mot de passe ne correspond pas. Réessayez, ou demandez à votre gérant de vous en donner un nouveau.",
   );
   await expect(page).toHaveURL(/\/login/);
 });
 
 test("validation de surface avant tout appel", async ({ page }) => {
   await page.goto("/login");
-  await loginThroughUi(page, { slug: "A B", email: "pas-un-email", password: "" });
+  await loginThroughUi(page, { slug: "A B", email: "", password: "" });
   await expect(page.getByText("3 à 40 caractères")).toBeVisible();
-  await expect(page.getByText("Adresse e-mail invalide.")).toBeVisible();
-  await expect(page.getByText("Ce champ est obligatoire.")).toBeVisible();
+  await expect(page.getByText("Ce champ est obligatoire.")).toHaveCount(2);
 });
 
 test("session révoquée côté serveur : retour à la connexion", async ({ page, context }) => {

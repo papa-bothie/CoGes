@@ -33,17 +33,34 @@ def qty(value: Decimal) -> str:
     return number(value, 0 if value == value.to_integral() else 1)
 
 
-def stockout_risk(name: str, days: int, on_hand: Decimal, when: date) -> tuple[str, str]:
-    title = (
-        f"Rupture en cours — {_name(name)}"
-        if days == 0
-        else f"Rupture prévue dans {days} jour{'s' if days > 1 else ''} — {_name(name)}"
+#: « Pour tenir deux semaines » : la commande conseillée couvre ce nombre de jours.
+COVER_DAYS = 14
+
+
+def stockout_risk(
+    name: str, days: int, on_hand: Decimal, when: date, per_day: Decimal | None = None
+) -> tuple[str, str]:
+    """« Le riz va bientôt manquer » (maquette v2, écran 22 ; ADR 0074).
+
+    Sans accord : on ne connaît pas le genre d'un article. La commande conseillée couvre
+    deux semaines au rythme prévu, moins ce qui reste.
+    """
+    title = f"{_name(name)} : plus en stock" if days == 0 else f"{_name(name)} va bientôt manquer"
+    pace = (
+        f" et vous en vendez environ {qty(per_day)} par jour"
+        if per_day is not None and per_day > 0
+        else ""
     )
+    advice = ""
+    if per_day is not None and per_day > 0:
+        needed = (per_day * COVER_DAYS - max(on_hand, Decimal(0))).to_integral_value()
+        if needed > 0:
+            advice = f" Commandez-en {qty(needed)} pour tenir deux semaines."
     body = (
-        f"Au rythme de vente prévu, le stock de {qty(on_hand)} sera épuisé vers le "
-        f"{dmy(when)}. Réapprovisionner."
+        f"Il vous en reste {qty(on_hand)}{pace}. Au rythme prévu, plus rien vers le "
+        f"{dmy(when)}.{advice}"
         if days > 0
-        else "Le stock est à zéro alors que la demande prévue ne l'est pas. Réapprovisionner."
+        else f"Il n'en reste plus alors qu'on vous en demande.{advice or ' Commandez-en.'}"
     )
     return title, body
 
@@ -51,42 +68,48 @@ def stockout_risk(name: str, days: int, on_hand: Decimal, when: date) -> tuple[s
 def slow_mover(
     name: str, velocity: Decimal, on_hand: Decimal, cover: Decimal | None
 ) -> tuple[str, str]:
-    title = f"Écoulement lent — {_name(name)}"
+    """« Les bougies ne bougent pas » : un article qui dort en stock."""
+    title = f"{_name(name)} se vend peu"
     cover_text = (
-        f"soit {number(int(cover))} jours de couverture"
+        f"de quoi tenir {number(int(cover))} jours au rythme des 28 derniers"
         if cover is not None
-        else "sans aucune vente sur 28 jours"
+        else "sans aucune vente depuis 28 jours"
     )
     body = (
-        f"{METRIC_VELOCITY} : {number(velocity, 3)} unité/jour sur 28 jours "
-        f"pour {qty(on_hand)} en stock, "
-        f"{cover_text}. Surveiller le réassort ou revoir le prix."
+        f"{qty(on_hand)} en stock, {cover_text}. "
+        "Mettez cet article en avant ou faites un petit prix."
     )
     return title, body
 
 
 def demand_spike(name: str, day: date, observed: Decimal, mean: str, z: float) -> tuple[str, str]:
-    title = f"Demande inhabituelle — {_name(name)}"
+    """« Le savon Madar se vend deux fois plus » : une journée bien au-dessus de l'habitude."""
+    title = f"{_name(name)} se vend plus que d'habitude"
     body = (
-        f"{METRIC_QUANTITY} le {dmy(day)} : {qty(observed)}, "
-        f"contre {number(Decimal(mean), 1)} par jour en "
-        f"moyenne sur les 28 jours précédents (écart de {number(z, 1)} écarts-types)."
+        f"Le {dmy(day)}, vous en avez vendu {qty(observed)}, contre "
+        f"{number(Decimal(mean), 1)} par jour d'habitude. Pensez à en garder assez."
     )
     return title, body
 
 
 def margin_drop(name: str, rate_7d: Decimal, rate_28d: Decimal) -> tuple[str, str]:
-    title = f"Gain en baisse — {_name(name)}"
+    """Ce que l'article fait gagner baisse : prix de vente ou prix d'achat à revoir."""
+    title = f"{_name(name)} vous rapporte moins"
     body = (
-        f"{METRIC_MARGIN_RATE} : {number(rate_7d * 100, 1)} % sur 7 jours, contre "
-        f"{number(rate_28d * 100, 1)} % sur 28 jours. Revoir le prix ou le coût d'achat."
+        f"Sur 7 jours, vous gardez {number(rate_7d * 100, 1)} % de ce que vous le vendez, "
+        f"contre {number(rate_28d * 100, 1)} % sur 28 jours. "
+        "Revoyez son prix ou son prix d'achat."
     )
     return title, body
 
 
 def debt_overdue(customer: str, days: int, balance: Decimal, since: date) -> tuple[str, str]:
-    title = f"Client en retard de paiement de {days} jours — {_name(customer)}"
-    body = f"{fcfa(balance)} restent dus depuis le {dmy(since)}. Relancer le client."
+    """« Moussa Fall vous doit 25 000 F depuis 12 jours »."""
+    title = f"{_name(customer)} vous doit {fcfa(balance)} depuis {days} jours"
+    body = (
+        f"À payer depuis le {dmy(since)}. "
+        "Un petit rappel par WhatsApp aide souvent à se faire payer."
+    )
     return title, body
 
 

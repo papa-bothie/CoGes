@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, audit_critical
 from app.core.errors import BusinessRuleError, NotFoundError, ValidationFailedError
-from app.core.security import hash_password
+from app.core.passwords import readable_password
+from app.core.security import hash_password, verify_password
 from app.core.tenancy import TenantContext
 from app.modules.rbac import service as rbac_service
 from app.modules.rbac.matrix import MANAGER
@@ -41,6 +42,20 @@ class LastManagerError(BusinessRuleError):
         "Impossible : l'entreprise n'aurait plus aucun gérant actif. "
         "Nommez d'abord un autre gérant."
     )
+
+
+class CurrentPasswordMismatchError(BusinessRuleError):
+    """Le mot de passe actuel tapé n'est pas le bon : rien ne change."""
+
+    code = "current_password_mismatch"
+    default_message = "Le mot de passe actuel ne correspond pas."
+
+
+class SamePasswordError(BusinessRuleError):
+    """Le nouveau mot de passe est l'ancien : l'obligation de le changer resterait vaine."""
+
+    code = "same_password"
+    default_message = "Choisissez un mot de passe différent de l'actuel."
 
 
 _SELF_DEACTIVATION = "Vous ne pouvez pas désactiver votre propre compte."
@@ -85,26 +100,38 @@ def create_user(
     payload: UserCreate,
     *,
     ip_address: str | None = None,
-) -> User:
-    """Crée un compte dans l'entreprise du contexte.
+) -> tuple[User, str | None]:
+    """Crée un compte dans l'entreprise du contexte ; rend aussi son mot de passe
+    provisoire s'il a été tiré par le serveur.
 
     L'e-mail est unique **par entreprise** : le même e-mail peut exister chez un
     autre tenant, ce sont deux comptes distincts (§ 2.2).
     """
     repository = UserRepository(session, ctx)
-    if repository.get_by_email(str(payload.email)) is not None:
+    if payload.email is not None and repository.get_by_email(str(payload.email)) is not None:
         raise ValidationFailedError(
             "Un compte utilise déjà cet e-mail dans cette entreprise.",
             details={"email": str(payload.email)},
         )
+    if payload.phone is not None and repository.get_by_phone(payload.phone) is not None:
+        raise ValidationFailedError(
+            "Un compte utilise déjà ce numéro dans cette entreprise.",
+            details={"phone": payload.phone},
+        )
 
+    # Sans mot de passe donné, un provisoire lisible, à changer à la première
+    # connexion (ADR 0074). Un mot de passe choisi (CLI, seed, API) reste tel quel.
+    temporary = payload.password is None
+    password = readable_password() if temporary else str(payload.password)
     user = repository.add(
         User(
             company_id=ctx.company_id,
-            email=str(payload.email),
-            password_hash=hash_password(payload.password),
+            email=str(payload.email) if payload.email is not None else None,
+            phone=payload.phone,
+            password_hash=hash_password(password),
             full_name=payload.full_name,
             is_active=True,
+            must_change_password=temporary,
         )
     )
     session.flush()
@@ -112,7 +139,7 @@ def create_user(
     for role_id in payload.role_ids:
         rbac_service.assign_role(session, ctx, user.id, role_id, ip_address=ip_address)
 
-    return user
+    return user, (password if temporary else None)
 
 
 def update_user(
@@ -189,11 +216,44 @@ def change_password(
     *,
     ip_address: str | None = None,
 ) -> User:
-    """Remplace le mot de passe. Le hachage n'apparaît jamais dans l'audit."""
+    """Remplace le mot de passe d'un **autre** compte : il devra le changer à sa
+    prochaine connexion, puisque quelqu'un d'autre le connaît (ADR 0074). Le hachage
+    n'apparaît jamais dans l'audit."""
     user = get_user(session, ctx, user_id)
     user.password_hash = hash_password(payload.new_password)
+    user.must_change_password = user.id != ctx.user_id
     session.flush()
 
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.UPDATE,
+        entity_table="users",
+        entity_id=user.id,
+        before={"password_changed": False},
+        after={"password_changed": True},
+        ip_address=ip_address,
+    )
+    return user
+
+
+def change_own_password(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    current_password: str,
+    new_password: str,
+    ip_address: str | None = None,
+) -> User:
+    """Le titulaire remplace son mot de passe ; l'obligation de le changer tombe."""
+    user = get_user(session, ctx, ctx.user_id)
+    if not verify_password(current_password, user.password_hash):
+        raise CurrentPasswordMismatchError()
+    if current_password == new_password:
+        raise SamePasswordError()
+    user.password_hash = hash_password(new_password)
+    user.must_change_password = False
+    session.flush()
     audit_critical(
         session,
         ctx,

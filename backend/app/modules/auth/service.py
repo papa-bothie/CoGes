@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, audit_critical
 from app.core.errors import AuthenticationRequiredError
+from app.core.phone import normalise_phone
 from app.core.security import (
     create_access_token,
     generate_refresh_token,
@@ -109,11 +110,18 @@ def _issue_session(
 def login(
     payload: LoginRequest, *, user_agent: str | None = None, ip_address: str | None = None
 ) -> IssuedTokens:
-    """Authentifie un couple (slug, e-mail) et ouvre une famille de sessions."""
-    with auth_lookup_transaction() as lookup_session:
-        identity = lookup_identity(
-            lookup_session, slug=payload.company_slug, email=str(payload.email)
-        )
+    """Authentifie un couple (slug, e-mail ou téléphone) et ouvre une famille de sessions.
+
+    Un identifiant sans « @ » est un numéro, ramené à ses chiffres (ADR 0074). Un
+    numéro illisible ne cherche personne, mais le mot de passe est vérifié quand même
+    contre le leurre : la réponse ne trahit pas la forme de l'identifiant.
+    """
+    raw = payload.login_identifier
+    key = raw.lower() if "@" in raw else normalise_phone(raw)
+    identity = None
+    if key:
+        with auth_lookup_transaction() as lookup_session:
+            identity = lookup_identity(lookup_session, slug=payload.company_slug, email=key)
 
     password_hash = identity.password_hash if identity else _DECOY_HASH
     password_matches = verify_password(payload.password, password_hash)
@@ -296,7 +304,13 @@ def current_identity(session: Session, ctx: TenantContext) -> MeResponse:
     user = users_service.get_user(session, ctx, ctx.user_id)
     company = companies_service.get_current_company(session, ctx)
     return MeResponse(
-        user=MeUser(id=user.id, email=user.email, full_name=user.full_name),
+        user=MeUser(
+            id=user.id,
+            email=user.email,
+            phone=user.phone,
+            full_name=user.full_name,
+            must_change_password=user.must_change_password,
+        ),
         roles=[
             MeRole(
                 id=role.id,

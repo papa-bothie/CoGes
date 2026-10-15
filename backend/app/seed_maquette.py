@@ -467,6 +467,7 @@ def seed(*, slug: str = SLUG, password: str = PASSWORD, owner_engine: Engine | N
     shop = _fill(manager, plan, slug=slug, password=password)
     engine = owner_engine or create_engine(get_settings().require_owner_url(), future=True)
     try:
+        _alerts(engine, manager.company_id)
         restamp(engine, manager.company_id, shop.moments)
     finally:
         if owner_engine is None:
@@ -499,7 +500,7 @@ def _fill(manager: TenantContext, plan: list[PlannedSale], *, slug: str, passwor
         companies_service.update_current_company(session, manager, SHOP_DETAILS)
         role_id = rbac_service.system_role_id(session, manager, SALESPERSON)
         roles = [] if role_id is None else [role_id]
-        modou = users_service.create_user(
+        modou, _ = users_service.create_user(
             session,
             manager,
             UserCreate(
@@ -509,7 +510,7 @@ def _fill(manager: TenantContext, plan: list[PlannedSale], *, slug: str, passwor
                 role_ids=roles,
             ),
         )
-        awa = users_service.create_user(
+        awa, _ = users_service.create_user(
             session,
             manager,
             UserCreate(
@@ -1096,11 +1097,86 @@ _RESTAMP_SQL = (
     UPDATE business_events SET published_at = occurred_at
     WHERE company_id = :co AND published_at IS NULL;
     """,
+    # Alertes (écran 23) : stock au fil de la matinée du 6, dettes échues au balayage de
+    # 8 h, vente annulée à l'heure de son annulation.
+    """
+    UPDATE notifications n SET created_at = :frozen - (
+        interval '7 minutes' * (row_number - 1) + interval '3 minutes')
+    FROM (
+        SELECT id, row_number() OVER (ORDER BY type DESC, title) AS row_number
+        FROM notifications WHERE company_id = :co AND type IN ('stock_low', 'stock_out')
+    ) ranked
+    WHERE n.company_id = :co AND n.id = ranked.id;
+    """,
+    """
+    UPDATE notifications SET created_at = :frozen - interval '2 hours 45 minutes'
+    WHERE company_id = :co AND type = 'debt_due';
+    """,
+    """
+    UPDATE notifications n SET created_at = s.cancelled_at
+    FROM sales s
+    WHERE n.company_id = :co AND s.company_id = :co AND n.type = 'sale_cancelled'
+        AND s.id = CAST(n.data ->> 'sale_id' AS uuid);
+    """,
+    # Marques des consommateurs rejoués par `_alerts` : traitées à la publication.
+    """
+    UPDATE processed_events p SET processed_at = e.occurred_at
+    FROM business_events e
+    WHERE p.company_id = :co AND e.company_id = :co AND e.id = p.event_id;
+    """,
     # Faits analytiques : construits au moment de la capture.
     """
     UPDATE daily_sales_facts SET built_at = :frozen WHERE company_id = :co;
     """,
 )
+
+
+def _alerts(engine: Engine, company_id: UUID) -> None:
+    """Les alertes que le worker aurait envoyées (écran 23, ADR 0074).
+
+    La comparaison tourne sans relais ni worker : on rejoue ici, une fois, les
+    événements du seed à travers les vrais consommateurs d'alertes — le dernier
+    `stock.updated` de chaque article, chaque `sale.cancelled` — puis le balayage des
+    dettes échues du 6 octobre. L'outbox se lit sous le rôle propriétaire, comme le
+    relais la lit sous le sien ; les alertes s'écrivent sous `coges_app`, comme au worker.
+    """
+    from app.core.events.inbox import Event
+    from app.core.events.types import EventType
+    from app.workers.tasks.notifications import (
+        on_sale_cancelled,
+        on_stock_updated,
+        scan_due_debts,
+    )
+
+    owner = sessionmaker(bind=engine, expire_on_commit=False, future=True)
+    with tenant_transaction(TenantContext.bootstrap(company_id), session_factory=owner) as session:
+        rows = session.execute(
+            text(
+                """
+                SELECT DISTINCT ON (event_type, aggregate_id)
+                       id, event_type, aggregate_type, aggregate_id, payload, occurred_at
+                FROM business_events
+                WHERE company_id = :co AND event_type IN ('stock.updated', 'sale.cancelled')
+                ORDER BY event_type, aggregate_id, id DESC
+                """
+            ),
+            {"co": company_id},
+        ).all()
+    for row in sorted(rows, key=lambda row: row.id):
+        event = Event(
+            id=row.id,
+            company_id=company_id,
+            event_type=EventType(row.event_type),
+            aggregate_type=row.aggregate_type,
+            aggregate_id=row.aggregate_id,
+            payload=row.payload,
+            occurred_at=row.occurred_at,
+        )
+        handler = (
+            on_stock_updated if event.event_type is EventType.STOCK_UPDATED else on_sale_cancelled
+        )
+        handler(**event.as_message())
+    scan_due_debts(str(company_id), TODAY.isoformat())
 
 
 def restamp(engine: Engine, company_id: UUID, moments: dict[UUID, datetime]) -> None:
@@ -1135,6 +1211,51 @@ def restamp(engine: Engine, company_id: UUID, moments: dict[UUID, datetime]) -> 
             session.execute(text(f"ALTER TABLE {table} ENABLE TRIGGER USER"))
 
 
+#: La nuit du 5 au 6 octobre : « Calculés cette nuit à partir de vos ventes » (écran 22).
+NIGHT_RUN = datetime(2026, 10, 6, 2, 0, tzinfo=UTC)
+
+
+# Horodatages posés par le serveur pendant la nuit de l'Intelligence, recalés sur 2 h.
+_NIGHT_SQL = (
+    """
+UPDATE forecasts SET generated_at = :night WHERE company_id = :co
+""",
+    """
+UPDATE insights SET generated_at = :night WHERE company_id = :co
+""",
+    """
+UPDATE notifications SET created_at = :night
+WHERE company_id = :co AND type = 'insight_critical'
+""",
+)
+
+
+def night_run(company_id: UUID, *, owner_engine: Engine | None = None) -> list[str]:
+    """Ce que la nuit du 6 octobre aurait calculé : features, modèle, prévisions et
+    conseils arrêtés au 5 octobre (écrans 22, 22b, 22c ; ADR 0074).
+
+    Exige le groupe `ml` (numpy, statsmodels), comme `app.cli run-intelligence`. Les
+    horodatages posés par le serveur sont ensuite recalés sur 2 h du matin, le 6.
+    """
+    from app.cli import run_intelligence
+
+    report = run_intelligence(
+        company_id, as_of=(TODAY - timedelta(days=1)).isoformat(), retrain=True
+    )
+    engine = owner_engine or create_engine(get_settings().require_owner_url(), future=True)
+    try:
+        owner = sessionmaker(bind=engine, expire_on_commit=False, future=True)
+        ctx = TenantContext.bootstrap(company_id)
+        with tenant_transaction(ctx, session_factory=owner) as session:
+            params = {"co": company_id, "night": NIGHT_RUN}
+            for statement in _NIGHT_SQL:
+                session.execute(text(statement), params)
+    finally:
+        if owner_engine is None:
+            engine.dispose()
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m app.seed_maquette",
@@ -1142,8 +1263,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--slug", default=SLUG, help=f"Slug de l'entreprise (défaut : {SLUG})")
     parser.add_argument("--password", default=PASSWORD, help="Mot de passe des comptes")
+    parser.add_argument(
+        "--intelligence",
+        action="store_true",
+        help="Calculer aussi les conseils et prévisions de la nuit du 6 octobre (groupe ml)",
+    )
     args = parser.parse_args(argv)
     company_id = seed(slug=args.slug, password=args.password)
+    if args.intelligence:
+        for line in night_run(company_id):
+            print(f"  {line}")
     print(f"Entreprise de la maquette créée : {company_id}")
     print(f"  slug     : {args.slug}")
     print(f"  gérante  : gerant@{args.slug}.example.com")

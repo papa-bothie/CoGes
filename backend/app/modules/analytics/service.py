@@ -53,6 +53,8 @@ from app.modules.analytics.schemas import (
     MoneyBucket,
     MoneyOverview,
     MoneyPeriod,
+    NextWeekForecast,
+    NextWeekRow,
     OwedRow,
     OwedSummary,
     PeoplePage,
@@ -307,6 +309,10 @@ def product_ranking(
         return _future_potential_ranking(
             session, ctx, period_from=period_from, period_to=period_to, limit=limit
         )
+    if metric is ProductMetric.DAYS_SINCE_LAST_SALE:
+        return _days_since_last_sale_ranking(
+            session, ctx, period_from=period_from, period_to=period_to, limit=limit
+        )
 
     repository = DailySalesFactRepository(session, ctx)
     totals = repository.product_totals(period_from=period_from, period_to=period_to)
@@ -333,6 +339,51 @@ def product_ranking(
         items=[
             ProductRankRow(product_id=product_id, product_name=name, value=rendered)
             for product_id, _, name, rendered in ranked
+        ],
+    )
+
+
+#: Articles en stock lus au plus pour « Vente rare » : une boutique en compte quelques
+#: centaines (même borne que la liste du stock, ADR 0071).
+RARE_SALE_SCAN = 5000
+
+
+def _days_since_last_sale_ranking(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    period_from: date,
+    period_to: date,
+    limit: int,
+) -> ProductRanking:
+    """« Vente rare » (écran 22b) : jours depuis la dernière vente des articles **en
+    stock**, le plus long d'abord. Un article jamais vendu compte depuis sa dernière
+    entrée en stock. La période ne s'applique pas : c'est un état à aujourd'hui.
+    """
+    label, unit = METRIC_LABELS[ProductMetric.DAYS_SINCE_LAST_SALE]
+    timezone = companies_service.get_timezone(session, ctx)
+    today = clock.today_in(timezone)
+    zone = ZoneInfo(timezone)
+    lines, _ = inventory_service.get_stock(session, ctx, page=1, page_size=RARE_SALE_SCAN)
+    last_sale = sales_service.last_sale_at_by_product(session, ctx)
+    rows: list[tuple[UUID, int, str]] = []
+    for line in lines:
+        if not line.is_stock_tracked or line.qty_on_hand <= 0:
+            continue
+        since = last_sale.get(line.product_id) or line.last_movement_at
+        if since is None:
+            continue
+        rows.append((line.product_id, (today - since.astimezone(zone).date()).days, line.name))
+    rows.sort(key=lambda row: (-row[1], row[2].casefold()))
+    return ProductRanking(
+        metric=ProductMetric.DAYS_SINCE_LAST_SALE,
+        metric_label=label,
+        unit=unit,
+        period_from=period_from,
+        period_to=period_to,
+        items=[
+            ProductRankRow(product_id=product_id, product_name=name, value=str(days))
+            for product_id, days, name in rows[:limit]
         ],
     )
 
@@ -1287,4 +1338,73 @@ def expenses_summary(
             )
             for e in recent
         ],
+    )
+
+
+# ------------------------------------------------------------ conseils (écran 22c)
+
+#: « La semaine prochaine » : les 7 jours qui suivent le dernier calcul.
+NEXT_WEEK_DAYS = 7
+#: Tuiles montrées au plus : les articles qui devraient le plus se vendre.
+NEXT_WEEK_LIMIT = 24
+
+
+def next_week(session: Session, ctx: TenantContext) -> NextWeekForecast:
+    """Écran 22c : ce que chaque article devrait vendre la semaine prochaine, et si le
+    stock suffit. Lu sur les prévisions déjà calculées (aucun calcul ici)."""
+    summary = intelligence_serving.summary(session, ctx)
+    potential = intelligence_serving.future_potential(session, ctx, horizon_days=NEXT_WEEK_DAYS)
+    if potential is None:
+        return NextWeekForecast(
+            enabled=summary.enabled,
+            as_of=None,
+            computed_at=None,
+            model_name=None,
+            model_version=None,
+            items=[],
+            insufficient_count=summary.insufficient_data_products,
+        )
+    ranked = sorted(potential.rows, key=lambda row: -Decimal(row.value))[:NEXT_WEEK_LIMIT]
+    lines, _ = inventory_service.get_stock(
+        session,
+        ctx,
+        page=1,
+        page_size=NEXT_WEEK_LIMIT,
+        product_ids=[row.product_id for row in ranked],
+    )
+    stock = {line.product_id: line for line in lines}
+
+    def rounded(value: str | None) -> Decimal | None:
+        return None if value is None else Decimal(value).quantize(Decimal("1"))
+
+    items = []
+    for row in ranked:
+        line = stock.get(row.product_id)
+        if line is None:
+            continue
+        expected = rounded(row.value) or Decimal("0")
+        if expected <= 0:
+            # « Vous devriez vendre environ 0 sac » ne dit rien : la tuile n'apparaît pas.
+            continue
+        items.append(
+            NextWeekRow(
+                product_id=row.product_id,
+                product_name=line.name,
+                unit=line.unit,
+                expected=to_quantity(expected),
+                lower=to_quantity(low) if (low := rounded(row.lower)) is not None else None,
+                upper=to_quantity(up) if (up := rounded(row.upper)) is not None else None,
+                on_hand=to_quantity(line.qty_on_hand),
+                low=line.qty_on_hand < expected,
+            )
+        )
+    first = potential.rows[0]
+    return NextWeekForecast(
+        enabled=True,
+        as_of=potential.as_of,
+        computed_at=potential.computed_at,
+        model_name=first.model_name,
+        model_version=first.model_version,
+        items=items,
+        insufficient_count=summary.insufficient_data_products,
     )

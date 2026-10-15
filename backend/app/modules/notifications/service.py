@@ -199,3 +199,8 @@ def set_read(
     notification.read_at = datetime.now(UTC) if read else None
     session.flush()
     return notification
+
+
+def mark_all_read(session: Session, ctx: TenantContext) -> int:
+    """« Tout marquer comme lu » (écran 23) : seulement le fil de l'utilisateur."""
+    return NotificationRepository(session, ctx).mark_all_read(ctx.user_id, datetime.now(UTC))

@@ -30,6 +30,7 @@ from app.modules.analytics.schemas import (
     FinanceOverview,
     MoneyOverview,
     MoneyPeriod,
+    NextWeekForecast,
     PeoplePage,
     PersonPaymentPage,
     ProductHistory,
@@ -109,6 +110,15 @@ def expenses_summary(
     return service.expenses_summary(
         tenant.session, tenant.ctx, period_from=period_from, period_to=period_to
     )
+
+
+@router.get("/next-week", response_model=NextWeekForecast)
+def next_week(
+    tenant: Annotated[TenantSession, Depends(require_permission("insights:read"))],
+) -> NextWeekForecast:
+    """Écran 22c « Prévisions » : la semaine prochaine, article par article, avec sa
+    fourchette, le modèle et la date du calcul, et le stock qui reste (ADR 0074)."""
+    return service.next_week(tenant.session, tenant.ctx)
 
 
 @router.get("/products", response_model=ProductRanking)

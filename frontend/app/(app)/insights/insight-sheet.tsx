@@ -34,8 +34,6 @@ import {
 } from "@/lib/intelligence";
 import { labels } from "@/lib/labels";
 
-import { SEVERITY_VARIANTS } from "./insight-card";
-
 type StatusChange = Schemas["InsightStatusChange"];
 const ACTIONS: readonly StatusChange[] = ["read", "acknowledged", "dismissed", "resolved"];
 
@@ -59,6 +57,12 @@ function orderedActions(status: Insight["status"]): StatusChange[] {
  * Détail d'une recommandation : texte, métrique nommée, date de calcul, modèle, incertitude,
  * éléments du calcul (evidence) et, pour un produit, sa prévision en mini-graphique.
  */
+const SEVERITY_VARIANTS: Record<Insight["severity"], "info" | "warning" | "danger"> = {
+  info: "info",
+  warning: "warning",
+  critical: "danger",
+};
+
 export function InsightSheet({
   insight,
   onOpenChange,

@@ -86,15 +86,22 @@ export const SCREENS: Screen[] = [
   { name: "depenses", open: (page) => page.goto("/finance/expenses").then(() => undefined) },
   { name: "entrees-sorties", open: (page) => page.goto("/finance/cash").then(() => undefined) },
   { name: "dettes", open: (page) => page.goto("/finance/debts").then(() => undefined) },
-  { name: "analytics", open: (page) => page.goto("/analytics").then(() => undefined) },
-  { name: "intelligence", open: (page) => page.goto("/insights?status=all").then(() => undefined) },
+  {
+    name: "meilleurs-articles",
+    open: (page) => page.goto("/insights?view=best").then(() => undefined),
+  },
+  {
+    name: "previsions",
+    open: (page) => page.goto("/insights?view=forecasts").then(() => undefined),
+  },
+  { name: "intelligence", open: (page) => page.goto("/insights").then(() => undefined) },
   {
     name: "intelligence-panneau",
     open: async (page) => {
-      await page.goto("/insights?status=all");
-      const card = page.getByRole("main").getByRole("listitem").first().getByRole("button");
-      await expect(card).toBeVisible({ timeout: 30_000 });
-      await card.click();
+      await page.goto("/insights");
+      const why = page.getByRole("main").getByRole("button", { name: "Pourquoi ?" }).first();
+      await expect(why).toBeVisible({ timeout: 30_000 });
+      await why.click();
       await expect(page.getByRole("dialog")).toBeVisible();
     },
   },

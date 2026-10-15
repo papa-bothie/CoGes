@@ -31,6 +31,12 @@ FUNCTION_SEARCH_PATH = re.compile(r"\bSET\s+search_path\s*=", re.IGNORECASE)
 # ni `BEFORE UPDATE ON`, ni `FOR UPDATE` n'ouvrent d'exception.
 UPDATE_STATEMENT = re.compile(r"^\s*UPDATE\s+[A-Za-z_\"]", re.IGNORECASE)
 
+# `ALTER COLUMN … SET NOT NULL` ou `SET DEFAULT` est une définition de colonne, pas un
+# réglage de session (révision 0019).
+ALTER_COLUMN_SET = re.compile(
+    r"\bALTER\s+COLUMN\s+\w+\s+SET\s+(NOT\s+NULL|DEFAULT)\b", re.IGNORECASE
+)
+
 # Équivalent Python d'un `SET` de session : le 3e argument de set_config vaut false.
 SESSION_SCOPED_SET_CONFIG = re.compile(r"set_config\s*\([^)]*,\s*(false|False)\s*\)")
 
@@ -56,6 +62,8 @@ def test_no_sql_set_without_local() -> None:
             if set_is_an_update_clause:
                 continue
             if in_migrations and FUNCTION_SEARCH_PATH.search(line):
+                continue
+            if in_migrations and ALTER_COLUMN_SET.search(line):
                 continue
             offenders.append(f"{source.name}:{number}: {line.strip()}")
 

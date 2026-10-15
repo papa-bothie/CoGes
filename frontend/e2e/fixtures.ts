@@ -20,10 +20,10 @@ export const E2E: Credentials = {
 };
 
 export async function loginThroughUi(page: Page, credentials: Credentials) {
-  await page.getByLabel("Identifiant d'entreprise").fill(credentials.slug);
-  await page.getByLabel("Adresse e-mail").fill(credentials.email);
-  await page.getByLabel("Mot de passe").fill(credentials.password);
-  await page.getByRole("button", { name: "Se connecter" }).click();
+  await page.getByLabel("Code de la boutique").fill(credentials.slug);
+  await page.getByLabel("Votre e-mail ou téléphone").fill(credentials.email);
+  await page.getByLabel("Mot de passe", { exact: true }).fill(credentials.password);
+  await page.getByRole("button", { name: "Entrer" }).click();
 }
 
 /** Jeton d'un gérant, obtenu par l'API **à travers la réécriture du front**. */

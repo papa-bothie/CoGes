@@ -74,6 +74,11 @@ const DONE = new Set<string>([
   "20",
   "21",
   "21b",
+  "22",
+  "22b",
+  "22c",
+  "23",
+  "25",
   "26",
 ]);
 
@@ -114,6 +119,11 @@ const ALLOWED = new Set<string>([
   "20",
   "21",
   "21b",
+  "22",
+  "22b",
+  "22c",
+  "23",
+  "25",
   "26",
 ]);
 
@@ -238,6 +248,16 @@ const STATES: Record<string, (page: Page, request: APIRequestContext) => Promise
     // Seulement la question : choisir une raison annulerait vraiment la ligne.
     await page.getByRole("button", { name: "Annuler", exact: true }).first().click();
     await expect(page.getByRole("group", { name: "Pourquoi ?" })).toBeVisible();
+  },
+  "22b": async (page) => {
+    await page.getByRole("button", { name: "Vos meilleurs articles" }).click();
+    await expect(page.getByRole("heading", { name: /Ce qui vous rapporte le plus/ })).toBeVisible();
+  },
+  "22c": async (page) => {
+    await page.getByRole("button", { name: "Prévisions" }).click();
+    await expect(
+      page.getByRole("heading", { name: "La semaine prochaine, vous devriez vendre environ" }),
+    ).toBeVisible();
   },
   "02d": async (page, request) => {
     await mockupCart(page, request);

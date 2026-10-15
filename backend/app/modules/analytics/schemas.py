@@ -87,7 +87,8 @@ class FinanceOverview(BaseModel):
 
 
 class ProductMetric(StrEnum):
-    """Les huit métriques du Diagramme 7, **jamais équivalentes**.
+    """Les huit métriques du Diagramme 7, et « jours sans vente » (ADR 0074), **jamais
+    équivalentes**.
 
     Un « produit à forte valeur » n'existe pas comme mesure unique. Chaque classement
     porte donc le nom de sa métrique, et aucune n'est fusionnée avec une autre dans un
@@ -102,6 +103,8 @@ class ProductMetric(StrEnum):
     VELOCITY = "velocity"
     DEMAND_TREND = "demand_trend"
     FUTURE_POTENTIAL = "future_potential"
+    #: Neuvième, ajoutée au lot 3e (ADR 0074) : « Vente rare » de l'écran 22b.
+    DAYS_SINCE_LAST_SALE = "days_since_last_sale"
 
 
 #: Libellé affiché et unité de chaque métrique. Le libellé est la phrase que le § 7
@@ -116,6 +119,7 @@ METRIC_LABELS: dict[ProductMetric, tuple[str, str]] = {
     ProductMetric.VELOCITY: ("Vélocité des ventes", "unité/jour"),
     ProductMetric.DEMAND_TREND: ("Évolution de la demande", "%"),
     ProductMetric.FUTURE_POTENTIAL: ("Potentiel futur estimé", "unité"),
+    ProductMetric.DAYS_SINCE_LAST_SALE: ("Jours sans vente", "jour"),
 }
 
 #: Longueur maximale d'un classement. Dix lignes suffisent à décider ; cent lignes
@@ -581,3 +585,38 @@ class ExpensesSummary(BaseModel):
     total: Amount
     by_category: list[ExpenseCategoryTotal]
     recent: list[RecentExpense]
+
+
+# ------------------------------------------------------------ conseils (écran 22c)
+
+
+class NextWeekRow(BaseModel):
+    """« La semaine prochaine, vous devriez vendre environ 7 sacs (entre 5 et 9) »."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    product_name: str
+    unit: str
+    #: Somme des 7 prochains jours prévus, et ses bornes.
+    expected: Quantity
+    lower: Quantity | None
+    upper: Quantity | None
+    #: Stock à l'instant ; `low` s'il ne couvre pas la quantité prévue.
+    on_hand: Quantity
+    low: bool
+
+
+class NextWeekForecast(BaseModel):
+    """Écran 22c. `enabled` faux : l'Intelligence est coupée ; `items` vide sans prévision."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    as_of: date | None
+    computed_at: datetime | None
+    model_name: str | None
+    model_version: str | None
+    items: list[NextWeekRow]
+    #: Articles qui n'ont pas encore assez d'historique pour une prévision.
+    insufficient_count: int

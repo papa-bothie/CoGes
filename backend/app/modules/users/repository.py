@@ -28,6 +28,10 @@ class UserRepository(TenantRepository[User]):
         """Unicité de l'e-mail **par entreprise** (`users_email_uq`)."""
         return self.session.execute(self._live().where(User.email == email)).scalar_one_or_none()
 
+    def get_by_phone(self, phone: str) -> User | None:
+        """Unicité du téléphone **par entreprise** (`users_phone_uq`)."""
+        return self.session.execute(self._live().where(User.phone == phone)).scalar_one_or_none()
+
     def count_live(self) -> int:
         stmt = (
             select(func.count())

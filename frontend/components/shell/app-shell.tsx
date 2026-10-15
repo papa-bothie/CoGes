@@ -38,8 +38,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => onLogoutElsewhere(() => window.location.assign(loginUrl("logout"))), []);
+  const mustChange = me.data?.user.must_change_password === true;
+  // Mot de passe provisoire (ADR 0074) : rien d'autre ne répond tant qu'il n'est pas changé.
+  useEffect(() => {
+    if (mustChange) window.location.replace("/password");
+  }, [mustChange]);
 
-  if (me.isPending) return <ShellSkeleton />;
+  if (me.isPending || mustChange) return <ShellSkeleton />;
 
   if (me.isError) {
     return (
