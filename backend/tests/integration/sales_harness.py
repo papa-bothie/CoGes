@@ -107,7 +107,7 @@ def make_sale(session: Session, tenant: Tenant, *, customer_id: UUID | None = No
             "id": sale_id,
             "company_id": tenant.company_id,
             "customer_id": customer_id,
-            "sale_no": f"V-{sale_id.hex[:6].upper()}",
+            "sale_no": f"V-{sale_id.hex[:12].upper()}",
             "created_by": tenant.user_id,
         },
     )
