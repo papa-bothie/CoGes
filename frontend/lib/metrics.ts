@@ -22,6 +22,7 @@ export const METRICS: readonly ProductMetric[] = [
   "velocity",
   "demand_trend",
   "future_potential",
+  "days_since_last_sale",
 ];
 
 export const METRIC_TEXTS: Record<
@@ -69,6 +70,12 @@ export const METRIC_TEXTS: Record<
       "Ventes prévues par CoGes Intelligence sur l'horizon de prévision, avec leur incertitude.",
     leader: (p) => `${p} est prévu avec les plus fortes ventes sur l'horizon de prévision.`,
   },
+  days_since_last_sale: {
+    label: "Jours sans vente",
+    definition:
+      "Jours depuis la dernière vente d'un article encore en stock (depuis son arrivée s'il n'a jamais été vendu).",
+    leader: (p) => `${p} attend le plus longtemps sa prochaine vente.`,
+  },
 };
 
 const UNIT_SUFFIX: Record<string, string> = {
@@ -76,6 +83,7 @@ const UNIT_SUFFIX: Record<string, string> = {
   vente: "ventes",
   fois: "×",
   "unité/jour": "u./jour",
+  jour: "jours",
 };
 
 /** Valeur d'une métrique dans **son** unité (renvoyée par l'API), sans calcul. */

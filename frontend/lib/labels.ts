@@ -40,16 +40,41 @@ export const labels = {
     themeDark: "Sombre",
     themeSystem: "Système",
   },
+  /** Écran 25 de la maquette v2 et « Choisissez votre mot de passe » (ADR 0074). */
   login: {
-    title: "Connexion",
-    subtitle: "Accédez à l'espace de gestion de votre entreprise.",
-    companySlug: "Identifiant d'entreprise",
-    email: "Adresse e-mail",
+    title: "Se connecter",
+    pageTitle: "Connexion",
+    tagline: "Votre boutique, simplement.",
+    pitch: "Vendre, suivre le stock et savoir ce que vous gagnez, chaque jour.",
+    pills: ["Ventes", "Stock", "Dettes", "Argent"] as const,
+    companySlug: "Code de la boutique",
+    identifier: "Votre e-mail ou téléphone",
     password: "Mot de passe",
-    submit: "Se connecter",
+    show: "Afficher",
+    hide: "Cacher",
+    showPassword: "Afficher le mot de passe",
+    hidePassword: "Cacher le mot de passe",
+    submit: "Entrer",
     submitting: "Connexion…",
+    forgot: "Mot de passe oublié ? Demandez à votre gérant : il peut vous en créer un nouveau.",
+    invalid:
+      "Le code de la boutique, l'identifiant ou le mot de passe ne correspond pas. Réessayez, ou demandez à votre gérant de vous en donner un nouveau.",
+    tooMany: "Trop d'essais d'affilée. Attendez une minute, puis réessayez.",
     sessionExpired: "Votre session a expiré. Reconnectez-vous.",
     loggedOut: "Vous êtes déconnecté.",
+    firstPassword: {
+      title: "Choisissez votre mot de passe",
+      intro:
+        "Le mot de passe que vous avez reçu était provisoire. Choisissez le vôtre : vous seul le connaîtrez.",
+      current: "Mot de passe reçu",
+      next: "Nouveau mot de passe",
+      nextHint: "12 caractères au moins. Une phrase courte se retient bien.",
+      confirm: "Retapez le nouveau mot de passe",
+      mismatch: "Les deux mots de passe ne sont pas identiques.",
+      tooShort: "12 caractères au moins.",
+      submit: "Enregistrer et entrer",
+      logout: "Se déconnecter",
+    },
   },
   validation: {
     required: "Ce champ est obligatoire.",
@@ -1399,6 +1424,101 @@ export const labels = {
     all: "Toutes",
     unreadOnly: "Non lues",
     count: (count: number) => `${count} notification${count > 1 ? "s" : ""}`,
+  },
+  /** Écran 22 de la maquette v2 (ADR 0074) : conseils, meilleurs articles, prévisions. */
+  adviceScreens: {
+    title: "Conseils pour votre boutique",
+    computed: {
+      night: "Calculés cette nuit à partir de vos ventes",
+      today: (time: string) => `Calculés aujourd'hui à ${time} à partir de vos ventes`,
+      yesterday: (time: string) => `Calculés hier à ${time} à partir de vos ventes`,
+      on: (day: string) => `Calculés le ${day} à partir de vos ventes`,
+      never: "Pas encore calculés : CoGes analyse vos ventes chaque nuit.",
+    },
+    views: {
+      advice: (count: number) => `Conseils (${count})`,
+      best: "Vos meilleurs articles",
+      forecasts: "Prévisions",
+    },
+    viewsLabel: "Afficher",
+    done: "C'est fait",
+    ignore: "Ignorer",
+    doneThanks: "Fait, merci.",
+    ignored: "Ignoré.",
+    why: "Pourquoi ?",
+    noAdvice: "Rien à signaler : CoGes vous préviendra dès qu'il verra quelque chose.",
+    insufficient: (count: number) =>
+      count === 1
+        ? "Pas assez de ventes pour 1 article : ses conseils viendront avec l'historique."
+        : `Pas assez de ventes pour ${count} articles : leurs conseils viendront avec l'historique.`,
+    actions: {
+      order: "Commander",
+      remind: "Lui envoyer un rappel",
+      expenses: "Voir les dépenses",
+      article: "Voir l'article",
+      price: "Changer le prix",
+      money: "Voir l'argent",
+      cash: "Voir la caisse",
+    },
+    best: {
+      chips: {
+        margin: "Rapporte le plus",
+        quantity: "Se vend le plus",
+        revenue: "Fait le plus de ventes",
+        days_since_last_sale: "Vente rare",
+      },
+      titles: {
+        margin: "Ce qui vous rapporte le plus",
+        quantity: "Ce qui se vend le plus",
+        revenue: "Ce qui fait le plus de ventes",
+        days_since_last_sale: "Ce qui se vend rarement",
+      },
+      thisMonth: "· ce mois-ci",
+      today: "· aujourd'hui",
+      sold: (qty: string) => `${qty} vendus`,
+      days: (days: number) => `${days} jour${days > 1 ? "s" : ""}`,
+      empty: "Pas encore de ventes ce mois-ci.",
+      emptyRare: "Aucun article en stock.",
+    },
+    forecasts: {
+      title: "La semaine prochaine, vous devriez vendre environ",
+      range: (lower: string, upper: string) => `entre ${lower} et ${upper}`,
+      low: (left: string) => `Il vous en reste ${left} : commandez`,
+      enough: (left: string) => `Stock suffisant (${left})`,
+      insufficient: (count: number) =>
+        count === 1
+          ? "Pas assez de ventes pour 1 autre article : il apparaîtra quand il y aura assez d'historique."
+          : `Pas assez de ventes pour ${count} autres articles : ils apparaîtront quand il y aura assez d'historique.`,
+      none: "Pas encore de prévision : CoGes en calcule chaque nuit dès qu'il y a assez de ventes.",
+      model: (date: string, model: string) => `Calculé le ${date} · ${model}`,
+    },
+  },
+  /** Écran 23 de la maquette v2 (ADR 0074). */
+  alerts: {
+    title: "Alertes",
+    unread: (count: number) =>
+      count === 0
+        ? "Tout est lu"
+        : `${count} alerte${count > 1 ? "s" : ""} non lue${count > 1 ? "s" : ""}`,
+    markAll: "Tout marquer comme lu",
+    filter: "Afficher les alertes",
+    all: "Toutes",
+    unreadOnly: "Non lues",
+    today: "Aujourd'hui",
+    yesterday: "Hier",
+    unreadDot: "Non lue",
+    markRead: "Marquer comme lue",
+    markUnread: "Marquer non lue",
+    more: "Voir les alertes plus anciennes",
+    empty: "Aucune alerte pour le moment.",
+    emptyUnread: "Aucune alerte non lue.",
+    actions: {
+      order: "Commander",
+      pay: "Payer",
+      collect: "Encaisser",
+      sale: "Voir la vente",
+      advice: "Voir le conseil",
+    },
   },
   emptyPage: {
     title: "Bientôt disponible",

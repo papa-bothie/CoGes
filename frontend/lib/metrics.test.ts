@@ -17,8 +17,8 @@ function allTexts(value: unknown): string[] {
 const plain = (text: string) => text.replace(/[\u00a0\u202f]/g, " ");
 
 describe("métriques produit", () => {
-  it("compte huit métriques, chacune nommée et définie", () => {
-    expect(METRICS).toHaveLength(8);
+  it("compte neuf métriques (huit du Diagramme 7 et « jours sans vente », ADR 0074), chacune nommée et définie", () => {
+    expect(METRICS).toHaveLength(9);
     for (const metric of METRICS) {
       expect(METRIC_TEXTS[metric].label).not.toBe("");
       expect(METRIC_TEXTS[metric].definition).not.toBe("");

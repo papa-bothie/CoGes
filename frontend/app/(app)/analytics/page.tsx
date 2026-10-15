@@ -1,16 +1,6 @@
-import type { Metadata } from "next";
-import { Suspense } from "react";
+import { redirect } from "next/navigation";
 
-import { labels } from "@/lib/labels";
-
-import { AnalyticsView } from "./analytics-view";
-
-export const metadata: Metadata = { title: labels.nav.analytics };
-
+/** Les analyses rejoignent les Conseils : « Vos meilleurs articles » (écran 22b, ADR 0074). */
 export default function AnalyticsPage() {
-  return (
-    <Suspense>
-      <AnalyticsView />
-    </Suspense>
-  );
+  redirect("/insights?view=best");
 }
