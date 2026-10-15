@@ -81,7 +81,7 @@ export async function managerApi(request: APIRequestContext, company: Credential
   const token = await managerToken(request, company);
   const headers = { Authorization: `Bearer ${token}` };
   const write = () => ({ ...headers, "Idempotency-Key": crypto.randomUUID() });
-  const call = async (method: "get" | "post" | "patch", path: string, data?: unknown) => {
+  const call = async (method: "get" | "post" | "patch" | "put", path: string, data?: unknown) => {
     const response = await request[method](`/api/v1${path}`, {
       headers: method === "get" ? headers : write(),
       data,
@@ -93,6 +93,7 @@ export async function managerApi(request: APIRequestContext, company: Credential
     get: (path: string) => call("get", path),
     post: (path: string, data: unknown) => call("post", path, data),
     patch: (path: string, data: unknown) => call("patch", path, data),
+    put: (path: string, data: unknown) => call("put", path, data),
   };
 }
 
