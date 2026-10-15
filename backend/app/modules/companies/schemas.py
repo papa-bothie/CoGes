@@ -17,6 +17,9 @@ DEFAULT_REORDER_POINT = "default_reorder_point"
 _MAX_REORDER = Decimal("99999999999.999")
 #: Taux de TVA appliqué à un article créé sans taux (ADR 0066, complément).
 DEFAULT_TAX_RATE = "default_tax_rate"
+#: Reçu ouvert par défaut après une vente (écran 24, ADR 0075) ; absent = petit ticket.
+RECEIPT_FORMAT = "receipt_format"
+RECEIPT_FORMATS = ("ticket", "a4")
 
 
 def _checked_tax_rate(value: Any) -> str | None:
@@ -128,6 +131,11 @@ class CompanyUpdate(BaseModel):
         for key in BOOLEAN_SETTINGS:
             if key in self.settings and not isinstance(self.settings[key], bool):
                 raise ValueError(f"`{key}` doit valoir true ou false.")
+        if RECEIPT_FORMAT in self.settings and self.settings[RECEIPT_FORMAT] not in (
+            None,
+            *RECEIPT_FORMATS,
+        ):
+            raise ValueError("`receipt_format` vaut « ticket » ou « a4 ».")
         if DEFAULT_TAX_RATE in self.settings:
             self.settings[DEFAULT_TAX_RATE] = _checked_tax_rate(self.settings[DEFAULT_TAX_RATE])
         if DEFAULT_REORDER_POINT in self.settings:

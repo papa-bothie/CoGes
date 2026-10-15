@@ -36,6 +36,8 @@ class UserRead(BaseModel):
     #: Vrai tant que le mot de passe provisoire n'a pas été remplacé (ADR 0074).
     must_change_password: bool
     last_login_at: datetime | None
+    #: Moment où l'accès a été coupé (ADR 0075), `null` s'il est ouvert.
+    deactivated_at: datetime | None
     created_at: datetime
     #: Rôles du compte (ADR 0053) : l'écran Utilisateurs les affiche sans N+1.
     roles: list[UserRoleRead] = Field(default_factory=list)

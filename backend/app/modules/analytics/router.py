@@ -10,7 +10,7 @@ vendeur : une caisse encaisse, elle n'a pas à lire la marge de l'entreprise.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -28,6 +28,7 @@ from app.modules.analytics.schemas import (
     CustomerSheet,
     ExpensesSummary,
     FinanceOverview,
+    HistoryPage,
     MoneyOverview,
     MoneyPeriod,
     NextWeekForecast,
@@ -299,4 +300,28 @@ def supplier_payments(
     """« Vos paiements » : ce que vous lui avez versé."""
     return service.supplier_payments(
         tenant.session, tenant.ctx, supplier_id, page=page, page_size=page_size
+    )
+
+
+@router.get("/history", response_model=HistoryPage)
+def history(
+    tenant: Annotated[TenantSession, Depends(require_permission("audit:read"))],
+    page: Page = 1,
+    page_size: PageSize = 20,
+    actor_user_id: Annotated[UUID | None, Query()] = None,
+    period_from: Annotated[datetime | None, Query(alias="from")] = None,
+    period_to: Annotated[datetime | None, Query(alias="to")] = None,
+) -> HistoryPage:
+    """Historique de ce qui a été fait (écran 24d) : une phrase par geste qui compte.
+
+    `audit:read`, comme le journal qu'il raconte (gérant et comptable).
+    """
+    return service.history(
+        tenant.session,
+        tenant.ctx,
+        page=page,
+        page_size=page_size,
+        actor_user_id=actor_user_id,
+        period_from=period_from,
+        period_to=period_to,
     )

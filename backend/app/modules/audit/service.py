@@ -29,8 +29,14 @@ def list_logs(
     entity_id: UUID | None = None,
     period_from: datetime | None = None,
     period_to: datetime | None = None,
+    notable_only: bool = False,
 ) -> tuple[list[AuditLogRead], int]:
-    """Page du journal, la plus récente d'abord, auteurs nommés en une requête."""
+    """Page du journal, la plus récente d'abord, auteurs nommés en une requête.
+
+    `notable_only` écarte le geste courant (connexions, ventes confirmées et leurs
+    encaissements, lettrages, recalculs) : l'Historique des réglages (ADR 0075) montre ce
+    qui mérite d'être relu, pas chaque vente.
+    """
     repository = AuditLogRepository(session, ctx)
     filters = {
         "actor_user_id": actor_user_id,
@@ -39,6 +45,7 @@ def list_logs(
         "entity_id": entity_id,
         "period_from": period_from,
         "period_to": period_to,
+        "notable_only": notable_only,
     }
     rows = repository.page(page=page, page_size=page_size, **filters)
     actors = users_service.names_by_id(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Self
+from typing import Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -85,6 +85,8 @@ class MeCompany(BaseModel):
     currency: str
     timezone: str
     tax_enabled: bool
+    #: Reçu ouvert par défaut après une vente (écran 24, ADR 0075).
+    receipt_format: Literal["ticket", "a4"]
 
 
 class MeResponse(BaseModel):

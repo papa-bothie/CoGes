@@ -57,3 +57,41 @@ class RolePage(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+class AbilityRead(BaseModel):
+    """Une ligne de la grille « Qui peut faire quoi » (ADR 0075)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str
+    label: str
+    permissions: list[str]
+    #: Vraie pour « Gérer les personnes » : réservée au gérant.
+    locked: bool
+
+
+class RoleAbilities(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role_id: UUID
+    name: str
+    label: str
+    #: Vraie pour le gérant : il garde tout, sa colonne ne se modifie pas.
+    locked: bool
+    #: Clés des lignes cochées : le rôle porte toutes leurs permissions.
+    abilities: list[str]
+
+
+class AbilityGrid(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    abilities: list[AbilityRead]
+    roles: list[RoleAbilities]
+
+
+class AbilitiesUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    #: Clés des lignes cochées, sans doublon ; les autres sont décochées.
+    abilities: list[str] = Field(max_length=20)

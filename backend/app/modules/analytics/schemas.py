@@ -620,3 +620,27 @@ class NextWeekForecast(BaseModel):
     items: list[NextWeekRow]
     #: Articles qui n'ont pas encore assez d'historique pour une prévision.
     insufficient_count: int
+
+
+class HistoryLine(BaseModel):
+    """Une ligne de l'Historique des réglages (écran 24d, ADR 0075)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    occurred_at: datetime
+    actor_user_id: UUID | None
+    actor_name: str | None
+    #: « FD » pour Fatou Diop, « CG » pour une action de CoGes lui-même.
+    initials: str
+    #: « Fatou a changé le prix de Riz brisé 25 kg : 15 000 FCFA → 15 500 FCFA ».
+    sentence: str
+
+
+class HistoryPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[HistoryLine]
+    page: int
+    page_size: int
+    total: int

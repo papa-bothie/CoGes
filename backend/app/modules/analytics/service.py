@@ -27,6 +27,7 @@ from app.core.money import amount as to_amount
 from app.core.money import quantity as to_quantity
 from app.core.money import serialize
 from app.core.tenancy import TenantContext
+from app.modules.analytics import history as history_sentences
 from app.modules.analytics.repository import DailySalesFactRepository
 from app.modules.analytics.schemas import (
     DAILY_SERIES_DAYS,
@@ -50,6 +51,8 @@ from app.modules.analytics.schemas import (
     ExpenseCategoryTotal,
     ExpensesSummary,
     FinanceOverview,
+    HistoryLine,
+    HistoryPage,
     MoneyBucket,
     MoneyOverview,
     MoneyPeriod,
@@ -74,6 +77,7 @@ from app.modules.analytics.schemas import (
     TimeseriesMeasure,
     TimeseriesPoint,
 )
+from app.modules.audit import service as audit_service
 from app.modules.companies import service as companies_service
 from app.modules.customers import service as customers_service
 from app.modules.expenses import service as expenses_service
@@ -1407,4 +1411,48 @@ def next_week(session: Session, ctx: TenantContext) -> NextWeekForecast:
         model_version=first.model_version,
         items=items,
         insufficient_count=summary.insufficient_data_products,
+    )
+
+
+def history(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    page: int,
+    page_size: int,
+    actor_user_id: UUID | None = None,
+    period_from: datetime | None = None,
+    period_to: datetime | None = None,
+) -> HistoryPage:
+    """Historique des réglages (écran 24d, ADR 0075) : le journal en phrases.
+
+    Le geste courant (ventes confirmées, connexions…) est écarté par la façade Audit ;
+    les noms sont lus par lots aux façades qui les possèdent.
+    """
+    logs, total = audit_service.list_logs(
+        session,
+        ctx,
+        page=page,
+        page_size=page_size,
+        actor_user_id=actor_user_id,
+        period_from=period_from,
+        period_to=period_to,
+        notable_only=True,
+    )
+    phrases = history_sentences.sentences(session, ctx, logs)
+    return HistoryPage(
+        items=[
+            HistoryLine(
+                id=log.id,
+                occurred_at=log.occurred_at,
+                actor_user_id=log.actor_user_id,
+                actor_name=log.actor_name,
+                initials=history_sentences.initials(log.actor_name),
+                sentence=phrase,
+            )
+            for log, phrase in zip(logs, phrases, strict=True)
+        ],
+        page=page,
+        page_size=page_size,
+        total=total,
     )

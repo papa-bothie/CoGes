@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -85,6 +85,9 @@ class ExportRead(BaseModel):
     kind: str
     format: ExportFormat
     status: ExportStatus
+    #: Période demandée (`date_from`, `date_to`) : l'écran 24e nomme le fichier avant
+    #: qu'il soit prêt (« Ventes de septembre 2026 »).
+    params: dict[str, Any]
     filename: str | None
     row_count: int | None = Field(default=None, ge=0)
     error: str | None

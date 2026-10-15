@@ -25,6 +25,8 @@ class User(IdentifiedTenantBase):
     #: Vrai tant qu'un mot de passe donné par quelqu'un d'autre n'est pas remplacé.
     must_change_password: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Moment où l'accès a été coupé, `None` tant qu'il est ouvert (révision 0020).
+    deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )

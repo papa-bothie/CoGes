@@ -328,5 +328,6 @@ def current_identity(session: Session, ctx: TenantContext) -> MeResponse:
             currency=company.currency,
             timezone=company.timezone,
             tax_enabled=companies_service.is_tax_enabled(session, ctx),
+            receipt_format=companies_service.receipt_format(session, ctx),
         ),
     )

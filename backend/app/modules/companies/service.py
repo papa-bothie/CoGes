@@ -6,7 +6,7 @@ Les autres modules passent **par ici**, jamais par le repository ni les modèles
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,7 @@ from app.modules.companies.repository import CompanyRepository
 from app.modules.companies.schemas import (
     DEFAULT_REORDER_POINT,
     DEFAULT_TAX_RATE,
+    RECEIPT_FORMAT,
     SHOP_FIELDS,
     CompanyUpdate,
 )
@@ -49,6 +50,12 @@ def create_company(
     session.add(company)
     session.flush()
     return company
+
+
+def receipt_format(session: Session, ctx: TenantContext) -> Literal["ticket", "a4"]:
+    """Reçu ouvert par défaut après une vente (écran 24, ADR 0075) ; absent = petit ticket."""
+    value = get_current_company(session, ctx).settings.get(RECEIPT_FORMAT)
+    return "a4" if value == "a4" else "ticket"
 
 
 def is_tax_enabled(session: Session, ctx: TenantContext) -> bool:
