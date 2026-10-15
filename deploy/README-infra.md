@@ -163,6 +163,9 @@ CREATE ROLE coges_ops NOLOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE;
 GRANT coges_ops TO coges_owner WITH INHERIT FALSE;
 ```
 
+**Préproduction : fait le 2026-10-15** (projet `CoGes-preprod`, base alors en 0020).
+Production : à faire à son ouverture.
+
 En local, sans recréer le volume : même commande par
 `docker compose exec -T postgres psql -U postgres`. Un cluster neuf l'a déjà par
 `01-roles.sql`.
