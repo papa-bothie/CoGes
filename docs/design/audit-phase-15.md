@@ -105,3 +105,14 @@ tous listés et datés dans `docs/design/maquette-v2/ecarts.md`.
    parcours vente, encaissement et droits.
 3. **[P3] `/impeccable adapt`** : boutons d'icône à 36 px, grille des droits en cartes sous 640 px.
 4. **`/impeccable polish`** en dernier, après ces corrections.
+
+## Suite donnée (15/10/2026, branche `fix/audit-phase-15`)
+
+| Constat | État |
+|---|---|
+| [P2] Pages secondaires dans le style de la phase 13 | ✅ Les trois pages sont repassées dans le monde de la maquette v2 : « Toutes les dettes », « Toutes les dépenses » et « Tous les mouvements ». Elles ont des puces de filtre (`components/kit/filter-chips.tsx`), des lignes `ListRow` avec pastille d'état, des boutons de 48 px et un « Voir plus ». `DataTable` n'a plus d'utilisateur : il est supprimé |
+| [P2] Aucun passage manuel au lecteur d'écran ni au zoom | 🟨 Le zoom est couvert par un test : **réagencement à 320 px** (WCAG 1.4.10, soit 400 % d'un écran de 1280 px) sur les 33 écrans de référence (`e2e/reflow.spec.ts`). Il a trouvé 9 écrans qui débordaient, tous corrigés : blocs flexibles sans `min-w-0`, colonne minimale de 320 px, textes insécables (`numeric`), fin de ligne qui ne passait pas à la ligne. **Le passage au lecteur d'écran (NVDA, VoiceOver) reste à faire par une personne** : un outil ne remplace pas l'écoute |
+| [P3] Boutons d'icône de 28 px à la souris | ✅ Tailles `xs`, `sm`, `icon-xs` et `icon-sm` portées à 36 px (`components/ui/button.tsx`), 48 px au toucher comme avant |
+| [P3] Grille des droits qui défile sur téléphone | ✅ Une carte par rôle sous 640 px, le tableau au-dessus. Les cases sont un composant stable : le focus clavier reste en place après un clic |
+
+Les quatre rubriques des Réglages rejoignent les écrans de référence : axe en clair et en sombre, réagencement.
