@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 
 import { ErrorState } from "@/components/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCompanyLocale } from "@/hooks/use-me";
+import { useCompanyLocale, useMe } from "@/hooks/use-me";
 import { api, unwrap } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
@@ -52,8 +52,12 @@ export function ReceiptView({ saleId }: { saleId: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const format: Format = params.get("format") === "a4" ? "a4" : "ticket";
   const { timeZone } = useCompanyLocale();
+  const { data: me } = useMe();
+  // Sans choix dans l'adresse, le reçu réglé dans « Ma boutique » (écran 24, ADR 0075).
+  const fallback: Format = me?.company.receipt_format ?? "ticket";
+  const requested = params.get("format");
+  const format: Format = requested === "a4" || requested === "ticket" ? requested : fallback;
 
   const receipt = useQuery({
     queryKey: queryKeys.sales.receipt(saleId),
@@ -67,7 +71,7 @@ export function ReceiptView({ saleId }: { saleId: string }) {
   });
 
   const setFormat = (next: Format) =>
-    router.replace(next === "ticket" ? pathname : `${pathname}?format=a4`, { scroll: false });
+    router.replace(next === fallback ? pathname : `${pathname}?format=${next}`, { scroll: false });
 
   const data = receipt.data;
   const firstPayment = data?.payments.find(

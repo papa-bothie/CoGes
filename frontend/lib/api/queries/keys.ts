@@ -88,12 +88,16 @@ export const queryKeys = {
   },
   company: ["company"] as const,
   users: { all: ["users"] as const },
-  roles: { all: ["roles"] as const, detail: (id: string) => ["roles", "detail", id] as const },
-  permissions: ["permissions"] as const,
+  roles: {
+    all: ["roles"] as const,
+    detail: (id: string) => ["roles", "detail", id] as const,
+    abilities: ["roles", "abilities"] as const,
+  },
   audit: {
     all: ["audit"] as const,
-    list: (params: Record<string, unknown>) => ["audit", "list", params] as const,
+    history: (params: Record<string, unknown>) => ["audit", "history", params] as const,
   },
+  exports: ["exports"] as const,
   notifications: {
     all: ["notifications"] as const,
     list: (params: Record<string, unknown>) => ["notifications", "list", params] as const,

@@ -313,6 +313,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/roles/abilities": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read Abilities
+     * @description Grille « Qui peut faire quoi » (ADR 0075) : 8 lignes, gérant, vendeur, comptable.
+     */
+    get: operations["read_abilities_api_v1_roles_abilities_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/roles/{role_id}/abilities": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Update Abilities
+     * @description Coche ces lignes pour un rôle ; ses autres droits restent. Gérant refusé (409).
+     */
+    put: operations["update_abilities_api_v1_roles__role_id__abilities_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/roles/{role_id}": {
     parameters: {
       query?: never;
@@ -1635,6 +1675,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/analytics/history": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * History
+     * @description Historique de ce qui a été fait (écran 24d) : une phrase par geste qui compte.
+     *
+     *     `audit:read`, comme le journal qu'il raconte (gérant et comptable).
+     */
+    get: operations["history_api_v1_analytics_history_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/notifications": {
     parameters: {
       query?: never;
@@ -2021,6 +2083,32 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** AbilitiesUpdate */
+    AbilitiesUpdate: {
+      /** Abilities */
+      abilities: string[];
+    };
+    /** AbilityGrid */
+    AbilityGrid: {
+      /** Abilities */
+      abilities: components["schemas"]["AbilityRead"][];
+      /** Roles */
+      roles: components["schemas"]["RoleAbilities"][];
+    };
+    /**
+     * AbilityRead
+     * @description Une ligne de la grille « Qui peut faire quoi » (ADR 0075).
+     */
+    AbilityRead: {
+      /** Key */
+      key: string;
+      /** Label */
+      label: string;
+      /** Permissions */
+      permissions: string[];
+      /** Locked */
+      locked: boolean;
+    };
     /**
      * ActiveAlert
      * @description Une alerte non lue de l'utilisateur courant.
@@ -3000,6 +3088,10 @@ export interface components {
       kind: string;
       format: components["schemas"]["ExportFormat"];
       status: components["schemas"]["ExportStatus"];
+      /** Params */
+      params: {
+        [key: string]: unknown;
+      };
       /** Filename */
       filename: string | null;
       /** Row Count */
@@ -3139,6 +3231,38 @@ export interface components {
     HTTPValidationError: {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
+    };
+    /**
+     * HistoryLine
+     * @description Une ligne de l'Historique des réglages (écran 24d, ADR 0075).
+     */
+    HistoryLine: {
+      /** Id */
+      id: number;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at: string;
+      /** Actor User Id */
+      actor_user_id: string | null;
+      /** Actor Name */
+      actor_name: string | null;
+      /** Initials */
+      initials: string;
+      /** Sentence */
+      sentence: string;
+    };
+    /** HistoryPage */
+    HistoryPage: {
+      /** Items */
+      items: components["schemas"]["HistoryLine"][];
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Total */
+      total: number;
     };
     /** @enum {string} */
     ImportKind: "categories" | "products" | "customers" | "suppliers";
@@ -3339,6 +3463,11 @@ export interface components {
       timezone: string;
       /** Tax Enabled */
       tax_enabled: boolean;
+      /**
+       * Receipt Format
+       * @enum {string}
+       */
+      receipt_format: "ticket" | "a4";
     };
     /**
      * MeResponse
@@ -4452,6 +4581,22 @@ export interface components {
       day: string;
       net_revenue: components["schemas"]["Amount-Output"];
     };
+    /** RoleAbilities */
+    RoleAbilities: {
+      /**
+       * Role Id
+       * Format: uuid
+       */
+      role_id: string;
+      /** Name */
+      name: string;
+      /** Label */
+      label: string;
+      /** Locked */
+      locked: boolean;
+      /** Abilities */
+      abilities: string[];
+    };
     /** RoleAssignment */
     RoleAssignment: {
       /**
@@ -5219,6 +5364,8 @@ export interface components {
       must_change_password: boolean;
       /** Last Login At */
       last_login_at: string | null;
+      /** Deactivated At */
+      deactivated_at: string | null;
       /**
        * Created At
        * Format: date-time
@@ -5265,6 +5412,8 @@ export interface components {
       must_change_password: boolean;
       /** Last Login At */
       last_login_at: string | null;
+      /** Deactivated At */
+      deactivated_at: string | null;
       /**
        * Created At
        * Format: date-time
@@ -5885,6 +6034,61 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["RoleDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  read_abilities_api_v1_roles_abilities_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AbilityGrid"];
+        };
+      };
+    };
+  };
+  update_abilities_api_v1_roles__role_id__abilities_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        role_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AbilitiesUpdate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RoleAbilities"];
         };
       };
       /** @description Validation Error */
@@ -8596,6 +8800,41 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["PersonPaymentPage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  history_api_v1_analytics_history_get: {
+    parameters: {
+      query?: {
+        page?: number;
+        page_size?: number;
+        actor_user_id?: string | null;
+        from?: string | null;
+        to?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HistoryPage"];
         };
       };
       /** @description Validation Error */
