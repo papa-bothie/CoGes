@@ -1,33 +1,28 @@
 "use client";
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { DataTable, type Column } from "@/components/data-table";
 import { ErrorState } from "@/components/error-state";
-import { Money } from "@/components/money";
+import { Chip } from "@/components/kit/chip";
+import { FilterChips, MoreButton, OUTLINE_ACTION } from "@/components/kit/filter-chips";
+import { Avatar, ListRow } from "@/components/kit/list-row";
+import { StatusPill } from "@/components/kit/status-pill";
 import { ReasonDialog } from "@/components/reason-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { Can, usePermission } from "@/hooks/use-permission";
 import { useTableParams } from "@/hooks/use-table-params";
 import { api, unwrap } from "@/lib/api/client";
 import { MONEY_KEYS, queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
-import { formatDate } from "@/lib/format";
+import { formatAmount, formatDate } from "@/lib/format";
 import { labels } from "@/lib/labels";
 import { todayIn } from "@/lib/period";
+import { cn } from "@/lib/utils";
 
 import { SettleDialog } from "./settle-dialog";
 import { SupplierDebtDialog } from "./supplier-debt-dialog";
@@ -36,23 +31,17 @@ type Debt = Schemas["DebtDetail"];
 type DebtStatus = Schemas["DebtStatus"];
 type PartyType = Schemas["PartyType"];
 
-const ALL = "all";
 const STATUSES: readonly DebtStatus[] = ["open", "partially_paid", "paid", "written_off"];
-const VARIANTS: Record<DebtStatus, "warning" | "success" | "neutral"> = {
-  open: "warning",
-  partially_paid: "warning",
-  paid: "success",
-  written_off: "neutral",
-};
+const t = labels.finance.debts;
 
 function isOpen(debt: Debt) {
   return debt.status === "open" || debt.status === "partially_paid";
 }
 
 /**
- * Créances clients et dettes fournisseurs (`GET /debts`), échéance la plus proche en tête.
- * Une dette ouverte dont l'échéance est passée est surlignée ; « Régler » répartit un
- * versement sur les dettes du même tiers ; « Abandonner » est réservé au gérant.
+ * « Toutes les dettes » (ADR 0073), dans le style de la maquette v2 : puces de filtre, une
+ * ligne par dette avec son reste en pastille, « Régler » et « Abandonner » (gérant) en
+ * boutons de 48 px. Une dette ouverte dont l'échéance est passée le dit en rouge.
  */
 export function DebtsTab() {
   const queryClient = useQueryClient();
@@ -63,23 +52,24 @@ export function DebtsTab() {
   const [settling, setSettling] = useState<Debt | null>(null);
   const [writingOff, setWritingOff] = useState<Debt | null>(null);
   const [creating, setCreating] = useState(false);
-  const t = labels.finance.debts;
   const today = todayIn(timeZone);
 
   const party = table.get("party") as PartyType | null;
   const status = table.get("status") as DebtStatus | null;
   const overdue = table.get("overdue") === "1";
-  const params = {
-    page: table.page,
+  const filters = {
     page_size: table.pageSize,
     party_type: party ?? undefined,
     status: status ?? undefined,
     overdue: overdue || undefined,
   };
-  const query = useQuery({
-    queryKey: queryKeys.debts.list(params),
-    queryFn: () => unwrap(api.GET("/api/v1/debts", { params: { query: params } })),
-    placeholderData: keepPreviousData,
+  const query = useInfiniteQuery({
+    queryKey: queryKeys.debts.list({ ...filters, infinite: true }),
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      unwrap(api.GET("/api/v1/debts", { params: { query: { ...filters, page: pageParam } } })),
+    getNextPageParam: (last) =>
+      last.page * last.page_size < last.total ? last.page + 1 : undefined,
   });
 
   const writeOff = useMutation({
@@ -97,176 +87,152 @@ export function DebtsTab() {
     },
   });
 
+  const debts = query.data?.pages.flatMap((page) => page.items) ?? [];
+  const total = query.data?.pages[0]?.total;
   const isOverdue = (debt: Debt) => isOpen(debt) && debt.due_date !== null && debt.due_date < today;
-
-  const columns: Column<Debt>[] = [
-    {
-      id: "party",
-      header: t.columns.party,
-      cell: (debt) => {
-        const href = debt.customer_id
-          ? `/customers/${debt.customer_id}`
-          : debt.supplier_id
-            ? `/suppliers/${debt.supplier_id}`
-            : null;
-        const name = debt.party_name ?? t.deletedParty;
-        return href && debt.party_name ? (
-          <Link
-            href={href}
-            className="inline-flex min-h-11 items-center font-medium hover:underline pointer-coarse:min-h-12"
-          >
-            {name}
-          </Link>
-        ) : (
-          <span className="text-muted-foreground">{name}</span>
-        );
-      },
-    },
-    { id: "type", header: t.columns.type, cell: (debt) => t.partyType[debt.party_type] },
-    {
-      id: "created",
-      header: t.columns.created,
-      cell: (debt) =>
-        debt.sale_id ? (
-          <Link
-            href={`/sales/${debt.sale_id}`}
-            className="inline-flex min-h-11 items-center numeric hover:underline pointer-coarse:min-h-12"
-          >
-            {formatDate(debt.created_at, timeZone)}
-          </Link>
-        ) : (
-          <span className="numeric">{formatDate(debt.created_at, timeZone)}</span>
-        ),
-    },
-    {
-      id: "principal",
-      header: t.columns.principal,
-      numeric: true,
-      cell: (debt) => <Money value={debt.principal} currency={currency} />,
-    },
-    {
-      id: "paid",
-      header: t.columns.paid,
-      numeric: true,
-      cell: (debt) => <Money value={debt.amount_paid} currency={currency} />,
-    },
-    {
-      id: "balance",
-      header: t.columns.balance,
-      numeric: true,
-      cell: (debt) => <Money value={debt.balance} currency={currency} className="font-medium" />,
-    },
-    {
-      id: "due",
-      header: t.columns.due,
-      cell: (debt) => (
-        <span className="flex items-center gap-2 whitespace-nowrap">
-          <span className="numeric">{formatDate(debt.due_date, timeZone)}</span>
-          {isOverdue(debt) && <Badge variant="danger">{t.overdue}</Badge>}
-        </span>
-      ),
-    },
-    {
-      id: "status",
-      header: t.columns.status,
-      cell: (debt) => (
-        <Badge variant={VARIANTS[debt.status]}>{labels.debtStatus[debt.status]}</Badge>
-      ),
-    },
-    {
-      id: "actions",
-      header: t.columns.actions,
-      className: "text-right",
-      cell: (debt) =>
-        isOpen(debt) ? (
-          <div className="flex justify-end gap-1">
-            {canSettle && (
-              <Button variant="outline" size="sm" onClick={() => setSettling(debt)}>
-                {t.settle}
-              </Button>
-            )}
-            {canWriteOff && debt.party_type === "customer" && (
-              <Button variant="ghost" size="sm" onClick={() => setWritingOff(debt)}>
-                {t.writeOff}
-              </Button>
-            )}
-          </div>
-        ) : null,
-    },
-  ];
 
   return (
     <>
-      {query.isError ? (
-        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
-      ) : (
-        <DataTable
-          caption={labels.finance.tabs.debts}
-          columns={columns}
-          rows={query.data?.items}
-          rowKey={(debt) => debt.id}
-          total={query.data?.total ?? 0}
-          page={table.page}
-          pageSize={table.pageSize}
-          onPageChange={table.setPage}
-          loading={query.isFetching}
-          rowClassName={(debt) => (isOverdue(debt) ? "bg-destructive/5" : undefined)}
-          empty={t.empty}
-          filters={
-            <div className="flex w-full flex-wrap items-center gap-2">
-              <Select
-                value={party ?? ALL}
-                onValueChange={(value) => table.setFilter("party", value === ALL ? null : value)}
-              >
-                <SelectTrigger aria-label={t.partyFilter} className="w-52">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>{t.allParties}</SelectItem>
-                  <SelectItem value="customer">{t.party.customer}</SelectItem>
-                  <SelectItem value="supplier">{t.party.supplier}</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={status ?? ALL}
-                onValueChange={(value) => table.setFilter("status", value === ALL ? null : value)}
-              >
-                <SelectTrigger aria-label={t.statusFilter} className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL}>{t.allStatuses}</SelectItem>
-                  {STATUSES.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {labels.debtStatus[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <label className="flex min-h-11 items-center gap-2 text-sm pointer-coarse:min-h-12">
-                <input
-                  type="checkbox"
-                  className="size-4 accent-primary"
-                  checked={overdue}
-                  onChange={(event) =>
-                    table.setFilter("overdue", event.target.checked ? "1" : null)
-                  }
-                />
-                {t.overdueOnly}
-              </label>
-              <span className="ml-auto text-sm text-muted-foreground">
-                {query.data ? t.count(query.data.total) : null}
-              </span>
-              <Can permission="debts:create">
-                <Button variant="outline" onClick={() => setCreating(true)}>
-                  <Plus aria-hidden />
-                  {t.add}
-                </Button>
-              </Can>
-            </div>
-          }
+      <div className="flex flex-col gap-3">
+        <FilterChips
+          label={t.partyFilter}
+          value={party}
+          allLabel={t.allParties}
+          options={[
+            ["customer", t.party.customer],
+            ["supplier", t.party.supplier],
+          ]}
+          onChange={(next) => table.setFilter("party", next)}
         />
+        <FilterChips
+          label={t.statusFilter}
+          value={status}
+          allLabel={t.allStatuses}
+          options={STATUSES.map((value) => [value, labels.debtStatus[value]] as const)}
+          onChange={(next) => table.setFilter("status", next)}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Chip
+            selected={overdue}
+            rubrique="depenses"
+            onClick={() => table.setFilter("overdue", overdue ? null : "1")}
+          >
+            {t.overdueOnly}
+          </Chip>
+          <span className="ml-auto text-muted-foreground">
+            {total !== undefined ? t.count(total) : null}
+          </span>
+          <Can permission="debts:create">
+            <button type="button" className={OUTLINE_ACTION} onClick={() => setCreating(true)}>
+              <Plus className="size-5" aria-hidden />
+              {t.add}
+            </button>
+          </Can>
+        </div>
+      </div>
+
+      <section className="rounded-carte border border-border bg-card px-carte pb-2">
+        {query.isError ? (
+          <div className="py-carte">
+            <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+          </div>
+        ) : !query.data ? (
+          <Skeleton className="my-carte h-64 w-full rounded-champ" />
+        ) : debts.length === 0 ? (
+          <p className="py-carte text-muted-foreground">{t.empty}</p>
+        ) : (
+          <ul aria-label={labels.moneyScreens.allDebts} className="[&>li:first-child>*]:border-t-0">
+            {debts.map((debt) => {
+              const name = debt.party_name ?? t.deletedParty;
+              const href = debt.customer_id
+                ? `/customers/${debt.customer_id}`
+                : debt.supplier_id
+                  ? `/suppliers/${debt.supplier_id}`
+                  : null;
+              const late = isOverdue(debt);
+              const pill =
+                debt.status === "paid" ? (
+                  <StatusPill status="paid" />
+                ) : debt.status === "written_off" ? (
+                  <StatusPill status="writtenOff" />
+                ) : (
+                  <StatusPill status="remaining" amount={formatAmount(debt.balance, currency)} />
+                );
+              return (
+                <li key={debt.id}>
+                  <ListRow
+                    wrap
+                    className="flex-wrap"
+                    leading={
+                      <Avatar
+                        name={debt.party_name ?? null}
+                        rubrique={debt.party_type === "customer" ? "clients" : "argent"}
+                      />
+                    }
+                    title={
+                      href && debt.party_name ? (
+                        <Link
+                          href={href}
+                          className="inline-flex min-h-11 items-center hover:underline pointer-coarse:min-h-12"
+                        >
+                          {name}
+                        </Link>
+                      ) : (
+                        name
+                      )
+                    }
+                    subtitle={
+                      <>
+                        {t.partyType[debt.party_type]} {formatAmount(debt.principal, currency)} ·{" "}
+                        {t.columns.created.toLowerCase()}{" "}
+                        <span className="numeric">{formatDate(debt.created_at, timeZone)}</span>
+                        {debt.due_date && (
+                          <>
+                            {" · "}
+                            <span
+                              className={cn("tabular-nums", late && "font-bold text-destructive")}
+                            >
+                              {t.columns.due.toLowerCase()} {formatDate(debt.due_date, timeZone)}
+                              {late && ` (${t.overdue.toLowerCase()})`}
+                            </span>
+                          </>
+                        )}
+                      </>
+                    }
+                    trailing={
+                      <>
+                        {pill}
+                        {isOpen(debt) && canSettle && (
+                          <button
+                            type="button"
+                            className={OUTLINE_ACTION}
+                            onClick={() => setSettling(debt)}
+                          >
+                            {t.settle}
+                          </button>
+                        )}
+                        {isOpen(debt) && canWriteOff && debt.party_type === "customer" && (
+                          <button
+                            type="button"
+                            className={cn(OUTLINE_ACTION, "border-transparent bg-transparent")}
+                            onClick={() => setWritingOff(debt)}
+                          >
+                            {t.writeOff}
+                          </button>
+                        )}
+                      </>
+                    }
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+      {query.hasNextPage && (
+        <MoreButton pending={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()} />
       )}
+
       {settling && (
         <SettleDialog key={settling.id} debt={settling} onClose={() => setSettling(null)} />
       )}

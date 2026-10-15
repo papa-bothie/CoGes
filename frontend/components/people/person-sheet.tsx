@@ -53,7 +53,7 @@ export function PersonHeader({
       </span>
       <div className="min-w-0 flex-[1_1_240px]">
         <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{name}</h1>
-        <p className="text-lg numeric text-muted-foreground">{subtitle}</p>
+        <p className="text-lg text-muted-foreground tabular-nums">{subtitle}</p>
       </div>
       <div className="flex flex-wrap gap-2">
         {phone && (
@@ -98,7 +98,8 @@ export function SheetTile({
       <span className="font-semibold">{label}</span>
       <span
         className={cn(
-          "font-extrabold numeric",
+          // Pas de `numeric` (insécable) : une date en toutes lettres passe à la ligne à 320 px.
+          "font-extrabold break-words tabular-nums",
           small ? "text-[22px] leading-snug" : "text-[34px] leading-tight",
           tone ? tone.ink : "text-foreground",
         )}

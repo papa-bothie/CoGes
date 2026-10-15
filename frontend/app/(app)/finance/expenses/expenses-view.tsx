@@ -125,7 +125,7 @@ export function ExpensesView() {
       </div>
 
       <div className="flex flex-wrap items-start gap-5">
-        <KitCard title={t.newExpense} className="flex flex-[3_1_460px] flex-col">
+        <KitCard title={t.newExpense} className="flex min-w-0 flex-[3_1_460px] flex-col">
           <form
             noValidate
             className="flex flex-col gap-4"
@@ -233,7 +233,7 @@ export function ExpensesView() {
           </div>
         </KitCard>
 
-        <KitCard title={t.byType} className="flex flex-[2_1_340px] flex-col">
+        <KitCard title={t.byType} className="flex min-w-0 flex-[2_1_340px] flex-col">
           {summary.isError ? (
             <ErrorState error={summary.error} onRetry={() => void summary.refetch()} />
           ) : !summary.data ? (

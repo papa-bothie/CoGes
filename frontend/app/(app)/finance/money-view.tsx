@@ -463,7 +463,7 @@ function OwedCard({
   const tone = RUBRIQUE_CLASSES[rubrique];
   return (
     <KitCard
-      className="flex flex-[1_1_380px] flex-col"
+      className="flex min-w-0 flex-[1_1_380px] flex-col"
       title={title}
       action={
         <span className={cn("text-[22px] font-extrabold numeric", tone.ink)}>

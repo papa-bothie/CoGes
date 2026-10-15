@@ -1894,6 +1894,7 @@ export const labels = {
         `${count} alerte${count > 1 ? "s" : ""} non lue${count > 1 ? "s" : ""}`,
     },
     theme: { toLight: "Passer en mode clair", toDark: "Passer en mode sombre" },
+    more: "Voir plus",
     chartToday: "Aujourd'hui",
     showcase: {
       title: "Composants de la maquette",
