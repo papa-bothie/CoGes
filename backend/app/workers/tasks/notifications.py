@@ -28,6 +28,7 @@ from app.modules.notifications.schemas import NotificationType
 from app.modules.products import service as products_service
 from app.workers.beat import SCAN_DUE_DEBTS
 from app.workers.celery_app import celery_app
+from app.workers.jobs import tracked_job
 from app.workers.subscriptions import ON_SALE_CANCELLED, ON_STOCK_UPDATED
 from app.workers.tenants import each_company
 
@@ -128,6 +129,7 @@ def on_sale_cancelled(**message: Any) -> str:
 
 
 @celery_app.task(name="notifications.scan_due_debts")
+@tracked_job("notifications.scan_due_debts", ping_as=SCAN_DUE_DEBTS)
 def scan_due_debts(company_id: str, today: str | None = None) -> int:
     """Alerte sur les créances et dettes arrivées à échéance dans une entreprise.
 
@@ -184,6 +186,7 @@ def scan_due_debts(company_id: str, today: str | None = None) -> int:
 
 
 @celery_app.task(name=SCAN_DUE_DEBTS)
+@tracked_job(SCAN_DUE_DEBTS)
 def scan_due_debts_all() -> int:
     """Éventail : une sous-tâche de dettes échues par entreprise."""
     count = 0

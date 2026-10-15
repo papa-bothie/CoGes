@@ -25,7 +25,9 @@ from app.core.events.inbox import Event, handle
 from app.core.tenancy import TenantContext, tenant_transaction
 from app.modules.analytics import service as analytics_service
 from app.modules.dashboard import service as dashboard_service
+from app.workers.beat import REBUILD_RECENT_FACTS
 from app.workers.celery_app import celery_app
+from app.workers.jobs import tracked_job
 from app.workers.subscriptions import INVALIDATE_DASHBOARD, REBUILD_SALE_DAY
 
 logger = logging.getLogger(__name__)
@@ -99,6 +101,7 @@ def invalidate_dashboard(**message: Any) -> str:
 
 
 @celery_app.task(name="analytics.rebuild_recent_facts")
+@tracked_job("analytics.rebuild_recent_facts", ping_as=REBUILD_RECENT_FACTS)
 def rebuild_recent_facts(company_id: str, window_days: int) -> int:
     """Réécrit les `window_days` derniers jours d'une entreprise.
 

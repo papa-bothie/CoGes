@@ -33,6 +33,7 @@ from app.workers.beat import (
     RECONCILIATION_WINDOW_DAYS,
 )
 from app.workers.celery_app import celery_app
+from app.workers.jobs import tracked_job
 from app.workers.tasks.analytics import rebuild_recent_facts
 from app.workers.tenants import each_company
 
@@ -44,6 +45,9 @@ logger = logging.getLogger(__name__)
 #: arrondi, pas pour absorber une erreur de construction.
 REVENUE_TOLERANCE = Decimal("0.01")
 
+#: Mois de partitions d'audit garantis d'avance, en plus du mois courant (ADR 0077).
+PARTITION_MONTHS_AHEAD = 3
+
 _PURGE_IDEMPOTENCY_KEYS = text("SELECT purge_expired_idempotency_keys() AS purged")
 _ENSURE_PARTITION = text("SELECT ensure_audit_partition(CAST(:day AS date))")
 
@@ -52,6 +56,7 @@ _ENSURE_PARTITION = text("SELECT ensure_audit_partition(CAST(:day AS date))")
 
 
 @celery_app.task(name="reconcile.rebuild_stock")
+@tracked_job("reconcile.rebuild_stock", ping_as=REBUILD_STOCK)
 def rebuild_stock(company_id: str) -> int:
     """Rejoue le journal d'une entreprise et réaligne sa projection (§ 5.7).
 
@@ -74,6 +79,7 @@ def rebuild_stock(company_id: str) -> int:
 
 
 @celery_app.task(name=REBUILD_STOCK)
+@tracked_job(REBUILD_STOCK)
 def rebuild_stock_all() -> int:
     """Éventail nocturne du réalignement de stock."""
     return _fan_out(rebuild_stock.delay, job="rebuild_stock")
@@ -83,6 +89,7 @@ def rebuild_stock_all() -> int:
 
 
 @celery_app.task(name=REBUILD_RECENT_FACTS)
+@tracked_job(REBUILD_RECENT_FACTS)
 def rebuild_recent_facts_all() -> int:
     """Éventail nocturne du filet analytique, sur une fenêtre glissante."""
     count = 0
@@ -96,6 +103,7 @@ def rebuild_recent_facts_all() -> int:
 
 
 @celery_app.task(name="reconcile.check_revenue")
+@tracked_job("reconcile.check_revenue", ping_as=CHECK_REVENUE)
 def check_revenue(company_id: str, window_days: int = RECONCILIATION_WINDOW_DAYS) -> str:
     """Compare `daily_sales_facts` au calcul direct sur la fenêtre. C'est **T32**.
 
@@ -138,6 +146,7 @@ def check_revenue(company_id: str, window_days: int = RECONCILIATION_WINDOW_DAYS
 
 
 @celery_app.task(name=CHECK_REVENUE)
+@tracked_job(CHECK_REVENUE)
 def check_revenue_all() -> int:
     """Éventail hebdomadaire du contrôle T32."""
     return _fan_out(check_revenue.delay, job="check_revenue")
@@ -147,31 +156,38 @@ def check_revenue_all() -> int:
 
 
 @celery_app.task(name=ENSURE_PARTITIONS)
+@tracked_job(ENSURE_PARTITIONS)
 def ensure_audit_partitions() -> str:
-    """Crée la partition `audit_logs` du mois suivant.
+    """Garantit les partitions `audit_logs` du mois courant et des trois suivants.
 
     Le contexte tenant est posé sur l'entreprise nulle : la fonction est
     `SECURITY DEFINER` et les partitions ne sont pas tenant-scoped, mais toute
     transaction du projet passe par `tenant_transaction` — une seule voie, sans
     exception, est ce qui rend le § 12.1 point 1 vérifiable.
 
-    Sans elle, tout INSERT dans `audit_logs` échouerait — donc toute vente, tout
-    paiement, toute opération à audit critique. La partition `DEFAULT` posée en
-    phase 02 est le filet qui empêche une panne de batch de devenir une panne de
-    caisse (ADR 0008) ; cette tâche fait en sorte qu'il ne serve jamais.
+    Sans elles, tout INSERT dans `audit_logs` irait à la partition `DEFAULT` posée en
+    phase 02 — le filet qui empêche une panne de batch de devenir une panne de caisse
+    (ADR 0008). Trois mois d'avance laissent trois mois pour s'apercevoir que cette
+    tâche ne tourne plus (ADR 0077) ; `ensure_audit_partition` est idempotente, la
+    relancer ne crée rien de plus.
 
+    Renvoie le dernier mois garanti.
     """
-    today = datetime.now(UTC).date()
-    # Le premier jour du mois suivant, atteint en passant par la fin du mois courant.
-    next_month = (today.replace(day=1) + timedelta(days=32)).replace(day=1)
+    first = datetime.now(UTC).date().replace(day=1)
+    months = [first]
+    for _ in range(PARTITION_MONTHS_AHEAD):
+        # Le premier jour du mois suivant, atteint en passant par la fin du mois.
+        months.append((months[-1] + timedelta(days=32)).replace(day=1))
     ctx = TenantContext.bootstrap(UUID(int=0))
     with tenant_transaction(ctx) as session:
-        session.execute(_ENSURE_PARTITION, {"day": next_month})
-    logger.info("Partition d'audit garantie", extra={"month": next_month.isoformat()})
-    return next_month.isoformat()
+        for month in months:
+            session.execute(_ENSURE_PARTITION, {"day": month})
+    logger.info("Partitions d'audit garanties", extra={"until": months[-1].isoformat()})
+    return months[-1].isoformat()
 
 
 @celery_app.task(name=PURGE_IDEMPOTENCY)
+@tracked_job(PURGE_IDEMPOTENCY)
 def purge_idempotency_keys() -> int:
     """Supprime les clés d'idempotence expirées — la dette laissée par l'ADR 0027.
 

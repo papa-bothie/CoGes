@@ -23,3 +23,19 @@ def test_relay_starts_without_the_app_dsn(monkeypatch) -> None:  # type: ignore[
     assert settings.require_relay_url().startswith("postgresql+psycopg://coges_relay")
     with pytest.raises(RuntimeError, match="COGES_DATABASE_URL_APP est absent"):
         settings.require_app_url()
+
+
+def test_job_ping_urls_accept_json_or_nothing(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """`COGES_JOB_PING_URLS` vide ou absent : aucun ping ; une URL non HTTP est refusée."""
+    import pytest
+    from pydantic import ValidationError
+
+    from app.core.config import Settings
+
+    monkeypatch.setenv("COGES_JOB_PING_URLS", "")
+    assert Settings(_env_file=None).job_ping_urls == {}
+    monkeypatch.setenv("COGES_JOB_PING_URLS", '{"system.beat_tick": "https://hc-ping.com/x"}')
+    assert Settings(_env_file=None).job_ping_urls == {"system.beat_tick": "https://hc-ping.com/x"}
+    monkeypatch.setenv("COGES_JOB_PING_URLS", '{"system.beat_tick": "file:///etc/passwd"}')
+    with pytest.raises(ValidationError, match="HTTP"):
+        Settings(_env_file=None)

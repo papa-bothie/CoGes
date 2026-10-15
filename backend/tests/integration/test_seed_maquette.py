@@ -34,6 +34,11 @@ FUTURE_BY_DESIGN = {
     ("forecasts", "horizon_date"),
 }
 
+#: Journal d'exploitation à l'heure réelle (ADR 0077) : une tâche tracée appelée par le
+#: remplissage s'y inscrit au moment où elle tourne. L'heure figée ne vaut que pour les
+#: lectures métier ; une panne se date à l'horloge vraie.
+REAL_TIME_BY_DESIGN = {("job_runs", "started_at"), ("job_runs", "finished_at")}
+
 _DATE_COLUMNS = text(
     "SELECT c.table_name, c.column_name, c.data_type FROM information_schema.columns c"
     " JOIN pg_class t ON t.relname = c.table_name AND NOT t.relispartition"
@@ -75,7 +80,7 @@ def owner(owner_engine: Engine, maquette: UUID) -> Iterator[Connection]:
 def test_no_maquette_timestamp_is_after_the_frozen_moment(owner: Connection) -> None:
     late: list[str] = []
     for table, column, data_type in owner.execute(_DATE_COLUMNS):
-        if (table, column) in FUTURE_BY_DESIGN:
+        if (table, column) in FUTURE_BY_DESIGN | REAL_TIME_BY_DESIGN:
             continue
         limit = FROZEN_NOW.date() if data_type == "date" else FROZEN_NOW
         count = owner.execute(
