@@ -11,7 +11,10 @@ from app.core.deps import TenantSession, client_ip, require_permission
 from app.modules.rbac import service
 from app.modules.rbac.repository import PermissionCatalogue
 from app.modules.rbac.schemas import (
+    AbilitiesUpdate,
+    AbilityGrid,
     PermissionRead,
+    RoleAbilities,
     RoleCreate,
     RoleDetail,
     RolePage,
@@ -59,6 +62,27 @@ def create_role(
     role = service.create_role(tenant.session, tenant.ctx, payload, ip_address=client_ip(request))
     codes = service.role_permissions(tenant.session, tenant.ctx, role.id)
     return RoleDetail(**RoleRead.model_validate(role).model_dump(), permissions=codes)
+
+
+@router.get("/roles/abilities", response_model=AbilityGrid)
+def read_abilities(
+    tenant: Annotated[TenantSession, Depends(require_permission("roles:read"))],
+) -> AbilityGrid:
+    """Grille « Qui peut faire quoi » (ADR 0075) : 8 lignes, gérant, vendeur, comptable."""
+    return service.ability_grid(tenant.session, tenant.ctx)
+
+
+@router.put("/roles/{role_id}/abilities", response_model=RoleAbilities)
+def update_abilities(
+    role_id: UUID,
+    payload: AbilitiesUpdate,
+    request: Request,
+    tenant: Annotated[TenantSession, Depends(require_permission("roles:update"))],
+) -> RoleAbilities:
+    """Coche ces lignes pour un rôle ; ses autres droits restent. Gérant refusé (409)."""
+    return service.set_role_abilities(
+        tenant.session, tenant.ctx, role_id, payload.abilities, ip_address=client_ip(request)
+    )
 
 
 @router.get("/roles/{role_id}", response_model=RoleDetail)

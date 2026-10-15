@@ -55,10 +55,12 @@ from app.modules.expenses.schemas import (
 )
 from app.modules.finance import service as finance_service
 from app.modules.finance.schemas import AllocationInput, DebtCreate, PaymentCreate
+from app.modules.importexport import service as importexport_service
+from app.modules.importexport.schemas import SalesExportCreate
 from app.modules.inventory import service as inventory_service
 from app.modules.inventory.schemas import DeliveryCreate, DeliveryLineCreate, MovementCreate
 from app.modules.products import service as products_service
-from app.modules.products.schemas import ProductCreate
+from app.modules.products.schemas import ProductCreate, ProductPriceCreate
 from app.modules.rbac import service as rbac_service
 from app.modules.rbac.matrix import SALESPERSON
 from app.modules.sales import service as sales_service
@@ -106,6 +108,17 @@ DELIVERY_AT = datetime(2026, 10, 3, 11, 0, tzinfo=UTC)
 SENDIS_DEBT_AT = datetime(2026, 9, 18, 10, 0, tzinfo=UTC)
 #: Une vente annulée l'est quelques minutes après avoir été encaissée.
 CANCEL_DELAY = timedelta(minutes=3)
+#: Réglages (maquette 24 à 24e, ADR 0075) : l'accès d'Awa Ndiaye coupé le 30 septembre,
+#: Modou vu la veille à 19 h, le prix du riz passé de 15 000 à 15 500 F le 5 au matin,
+#: un sac de riz abîmé le 5 au soir, les ventes de septembre préparées le 1er octobre.
+ACCESS_CUT_AT = datetime(2026, 9, 30, 20, 41, tzinfo=UTC)
+SELLER_SEEN_AT = datetime(2026, 10, 5, 19, 0, tzinfo=UTC)
+PRICE_CHANGED_AT = datetime(2026, 10, 5, 9, 5, tzinfo=UTC)
+FIRST_PRICES = {"riz": 15000}
+CORRECTIONS = {"riz": (-1, "damaged", datetime(2026, 10, 5, 18, 20, tzinfo=UTC))}
+EXPORT_AT = datetime(2026, 10, 1, 8, 10, tzinfo=UTC)
+#: Le vendeur vend et encaisse les dettes (grille 24c) ; le reste reste au gérant.
+SELLER_ABILITIES = ["sell", "collect_debt"]
 
 
 @dataclass(frozen=True)
@@ -483,6 +496,8 @@ def _with_permissions(ctx: TenantContext, user_id: UUID) -> TenantContext:
 
 #: Coordonnées de la boutique, comme sur le reçu et la facture de la maquette (05, 05b).
 SHOP_DETAILS = CompanyUpdate(
+    # « Appliquer la TVA » désactivé (écran 24) : les articles du seed sont déjà à 0 %.
+    settings={"tax_enabled": False},
     address="Marché HLM 5, Dakar",
     phone="77 123 45 67",
     wave_number="77 123 45 67",
@@ -521,6 +536,8 @@ def _fill(manager: TenantContext, plan: list[PlannedSale], *, slug: str, passwor
             ),
         )
         users_service.update_user(session, manager, awa.id, UserUpdate(is_active=False))
+        if role_id is not None:
+            rbac_service.set_role_abilities(session, manager, role_id, SELLER_ABILITIES)
     shop = Shop(manager=manager, seller=_with_permissions(manager, modou.id))
 
     with tenant_transaction(manager) as session:
@@ -547,6 +564,8 @@ def _fill(manager: TenantContext, plan: list[PlannedSale], *, slug: str, passwor
     _history(shop, plan)
     _suppliers(shop)
     _expenses(shop)
+    _corrections(shop)
+    _sales_export(shop)
     _rebuild_facts(manager)
     print(f"  ventes         {shop.sales}")
     return shop
@@ -624,12 +643,13 @@ def _catalogue(shop: Shop, plan: list[PlannedSale]) -> None:
                     unit=article.unit,
                     category_id=categories[article.category],
                     reorder_point=Decimal(article.reorder),
-                    unit_price=Decimal(article.price),
+                    unit_price=Decimal(FIRST_PRICES.get(article.key, article.price)),
                     cost_price=Decimal(article.cost),
                 ),
             )
             shop.products[article.key] = product.id
-            opening = article.stock + sold[article.key] - delivery.get(article.key, 0)
+            corrected = CORRECTIONS[article.key][0] if article.key in CORRECTIONS else 0
+            opening = article.stock + sold[article.key] - delivery.get(article.key, 0) - corrected
             if opening <= 0:
                 raise RuntimeError(f"Stock d'ouverture impossible pour {article.name} : {opening}")
             inventory_service.record_movement(
@@ -646,6 +666,20 @@ def _catalogue(shop: Shop, plan: list[PlannedSale]) -> None:
                 idempotency_key=uuid4(),
             )
     shop.received.update(delivery)
+    # Avant toute vente, qui se font toutes au prix d'aujourd'hui ; dans une autre
+    # transaction, sans quoi l'ancien intervalle s'ouvrirait et se fermerait au même
+    # `now()` (`product_prices_range`).
+    with tenant_transaction(ctx) as session:
+        for article in ARTICLES:
+            if article.key in FIRST_PRICES:
+                products_service.change_price(
+                    session,
+                    ctx,
+                    shop.products[article.key],
+                    ProductPriceCreate(
+                        unit_price=Decimal(article.price), cost_price=Decimal(article.cost)
+                    ),
+                )
 
 
 def _history(shop: Shop, plan: list[PlannedSale]) -> None:
@@ -690,12 +724,13 @@ def _history(shop: Shop, plan: list[PlannedSale]) -> None:
 
 
 def _settle(shop: Shop, sale_id: UUID, paid_at: datetime, amount: int, method: str) -> None:
-    with tenant_transaction(shop.manager) as session:
-        debt = finance_service.debt_for_sale(session, shop.manager, sale_id)
+    """Encaissement d'une dette au comptoir, par le vendeur (historique 24d)."""
+    with tenant_transaction(shop.seller) as session:
+        debt = finance_service.debt_for_sale(session, shop.seller, sale_id)
         assert debt is not None
         finance_service.record_payment(
             session,
-            shop.manager,
+            shop.seller,
             PaymentCreate(
                 direction="inflow",
                 method=method,
@@ -715,6 +750,35 @@ def _cancel(shop: Shop, sale_id: UUID) -> None:
             finance_service.cancel_payment(session, shop.manager, payment.id, reason=reason)
     with tenant_transaction(shop.manager) as session:
         sales_service.cancel_sale(session, shop.manager, sale_id, SaleCancel(reason=reason))
+
+
+def _corrections(shop: Shop) -> None:
+    """Corrections de stock à la main (historique 24d) : « −1 sac (abîmé) »."""
+    ctx = shop.manager
+    with tenant_transaction(ctx) as session:
+        for key, (delta, reason, moment) in CORRECTIONS.items():
+            movement = inventory_service.record_movement(
+                session,
+                ctx,
+                MovementCreate(
+                    product_id=shop.products[key], qty_delta=Decimal(delta), reason_code=reason
+                ),
+                idempotency_key=uuid4(),
+            )
+            shop.moments[movement.id] = moment
+
+
+def _sales_export(shop: Shop) -> None:
+    """Le fichier des ventes de septembre, prêt (écran 24e). Le worker le produirait ;
+    le seed appelle la même façade, sans file d'attente."""
+    ctx = shop.manager
+    with tenant_transaction(ctx) as session:
+        export = importexport_service.request_sales_export(
+            session,
+            ctx,
+            SalesExportCreate(date_from=date(2026, 9, 1), date_to=date(2026, 9, 30), format="xlsx"),
+        )
+        importexport_service.build_sales_export(session, ctx, export.id)
 
 
 def _delivery(shop: Shop) -> None:
@@ -845,6 +909,7 @@ RESTAMPED_TABLES = (
     "audit_logs",
     "business_events",
     "daily_sales_facts",
+    "export_files",
 )
 
 #: Dans l'ordre : chaque requête s'appuie sur les dates déjà recalées par les précédentes.
@@ -869,9 +934,24 @@ _RESTAMP_SQL = (
     """
     UPDATE products SET created_at = :opening, updated_at = :opening WHERE company_id = :co;
     """,
+    # Un prix changé (le riz) : l'ancien vaut de l'ouverture au 5 octobre, le nouveau
+    # ensuite. L'ancien d'abord, pour que les intervalles ne se chevauchent jamais.
     """
-    UPDATE product_prices SET valid_from = :opening, created_at = :opening
-    WHERE company_id = :co;
+    UPDATE product_prices SET valid_from = :opening, created_at = :opening,
+        valid_to = :price_changed
+    WHERE company_id = :co AND valid_to IS NOT NULL;
+    """,
+    """
+    UPDATE product_prices p SET valid_from = CASE
+            WHEN EXISTS (
+                SELECT 1 FROM product_prices o
+                WHERE o.company_id = :co AND o.product_id = p.product_id
+                    AND o.valid_to IS NOT NULL
+            ) THEN :price_changed
+            ELSE :opening
+        END,
+        created_at = :opening
+    WHERE p.company_id = :co AND p.valid_to IS NULL;
     """,
     """
     UPDATE customers SET created_at = :opening, updated_at = :opening WHERE company_id = :co;
@@ -1038,6 +1118,36 @@ _RESTAMP_SQL = (
     WHERE company_id = :co
         AND entity_table IN ('product_prices', 'users', 'user_roles', 'roles', 'companies');
     """,
+    # Réglages (24b et 24d) : l'accès d'Awa coupé, le prix du riz changé, le stock corrigé.
+    """
+    UPDATE users SET deactivated_at = :access_cut, updated_at = :access_cut
+    WHERE company_id = :co AND NOT is_active;
+    """,
+    """
+    UPDATE users SET last_login_at = :seller_seen
+    WHERE company_id = :co AND email LIKE 'vendeur@%';
+    """,
+    """
+    UPDATE audit_logs SET occurred_at = :access_cut
+    WHERE company_id = :co AND entity_table = 'users' AND action = 'update'
+        AND diff -> 'after' ->> 'is_active' = 'false';
+    """,
+    """
+    UPDATE audit_logs SET occurred_at = :price_changed
+    WHERE company_id = :co AND entity_table = 'product_prices' AND action = 'update';
+    """,
+    """
+    UPDATE audit_logs l SET occurred_at = m.occurred_at
+    FROM inventory_movements m
+    WHERE l.company_id = :co AND m.company_id = :co
+        AND l.entity_table = 'inventory_movements' AND m.id = l.entity_id;
+    """,
+    # Les ventes de septembre, prêtes depuis le 1er octobre et encore téléchargeables.
+    """
+    UPDATE export_files SET created_at = :export_at, updated_at = :export_at,
+        completed_at = :export_at, expires_at = :frozen + interval '1 day'
+    WHERE company_id = :co;
+    """,
     # Outbox : l'heure de l'événement qu'elle porte.
     """
     UPDATE business_events b SET occurred_at = s.sold_at
@@ -1198,6 +1308,10 @@ def restamp(engine: Engine, company_id: UUID, moments: dict[UUID, datetime]) -> 
         "opening": OPENING,
         "frozen": FROZEN_NOW,
         "delay": CANCEL_DELAY,
+        "access_cut": ACCESS_CUT_AT,
+        "seller_seen": SELLER_SEEN_AT,
+        "price_changed": PRICE_CHANGED_AT,
+        "export_at": EXPORT_AT,
         "moments": json.dumps({str(key): value.isoformat() for key, value in moments.items()}),
     }
     owner = sessionmaker(bind=engine, expire_on_commit=False, future=True)

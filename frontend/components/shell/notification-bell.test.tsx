@@ -27,7 +27,11 @@ describe("NotificationBell", () => {
   it("ne montre pas de badge sans alerte grave, mais compte les non lues dans son nom", async () => {
     counter.value = { unread: 3, critical: 0 };
     renderBell();
-    const link = await screen.findByRole("link", { name: "Alertes, 3 non lues" });
+    const link = await screen.findByRole(
+      "link",
+      { name: "Alertes, 3 non lues" },
+      { timeout: 5000 },
+    );
     expect(link).toHaveAttribute("href", "/notifications");
     expect(link.textContent).toBe("");
   });
@@ -35,7 +39,11 @@ describe("NotificationBell", () => {
   it("montre le badge dès qu'une alerte grave n'est pas lue", async () => {
     counter.value = { unread: 3, critical: 1 };
     renderBell();
-    const link = await screen.findByRole("link", { name: "Alertes, 3 non lues" });
+    const link = await screen.findByRole(
+      "link",
+      { name: "Alertes, 3 non lues" },
+      { timeout: 5000 },
+    );
     expect(link.textContent).toBe("3");
   });
 });

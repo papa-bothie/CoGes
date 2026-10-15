@@ -46,3 +46,40 @@ def test_audit_logs_never_cross_the_tenant(
         "/api/v1/audit-logs?page_size=100", headers=auth_headers(beta_token)
     ).json()
     assert supplier_id not in {item["entity_id"] for item in everything["items"]}
+
+
+def test_history_and_ability_grid_never_cross_the_tenant(
+    api_client: TestClient, alpha_token: str, beta_token: str
+) -> None:
+    """Historique et grille (ADR 0075) : composés par façades, donc sous le même filtre."""
+    name = f"Fournisseur {uuid4().hex[:8]}"
+    created = api_client.post(
+        "/api/v1/suppliers", headers=auth_headers(alpha_token), json={"name": name}
+    )
+    supplier_id = created.json()["id"]
+    api_client.delete(f"/api/v1/suppliers/{supplier_id}", headers=auth_headers(alpha_token))
+
+    own = api_client.get(
+        "/api/v1/analytics/history?page_size=50", headers=auth_headers(alpha_token)
+    )
+    assert own.status_code == 200, own.text
+    assert own.json()["total"] >= 1
+    foreign = api_client.get(
+        "/api/v1/analytics/history?page_size=50", headers=auth_headers(beta_token)
+    ).json()
+    alpha_ids = {line["id"] for line in own.json()["items"]}
+    assert alpha_ids.isdisjoint({line["id"] for line in foreign["items"]})
+
+    alpha_roles = {
+        role["role_id"]
+        for role in api_client.get(
+            "/api/v1/roles/abilities", headers=auth_headers(alpha_token)
+        ).json()["roles"]
+    }
+    beta_roles = {
+        role["role_id"]
+        for role in api_client.get(
+            "/api/v1/roles/abilities", headers=auth_headers(beta_token)
+        ).json()["roles"]
+    }
+    assert alpha_roles and beta_roles and alpha_roles.isdisjoint(beta_roles)

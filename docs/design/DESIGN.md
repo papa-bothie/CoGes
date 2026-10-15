@@ -320,6 +320,18 @@ de la couleur du type si non lue, puces noires « Toutes » / « Non lues »), C
 (`(auth)/password/`). Aide : `lib/notifications.ts` (`alertLook` : couleur et action d'une
 alerte).
 
+Écrans du lot 3e-2 (ADR 0075) : Réglages (`settings/settings-frame.tsx` : titre, menu des
+rubriques en carte à gauche, rubrique choisie en noir plein, carte de la rubrique à
+droite ; une page par rubrique). Ma boutique (`settings/shop-view.tsx` : champs de 54 px en
+grille auto, puces « Petit ticket » / « Facture A4 », interrupteurs `ToggleSwitch`,
+« Plus de réglages » replié), Personnes (`settings/people/` : avatar à initiales vert
+pâle, gris si l'accès est coupé, ajout dans un encart papier, mot de passe provisoire
+espacé), Qui peut faire quoi (`settings/rights/` : vrai tableau, cases de 48 px vert plein,
+vert adouci et verrouillé pour le gérant), Historique (`settings/history/` : avatar gris,
+phrase en gras, moment en gris), Fichiers Excel (`settings/files/` : trois encarts
+teintés vert, orange et violet). Aides : `lib/settings.ts` (moments en mots, contact d'une
+personne, case de la grille), `lib/files.ts` (périodes, nom d'un fichier, téléchargement).
+
 ## Do's and Don'ts
 
 ### Do:

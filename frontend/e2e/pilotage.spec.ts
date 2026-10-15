@@ -120,11 +120,12 @@ test("un vendeur n'accède pas aux paramètres, ni à l'écran ni à l'API", asy
   const seller = await createSalesperson(request);
   await login(page, seller);
 
-  // Côté front : aucune entrée de menu, aucun onglet.
-  await expect(page.getByRole("link", { name: "Paramètres" })).toHaveCount(0);
+  // Côté front : aucune rubrique des réglages (ADR 0075).
   await page.goto("/settings");
-  await expect(page.getByRole("heading", { level: 1, name: "Paramètres" })).toBeVisible();
-  await expect(page.getByRole("tab")).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1, name: "Réglages" })).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Rubriques des réglages" }).getByRole("link"),
+  ).toHaveCount(0);
 
   // Côté API : chaque route refuse, quelle que soit l'interface.
   const signIn = await request.post("/api/v1/auth/login", {
@@ -137,6 +138,8 @@ test("un vendeur n'accède pas aux paramètres, ni à l'écran ni à l'API", asy
     ["get", "/api/v1/users"],
     ["get", "/api/v1/roles"],
     ["get", "/api/v1/audit-logs"],
+    ["get", "/api/v1/roles/abilities"],
+    ["get", "/api/v1/analytics/history"],
   ] as const) {
     const response = await request[method](path, {
       headers,

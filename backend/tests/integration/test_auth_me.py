@@ -40,6 +40,7 @@ def test_manager_sees_self_company_and_every_permission(
         "currency": "XOF",
         "timezone": "Africa/Dakar",
         "tax_enabled": True,
+        "receipt_format": "ticket",
     }
     assert body["permissions"] == sorted(body["permissions"])
     assert "users:read" in body["permissions"]

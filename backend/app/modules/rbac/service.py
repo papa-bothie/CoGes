@@ -12,9 +12,16 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, audit_critical
-from app.core.errors import NotFoundError, ValidationFailedError
+from app.core.errors import BusinessRuleError, NotFoundError, ValidationFailedError
 from app.core.tenancy import TenantContext
-from app.modules.rbac.matrix import SYSTEM_ROLE_LABELS, SYSTEM_ROLES
+from app.modules.rbac.matrix import (
+    ABILITIES,
+    GRID_ROLES,
+    LOCKED_ABILITIES,
+    MANAGER,
+    SYSTEM_ROLE_LABELS,
+    SYSTEM_ROLES,
+)
 from app.modules.rbac.models import Role
 from app.modules.rbac.repository import (
     PermissionCatalogue,
@@ -22,7 +29,18 @@ from app.modules.rbac.repository import (
     RoleRepository,
     UserRoleRepository,
 )
-from app.modules.rbac.schemas import RoleCreate, RoleUpdate
+from app.modules.rbac.schemas import (
+    AbilityGrid,
+    AbilityRead,
+    RoleAbilities,
+    RoleCreate,
+    RoleUpdate,
+)
+
+
+class RoleLockedError(BusinessRuleError):
+    code = "role_locked"
+    default_message = "Le gérant garde tous les droits : sa colonne ne se modifie pas."
 
 
 def permission_codes_for_user(session: Session, ctx: TenantContext, user_id: UUID) -> list[str]:
@@ -69,6 +87,11 @@ def get_role(session: Session, ctx: TenantContext, role_id: UUID) -> Role:
     if role is None:
         raise NotFoundError("Rôle introuvable.")
     return role
+
+
+def role_label(role: Role) -> str:
+    """« Vendeur » pour un rôle système, son nom tel quel pour un rôle sur mesure."""
+    return SYSTEM_ROLE_LABELS.get(role.name, role.name) if role.is_system else role.name
 
 
 def role_permissions(session: Session, ctx: TenantContext, role_id: UUID) -> list[str]:
@@ -293,3 +316,100 @@ def user_ids_with_permission(session: Session, ctx: TenantContext, code: str) ->
     les deux façades, RBAC ne joint pas la table d'un autre module.
     """
     return UserRoleRepository(session, ctx).user_ids_with_permission(code)
+
+
+# ------------------------------------------------------------ grille (ADR 0075)
+
+
+def _checked(codes: set[str]) -> list[str]:
+    """Lignes cochées : celles dont le rôle porte toutes les permissions."""
+    return [key for key, (_, needed) in ABILITIES.items() if needed <= codes]
+
+
+def ability_grid(session: Session, ctx: TenantContext) -> AbilityGrid:
+    """La grille « Qui peut faire quoi » des trois rôles système, dans cet ordre."""
+    repository = RoleRepository(session, ctx)
+    links = RolePermissionRepository(session, ctx)
+    roles: list[RoleAbilities] = []
+    for name in GRID_ROLES:
+        role = repository.get_by_name(name)
+        if role is None or not role.is_system:
+            continue
+        roles.append(
+            RoleAbilities(
+                role_id=role.id,
+                name=role.name,
+                label=SYSTEM_ROLE_LABELS[name],
+                locked=name == MANAGER,
+                abilities=_checked(set(links.codes_for_role(role.id))),
+            )
+        )
+    return AbilityGrid(
+        abilities=[
+            AbilityRead(
+                key=key, label=label, permissions=sorted(needed), locked=key in LOCKED_ABILITIES
+            )
+            for key, (label, needed) in ABILITIES.items()
+        ],
+        roles=roles,
+    )
+
+
+def set_role_abilities(
+    session: Session,
+    ctx: TenantContext,
+    role_id: UUID,
+    abilities: Sequence[str],
+    *,
+    ip_address: str | None = None,
+) -> RoleAbilities:
+    """Coche exactement ces lignes pour un rôle ; ses droits hors grille ne bougent pas.
+
+    Nouvelle matrice = (droits actuels − droits de toutes les lignes) ∪ droits des
+    lignes cochées. Le gérant est refusé (409) ; la ligne verrouillée garde l'état
+    qu'elle avait. Audit critique, comme toute modification de rôle.
+    """
+    role = get_role(session, ctx, role_id)
+    if role.name == MANAGER and role.is_system:
+        raise RoleLockedError()
+    wanted = set(abilities)
+    unknown = sorted(wanted - ABILITIES.keys())
+    if unknown or len(wanted) != len(abilities):
+        raise ValidationFailedError(
+            "Lignes inconnues ou en double.", details={"abilities": unknown or list(abilities)}
+        )
+
+    links = RolePermissionRepository(session, ctx)
+    before = set(links.codes_for_role(role_id))
+    previously = set(_checked(before))
+    if (wanted ^ previously) & LOCKED_ABILITIES:
+        raise ValidationFailedError(
+            "« Gérer les personnes » reste au gérant.",
+            details={"abilities": sorted(LOCKED_ABILITIES)},
+        )
+
+    grid = set().union(*(needed for _, needed in ABILITIES.values()))
+    after = (before - grid).union(*(ABILITIES[key][1] for key in wanted))
+    # Une ligne verrouillée non cochée garde ses droits partiels tels quels.
+    for key in LOCKED_ABILITIES - wanted:
+        after |= before & ABILITIES[key][1]
+    if after != before:
+        links.replace(role_id, _resolve_permission_ids(session, sorted(after)))
+        session.flush()
+        audit_critical(
+            session,
+            ctx,
+            action=AuditAction.UPDATE,
+            entity_table="roles",
+            entity_id=role.id,
+            before={"permissions": sorted(before), "abilities": sorted(previously)},
+            after={"permissions": sorted(after), "abilities": sorted(wanted)},
+            ip_address=ip_address,
+        )
+    return RoleAbilities(
+        role_id=role.id,
+        name=role.name,
+        label=role_label(role),
+        locked=False,
+        abilities=_checked(after),
+    )

@@ -580,7 +580,9 @@ def write_off_sale_debt(
         entity_table="debts",
         entity_id=debt.id,
         before=before,
-        after={**_audited_debt(debt), "reason": reason},
+        # `by_sale_cancel` sépare cette extinction d'un abandon choisi (ADR 0075) :
+        # l'Historique raconte l'annulation de la vente, pas une dette abandonnée.
+        after={**_audited_debt(debt), "reason": reason, "by_sale_cancel": True},
         ip_address=ip_address,
     )
     return debt
@@ -597,6 +599,8 @@ def _audited_payment(payment: Payment) -> dict[str, Any]:
         "method": payment.method,
         "amount": str(payment.amount),
         "sale_id": None if payment.sale_id is None else str(payment.sale_id),
+        # La dépense payée a sa propre ligne d'historique (ADR 0075).
+        "expense_id": None if payment.expense_id is None else str(payment.expense_id),
     }
 
 

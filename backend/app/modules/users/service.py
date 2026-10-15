@@ -164,6 +164,9 @@ def update_user(
     before = {field: getattr(user, field) for field in changes}
     for field, value in changes.items():
         setattr(user, field, value)
+    if "is_active" in changes and before["is_active"] != user.is_active:
+        # Date de coupure (ADR 0075) : posée en coupant, effacée en redonnant l'accès.
+        user.deactivated_at = None if user.is_active else datetime.now(UTC)
     session.flush()
 
     # La désactivation d'un compte est un changement d'accès : audit critique.
@@ -193,6 +196,7 @@ def deactivate_user(
     before = {"is_active": user.is_active, "deleted_at": user.deleted_at}
     user.is_active = False
     user.deleted_at = datetime.now(UTC)
+    user.deactivated_at = user.deactivated_at or user.deleted_at
     session.flush()
 
     audit_critical(

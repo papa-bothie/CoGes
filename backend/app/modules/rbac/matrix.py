@@ -101,3 +101,29 @@ SYSTEM_ROLES: Final[dict[str, frozenset[str] | None]] = {
     SALESPERSON: SALESPERSON_PERMISSIONS,
     ACCOUNTANT: ACCOUNTANT_PERMISSIONS,
 }
+
+
+#: Grille « Qui peut faire quoi » (écran 24c, ADR 0075) : une ligne = un geste du
+#: commerçant, cochée pour un rôle quand il porte **toutes** ses permissions. Les
+#: lignes partagent parfois un droit (`inventory:create`) : décocher l'une le garde tant
+#: qu'une autre cochée le demande.
+ABILITIES: Final[dict[str, tuple[str, frozenset[str]]]] = {
+    "sell": ("Vendre", frozenset({"sales:create", "sales:update", "sales:confirm"})),
+    "cancel_sale": ("Annuler une vente", frozenset({"sales:cancel", "sale_returns:confirm"})),
+    "fix_stock": ("Corriger le stock", frozenset({"inventory:create", "inventory:update"})),
+    "receive": ("Recevoir une livraison", frozenset({"inventory:create", "debts:create"})),
+    "see_money": ("Voir l’argent et les bénéfices", frozenset({"analytics:read", "expenses:read"})),
+    "collect_debt": ("Encaisser une dette", frozenset({"debts:read", "payments:create"})),
+    "change_prices": ("Changer les prix", frozenset({"prices:create", "products:update"})),
+    "manage_people": (
+        "Gérer les personnes",
+        frozenset({"users:create", "users:read", "users:update", "users:delete"}),
+    ),
+}
+
+#: Lignes que la grille montre sans permettre de les changer : gérer les personnes
+#: reste au gérant (et le gérant, lui, garde tout).
+LOCKED_ABILITIES: Final[frozenset[str]] = frozenset({"manage_people"})
+
+#: Ordre des colonnes de la grille ; pas de rôle sur mesure à l'écran.
+GRID_ROLES: Final[tuple[str, ...]] = (MANAGER, SALESPERSON, ACCOUNTANT)

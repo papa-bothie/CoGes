@@ -32,6 +32,16 @@ _FILTERS = """
          OR occurred_at >= CAST(:period_from AS timestamptz))
     AND (CAST(:period_to AS timestamptz) IS NULL
          OR occurred_at <= CAST(:period_to AS timestamptz))
+    AND (NOT CAST(:notable_only AS boolean) OR NOT (
+         entity_table IN ('auth_sessions', 'payment_allocations', 'product_stock')
+         OR action IN ('login', 'rebuild')
+         OR (entity_table = 'sales' AND action = 'confirm')
+         OR (entity_table IN ('payments', 'debts') AND action = 'insert'
+             AND diff -> 'after' ->> 'sale_id' IS NOT NULL)
+         OR (entity_table = 'payments' AND action = 'insert'
+             AND diff -> 'after' ->> 'expense_id' IS NOT NULL)
+         OR (entity_table = 'debts' AND action = 'cancel'
+             AND diff -> 'after' ->> 'by_sale_cancel' = 'true')))
 """
 
 _PAGE = text(
@@ -57,6 +67,7 @@ class AuditLogRepository:
         entity_id: UUID | None,
         period_from: datetime | None,
         period_to: datetime | None,
+        notable_only: bool = False,
     ) -> dict[str, Any]:
         return {
             "company_id": self.ctx.company_id,
@@ -66,6 +77,7 @@ class AuditLogRepository:
             "entity_id": entity_id,
             "period_from": period_from,
             "period_to": period_to,
+            "notable_only": notable_only,
         }
 
     def page(self, *, page: int, page_size: int, **filters: Any) -> Sequence[Row[Any]]:
