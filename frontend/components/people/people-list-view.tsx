@@ -198,7 +198,7 @@ export function PeopleListView({ kind }: { kind: PersonKind }) {
           <p className="mt-1 text-muted-foreground">{t.emptyHint}</p>
         </section>
       ) : (
-        <ul className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3">
+        <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(320px,100%),1fr))] gap-3">
           {rows.map((row) => (
             <li key={row.id}>
               <PersonCard row={row} kind={kind} currency={currency} timeZone={timeZone} />

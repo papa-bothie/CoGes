@@ -34,7 +34,11 @@ test("un paiement réparti solde deux dettes du même client", async ({ page, re
 
   await login(page);
   await page.goto("/finance/debts?party=customer&status=open&page_size=100");
-  const row = page.getByRole("row", { name: new RegExp(customer.name) }).first();
+  const row = page
+    .getByRole("main")
+    .getByRole("listitem")
+    .filter({ hasText: customer.name })
+    .first();
   await row.getByRole("button", { name: "Régler" }).click();
 
   const dialog = page.getByRole("dialog");
@@ -63,7 +67,9 @@ test("un paiement réparti solde deux dettes du même client", async ({ page, re
   expect(paymentIds.size).toBe(1);
 
   // L'écran le reflète : plus aucune dette ouverte pour ce client.
-  await expect(page.getByRole("row", { name: new RegExp(customer.name) })).toHaveCount(0);
+  await expect(
+    page.getByRole("main").getByRole("listitem").filter({ hasText: customer.name }),
+  ).toHaveCount(0);
 });
 
 // Classement et recommandations : il faut l'historique de la démo, que ces deux

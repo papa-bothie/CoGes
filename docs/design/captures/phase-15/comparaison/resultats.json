@@ -16,13 +16,13 @@
     {
       "file": "11-recevoir-livraison.png",
       "width": 1280,
-      "percent": 5.5707992344244985,
+      "percent": 5.570716737064414,
       "missing": []
     },
     {
       "file": "11-recevoir-livraison-390.png",
       "width": 390,
-      "percent": 10.619744105659597
+      "percent": 10.619486147655161
     }
   ],
   "12": [
@@ -55,13 +55,13 @@
     {
       "file": "14-fiche-client.png",
       "width": 1280,
-      "percent": 3.953223892405063,
+      "percent": 3.9500098892405062,
       "missing": []
     },
     {
       "file": "14-fiche-client-390.png",
       "width": 390,
-      "percent": 12.249246464178066
+      "percent": 16.127725064949736
     }
   ],
   "15": [
@@ -87,7 +87,7 @@
     {
       "file": "16-fiche-fournisseur-390.png",
       "width": 390,
-      "percent": 14.26615496029457
+      "percent": 16.079626062153725
     }
   ],
   "17": [
@@ -107,13 +107,13 @@
     {
       "file": "18-encaisser-dette.png",
       "width": 1280,
-      "percent": 5.766974866207951,
+      "percent": 5.76637758027523,
       "missing": []
     },
     {
       "file": "18-encaisser-dette-390.png",
       "width": 390,
-      "percent": 14.377522027112267
+      "percent": 14.835844826074428
     }
   ],
   "19": [
@@ -126,7 +126,7 @@
     {
       "file": "19-payer-fournisseur-390.png",
       "width": 390,
-      "percent": 16.284952560181917
+      "percent": 16.25201913275308
     }
   ],
   "20": [
@@ -159,13 +159,13 @@
     {
       "file": "22-conseils.png",
       "width": 1280,
-      "percent": 7.490166558159722,
+      "percent": 7.491963704427083,
       "missing": []
     },
     {
       "file": "22-conseils-390.png",
       "width": 390,
-      "percent": 15.287056779594094
+      "percent": 15.283047521853494
     }
   ],
   "23": [
@@ -178,7 +178,7 @@
     {
       "file": "23-alertes-390.png",
       "width": 390,
-      "percent": 12.347237381167055
+      "percent": 12.349662812340172
     }
   ],
   "24": [
@@ -211,7 +211,7 @@
     {
       "file": "26-telephone-390.png",
       "width": 390,
-      "percent": 5.521327014218009,
+      "percent": 5.52102321059667,
       "missing": []
     }
   ],
@@ -238,7 +238,7 @@
     {
       "file": "02-nouvelle-vente-390.png",
       "width": 390,
-      "percent": 15.906215528691384
+      "percent": 15.768442853605277
     }
   ],
   "02b": [
@@ -287,7 +287,7 @@
     {
       "file": "03-liste-des-ventes-390.png",
       "width": 390,
-      "percent": 5.800096318024605
+      "percent": 5.800534127227355
     }
   ],
   "04": [
@@ -350,7 +350,7 @@
     {
       "file": "06-retour-articles-390.png",
       "width": 390,
-      "percent": 12.036310050103154
+      "percent": 12.036192160330092
     }
   ],
   "07": [
@@ -396,12 +396,12 @@
     {
       "file": "14b-fiche-client-rappel.png",
       "width": 1280,
-      "percent": 5.243125503626108
+      "percent": 5.241299858984689
     },
     {
       "file": "14b-fiche-client-rappel-390.png",
       "width": 390,
-      "percent": 14.631433756805809
+      "percent": 18.474152667256117
     }
   ],
   "17b": [
@@ -420,12 +420,12 @@
     {
       "file": "18b-encaisser-dette-montant-libre.png",
       "width": 1280,
-      "percent": 5.8074111238532105
+      "percent": 5.806813837920489
     },
     {
       "file": "18b-encaisser-dette-montant-libre-390.png",
       "width": 390,
-      "percent": 14.556114218872338
+      "percent": 15.164056957535218
     }
   ],
   "21b": [
@@ -480,12 +480,12 @@
     {
       "file": "24c-reglages-droits.png",
       "width": 1280,
-      "percent": 3.2328125
+      "percent": 3.2328993055555553
     },
     {
       "file": "24c-reglages-droits-390.png",
       "width": 390,
-      "percent": 13.819530984479439
+      "percent": 10.103895829369861
     }
   ],
   "24d": [

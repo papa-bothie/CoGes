@@ -1,16 +1,16 @@
 "use client";
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Undo2, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { DataTable, type Column } from "@/components/data-table";
 import { ErrorState } from "@/components/error-state";
 import { FieldError } from "@/components/field-error";
-import { Money } from "@/components/money";
+import { FilterChips, MoreButton, OUTLINE_ACTION } from "@/components/kit/filter-chips";
+import { ListRow, ProductSquare } from "@/components/kit/list-row";
+import { fieldClasses } from "@/components/kit/rubrique";
 import { SearchCombobox } from "@/components/search-combobox";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,14 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { usePermission } from "@/hooks/use-permission";
 import { useTableParams } from "@/hooks/use-table-params";
@@ -37,9 +30,10 @@ import { queryKeys } from "@/lib/api/queries/keys";
 import { useStockFor } from "@/lib/api/queries/stock";
 import type { Schemas } from "@/lib/api/schema";
 import { compareDecimal } from "@/lib/decimal";
-import { formatDateTime, formatQty } from "@/lib/format";
+import { formatAmount, formatDateTime, formatQty } from "@/lib/format";
 import { dayEndIso, dayStartIso } from "@/lib/format/zoned";
 import { labels } from "@/lib/labels";
+import { MINUS } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 type Movement = Schemas["MovementRead"];
@@ -55,7 +49,6 @@ const TYPES: readonly MovementType[] = [
   "adjustment",
   "loss",
 ];
-const ALL = "all";
 /** Seuls les mouvements saisis à la main se corrigent depuis le stock (ADR 0017, complément). */
 const MANUAL = new Set<MovementType>([
   "initial",
@@ -64,6 +57,7 @@ const MANUAL = new Set<MovementType>([
   "adjustment",
   "loss",
 ]);
+const j = labels.stock.journal;
 
 async function searchProducts(text: string): Promise<Product[]> {
   const page = await unwrap(
@@ -72,9 +66,14 @@ async function searchProducts(text: string): Promise<Product[]> {
   return page.items;
 }
 
-/** Journal append-only : on le lit, on le filtre, on le corrige par un mouvement inverse. */
+/**
+ * Journal append-only, dans le style de la maquette v2 : l'article, le type en puces, les
+ * dates ; une ligne par mouvement, quantité en vert ou en orange, et « Corriger » qui ajoute
+ * le mouvement inverse (ADR 0017).
+ */
 export function MovementJournal() {
   const table = useTableParams();
+  const id = useId();
   const { timeZone, currency } = useCompanyLocale();
   const canCorrect = usePermission("inventory:update");
   const [toReverse, setToReverse] = useState<Movement | null>(null);
@@ -84,20 +83,30 @@ export function MovementJournal() {
   const from = table.get("from") ?? "";
   const to = table.get("to") ?? "";
 
-  const params = {
-    page: table.page,
+  const filters = {
     page_size: table.pageSize,
     product_id: productId ?? undefined,
     type: type ?? undefined,
     date_from: (from && dayStartIso(from, timeZone)) || undefined,
     date_to: (to && dayEndIso(to, timeZone)) || undefined,
   };
-  const query = useQuery({
-    queryKey: queryKeys.movements.list(params),
-    queryFn: () => unwrap(api.GET("/api/v1/inventory/movements", { params: { query: params } })),
-    placeholderData: keepPreviousData,
+  const query = useInfiniteQuery({
+    queryKey: queryKeys.movements.list({ ...filters, infinite: true }),
+    initialPageParam: 1,
+    queryFn: ({ pageParam }) =>
+      unwrap(
+        api.GET("/api/v1/inventory/movements", {
+          params: { query: { ...filters, page: pageParam } },
+        }),
+      ),
+    getNextPageParam: (last) =>
+      last.page * last.page_size < last.total ? last.page + 1 : undefined,
   });
-  const movements = useMemo(() => query.data?.items ?? [], [query.data]);
+  const movements = useMemo(
+    () => query.data?.pages.flatMap((page) => page.items) ?? [],
+    [query.data],
+  );
+  const total = query.data?.pages[0]?.total;
 
   // Libellés des articles : tout article qui a un mouvement a une ligne de stock.
   const productIds = useMemo(() => {
@@ -106,185 +115,157 @@ export function MovementJournal() {
     return [...ids];
   }, [movements, productId]);
   const names = useStockFor(productIds);
-  // Mouvements déjà annulés **sur cette page** ; au-delà, le serveur refuse (`already_reversed`).
+  // Mouvements déjà annulés **parmi ceux chargés** ; au-delà, le serveur refuse (`already_reversed`).
   const reversed = new Set(movements.map((movement) => movement.reversal_of_movement_id));
-
-  if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
-
   const filteredProduct = productId ? names.data?.get(productId) : undefined;
-
-  const columns: Column<Movement>[] = [
-    {
-      id: "date",
-      header: labels.stock.journal.date,
-      cell: (movement) => (
-        <span className="numeric whitespace-nowrap">
-          {formatDateTime(movement.occurred_at, timeZone)}
-        </span>
-      ),
-    },
-    {
-      id: "product",
-      header: labels.stock.journal.product,
-      cell: (movement) => {
-        const line = names.data?.get(movement.product_id);
-        return line ? (
-          <div>
-            <p className="font-medium">{line.name}</p>
-            <p className="text-xs numeric text-muted-foreground">{line.sku}</p>
-          </div>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        );
-      },
-    },
-    {
-      id: "type",
-      header: labels.stock.journal.type,
-      cell: (movement) => (
-        <span className="flex flex-wrap items-center gap-1.5">
-          {labels.stock.movementTypes[movement.type]}
-          {movement.reversal_of_movement_id && (
-            <Badge variant="neutral">{labels.stock.journal.reversal}</Badge>
-          )}
-          {reversed.has(movement.id) && (
-            <Badge variant="neutral">{labels.stock.journal.reversed}</Badge>
-          )}
-        </span>
-      ),
-    },
-    {
-      id: "qty",
-      header: labels.stock.journal.qty,
-      numeric: true,
-      cell: (movement) => {
-        const positive = compareDecimal(movement.qty_delta, "0") === 1;
-        return (
-          <span className={cn("font-medium", positive ? "text-success-ink" : "text-danger-ink")}>
-            {positive ? "+" : ""}
-            {formatQty(movement.qty_delta)}
-          </span>
-        );
-      },
-    },
-    {
-      id: "cost",
-      header: labels.stock.journal.unitCost,
-      numeric: true,
-      cell: (movement) => <Money value={movement.unit_cost} currency={currency} />,
-    },
-    {
-      id: "note",
-      header: labels.stock.journal.note,
-      className: "max-w-64",
-      cell: (movement) => (
-        <span className="line-clamp-2 text-sm text-muted-foreground">
-          {/* La raison en toutes lettres (ADR 0067) ; le motif écrit des mouvements d'avant. */}
-          {movement.reason_code
-            ? labels.stock.reasons[movement.reason_code]
-            : (movement.note ?? "—")}
-        </span>
-      ),
-    },
-    {
-      id: "actions",
-      header: "",
-      className: "w-28 text-right",
-      cell: (movement) =>
-        canCorrect &&
-        MANUAL.has(movement.type) &&
-        !movement.reversal_of_movement_id &&
-        !reversed.has(movement.id) ? (
-          <Button variant="ghost" size="sm" onClick={() => setToReverse(movement)}>
-            <Undo2 aria-hidden />
-            {labels.stock.journal.correct}
-          </Button>
-        ) : null,
-    },
-  ];
+  const dateField = cn(fieldClasses("stock"), "min-h-cible px-3 numeric");
 
   return (
     <>
-      <DataTable
-        caption={labels.stock.tabs.journal}
-        columns={columns}
-        rows={query.data?.items}
-        rowKey={(movement) => movement.id}
-        total={query.data?.total ?? 0}
-        page={table.page}
-        pageSize={table.pageSize}
-        onPageChange={table.setPage}
-        loading={query.isFetching}
-        empty={labels.stock.journal.empty}
-        filters={
-          <>
-            {productId ? (
-              <span className="flex h-9 items-center gap-1 rounded-lg border bg-card pr-1 pl-3 text-sm">
-                {filteredProduct?.name ?? "…"}
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={labels.stock.journal.clearProduct}
-                  onClick={() => table.setFilter("product", null)}
-                >
-                  <X />
-                </Button>
-              </span>
-            ) : (
-              <SearchCombobox
-                className="w-72"
-                label={labels.stock.journal.productFilter}
-                queryKey={[...queryKeys.products.search, "journal"]}
-                search={searchProducts}
-                itemKey={(item) => item.id}
-                onSelect={(item) => table.setFilter("product", item.id)}
-                renderItem={(item) => (
-                  <span className="flex justify-between gap-3">
-                    <span>{item.name}</span>
-                    <span className="numeric text-muted-foreground">{item.sku}</span>
-                  </span>
-                )}
-              />
-            )}
-            <Select
-              value={type ?? ALL}
-              onValueChange={(value) => table.setFilter("type", value === ALL ? null : value)}
-            >
-              <SelectTrigger className="w-48" aria-label={labels.stock.journal.typeFilter}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>{labels.stock.journal.allTypes}</SelectItem>
-                {TYPES.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {labels.stock.movementTypes[value]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              {labels.sales.dateFrom}
-              <Input
-                type="date"
-                value={from}
-                max={to || undefined}
-                onChange={(event) => table.setFilter("from", event.target.value || null)}
-                className="h-9 w-40"
-              />
-            </label>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              {labels.sales.dateTo}
-              <Input
-                type="date"
-                value={to}
-                min={from || undefined}
-                onChange={(event) => table.setFilter("to", event.target.value || null)}
-                className="h-9 w-40"
-              />
-            </label>
-          </>
-        }
-      />
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {productId ? (
+            <span className="inline-flex min-h-cible items-center gap-1 rounded-full border-2 border-stock bg-stock-teinte pr-1 pl-4 font-bold text-stock-encre">
+              {filteredProduct?.name ?? "…"}
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={j.clearProduct}
+                onClick={() => table.setFilter("product", null)}
+              >
+                <X />
+              </Button>
+            </span>
+          ) : (
+            <SearchCombobox
+              className="w-72"
+              label={j.productFilter}
+              queryKey={[...queryKeys.products.search, "journal"]}
+              search={searchProducts}
+              itemKey={(item) => item.id}
+              onSelect={(item) => table.setFilter("product", item.id)}
+              renderItem={(item) => (
+                <span className="flex justify-between gap-3">
+                  <span>{item.name}</span>
+                  <span className="numeric text-muted-foreground">{item.sku}</span>
+                </span>
+              )}
+            />
+          )}
+          <label htmlFor={`${id}-from`} className="ml-2 font-bold">
+            {labels.sales.dateFrom}
+          </label>
+          <input
+            id={`${id}-from`}
+            type="date"
+            value={from}
+            max={to || undefined}
+            onChange={(event) => table.setFilter("from", event.target.value || null)}
+            className={cn(dateField, "w-44")}
+          />
+          <label htmlFor={`${id}-to`} className="font-bold">
+            {labels.sales.dateTo}
+          </label>
+          <input
+            id={`${id}-to`}
+            type="date"
+            value={to}
+            min={from || undefined}
+            onChange={(event) => table.setFilter("to", event.target.value || null)}
+            className={cn(dateField, "w-44")}
+          />
+        </div>
+        <FilterChips
+          label={j.typeFilter}
+          value={type}
+          allLabel={j.allTypes}
+          options={TYPES.map((value) => [value, labels.stock.movementTypes[value]] as const)}
+          onChange={(next) => table.setFilter("type", next)}
+        />
+        <p className="text-muted-foreground">
+          {total !== undefined ? labels.table.total(total) : null}
+        </p>
+      </div>
+
+      <section className="rounded-carte border border-border bg-card px-carte pb-2">
+        {query.isError ? (
+          <div className="py-carte">
+            <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+          </div>
+        ) : !query.data ? (
+          <Skeleton className="my-carte h-64 w-full rounded-champ" />
+        ) : movements.length === 0 ? (
+          <p className="py-carte text-muted-foreground">{j.empty}</p>
+        ) : (
+          <ul aria-label={labels.stock.tabs.journal} className="[&>li:first-child>*]:border-t-0">
+            {movements.map((movement) => {
+              const line = names.data?.get(movement.product_id);
+              const positive = compareDecimal(movement.qty_delta, "0") === 1;
+              const why = movement.reason_code
+                ? labels.stock.reasons[movement.reason_code]
+                : movement.note;
+              const canReverse =
+                canCorrect &&
+                MANUAL.has(movement.type) &&
+                !movement.reversal_of_movement_id &&
+                !reversed.has(movement.id);
+              return (
+                <li key={movement.id}>
+                  <ListRow
+                    wrap
+                    className="flex-wrap"
+                    leading={<ProductSquare name={line?.name ?? "?"} size="petit" />}
+                    title={line?.name ?? "—"}
+                    subtitle={
+                      <>
+                        {labels.stock.movementTypes[movement.type]}
+                        {movement.reversal_of_movement_id && ` · ${j.reversal}`}
+                        {reversed.has(movement.id) && ` · ${j.reversed}`}
+                        {" · "}
+                        <span className="numeric">
+                          {formatDateTime(movement.occurred_at, timeZone)}
+                        </span>
+                        {why ? ` · ${why}` : ""}
+                        {" · "}
+                        {j.unitCost.toLowerCase()}{" "}
+                        <span className="numeric">
+                          {formatAmount(movement.unit_cost, currency)}
+                        </span>
+                      </>
+                    }
+                    trailing={
+                      <>
+                        <span
+                          className={cn(
+                            "text-lg font-extrabold numeric",
+                            positive ? "text-ventes-encre" : "text-depenses-encre",
+                          )}
+                        >
+                          {positive ? "+" : MINUS}
+                          {formatQty(movement.qty_delta.replace(/^-/, ""))}
+                        </span>
+                        {canReverse && (
+                          <button
+                            type="button"
+                            className={OUTLINE_ACTION}
+                            onClick={() => setToReverse(movement)}
+                          >
+                            <Undo2 className="size-5" aria-hidden />
+                            {j.correct}
+                          </button>
+                        )}
+                      </>
+                    }
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+      {query.hasNextPage && (
+        <MoreButton pending={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()} />
+      )}
       <ReverseDialog movement={toReverse} onClose={() => setToReverse(null)} />
     </>
   );

@@ -39,9 +39,7 @@ export function InventoryView() {
           </Button>
         </Can>
       </div>
-      <section className="rounded-carte border border-border bg-card p-carte">
-        <MovementJournal />
-      </section>
+      <MovementJournal />
       <MovementDialog open={adding} onOpenChange={setAdding} defaultType="supplier_return_out" />
     </div>
   );

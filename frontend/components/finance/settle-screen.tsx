@@ -146,7 +146,7 @@ export function SettleScreen({ kind }: { kind: Kind }) {
         <div className="flex flex-wrap items-start gap-5">
           <ul
             aria-label={setup.copy.list}
-            className="flex flex-[2_1_320px] flex-col gap-1 rounded-carte border border-border bg-card p-3"
+            className="flex min-w-0 flex-[2_1_320px] flex-col gap-1 rounded-carte border border-border bg-card p-3"
           >
             {rows.map((person) => {
               const isCleared = !!cleared[person.id] && !owing.some((row) => row.id === person.id);
@@ -332,7 +332,7 @@ function SettlePanel({
   return (
     <section
       aria-label={person.name}
-      className="flex flex-[3_1_460px] flex-col gap-5 rounded-carte border border-border bg-card p-carte"
+      className="flex min-w-0 flex-[3_1_460px] flex-col gap-5 rounded-carte border border-border bg-card p-carte"
     >
       {done && (
         <div

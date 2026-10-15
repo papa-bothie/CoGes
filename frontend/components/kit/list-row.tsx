@@ -138,6 +138,7 @@ export function ListRow({
   trailing,
   href,
   className,
+  wrap = false,
 }: {
   leading?: ReactNode;
   title: ReactNode;
@@ -145,15 +146,28 @@ export function ListRow({
   trailing?: ReactNode;
   href?: string;
   className?: string;
+  /** Sous-titre sur plusieurs lignes au lieu d'être coupé (lignes longues, petits écrans). */
+  wrap?: boolean;
 }) {
   const content = (
     <>
       {leading}
-      <div className="min-w-0 flex-1">
+      {/* Plusieurs lignes : le texte garde 224 px, la fin de ligne passe dessous si besoin. */}
+      <div className={cn("min-w-0 flex-1", wrap && "basis-56")}>
         <div className="truncate font-bold">{title}</div>
-        {subtitle && <div className="truncate text-sm text-muted-foreground">{subtitle}</div>}
+        {subtitle && (
+          <div className={cn("text-sm text-muted-foreground", wrap ? "break-words" : "truncate")}>
+            {subtitle}
+          </div>
+        )}
       </div>
-      {trailing && <div className="flex shrink-0 items-center gap-3.5">{trailing}</div>}
+      {trailing && (
+        <div
+          className={cn("flex items-center gap-3.5", wrap ? "min-w-0 flex-wrap gap-2" : "shrink-0")}
+        >
+          {trailing}
+        </div>
+      )}
     </>
   );
   const base = cn(
