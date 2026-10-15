@@ -309,6 +309,17 @@ secondaires : « Toutes les dettes » (`/finance/debts`) et « Toutes les dépen
 barre, phrase d'une ligne de caisse). Les entrées sont vertes, les sorties orange, la
 différence bleu plein.
 
+Écrans du lot 3e-1 (ADR 0074) : Conseils (`insights/insights-view.tsx` : trois grands
+boutons de vue en sarcelle `conseils`, cartes de conseil à carré coloré et action directe,
+« Pourquoi ? » vers le panneau de l'Intelligence, classement en barres horizontales,
+tuiles de la semaine prochaine orange quand le stock ne suffit pas), Alertes
+(`notifications/notifications-view.tsx` : groupées par jour, carré coloré par type, point
+de la couleur du type si non lue, puces noires « Toutes » / « Non lues »), Connexion
+(`(auth)/login/` : panneau vert à gauche, champs de 60 px, bouton « Entrer » de 64 px,
+« Afficher » / « Cacher » dans le champ) et « Choisissez votre mot de passe »
+(`(auth)/password/`). Aide : `lib/notifications.ts` (`alertLook` : couleur et action d'une
+alerte).
+
 ## Do's and Don'ts
 
 ### Do:
