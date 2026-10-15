@@ -68,51 +68,49 @@ test("un paiement réparti solde deux dettes du même client", async ({ page, re
 
 // Classement et recommandations : il faut l'historique de la démo, que ces deux
 // parcours lisent sans y créer d'article.
-test("changer de métrique change le classement et son libellé", async ({ page }) => {
+test("changer de puce change le classement et le dit", async ({ page }) => {
   await login(page, DEMO);
+  // Les analyses ont rejoint les Conseils (ADR 0074).
   await page.goto("/analytics");
-  await expect(page.getByTestId("ranking-title")).toContainText("ventes générées", {
+  await expect(page).toHaveURL(/\/insights\?view=best$/);
+  await expect(page.getByRole("heading", { name: /Ce qui vous rapporte le plus/ })).toBeVisible({
     timeout: 30_000,
   });
 
-  await page.getByRole("combobox", { name: "Métrique" }).click();
-  await page.getByRole("option", { name: "Quantité vendue" }).click();
-
-  await expect(page).toHaveURL(/metric=quantity/);
-  await expect(page.getByTestId("ranking-title")).toHaveText("Classement par quantité vendue");
-  await expect(page.getByTestId("metric-definition")).toContainText("Unités écoulées");
-  const rows = page.locator("tbody tr");
-  const count = await rows.count();
-  expect(count).toBeGreaterThan(0);
-  // La métrique est nommée sur **chaque** ligne, jamais un classement anonyme.
-  for (let index = 0; index < count; index += 1) {
-    await expect(rows.nth(index).getByRole("cell").nth(2)).toHaveText("Quantité vendue");
-  }
-  await expect(page.getByText(/meilleur/i)).toHaveCount(0);
+  await page.getByRole("button", { name: "Se vend le plus" }).click();
+  await expect(page.getByRole("heading", { name: /Ce qui se vend le plus/ })).toBeVisible();
+  const rows = page.getByRole("listitem").filter({ hasText: / vendus$/ });
+  await expect(rows.first()).toBeVisible();
+  // Chaque valeur dit son unité : jamais un classement anonyme.
+  for (const text of await rows.allInnerTexts()) expect(text).toMatch(/ vendus$/);
 });
 
-test("une recommandation écartée quitte la liste des nouvelles", async ({ page, request }) => {
+test("un conseil marqué « C'est fait » est résolu, sa raison reste lisible", async ({
+  page,
+  request,
+}) => {
   const client = await managerApi(request, DEMO);
-  const fresh = await client.get("/insights?status=new&page_size=100");
-  test.skip(fresh.items.length === 0, "Aucune recommandation nouvelle dans le jeu de démo.");
-  const insight = fresh.items[0] as { id: string; title: string };
+  const live = await client.get("/insights?page_size=100");
+  const actionable = (live.items as { id: string; title: string; insight_type: string }[]).filter(
+    (item) => item.insight_type !== "insufficient_history",
+  );
+  test.skip(actionable.length === 0, "Aucun conseil dans le jeu de démo.");
+  const insight = actionable[0]!;
 
   await login(page, DEMO);
   await page.goto("/insights");
-  const card = page.getByRole("button", { name: new RegExp(insight.title) }).first();
-  await card.click();
+  const card = page.getByRole("listitem").filter({ hasText: insight.title }).first();
+  // « Pourquoi ? » date et qualifie toujours le conseil (métrique, modèle).
+  await card.getByRole("button", { name: "Pourquoi ?" }).click();
   const panel = page.getByRole("dialog");
-  await expect(panel.getByText(insight.title).first()).toBeVisible();
-  // Le panneau date et qualifie toujours la recommandation.
   await expect(panel.getByText("Date de calcul", { exact: true }).first()).toBeVisible();
   await expect(panel.getByText("Modèle", { exact: true }).first()).toBeVisible();
-  await panel.getByRole("button", { name: "Écarter" }).click();
-  await expect(page.getByText("Recommandation : écarté.")).toBeVisible();
+  await page.keyboard.press("Escape");
 
-  const after = await client.get("/insights?status=dismissed&page_size=100");
-  expect(after.items.map((item: { id: string }) => item.id)).toContain(insight.id);
-  const stillNew = await client.get("/insights?status=new&page_size=100");
-  expect(stillNew.items.map((item: { id: string }) => item.id)).not.toContain(insight.id);
+  await card.getByRole("button", { name: "C'est fait" }).click();
+  await expect(card.getByText("Fait, merci.")).toBeVisible();
+  const resolved = await client.get("/insights?status=resolved&page_size=100");
+  expect(resolved.items.map((item: { id: string }) => item.id)).toContain(insight.id);
 });
 
 test("un vendeur n'accède pas aux paramètres, ni à l'écran ni à l'API", async ({

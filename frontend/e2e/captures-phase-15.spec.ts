@@ -96,6 +96,8 @@ const LOT_3A_SALE_PAGES = [
 ];
 /** Lot 2 : les onglets de « L'argent » dont les colonnes changent de nom. */
 const LOT_2_TABS = ["payments", "debts", "expenses"];
+/** `CAPTURES_ONLY=conseils,alertes` : seulement ces pages du lot (lot 3e livré en deux PR). */
+const ONLY = process.env.CAPTURES_ONLY?.split(",").map((name) => name.trim());
 const FOLDER = LOT === "0" ? "" : `/lot-${LOT.toLowerCase()}`;
 
 /** Lot 1 : chaque formulaire touché, ouvert depuis son écran. Les libellés changent avec
@@ -260,7 +262,7 @@ test.describe("captures de la phase 15", () => {
           for (const width of [1280, 390]) {
             await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
             const suffix = width === 390 ? "-390" : "";
-            for (const extra of LOT_3E_PAGES) {
+            for (const extra of LOT_3E_PAGES.filter((p) => !ONLY || ONLY.includes(p.name))) {
               await page.goto(extra.path);
               await settle(page);
               await shoot(page, `${extra.name}${suffix}`);
