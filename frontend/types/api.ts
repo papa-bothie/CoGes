@@ -2056,6 +2056,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/system/workers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Workers Health
+     * @description Bilan des workers, de beat, du relais et des tâches de nuit (ADR 0077).
+     *
+     *     Protégé par `COGES_OPS_TOKEN` (`Authorization: Bearer …`), pas par un compte :
+     *     c'est l'exploitant qui interroge. 200 si tout va bien, 503 sinon, avec le même
+     *     corps. Aucun nom ni identifiant d'entreprise n'y figure.
+     */
+    get: operations["workers_health_api_v1_system_workers_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/audit-logs": {
     parameters: {
       query?: never;
@@ -2469,6 +2493,18 @@ export interface components {
       rc?: string | null;
       /** Receipt Footer */
       receipt_footer?: string | null;
+    };
+    /**
+     * ComponentHealth
+     * @description Worker, beat ou relais : sain si au moins un hôte a battu depuis moins de 90 s.
+     */
+    ComponentHealth: {
+      /** Component */
+      component: string;
+      /** Healthy */
+      healthy: boolean;
+      /** Hosts */
+      hosts: components["schemas"]["HostPulse"][];
     };
     "CostPrice-Input": components["schemas"]["UnitCost-Input"];
     "CostPrice-Output": components["schemas"]["UnitCost-Output"];
@@ -3264,6 +3300,16 @@ export interface components {
       /** Total */
       total: number;
     };
+    /**
+     * HostPulse
+     * @description Un battement de cœur : l'hôte (identifiant de conteneur) et son âge.
+     */
+    HostPulse: {
+      /** Host */
+      host: string;
+      /** Age Seconds */
+      age_seconds: number;
+    };
     /** @enum {string} */
     ImportKind: "categories" | "products" | "customers" | "suppliers";
     /**
@@ -3423,6 +3469,35 @@ export interface components {
       forecast_products: number;
       /** Insufficient Data Products */
       insufficient_data_products: number;
+    };
+    /**
+     * JobHealth
+     * @description Dernière exécution d'une tâche planifiée, et ce qu'il faut en penser.
+     *
+     *     `companies_failed` compte les entreprises dont la **dernière** exécution de la
+     *     sous-tâche a échoué. Jamais de nom ni d'identifiant d'entreprise.
+     */
+    JobHealth: {
+      /** Job */
+      job: string;
+      /** Healthy */
+      healthy: boolean;
+      /** State */
+      state: string;
+      /** Window Hours */
+      window_hours: number;
+      /** Last Status */
+      last_status: string | null;
+      /** Last Started At */
+      last_started_at: string | null;
+      /** Last Finished At */
+      last_finished_at: string | null;
+      /** Last Ok At */
+      last_ok_at: string | null;
+      /** Companies Ok */
+      companies_ok: number;
+      /** Companies Failed */
+      companies_failed: number;
     };
     LineDiscount: components["schemas"]["Amount-Input"];
     /**
@@ -3840,6 +3915,24 @@ export interface components {
       oldest_pending_at: string | null;
       /** Last Published At */
       last_published_at: string | null;
+    };
+    /**
+     * OutboxLag
+     * @description Retard du relais, toutes entreprises confondues. Aucune donnée d'événement.
+     */
+    OutboxLag: {
+      /** Healthy */
+      healthy: boolean;
+      /** Pending */
+      pending: number;
+      /** Dead Lettered */
+      dead_lettered: number;
+      /** Oldest Pending At */
+      oldest_pending_at: string | null;
+      /** Lag Seconds */
+      lag_seconds: number;
+      /** Max Lag Seconds */
+      max_lag_seconds: number;
     };
     /**
      * OwedRow
@@ -4372,6 +4465,16 @@ export interface components {
     };
     "Quantity-Input": number | string;
     "Quantity-Output": string;
+    /**
+     * QueueDepth
+     * @description Tâches en attente dans la file Celery ; `None` si Redis n'a pas répondu.
+     */
+    QueueDepth: {
+      /** Name */
+      name: string;
+      /** Length */
+      length: number | null;
+    };
     "Rate-Input": number | string;
     "Rate-Output": string;
     /**
@@ -5491,6 +5594,33 @@ export interface components {
       unit: string;
       qty_on_hand: components["schemas"]["Quantity-Output"];
       status: components["schemas"]["StockStatus"];
+    };
+    /**
+     * WorkersHealth
+     * @description Bilan de la zone B (ADR 0077). Rendu en 200 si tout va bien, en 503 sinon.
+     *
+     *     `problems` liste les causes en codes stables (`heartbeat_missing:beat`,
+     *     `outbox_lagging`, `job_stale:reconcile.rebuild_stock_all`…) : c'est ce que lit
+     *     le guide `docs/runbooks/workers.md`.
+     */
+    WorkersHealth: {
+      /** Healthy */
+      healthy: boolean;
+      /**
+       * Checked At
+       * Format: date-time
+       */
+      checked_at: string;
+      /** Problems */
+      problems: string[];
+      /** Components */
+      components: components["schemas"]["ComponentHealth"][];
+      /** Beat Tick Age Seconds */
+      beat_tick_age_seconds: number | null;
+      outbox: components["schemas"]["OutboxLag"] | null;
+      queue: components["schemas"]["QueueDepth"];
+      /** Jobs */
+      jobs: components["schemas"]["JobHealth"][];
     };
   };
   responses: never;
@@ -9346,6 +9476,35 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["OutboxHealth"];
+        };
+      };
+    };
+  };
+  workers_health_api_v1_system_workers_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkersHealth"];
+        };
+      };
+      /** @description Au moins un problème détecté. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkersHealth"];
         };
       };
     };
