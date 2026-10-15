@@ -15,7 +15,7 @@ PNPM := pnpm --dir frontend
 API_PORT ?= 8000
 COGES_API_URL ?= http://localhost:$(API_PORT)
 
-.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format dev api worker relay seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front
+.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format dev api worker relay ops-status seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front
 
 help: ## Liste les cibles disponibles
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -68,6 +68,9 @@ worker: ## Lance un worker Celery avec le scheduler beat
 
 relay: ## Lance le relais de l'outbox (rôle coges_relay, processus séparé)
 	$(UV) python -m app.workers.relay
+
+ops-status: ## Bilan des workers, de beat, du relais et des tâches de nuit (COGES_OPS_URL, COGES_OPS_TOKEN)
+	$(UV) python -m app.ops_status
 
 seed-demo: ## Épicerie de démonstration `demo` : 46 articles, 15 clients, 90 jours (≈ 1 200 ventes)
 	$(UV) python -m app.seed
