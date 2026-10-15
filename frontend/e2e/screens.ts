@@ -106,5 +106,18 @@ export const SCREENS: Screen[] = [
     },
   },
   { name: "parametres", open: (page) => page.goto("/settings").then(() => undefined) },
+  {
+    name: "reglages-personnes",
+    open: (page) => page.goto("/settings/people").then(() => undefined),
+  },
+  { name: "reglages-droits", open: (page) => page.goto("/settings/rights").then(() => undefined) },
+  {
+    name: "reglages-historique",
+    open: (page) => page.goto("/settings/history").then(() => undefined),
+  },
+  {
+    name: "reglages-fichiers",
+    open: (page) => page.goto("/settings/files").then(() => undefined),
+  },
   { name: "notifications", open: (page) => page.goto("/notifications").then(() => undefined) },
 ];

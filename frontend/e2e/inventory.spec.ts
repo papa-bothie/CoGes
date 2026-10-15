@@ -57,8 +57,8 @@ test("corriger le stock avec une raison en tuile, puis l'annuler", async ({ page
   await page.getByRole("option", { name: new RegExp(product.name) }).click();
   await expect(page).toHaveURL(/product=/);
   await expect(page.getByText(/^2 éléments$/)).toBeVisible();
-  const adjustment = page.getByRole("row").filter({ hasText: "Ajustement" });
-  await expect(adjustment).toContainText("-3");
+  const adjustment = page.getByRole("main").getByRole("listitem").filter({ hasText: "Ajustement" });
+  await expect(adjustment).toContainText("−3");
   await expect(adjustment).toContainText("Erreur de comptage");
   await page.screenshot({
     path: `${CAPTURES}/journal.png`,
@@ -70,7 +70,9 @@ test("corriger le stock avec une raison en tuile, puis l'annuler", async ({ page
   await adjustment.getByRole("button", { name: "Corriger" }).click();
   await page.getByRole("button", { name: "Enregistrer l'inverse" }).click();
   await expect(page.getByText("Mouvement corrigé par son inverse.")).toBeVisible();
-  await expect(page.getByRole("row").filter({ hasText: "Annulation" })).toContainText("+3");
+  await expect(
+    page.getByRole("main").getByRole("listitem").filter({ hasText: "Annulation" }),
+  ).toContainText("+3");
   const restored = await client.get(`/inventory/stock?product_id=${product.id}`);
   expect(restored.items[0].qty_on_hand).toBe("10.000");
 });
