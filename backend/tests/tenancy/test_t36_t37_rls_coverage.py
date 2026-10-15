@@ -19,6 +19,8 @@ AUTH_ROLE = "coges_auth"
 RELAY_ROLE = "coges_relay"
 ANALYTICS_ROLE = "coges_analytics"
 BUS_ROLE = "coges_bus"
+#: Propriétaire des fonctions de surveillance (ADR 0077).
+OPS_ROLE = "coges_ops"
 
 #: Seules tables où le rôle analytique peut supprimer. Elles sont intégralement
 #: reconstruisibles depuis le transactionnel : c'est ce qui justifie l'exception.
@@ -27,6 +29,9 @@ ANALYTICS_DELETABLE = ["daily_sales_facts"]
 #: Tables que le propriétaire des fonctions du bus peut atteindre. Il a BYPASSRLS,
 #: donc cette liste **est** la portée réelle du contournement.
 BUS_TABLES = ["business_events", "companies", "idempotency_keys"]
+
+#: Seule table que `coges_ops` atteint : le journal des tâches planifiées.
+OPS_TABLES = ["job_runs"]
 
 #: Les fonctions du projet dont `EXECUTE` a été retiré à `PUBLIC`. Ce sont celles qui
 #: franchissent la RLS ou qui accordent un geste que le rôle appelant n'a pas.
@@ -37,6 +42,11 @@ PRIVILEGED_FUNCTIONS = {
     "outbox_mark_published",
     "active_company_ids",
     "purge_expired_idempotency_keys",
+    "outbox_lag",
+    "job_run_start",
+    "job_run_finish",
+    "job_runs_latest",
+    "purge_job_runs",
 }
 
 #: Seules tables sur lesquelles `coges_app` a le droit de supprimer (ADR 0007, 0020).
@@ -401,6 +411,19 @@ def test_t36_who_may_call_the_privileged_functions(app_engine: Engine) -> None:
         ("purge_expired_idempotency_keys", RELAY_ROLE): False,
         ("auth_lookup", APP_ROLE): True,
         ("auth_lookup", RELAY_ROLE): False,
+        # Surveillance (ADR 0077) : le worker trace, l'API lit le bilan.
+        ("outbox_lag", APP_ROLE): True,
+        ("outbox_lag", RELAY_ROLE): False,
+        ("outbox_lag", ANALYTICS_ROLE): False,
+        ("job_run_start", APP_ROLE): True,
+        ("job_run_start", RELAY_ROLE): False,
+        ("job_run_start", ANALYTICS_ROLE): False,
+        ("job_run_finish", APP_ROLE): True,
+        ("job_run_finish", ANALYTICS_ROLE): False,
+        ("job_runs_latest", APP_ROLE): True,
+        ("job_runs_latest", RELAY_ROLE): False,
+        ("purge_job_runs", APP_ROLE): True,
+        ("purge_job_runs", ANALYTICS_ROLE): False,
     }
     signatures = {
         "outbox_claim": "outbox_claim(integer)",
@@ -408,6 +431,11 @@ def test_t36_who_may_call_the_privileged_functions(app_engine: Engine) -> None:
         "active_company_ids": "active_company_ids()",
         "purge_expired_idempotency_keys": "purge_expired_idempotency_keys()",
         "auth_lookup": "auth_lookup(citext, citext)",
+        "outbox_lag": "outbox_lag()",
+        "job_run_start": "job_run_start(text, uuid)",
+        "job_run_finish": "job_run_finish(bigint, text, text)",
+        "job_runs_latest": "job_runs_latest(interval)",
+        "purge_job_runs": "purge_job_runs()",
     }
 
     with app_engine.connect() as connection:
@@ -459,3 +487,36 @@ def test_t36_bus_role_reach_is_named(app_engine: Engine) -> None:
     assert row.rolcanlogin is False, f"{BUS_ROLE} doit rester NOLOGIN"
     assert row.rolbypassrls is True, f"{BUS_ROLE} doit franchir la RLS pour ses fonctions"
     assert reachable == BUS_TABLES, f"portée du contournement inattendue : {reachable}"
+
+
+def test_t36_ops_role_reach_is_job_runs_only(app_engine: Engine) -> None:
+    """T36 — `coges_ops` a BYPASSRLS, NOLOGIN, et n'atteint que `job_runs` (ADR 0077)."""
+    with app_engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT rolcanlogin, rolbypassrls FROM pg_roles WHERE rolname = :role"),
+            {"role": OPS_ROLE},
+        ).one_or_none()
+        assert row is not None, "coges_ops absent : voir deploy/postgres/init/01-roles.sql"
+        reachable = sorted(
+            set(_table_privileges(connection, OPS_ROLE, "SELECT"))
+            | set(_table_privileges(connection, OPS_ROLE, "INSERT"))
+            | set(_table_privileges(connection, OPS_ROLE, "UPDATE"))
+            | set(_table_privileges(connection, OPS_ROLE, "DELETE"))
+        )
+
+    assert row.rolcanlogin is False, f"{OPS_ROLE} doit rester NOLOGIN"
+    assert row.rolbypassrls is True
+    assert reachable == OPS_TABLES, f"portée du contournement inattendue : {reachable}"
+
+
+@pytest.mark.parametrize("role", [APP_ROLE, RELAY_ROLE, ANALYTICS_ROLE])
+def test_t36_no_runtime_role_touches_job_runs(app_engine: Engine, role: str) -> None:
+    """T36 — aucun rôle d'exécution n'a de privilège sur `job_runs` : tout passe par
+    les fonctions de `coges_ops`, qui ne rendent jamais un `company_id`."""
+    with app_engine.connect() as connection:
+        granted = [
+            privilege
+            for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE")
+            if "job_runs" in _table_privileges(connection, role, privilege)
+        ]
+    assert granted == [], f"{role} détient {granted} sur job_runs"

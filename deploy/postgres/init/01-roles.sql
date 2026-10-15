@@ -47,10 +47,17 @@ CREATE ROLE coges_analytics LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROL
 -- SECURITY. NOLOGIN : la surface de contournement tient en trois fonctions.
 CREATE ROLE coges_bus NOLOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE;
 
+-- Propriétaire des fonctions de surveillance (job_run_start, job_run_finish,
+-- job_runs_latest, purge_job_runs) : seul à atteindre `job_runs`, journal des tâches
+-- planifiées (ADR 0077). Même patron que coges_bus : NOLOGIN, BYPASSRLS confiné à
+-- quatre fonctions et à une table.
+CREATE ROLE coges_ops NOLOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE;
+
 -- coges_owner doit pouvoir transférer la propriété des fonctions à leur rôle final.
 -- WITH INHERIT FALSE : aucune élévation implicite, il faut un SET ROLE explicite.
 GRANT coges_auth TO coges_owner WITH INHERIT FALSE;
 GRANT coges_bus  TO coges_owner WITH INHERIT FALSE;
+GRANT coges_ops  TO coges_owner WITH INHERIT FALSE;
 
 CREATE DATABASE coges      OWNER coges_owner;
 CREATE DATABASE coges_test OWNER coges_owner;
