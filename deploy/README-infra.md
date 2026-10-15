@@ -42,6 +42,7 @@ changement de ce fichier : `docker compose down -v && make up`.
 | `coges_analytics` | oui | agrégats et ML (worker) | seul DELETE : projections reconstruisibles |
 | `coges_auth` | **non** | propriétaire d'`auth_lookup` | BYPASSRLS |
 | `coges_bus` | **non** | propriétaire des fonctions du relais | BYPASSRLS |
+| `coges_ops` | **non** | propriétaire des fonctions de surveillance (ADR 0077) | BYPASSRLS ; n'atteint que `job_runs` |
 
 ### `coges_owner` et son risque résiduel
 
@@ -135,6 +136,85 @@ Machine éteinte : les événements s'accumulent dans `business_events` et parte
 redémarrage (au moins une fois, T40) ; les exports restent `pending`, et le balayage
 nocturne les renfile. L'API sur Vercel continue de servir.
 
+## Surveillance des workers (ADR 0077)
+
+Objectif : savoir en moins de 10 minutes qu'un worker, beat ou le relais est tombé ou
+bloqué, ou qu'une tâche de nuit n'a pas tourné. Quoi faire de chaque alerte :
+**`docs/runbooks/workers.md`**.
+
+| Signal | Où | Délai de détection |
+|---|---|---|
+| Battement Redis `coges:heartbeat:<composant>:<hôte>`, toutes les 30 s | healthcheck Docker → `autoheal` relance le conteneur | ≈ 4 min (3 × 60 s) |
+| Passage du relais de plus de 5 min | le relais s'arrête (exit 1), `restart` le relance | 5 min |
+| `GET /api/v1/system/workers` (jeton `COGES_OPS_TOKEN`), `make ops-status` | 503 + liste `problems` | à la demande |
+| Pings « homme mort » (`COGES_JOB_PING_URLS`) | Healthchecks.io ou Sentry Crons | délai de grâce du check |
+| Tâche en échec | Sentry, étiquettes `component`, `job`, `company_id` | immédiat |
+
+**Aucun service payant n'est ouvert sans accord** : les comptes se créent à la main, puis
+leurs URL passent par les variables ci-dessous.
+
+### Rôle `coges_ops` (révision 0021)
+
+Rôle de cluster : il ne naît pas d'une migration. **Avant** la migration 0021 sur un
+cluster existant (Neon préprod, puis prod), en `neondb_owner` :
+
+```sql
+CREATE ROLE coges_ops NOLOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE;
+GRANT coges_ops TO coges_owner WITH INHERIT FALSE;
+```
+
+**Préproduction : fait le 2026-10-15** (projet `CoGes-preprod`, base alors en 0020).
+Production : à faire à son ouverture.
+
+En local, sans recréer le volume : même commande par
+`docker compose exec -T postgres psql -U postgres`. Un cluster neuf l'a déjà par
+`01-roles.sql`.
+
+### Pings « homme mort » (Healthchecks.io, offre gratuite)
+
+Un check par tâche ; l'URL `https://hc-ping.com/<uuid>` reçoit `GET` au succès et
+`GET …/fail` à l'échec. Le service alerte quand un ping attendu n'arrive pas.
+
+| Tâche (clé du JSON) | Période | Délai de grâce |
+|---|---|---|
+| `system.beat_tick` | 5 min | 10 min |
+| `reconcile.ensure_audit_partitions`, `system.purge_job_runs`, `reconcile.purge_idempotency_keys`, `exports.sweep_all`, `reconcile.rebuild_stock_all`, `reconcile.rebuild_recent_facts_all`, `ml_features.compute_all`, `ml_infer.infer_all`, `notifications.scan_due_debts_all` | 1 jour (cron `beat.py`, UTC) | 2 h |
+| `ml_train.train_all`, `reconcile.check_revenue_all` | 7 jours | 6 h |
+
+Un échec d'entreprise pingue `/fail` au nom de l'éventail. Le succès part à la fin de
+l'éventail. **Sentry Crons** (inclus dans l'offre Sentry) : mettre `{status}` dans l'URL de
+check-in (`…/cron/<slug>/<clé>/?status={status}`), remplacé par `ok` ou `error`.
+
+### Règles d'alerte Sentry à créer
+
+L'intégration Celery est active sur le worker et beat ; chaque événement porte `component`
+(`api`, `worker`, `beat`, `relay`), et pour une tâche `job` et, s'il y a lieu, `company_id`
+(un identifiant, jamais un nom). Une tâche relancée par `self.retry` ne remonte qu'une
+fois ses tentatives épuisées.
+
+1. **Nouvelle erreur en zone B** : *Issue alert*, « A new issue is created », filtre
+   `component` dans `worker, beat, relay` → e-mail (ou Slack) immédiat.
+2. **Tâches qui échouent en série** : *Issue alert*, « The issue is seen more than 3 times
+   in 1 hour », filtre `component:worker` → e-mail.
+3. **Relais arrêté par son chien de garde** : *Issue alert* sur le message
+   « Passage du relais bloqué », filtre `component:relay` → e-mail immédiat.
+4. Si Sentry Crons est choisi à la place de Healthchecks.io : un moniteur par tâche avec
+   les périodes et délais de grâce du tableau ci-dessus.
+
+### Ce qui ne doit pas réveiller Neon
+
+Les battements, le tic de beat et les pings passent par Redis ou HTTP, jamais par la base.
+`/system/workers` lit la base (outbox, `job_runs`) : en préproduction, ne pas le faire
+sonder plus d'une fois par heure par un service externe, sans quoi la base ne s'endort
+plus (100 CU-heures par mois). Les pings couvrent le reste.
+
+### Redis : `maxmemory-policy noeviction`
+
+Une politique d'éviction effacerait des tâches en attente quand Redis est plein. Le
+worker **refuse de démarrer en production** sans `noeviction` (lu par `INFO memory`) et
+avertit seulement en local et en préproduction. Redis Cloud : *Database* → *Configuration*
+→ *Data eviction policy* → `noeviction`.
+
 ## Secrets par environnement
 
 | Où | Variable | Préproduction | Production |
@@ -145,8 +225,11 @@ nocturne les renfile. L'API sur Vercel continue de servir.
 | | `COGES_REDIS_URL`, `COGES_JWT_SECRET`, `COGES_SENTRY_DSN` | propres à la préprod | propres à la prod |
 | | `COGES_CORS_ORIGINS` | domaine du frontend de préprod | domaine de prod |
 | | `COGES_TRUST_PROXY_HEADERS` | `true` | `true` |
+| | `COGES_OPS_TOKEN` | `openssl rand -hex 32` | idem, distinct |
+| | `COGES_OPS_OUTBOX_MAX_LAG_SECONDS` | `900` | `600` |
 | Poste / hôte workers | `COGES_DATABASE_URL_APP`, `…_RELAY`, `…_ANALYTICS` | hôte pooler | idem |
 | | `COGES_OUTBOX_IDLE_MAX_SECONDS` | `600` | `1` |
+| | `COGES_JOB_PING_URLS` | JSON des URL de Healthchecks.io (facultatif) | idem |
 | GitHub, environnement `preprod` / `production` | `NEON_OWNER_DSN` | DSN `coges_owner`, hôte **direct** | idem |
 | | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` (`VERCEL_TEAM_ID`) | projet Hobby | projet Pro |
 | | `SMOKE_SLUG`, `SMOKE_EMAIL`, `SMOKE_PASSWORD` | entreprise de fumée | idem |

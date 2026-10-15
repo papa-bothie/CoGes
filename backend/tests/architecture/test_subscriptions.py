@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from app.core.events.types import EventType
 from app.workers import subscriptions
-from app.workers.beat import BEAT_SCHEDULE
+from app.workers.beat import BEAT_SCHEDULE, BEAT_TICK, JOB_FRESHNESS
 from app.workers.celery_app import celery_app
 
 # Importés pour leur effet de bord : l'enregistrement des tâches auprès de Celery.
@@ -27,6 +27,7 @@ import app.workers.tasks.reconcile  # noqa: F401  isort:skip
 import app.workers.tasks.ml_features  # noqa: F401  isort:skip
 import app.workers.tasks.ml_train  # noqa: F401  isort:skip
 import app.workers.tasks.ml_infer  # noqa: F401  isort:skip
+import app.workers.tasks.system  # noqa: F401  isort:skip
 
 
 def test_every_event_type_has_at_least_one_subscriber() -> None:
@@ -65,3 +66,20 @@ def test_every_scheduled_name_is_a_registered_task() -> None:
     scheduled = {entry["task"] for entry in BEAT_SCHEDULE.values()}
     missing = sorted(name for name in scheduled if name not in celery_app.tasks)
     assert missing == [], f"Tâches planifiées introuvables : {missing}"
+
+
+def test_every_scheduled_task_has_a_freshness_window() -> None:
+    """Toute tâche planifiée a un délai de fraîcheur, lu par `/system/workers` (ADR 0077).
+
+    Sans lui, une tâche ajoutée à `BEAT_SCHEDULE` pourrait cesser de tourner sans que
+    personne le sache. `beat_tick` est suivi dans Redis, pas dans `job_runs`.
+    """
+    scheduled = {entry["task"] for entry in BEAT_SCHEDULE.values()} - {BEAT_TICK}
+    assert scheduled == set(JOB_FRESHNESS), sorted(scheduled ^ set(JOB_FRESHNESS))
+
+
+def test_every_per_company_subtask_is_a_registered_task() -> None:
+    """Les sous-tâches nommées dans `JOB_FRESHNESS` existent sous ce nom."""
+    subtasks = {f.per_company for f in JOB_FRESHNESS.values() if f.per_company}
+    missing = sorted(name for name in subtasks if name not in celery_app.tasks)
+    assert missing == [], f"Sous-tâches introuvables : {missing}"

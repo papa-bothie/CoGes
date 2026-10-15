@@ -27,8 +27,11 @@ en base et enfile des tâches, point.
 from __future__ import annotations
 
 import logging
+import os
 import signal
 import threading
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from types import FrameType
 from typing import Any
@@ -82,6 +85,69 @@ class RelayPass:
         return self.claimed == 0
 
 
+#: Durée maximale d'un passage. Au-delà, le relais est bloqué (base qui ne répond plus,
+#: verrou, Redis suspendu) : il s'arrête de lui-même et Docker le relance (ADR 0077).
+MAX_PASS_SECONDS = 300.0
+
+
+class PassWatchdog:
+    """Fil qui arrête le processus si un passage dure plus de `MAX_PASS_SECONDS`.
+
+    Un relais bloqué continuerait de battre (le battement vit dans son propre fil) :
+    c'est ce chien de garde qui transforme le blocage en arrêt, que `restart` et
+    `autoheal` savent réparer. `os._exit` et non `sys.exit` : le fil principal est
+    justement celui qui ne rend plus la main.
+    """
+
+    def __init__(
+        self,
+        *,
+        limit: float = MAX_PASS_SECONDS,
+        clock: Callable[[], float] = time.monotonic,
+        exit_process: Callable[[int], None] = os._exit,
+        check_every: float = 10.0,
+    ) -> None:
+        self._limit = limit
+        self._clock = clock
+        self._exit = exit_process
+        self._check_every = check_every
+        self._started_at: float | None = None
+        self._stop = threading.Event()
+
+    def pass_started(self) -> None:
+        self._started_at = self._clock()
+
+    def pass_finished(self) -> None:
+        self._started_at = None
+
+    def check(self) -> bool:
+        """Rend `False` (et arrête le processus) si le passage en cours a trop duré."""
+        started = self._started_at
+        if started is None or self._clock() - started <= self._limit:
+            return True
+        logger.critical(
+            "Passage du relais bloqué : arrêt du processus",
+            extra={"limit_seconds": self._limit},
+        )
+        # `os._exit` coupe tout, y compris le fil d'envoi de Sentry : on le vide d'abord.
+        import sentry_sdk  # noqa: PLC0415
+
+        sentry_sdk.flush(timeout=2)
+        self._exit(1)
+        return False
+
+    def _run(self) -> None:
+        while not self._stop.wait(self._check_every):
+            self.check()
+
+    def start(self) -> PassWatchdog:
+        threading.Thread(target=self._run, name="relay-watchdog", daemon=True).start()
+        return self
+
+    def stop(self) -> None:
+        self._stop.set()
+
+
 class OutboxRelay:
     """Boucle de publication. Une instance par processus."""
 
@@ -95,8 +161,10 @@ class OutboxRelay:
         max_attempts: int | None = None,
         backoff_max: float | None = None,
         idle_max: float | None = None,
+        watchdog: PassWatchdog | None = None,
     ) -> None:
         settings = get_settings()
+        self._watchdog = watchdog
         self._bus = bus
         self._session_factory = session_factory or get_relay_session_factory()
         self._batch_size = batch_size or settings.outbox_batch_size
@@ -247,12 +315,19 @@ class OutboxRelay:
 
     def run_forever(self) -> None:
         while not self._stopping:
+            if self._watchdog is not None:
+                self._watchdog.pass_started()
             try:
-                result = self.run_once()
+                result: RelayPass | None = self.run_once()
             except Exception:
                 # Base injoignable, fonction absente, lot illisible : on journalise et
                 # on réessaie. Un relais qui s'arrête est une file qui ne part plus.
                 logger.error("Passage du relais en échec", exc_info=True)
+                result = None
+            finally:
+                if self._watchdog is not None:
+                    self._watchdog.pass_finished()
+            if result is None:
                 self._backoff = min(max(self._backoff * 2, self._poll_interval), self._backoff_max)
                 self._pause(self._backoff)
                 continue
@@ -272,7 +347,16 @@ def main() -> None:
     relay_factory = get_relay_session_factory()
     # Garde-fou 1 de l'ADR 0042 : refuse de démarrer sous coges_owner ou BYPASSRLS.
     assert_runtime_role(relay_factory.kw["bind"])
-    relay = OutboxRelay(CeleryEventBus(celery_app), session_factory=relay_factory)
+    from app.core.heartbeat import Heartbeat  # noqa: PLC0415
+
+    # Le battement vit dans son propre fil : il continue pendant les attentes de dix
+    # minutes de la préproduction, sans réveiller la base (ADR 0040, 0077).
+    Heartbeat("relay").start()
+    relay = OutboxRelay(
+        CeleryEventBus(celery_app),
+        session_factory=relay_factory,
+        watchdog=PassWatchdog().start(),
+    )
     for received in (signal.SIGINT, signal.SIGTERM):
         signal.signal(received, _handler(relay))
     logger.info("Relais de l'outbox démarré")

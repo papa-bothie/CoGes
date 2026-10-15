@@ -18,6 +18,7 @@ from app.core.tenancy import TenantContext, tenant_transaction
 from app.modules.importexport import service as importexport_service
 from app.workers.beat import SWEEP_EXPORTS
 from app.workers.celery_app import celery_app
+from app.workers.jobs import tracked_job
 from app.workers.tenants import each_company
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ def build_sales(self: Any, *, company_id: str, user_id: str, export_id: str) -> 
 
 
 @celery_app.task(name="exports.sweep")
+@tracked_job("exports.sweep", ping_as=SWEEP_EXPORTS)
 def sweep(company_id: str) -> int:
     """Vide les exports périmés d'une entreprise et renfile ceux restés en attente."""
     ctx = TenantContext.bootstrap(UUID(company_id))
@@ -71,6 +73,7 @@ def sweep(company_id: str) -> int:
 
 
 @celery_app.task(name=SWEEP_EXPORTS)
+@tracked_job(SWEEP_EXPORTS)
 def sweep_all() -> int:
     """Éventail nocturne du balayage des exports."""
     count = 0

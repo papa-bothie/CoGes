@@ -52,23 +52,43 @@ def scrub_event(event: dict[str, Any], hint: dict[str, Any] | None = None) -> di
     return event
 
 
-def init_sentry(component: str) -> bool:
-    """Initialise Sentry pour ce processus ; renvoie `False` sans DSN."""
+def init_sentry(component: str, *, celery: bool = False) -> bool:
+    """Initialise Sentry pour ce processus ; renvoie `False` sans DSN.
+
+    `celery=True` pour le worker et beat : l'intégration Celery rapporte toute tâche qui
+    échoue pour de bon — une tâche relancée par `self.retry` ne remonte qu'une fois ses
+    tentatives épuisées (ADR 0077). Les moniteurs Crons de Sentry ne sont pas activés
+    d'office : les pings sont configurés tâche par tâche (`COGES_JOB_PING_URLS`).
+    """
     settings = get_settings()
     # Absent ou vide (`COGES_SENTRY_DSN=` dans un .env) : inactif.
     dsn = settings.sentry_dsn.get_secret_value() if settings.sentry_dsn else ""
     if not dsn:
         return False
+    integrations: list[Any] = []
+    if celery:
+        from sentry_sdk.integrations.celery import CeleryIntegration  # noqa: PLC0415
+
+        integrations.append(CeleryIntegration(monitor_beat_tasks=False))
     sentry_sdk.init(
         dsn=dsn,
+        integrations=integrations,
         environment=settings.env,
         send_default_pii=False,
         traces_sample_rate=settings.sentry_traces_sample_rate,
         before_send=scrub_event,  # type: ignore[arg-type]
     )
-    sentry_sdk.set_tag("component", component)
+    # Portée globale : chaque tâche Celery ouvre sa propre portée, qui en hérite.
+    sentry_sdk.get_global_scope().set_tag("component", component)
     logger.info("Sentry actif", extra={"component": component})
     return True
+
+
+def tag_job(job: str, company_id: UUID | None) -> None:
+    """Rattache les erreurs de la tâche courante à son nom et à son entreprise."""
+    sentry_sdk.set_tag("job", job)
+    if company_id is not None:
+        tag_tenant(company_id)
 
 
 def tag_tenant(company_id: UUID) -> None:

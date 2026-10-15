@@ -12,12 +12,13 @@ Quatre DSN distincts, jamais interchangeables :
 Aucun secret n'est journalisé : les valeurs sensibles sont des ``SecretStr``.
 """
 
+import json
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import AwareDatetime, Field, SecretStr, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # backend/app/core/config.py -> backend/app/core -> backend/app -> backend -> racine
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -132,6 +133,17 @@ class Settings(BaseSettings):
     sentry_dsn: SecretStr | None = None
     sentry_traces_sample_rate: float = Field(default=0.0, ge=0, le=1)
 
+    # --- Surveillance des workers (ADR 0077) ---
+    # Jeton de `GET /system/workers`. Absent : la route répond 404, comme si elle
+    # n'existait pas.
+    ops_token: SecretStr | None = None
+    # Retard toléré du plus vieil événement en attente. 600 s en production ; 900 s en
+    # préproduction, où le relais espace ses passages jusqu'à 600 s (ADR 0040).
+    ops_outbox_max_lag_seconds: int = Field(default=600, gt=0, le=86400)
+    # Pings « homme mort » : `{"nom de tâche": "url"}` en JSON. Absent ou vide : aucun
+    # ping (le compose des workers transmet une chaîne vide quand rien n'est configuré).
+    job_ping_urls: Annotated[dict[str, str], NoDecode] = Field(default_factory=dict)
+
     # --- Heure figée (ADR 0065) ---
     # Pour comparer le front à la maquette v2 au pixel près : « aujourd'hui » devient ce
     # moment (`2026-10-06T10:45:00+00:00`) dans les lectures métier (`app/core/clock.py`).
@@ -146,6 +158,22 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"COGES_JWT_SECRET doit faire au moins {MIN_JWT_SECRET_LENGTH} caractères."
             )
+        return value
+
+    @field_validator("job_ping_urls", mode="before")
+    @classmethod
+    def _ping_urls_from_json(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return json.loads(value) if value.strip() else {}
+        return value
+
+    @field_validator("job_ping_urls")
+    @classmethod
+    def _ping_urls_are_http(cls, value: dict[str, str]) -> dict[str, str]:
+        """Refuse au démarrage une URL de ping qui ne serait pas HTTP(S)."""
+        for job, url in value.items():
+            if not url.startswith(("https://", "http://")):
+                raise ValueError(f"COGES_JOB_PING_URLS : l'URL de « {job} » doit être HTTP(S).")
         return value
 
     @model_validator(mode="after")

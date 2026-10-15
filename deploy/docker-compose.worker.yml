@@ -20,11 +20,25 @@ x-common: &common
     COGES_REDIS_URL: ${COGES_REDIS_URL:?}
     COGES_JWT_SECRET: ${COGES_JWT_SECRET:?}
     COGES_SENTRY_DSN: ${COGES_SENTRY_DSN:-}
+    # Pings « homme mort » (ADR 0077) : JSON `{"tâche": "url"}`, vide = aucun ping.
+    COGES_JOB_PING_URLS: ${COGES_JOB_PING_URLS:-}
     # Connexions par le pooler Neon en mode transaction (ADR 0040).
     COGES_DB_POOLER: ${COGES_DB_POOLER:-transaction}
-  logging:
+  logging: &logging
     driver: json-file
     options: { max-size: "10m", max-file: "5" }
+  # Relancé par `autoheal` quand il devient « unhealthy » (ADR 0077).
+  labels:
+    autoheal: "true"
+
+# Sonde commune : battement de moins de 90 s sur cet hôte (`app/workers/health.py`).
+# Trois échecs d'affilée, une minute d'écart : moins de 4 min pour être déclaré
+# malade, puis relancé par `autoheal`.
+x-healthcheck: &healthcheck
+  interval: 60s
+  timeout: 15s
+  retries: 3
+  start_period: 60s
 
 services:
   # Consommateurs : agrégats, alertes, audit secondaire, exports, ML. Deux DSN : la
@@ -40,6 +54,10 @@ services:
     volumes:
       - ml-artifacts:/var/lib/coges/ml
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    # Battement, plus `celery inspect ping` vers ce worker.
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "python", "-m", "app.workers.health", "worker"]
 
   # Planificateur : il n'exécute rien, il enfile. Un seul exemplaire — deux `beat`
   # déclencheraient chaque batch deux fois. Son état vit dans un volume : l'image
@@ -59,6 +77,9 @@ services:
       - beat
       - --loglevel=info
       - --schedule=/var/lib/coges/beat/celerybeat-schedule
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "python", "-m", "app.workers.health", "beat"]
 
   # Relais de l'outbox, sous `coges_relay` (aucun privilège de table, ADR 0032). En
   # préproduction sur l'offre gratuite de Neon, il espace ses passages jusqu'à 10 min
@@ -71,6 +92,24 @@ services:
       COGES_DATABASE_URL_RELAY: ${COGES_DATABASE_URL_RELAY:?}
       COGES_OUTBOX_IDLE_MAX_SECONDS: ${COGES_OUTBOX_IDLE_MAX_SECONDS:-1}
     command: ["python", "-m", "app.workers.relay"]
+    # Le battement continue pendant les attentes de 10 min ; un passage bloqué plus de
+    # 5 min arrête le relais de lui-même (`PassWatchdog`), et `restart` le relance.
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "python", "-m", "app.workers.health", "relay"]
+
+  # Relance les conteneurs « unhealthy » étiquetés `autoheal=true` : Docker se contente
+  # de les marquer, `restart` ne joue qu'à la sortie d'un processus. Version figée.
+  autoheal:
+    image: willfarrell/autoheal:1.2.0
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: 30
+      AUTOHEAL_START_PERIOD: 120
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    logging: *logging
 
 volumes:
   ml-artifacts:

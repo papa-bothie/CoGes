@@ -12,6 +12,8 @@ plusieurs entreprises dans une même transaction.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 
 from celery.schedules import crontab
@@ -28,6 +30,17 @@ ML_FEATURES = "ml_features.compute_all"
 ML_TRAIN = "ml_train.train_all"
 ML_INFER = "ml_infer.infer_all"
 SWEEP_EXPORTS = "exports.sweep_all"
+#: Surveillance (ADR 0077).
+BEAT_TICK = "system.beat_tick"
+PURGE_JOB_RUNS = "system.purge_job_runs"
+
+#: Délai dur d'une tâche (`task_time_limit`). Une trace restée `running` au-delà est
+#: celle d'un worker tué : la lecture la compte comme un échec.
+TASK_TIME_LIMIT_SECONDS = 360
+
+#: Intervalle de `system.beat_tick`, et délai au-delà duquel son silence est une panne.
+BEAT_TICK_SECONDS = 300
+BEAT_TICK_MAX_AGE = timedelta(minutes=15)
 
 #: Nombre de jours de faits réécrits chaque nuit. C'est le filet du § 12.1 point 3 :
 #: un événement perdu ne laisse pas un agrégat faux plus d'une nuit.
@@ -95,4 +108,47 @@ BEAT_SCHEDULE: dict[str, dict[str, Any]] = {
         "task": CHECK_REVENUE,
         "schedule": crontab(day_of_week="0", hour="4", minute="0"),
     },
+    # 01 h 15 — purge des traces de tâches de plus de 90 jours (ADR 0077).
+    "purge-job-runs": {
+        "task": PURGE_JOB_RUNS,
+        "schedule": crontab(hour="1", minute="15"),
+    },
+    # Toutes les 5 min — « beat est vivant et un worker consomme ». Écrit dans Redis et
+    # pingue, sans toucher la base, qui peut ainsi s'endormir en préproduction.
+    "beat-tick": {
+        "task": BEAT_TICK,
+        "schedule": float(BEAT_TICK_SECONDS),
+    },
+}
+
+
+@dataclass(frozen=True, slots=True)
+class Freshness:
+    """Délai dans lequel une tâche planifiée doit avoir réussi, et sa sous-tâche.
+
+    `per_company` nomme la sous-tâche enfilée pour chaque entreprise : le bilan compte
+    les entreprises dont la dernière exécution a échoué.
+    """
+
+    window: timedelta
+    per_company: str | None = None
+
+
+#: 26 h pour une tâche quotidienne (une nuit manquée, plus deux heures de marge),
+#: 8 jours pour une hebdomadaire. Toute tâche de `BEAT_SCHEDULE` figure ici, sauf
+#: `beat_tick`, suivie dans Redis (test d'architecture).
+DAILY = timedelta(hours=26)
+WEEKLY = timedelta(days=8)
+JOB_FRESHNESS: dict[str, Freshness] = {
+    ENSURE_PARTITIONS: Freshness(DAILY),
+    PURGE_JOB_RUNS: Freshness(DAILY),
+    PURGE_IDEMPOTENCY: Freshness(DAILY),
+    SWEEP_EXPORTS: Freshness(DAILY, "exports.sweep"),
+    REBUILD_STOCK: Freshness(DAILY, "reconcile.rebuild_stock"),
+    REBUILD_RECENT_FACTS: Freshness(DAILY, "analytics.rebuild_recent_facts"),
+    ML_FEATURES: Freshness(DAILY, "ml_features.compute"),
+    ML_TRAIN: Freshness(WEEKLY, "ml_train.train"),
+    ML_INFER: Freshness(DAILY, "ml_infer.infer"),
+    SCAN_DUE_DEBTS: Freshness(DAILY, "notifications.scan_due_debts"),
+    CHECK_REVENUE: Freshness(WEEKLY, "reconcile.check_revenue"),
 }

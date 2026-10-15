@@ -11,6 +11,7 @@ from app.core.tenancy import TenantContext
 from app.modules.intelligence.pipelines import run_training
 from app.workers.beat import ML_TRAIN
 from app.workers.celery_app import celery_app
+from app.workers.jobs import tracked_job
 from app.workers.tasks.intelligence_common import artifact_store, run_for_company
 from app.workers.tenants import each_company
 
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="ml_train.train")
+@tracked_job("ml_train.train", ping_as=ML_TRAIN)
 def train(company_id: str, as_of: str | None = None) -> str | None:
     """Entraîne et enregistre l'artefact de la semaine. Renvoie sa version."""
 
@@ -41,6 +43,7 @@ def train(company_id: str, as_of: str | None = None) -> str | None:
 
 
 @celery_app.task(name=ML_TRAIN)
+@tracked_job(ML_TRAIN)
 def train_all() -> int:
     """Éventail : une sous-tâche par entreprise."""
     count = 0

@@ -6574,6 +6574,38 @@
         }
       }
     },
+    "/api/v1/system/workers": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Workers Health",
+        "description": "Bilan des workers, de beat, du relais et des tâches de nuit (ADR 0077).\n\nProtégé par `COGES_OPS_TOKEN` (`Authorization: Bearer …`), pas par un compte :\nc'est l'exploitant qui interroge. 200 si tout va bien, 503 sinon, avec le même\ncorps. Aucun nom ni identifiant d'entreprise n'y figure.",
+        "operationId": "workers_health_api_v1_system_workers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkersHealth"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Au moins un problème détecté.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkersHealth"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/audit-logs": {
       "get": {
         "tags": [
@@ -7800,6 +7832,34 @@
         "type": "object",
         "title": "CompanyUpdate",
         "description": "Paramètres modifiables. Chaque modification est auditée en transactionnel."
+      },
+      "ComponentHealth": {
+        "properties": {
+          "component": {
+            "type": "string",
+            "title": "Component"
+          },
+          "healthy": {
+            "type": "boolean",
+            "title": "Healthy"
+          },
+          "hosts": {
+            "items": {
+              "$ref": "#/components/schemas/HostPulse"
+            },
+            "type": "array",
+            "title": "Hosts"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "component",
+          "healthy",
+          "hosts"
+        ],
+        "title": "ComponentHealth",
+        "description": "Worker, beat ou relais : sain si au moins un hôte a battu depuis moins de 90 s."
       },
       "CostPrice-Input": {
         "$ref": "#/components/schemas/UnitCost-Input",
@@ -9954,6 +10014,26 @@
         ],
         "title": "HistoryPage"
       },
+      "HostPulse": {
+        "properties": {
+          "host": {
+            "type": "string",
+            "title": "Host"
+          },
+          "age_seconds": {
+            "type": "number",
+            "title": "Age Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "host",
+          "age_seconds"
+        ],
+        "title": "HostPulse",
+        "description": "Un battement de cœur : l'hôte (identifiant de conteneur) et son âge."
+      },
       "ImportKind": {
         "type": "string",
         "enum": [
@@ -10398,6 +10478,97 @@
         ],
         "title": "IntelligenceSummary",
         "description": "Compteurs de l'écran Insights, lus sur les résultats déjà persistés."
+      },
+      "JobHealth": {
+        "properties": {
+          "job": {
+            "type": "string",
+            "title": "Job"
+          },
+          "healthy": {
+            "type": "boolean",
+            "title": "Healthy"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "window_hours": {
+            "type": "number",
+            "title": "Window Hours"
+          },
+          "last_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Status"
+          },
+          "last_started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Started At"
+          },
+          "last_finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Finished At"
+          },
+          "last_ok_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Ok At"
+          },
+          "companies_ok": {
+            "type": "integer",
+            "title": "Companies Ok"
+          },
+          "companies_failed": {
+            "type": "integer",
+            "title": "Companies Failed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "job",
+          "healthy",
+          "state",
+          "window_hours",
+          "last_status",
+          "last_started_at",
+          "last_finished_at",
+          "last_ok_at",
+          "companies_ok",
+          "companies_failed"
+        ],
+        "title": "JobHealth",
+        "description": "Dernière exécution d'une tâche planifiée, et ce qu'il faut en penser.\n\n`companies_failed` compte les entreprises dont la **dernière** exécution de la\nsous-tâche a échoué. Jamais de nom ni d'identifiant d'entreprise."
       },
       "LineDiscount": {
         "$ref": "#/components/schemas/Amount-Input",
@@ -11505,6 +11676,54 @@
         ],
         "title": "OutboxHealth",
         "description": "État de l'outbox pour l'entreprise du contexte.\n\nLes trois compteurs se lisent ensemble : `pending` qui monte sans que `published`\nbouge signale un relais arrêté ; `dead_lettered` non nul signale des événements\nqu'aucune reprise ne rattrapera plus."
+      },
+      "OutboxLag": {
+        "properties": {
+          "healthy": {
+            "type": "boolean",
+            "title": "Healthy"
+          },
+          "pending": {
+            "type": "integer",
+            "title": "Pending"
+          },
+          "dead_lettered": {
+            "type": "integer",
+            "title": "Dead Lettered"
+          },
+          "oldest_pending_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Pending At"
+          },
+          "lag_seconds": {
+            "type": "number",
+            "title": "Lag Seconds"
+          },
+          "max_lag_seconds": {
+            "type": "integer",
+            "title": "Max Lag Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "healthy",
+          "pending",
+          "dead_lettered",
+          "oldest_pending_at",
+          "lag_seconds",
+          "max_lag_seconds"
+        ],
+        "title": "OutboxLag",
+        "description": "Retard du relais, toutes entreprises confondues. Aucune donnée d'événement."
       },
       "OwedRow": {
         "properties": {
@@ -13117,6 +13336,33 @@
       },
       "Quantity-Output": {
         "type": "string"
+      },
+      "QueueDepth": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "length"
+        ],
+        "title": "QueueDepth",
+        "description": "Tâches en attente dans la file Celery ; `None` si Redis n'a pas répondu."
       },
       "Rate-Input": {
         "anyOf": [
@@ -16184,6 +16430,78 @@
         ],
         "title": "WatchStock",
         "description": "Un article à surveiller : sous son seuil ou épuisé (« Plus que 2 sacs »)."
+      },
+      "WorkersHealth": {
+        "properties": {
+          "healthy": {
+            "type": "boolean",
+            "title": "Healthy"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Checked At"
+          },
+          "problems": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Problems"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/ComponentHealth"
+            },
+            "type": "array",
+            "title": "Components"
+          },
+          "beat_tick_age_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beat Tick Age Seconds"
+          },
+          "outbox": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OutboxLag"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "queue": {
+            "$ref": "#/components/schemas/QueueDepth"
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/JobHealth"
+            },
+            "type": "array",
+            "title": "Jobs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "healthy",
+          "checked_at",
+          "problems",
+          "components",
+          "beat_tick_age_seconds",
+          "outbox",
+          "queue",
+          "jobs"
+        ],
+        "title": "WorkersHealth",
+        "description": "Bilan de la zone B (ADR 0077). Rendu en 200 si tout va bien, en 503 sinon.\n\n`problems` liste les causes en codes stables (`heartbeat_missing:beat`,\n`outbox_lagging`, `job_stale:reconcile.rebuild_stock_all`…) : c'est ce que lit\nle guide `docs/runbooks/workers.md`."
       }
     }
   }

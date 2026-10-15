@@ -8,6 +8,7 @@ jamais désactivée.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
+import redis
 from _pytest.monkeypatch import MonkeyPatch
 from alembic import command
 from alembic.config import Config
@@ -409,3 +411,29 @@ def read_scalar_in_tenant(
     ctx = TenantContext.bootstrap(company_id)
     with tenant_transaction(ctx, session_factory=session_factory) as session:
         return session.execute(text(sql), params or {}).scalar_one()
+
+
+#: Base Redis réservée aux tests de surveillance (ADR 0077) : vidée avant et après,
+#: elle ne touche ni le cache ni la file d'un `make dev` qui tournerait à côté (base 0),
+#: ni les parcours e2e (base 1).
+OPS_REDIS_DB = 15
+
+
+@pytest.fixture
+def ops_redis(monkeypatch: pytest.MonkeyPatch) -> Iterator[redis.Redis]:
+    """Client Redis sur la base 15, branché à la place de `heartbeat.redis_client`."""
+    base = get_settings().redis_url
+    url = re.sub(r"/\d+$", "", base) + f"/{OPS_REDIS_DB}"
+    client = redis.Redis.from_url(
+        url, decode_responses=True, socket_connect_timeout=1, socket_timeout=1
+    )
+    try:
+        client.ping()
+    except redis.RedisError:
+        pytest.skip("Redis requis")
+    client.flushdb()
+    monkeypatch.setattr("app.core.heartbeat.redis_client", lambda: client)
+    try:
+        yield client
+    finally:
+        client.flushdb()

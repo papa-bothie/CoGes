@@ -20,6 +20,7 @@ dépendre de `modules/` (dépendances vers le bas uniquement).
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from ipaddress import ip_address
@@ -34,6 +35,7 @@ from app.core import rate_limit
 from app.core.config import get_settings
 from app.core.errors import (
     AuthenticationRequiredError,
+    NotFoundError,
     PasswordChangeRequiredError,
     PermissionDeniedError,
 )
@@ -134,6 +136,35 @@ def require_permission(code: str) -> Callable[[TenantSession], TenantSession]:
         return tenant
 
     return dependency
+
+
+def require_ops_token(request: Request) -> None:
+    """Exige le jeton d'exploitation `COGES_OPS_TOKEN` (ADR 0077).
+
+    Aucun utilisateur, aucune entreprise : c'est l'exploitant qui interroge, depuis
+    un terminal ou un service de surveillance. Comparaison en temps constant. Sans
+    jeton configuré, la route n'existe pas (404) : rien à deviner.
+    """
+    configured = get_settings().ops_token
+    expected = configured.get_secret_value() if configured else ""
+    if not expected:
+        raise NotFoundError()
+    scheme, _, presented = (request.headers.get("authorization") or "").partition(" ")
+    if scheme.lower() != "bearer" or not secrets.compare_digest(
+        presented.strip().encode(), expected.encode()
+    ):
+        raise AuthenticationRequiredError("Jeton d'exploitation absent ou invalide.")
+
+
+def get_platform_session() -> Iterator[Session]:
+    """Transaction sans entreprise, pour les lectures de plate-forme (ADR 0077).
+
+    Le contexte est l'entreprise nulle : la RLS ne laisse rien voir de métier. Seules
+    les fonctions `SECURITY DEFINER` qui rendent des agrégats sans identifiant
+    (`outbox_lag`, `job_runs_latest`) ont quelque chose à dire ici.
+    """
+    with tenant_transaction(TenantContext.bootstrap(UUID(int=0))) as session:
+        yield session
 
 
 def client_ip(request: Request) -> str | None:

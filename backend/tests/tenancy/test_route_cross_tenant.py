@@ -43,6 +43,11 @@ def _write_headers(token: str) -> dict[str, str]:
 pytestmark = pytest.mark.tenancy
 
 #: Routes publiques : aucune donnée de tenant n'y transite.
+#: Routes d'exploitation : protégées par `COGES_OPS_TOKEN`, pas par un compte. Sans
+#: jeton configuré, elles répondent 404 ; leur 401 est vérifié dans
+#: `tests/integration/test_system_workers.py` (ADR 0077).
+OPS_PATHS = frozenset({"/api/v1/system/workers"})
+
 PUBLIC_PATHS = frozenset(
     {"/api/v1/health", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout"}
 )
@@ -441,7 +446,7 @@ def test_unauthenticated_access_is_refused_on_every_protected_route(
 ) -> None:
     """Sans jeton, aucune route protégée ne répond autre chose que 401."""
     for path in sorted(app.openapi()["paths"]):
-        if path in PUBLIC_PATHS or not path.startswith("/api/v1/"):
+        if path in PUBLIC_PATHS | OPS_PATHS or not path.startswith("/api/v1/"):
             continue
         # N'importe quel paramètre de chemin reçoit un UUID valide : le test reste
         # vrai pour les routes des phases suivantes, sans liste à tenir à jour.

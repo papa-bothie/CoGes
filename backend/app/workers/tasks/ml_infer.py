@@ -11,6 +11,7 @@ from app.core.tenancy import TenantContext
 from app.modules.intelligence.pipelines import run_inference
 from app.workers.beat import ML_INFER
 from app.workers.celery_app import celery_app
+from app.workers.jobs import tracked_job
 from app.workers.tasks.intelligence_common import artifact_store, run_for_company
 from app.workers.tenants import each_company
 
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="ml_infer.infer")
+@tracked_job("ml_infer.infer", ping_as=ML_INFER)
 def infer(company_id: str, as_of: str | None = None) -> int:
     """Produit les prévisions et insights d'une entreprise. Renvoie le nombre de prévisions."""
 
@@ -42,6 +44,7 @@ def infer(company_id: str, as_of: str | None = None) -> int:
 
 
 @celery_app.task(name=ML_INFER)
+@tracked_job(ML_INFER)
 def infer_all() -> int:
     """Éventail : une sous-tâche par entreprise."""
     count = 0
