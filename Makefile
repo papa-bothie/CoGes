@@ -15,7 +15,7 @@ PNPM := pnpm --dir frontend
 API_PORT ?= 8000
 COGES_API_URL ?= http://localhost:$(API_PORT)
 
-.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format dev api worker relay seed-demo seed-maquette maquette-check openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front
+.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format dev api worker relay seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front
 
 help: ## Liste les cibles disponibles
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -108,6 +108,9 @@ front-e2e: e2e-reset ## Parcours Playwright sur la base dédiée coges_e2e (recr
 
 maquette-check: ## Compare le front à la maquette v2 (seuil 2 %) ; MAQUETTE_ALL=1 : tous les écrans
 	$(PNPM) exec playwright test --config playwright.maquette.config.ts
+
+lighthouse: ## Accessibilité Lighthouse des 26 écrans de la maquette (≥ 95), rapport dans docs/design
+	$(PNPM) exec node scripts/lighthouse.mjs
 
 e2e-reset: ## Recrée coges_e2e : migrations, démo `demo` et entreprise `e2e` vide (jamais coges ni Neon)
 	deploy/scripts/e2e.sh reset
