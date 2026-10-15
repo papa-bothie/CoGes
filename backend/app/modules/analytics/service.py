@@ -1383,6 +1383,9 @@ def next_week(session: Session, ctx: TenantContext) -> NextWeekForecast:
         if line is None:
             continue
         expected = rounded(row.value) or Decimal("0")
+        if expected <= 0:
+            # « Vous devriez vendre environ 0 sac » ne dit rien : la tuile n'apparaît pas.
+            continue
         items.append(
             NextWeekRow(
                 product_id=row.product_id,

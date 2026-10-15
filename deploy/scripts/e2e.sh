@@ -106,11 +106,11 @@ SQL
       --slug e2e --manager-email gerant@e2e.example.com --manager-name "Gérant des parcours" \
       --password demo-coges-2026
     # L'épicerie de la maquette v2, à part : la démo et `e2e` ne changent pas (ADR 0065).
-    uv run --directory backend python -m app.seed_maquette
+    uv run --directory backend python -m app.seed_maquette --intelligence
     ;;
   maquette)
     shift
-    uv run --directory backend python -m app.seed_maquette "$@"
+    uv run --directory backend python -m app.seed_maquette --intelligence "$@"
     ;;
   maquette-api)
     # Une API à part, à l'heure figée : les autres parcours gardent l'heure réelle.

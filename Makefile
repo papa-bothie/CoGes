@@ -73,7 +73,7 @@ seed-demo: ## Épicerie de démonstration `demo` : 46 articles, 15 clients, 90 j
 	$(UV) python -m app.seed
 
 seed-maquette: ## Données de la maquette v2 `maquette` (Keur Fatou, 6 octobre 2026 à 10 h 45)
-	$(UV) python -m app.seed_maquette
+	$(UV) python -m app.seed_maquette --intelligence
 
 openapi: ## Régénère backend/openapi.json (source des types du frontend)
 	$(UV) python -m app.cli export-openapi
