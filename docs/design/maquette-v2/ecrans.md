@@ -47,10 +47,10 @@ Les lignes « état » (lettre après le numéro) montrent le même écran aprè
 | 22c | … prévisions | `22c-previsions` | idem | idem | 3e |
 | 23 | Alertes | `23-alertes` | `Alertes.dc.html` | `/notifications` | 3e |
 | 24 | Réglages : ma boutique | `24-reglages-boutique` | `Reglages.dc.html` | `/settings` | 3e |
-| 24b | … personnes | `24b-reglages-personnes` | idem | idem | 3e |
-| 24c | … qui peut faire quoi | `24c-reglages-droits` | idem | idem | 3e |
-| 24d | … historique | `24d-reglages-historique` | idem | idem | 3e |
-| 24e | … fichiers Excel | `24e-reglages-fichiers-excel` | idem | idem | 3e |
+| 24b | … personnes | `24b-reglages-personnes` | idem | `/settings/people` | 3e |
+| 24c | … qui peut faire quoi | `24c-reglages-droits` | idem | `/settings/rights` | 3e |
+| 24d | … historique | `24d-reglages-historique` | idem | `/settings/history` | 3e |
+| 24e | … fichiers Excel | `24e-reglages-fichiers-excel` | idem | `/settings/files` | 3e |
 | 25 | Connexion | `25-connexion` | `Connexion.dc.html` | `/login` | 3e |
 | 26 | Sur téléphone (390 px) | `26-telephone` | `Telephone.dc.html` | toutes, en dessous de 768 px | 3a, puis chaque lot |
 
