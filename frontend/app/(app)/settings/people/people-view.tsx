@@ -19,7 +19,7 @@ import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
 import { formatDayMonth } from "@/lib/format";
 import { labels } from "@/lib/labels";
-import { contactOf, seenWhen } from "@/lib/settings";
+import { contactOf, seenWhen, temporaryDeadline } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 
 type User = Schemas["UserRead"];
@@ -56,6 +56,8 @@ export function PeopleView() {
   const canEditRoles = usePermission("roles:update");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  // Provisoire tiré par « Donner un nouveau mot de passe » : affiché une seule fois.
+  const [drawn, setDrawn] = useState<{ id: string; name: string; password: string } | null>(null);
   const roles = useSystemRoles();
   const users = useQuery({
     queryKey: [...queryKeys.users.all, { page_size: 100 }],
@@ -74,6 +76,24 @@ export function PeopleView() {
     onSuccess: (user) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
       toast.success(user.is_active ? t.backDone(user.full_name) : t.cutDone(user.full_name));
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+
+  const redraw = useMutation({
+    meta: { toastError: false },
+    mutationFn: (user: User) =>
+      unwrap(
+        api.POST("/api/v1/users/{user_id}/password", {
+          params: { path: { user_id: user.id } },
+          body: {},
+        }),
+      ),
+    onSuccess: (user) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
+      if (user.temporary_password) {
+        setDrawn({ id: user.id, name: user.full_name, password: user.temporary_password });
+      }
     },
     onError: (error) => toast.error(errorMessage(error)),
   });
@@ -141,6 +161,25 @@ export function PeopleView() {
                   <div className="text-muted-foreground">
                     {role ? roleLabel(role) : "—"} · {last}
                   </div>
+                  {user.is_active && !you && user.must_change_password && (
+                    <TemporaryLine
+                      user={user}
+                      timeZone={timeZone}
+                      canRedraw={canUpdate}
+                      pending={redraw.isPending}
+                      onRedraw={() => redraw.mutate(user)}
+                    />
+                  )}
+                  {user.is_active && !you && !user.must_change_password && canUpdate && (
+                    <button
+                      type="button"
+                      disabled={redraw.isPending}
+                      onClick={() => redraw.mutate(user)}
+                      className="mt-1 mr-4 text-sm font-semibold text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+                    >
+                      {t.newPassword}
+                    </button>
+                  )}
                   {canEditRoles && !you && user.is_active && (
                     <button
                       type="button"
@@ -175,6 +214,18 @@ export function PeopleView() {
                     </button>
                   )
                 )}
+                {drawn?.id === user.id && (
+                  <p
+                    role="status"
+                    className="basis-full rounded-champ bg-card px-3.5 py-3 font-semibold"
+                  >
+                    {t.newPasswordFor(drawn.name)}{" "}
+                    <span className="font-extrabold tracking-[0.06em] numeric">
+                      {drawn.password}
+                    </span>{" "}
+                    {t.newPasswordHint}
+                  </p>
+                )}
                 {editing === user.id && (
                   <RoleEditor
                     user={user}
@@ -188,6 +239,43 @@ export function PeopleView() {
         </ul>
       )}
       <p className="mt-1.5 text-muted-foreground">{t.lastManager}</p>
+    </div>
+  );
+}
+
+/** « Mot de passe provisoire · Expire le 19/10 à 14 h 05 » (ou « Expiré »), et le geste pour en redonner un. */
+function TemporaryLine({
+  user,
+  timeZone,
+  canRedraw,
+  pending,
+  onRedraw,
+}: {
+  user: User;
+  timeZone: string;
+  canRedraw: boolean;
+  pending: boolean;
+  onRedraw: () => void;
+}) {
+  const until = user.must_change_password_until;
+  const deadline = until ? temporaryDeadline(until, timeZone) : null;
+  const expired = deadline === t.expired;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+      <span className={cn("font-semibold", expired ? "text-depenses-encre" : "text-encre-2")}>
+        {t.temporaryLabel}
+        {deadline && ` · ${deadline}`}
+      </span>
+      {canRedraw && (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={onRedraw}
+          className="font-semibold text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+        >
+          {t.newPassword}
+        </button>
+      )}
     </div>
   );
 }

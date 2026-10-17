@@ -273,6 +273,8 @@ def _user(names: _Names, log: AuditLogRead, who: str) -> str:
         if after["is_active"]:
             return f"{who} a redonné l’accès à {target}"
         return f"{who} a coupé l’accès {of(target)}"
+    if after.get("refused") == "temporary_password_expired":
+        return f"{who} n’a pas pu se connecter : mot de passe provisoire expiré"
     if after.get("password_changed"):
         if log.actor_user_id == log.entity_id:
             return f"{who} a changé son mot de passe"

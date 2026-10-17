@@ -42,6 +42,9 @@ export function notificationHref(notification: Pick<AppNotification, "type" | "d
     }
     case "forecast_alert":
       return "/insights?view=forecasts";
+    case "login_failures":
+      // Échecs de connexion répétés (ADR 0078) : là où l'on redonne un mot de passe.
+      return "/settings/people";
     default:
       return "/notifications";
   }
@@ -71,6 +74,8 @@ export function alertLook(notification: Pick<AppNotification, "type" | "data">):
         : { tone: "clients", action: t.collect };
     case "sale_cancelled":
       return { tone: "neutre", action: t.sale };
+    case "login_failures":
+      return { tone: "stock", action: t.people };
     default:
       return { tone: "conseils", action: t.advice };
   }

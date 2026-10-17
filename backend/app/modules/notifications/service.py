@@ -44,6 +44,8 @@ RECIPIENT_PERMISSION: dict[NotificationType, str] = {
     NotificationType.SALE_CANCELLED: "sales:cancel",
     # Un insight critique vise qui peut le lire : la permission de l'écran Insights.
     NotificationType.INSIGHT_CRITICAL: "insights:read",
+    # Qui peut donner un nouveau mot de passe ou couper l'accès (ADR 0078).
+    NotificationType.LOGIN_FAILURES: "users:update",
 }
 
 
@@ -107,13 +109,15 @@ def notify(
     entity_id: str | None = None,
     data: dict[str, Any] | None = None,
     channel: NotificationChannel | None = None,
+    dedupe_hours: int | None = None,
 ) -> int:
     """Alerte les personnes habilitées, sans doublon dans la fenêtre. Renvoie le compte.
 
     Le dédoublonnage porte sur (type, entité, destinataire) et sur une fenêtre de
     quelques heures : un stock bas est une **situation**, pas un flux d'événements. Sans
     cette fenêtre, chaque vente d'un article sous son seuil rouvrirait la même alerte,
-    et un fil illisible ne prévient plus de rien.
+    et un fil illisible ne prévient plus de rien. `dedupe_hours` la raccourcit pour une
+    alerte qui doit pouvoir revenir plus tôt (échecs de connexion : une par heure).
     """
     permission = RECIPIENT_PERMISSION[notification_type]
     holders = rbac_service.user_ids_with_permission(session, ctx, permission)
@@ -126,7 +130,8 @@ def notify(
         payload["entity_id"] = entity_id
 
     repository = NotificationRepository(session, ctx)
-    since = datetime.now(UTC) - timedelta(hours=get_settings().notification_dedupe_hours)
+    window = dedupe_hours if dedupe_hours is not None else get_settings().notification_dedupe_hours
+    since = datetime.now(UTC) - timedelta(hours=window)
     sink = channel or InAppChannel()
 
     delivered = 0

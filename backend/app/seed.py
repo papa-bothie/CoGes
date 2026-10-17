@@ -278,6 +278,8 @@ class Shop:
     supplier_payments: dict[date, list[UUID]] = field(default_factory=lambda: defaultdict(list))
     cash_sales: list[tuple[UUID, datetime]] = field(default_factory=list)
     old_debts_of_bad_payer: list[UUID] = field(default_factory=list)
+    #: Clients qui ont déjà réglé au moins une créance.
+    payers: set[UUID] = field(default_factory=set)
     counts: dict[str, int] = field(default_factory=lambda: defaultdict(int))
 
 
@@ -382,6 +384,7 @@ def fill(manager: TenantContext, *, slug: str, password: str, days: int, scale: 
 
     _returns(shop, rng, today)
     _write_off(shop)
+    _settle_one_customer(shop, today)
     for label, count in sorted(shop.counts.items()):
         print(f"  {label:<14} {count}")
 
@@ -631,7 +634,50 @@ def _settle_customer_debts(shop: Shop, rng: random.Random, day: date) -> None:
                 ),
             )
         shop.outstanding[customer_id] -= paid
+        shop.payers.add(customer_id)
         shop.counts["settlements"] += 1
+
+
+def _settle_one_customer(shop: Shop, today: date) -> None:
+    """Un bon payeur solde tout aujourd'hui : la démo montre un client soldé.
+
+    Sans ce geste, chaque client à crédit garde une dette récente ouverte selon le jour
+    où le jeu est semé, et l'état « soldé » n'apparaît que par hasard.
+    """
+    candidates = [
+        customer_id
+        for customer_id, _, profile, _ in shop.customers
+        if profile != "bad" and customer_id in shop.payers and shop.outstanding[customer_id] > 0
+    ]
+    if not candidates:
+        return
+    chosen = min(candidates, key=lambda customer_id: shop.outstanding[customer_id])
+    sale_ids = {
+        sale_id
+        for pending in shop.settlements.values()
+        for sale_id, customer_id, _, _ in pending
+        if customer_id == chosen
+    }
+    for pending in shop.settlements.values():
+        pending[:] = [entry for entry in pending if entry[1] != chosen]
+    with tenant_transaction(shop.manager) as session:
+        for sale_id in sorted(sale_ids):
+            debt = finance_service.debt_for_sale(session, shop.manager, sale_id)
+            if debt is None or debt.status not in ("open", "partially_paid"):
+                continue
+            finance_service.record_payment(
+                session,
+                shop.manager,
+                PaymentCreate(
+                    direction="inflow",
+                    method="cash",
+                    amount=debt.balance,
+                    paid_at=_at(shop, today, time(9, 30)),
+                    allocations=[AllocationInput(debt_id=debt.id, amount=debt.balance)],
+                ),
+            )
+            shop.outstanding[chosen] -= debt.balance
+            shop.counts["settlements"] += 1
 
 
 def _day_of_sales(

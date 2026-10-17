@@ -7,12 +7,13 @@ modèles (décision 01).
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, audit_critical
+from app.core.config import get_settings
 from app.core.errors import BusinessRuleError, NotFoundError, ValidationFailedError
 from app.core.passwords import readable_password
 from app.core.security import hash_password, verify_password
@@ -94,6 +95,15 @@ def get_user(session: Session, ctx: TenantContext, user_id: UUID) -> User:
     return user
 
 
+def temporary_password_deadline() -> datetime:
+    """Échéance d'un mot de passe provisoire donné maintenant (ADR 0078).
+
+    Heure réelle, jamais l'heure figée de `app.core.clock` : c'est une règle de
+    sécurité, comme l'expiration des jetons.
+    """
+    return datetime.now(UTC) + timedelta(hours=get_settings().temp_password_ttl_hours)
+
+
 def create_user(
     session: Session,
     ctx: TenantContext,
@@ -132,6 +142,7 @@ def create_user(
             full_name=payload.full_name,
             is_active=True,
             must_change_password=temporary,
+            must_change_password_until=temporary_password_deadline() if temporary else None,
         )
     )
     session.flush()
@@ -219,13 +230,22 @@ def change_password(
     payload: PasswordChange,
     *,
     ip_address: str | None = None,
-) -> User:
+) -> tuple[User, str | None]:
     """Remplace le mot de passe d'un **autre** compte : il devra le changer à sa
     prochaine connexion, puisque quelqu'un d'autre le connaît (ADR 0074). Le hachage
-    n'apparaît jamais dans l'audit."""
+    n'apparaît jamais dans l'audit.
+
+    Sans mot de passe donné, un provisoire lisible est tiré et rendu **une seule
+    fois**, comme à la création (ADR 0078) : c'est le geste « Donner un nouveau mot de
+    passe » de l'écran Personnes."""
     user = get_user(session, ctx, user_id)
-    user.password_hash = hash_password(payload.new_password)
+    temporary = payload.new_password is None
+    password = readable_password() if temporary else str(payload.new_password)
+    user.password_hash = hash_password(password)
     user.must_change_password = user.id != ctx.user_id
+    user.must_change_password_until = (
+        temporary_password_deadline() if user.must_change_password else None
+    )
     session.flush()
 
     audit_critical(
@@ -238,7 +258,7 @@ def change_password(
         after={"password_changed": True},
         ip_address=ip_address,
     )
-    return user
+    return user, (password if temporary else None)
 
 
 def change_own_password(
@@ -257,6 +277,7 @@ def change_own_password(
         raise SamePasswordError()
     user.password_hash = hash_password(new_password)
     user.must_change_password = False
+    user.must_change_password_until = None
     session.flush()
     audit_critical(
         session,

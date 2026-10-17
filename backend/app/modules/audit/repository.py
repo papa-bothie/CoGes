@@ -34,7 +34,8 @@ _FILTERS = """
          OR occurred_at <= CAST(:period_to AS timestamptz))
     AND (NOT CAST(:notable_only AS boolean) OR NOT (
          entity_table IN ('auth_sessions', 'payment_allocations', 'product_stock')
-         OR action IN ('login', 'rebuild')
+         OR action = 'rebuild'
+         OR (action = 'login' AND diff -> 'after' ->> 'refused' IS NULL)
          OR (entity_table = 'sales' AND action = 'confirm')
          OR (entity_table IN ('payments', 'debts') AND action = 'insert'
              AND diff -> 'after' ->> 'sale_id' IS NOT NULL)

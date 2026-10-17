@@ -99,18 +99,18 @@ def deactivate_user(
     return _read(tenant, user)
 
 
-@router.post("/{user_id}/password", response_model=UserRead)
+@router.post("/{user_id}/password", response_model=UserCreated)
 def change_password(
     user_id: UUID,
     payload: PasswordChange,
     request: Request,
     tenant: Annotated[TenantSession, Depends(require_permission("users:update"))],
-) -> UserRead:
-    """Remplace le mot de passe d'un compte."""
-    user = service.change_password(
+) -> UserCreated:
+    """Remplace le mot de passe d'un compte ; corps vide : provisoire tiré, rendu une fois."""
+    user, temporary = service.change_password(
         tenant.session, tenant.ctx, user_id, payload, ip_address=client_ip(request)
     )
-    return _read(tenant, user)
+    return UserCreated(**_read(tenant, user).model_dump(), temporary_password=temporary)
 
 
 @router.post("/{user_id}/roles", response_model=list[UUID], tags=["rbac"])

@@ -24,6 +24,11 @@ class User(IdentifiedTenantBase):
     is_active: Mapped[bool] = mapped_column(Boolean)
     #: Vrai tant qu'un mot de passe donné par quelqu'un d'autre n'est pas remplacé.
     must_change_password: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    #: Échéance du mot de passe provisoire (ADR 0078) ; `None` : aucune (choisi, ou
+    #: provisoire antérieur à la révision 0022).
+    must_change_password_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     #: Moment où l'accès a été coupé, `None` tant qu'il est ouvert (révision 0020).
     deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

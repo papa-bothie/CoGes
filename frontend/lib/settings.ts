@@ -2,7 +2,8 @@
  * Réglages, maquette v2 (écrans 24b et 24d, ADR 0075) : les moments en mots et le contact
  * d'une personne ajoutée.
  */
-import { formatClock, formatDayMonth } from "@/lib/format";
+import { formatClock, formatDate, formatDayMonth } from "@/lib/format";
+import { labels } from "@/lib/labels";
 import { addDays, todayIn } from "@/lib/period";
 import { phoneDigits } from "@/lib/phone";
 
@@ -28,6 +29,13 @@ export function historyWhen(value: string, timeZone: string, now: Date = new Dat
   if (day === today) return `Aujourd'hui, ${clock}`;
   if (day === addDays(today, -1)) return `Hier, ${clock}`;
   return `${formatDayMonth(value, timeZone)}, ${clock}`;
+}
+
+/** Échéance d'un mot de passe provisoire (ADR 0078) : « Expire le 19/10 à 14 h 05 » ou « Expiré ». */
+export function temporaryDeadline(until: string, timeZone: string, now: Date = new Date()): string {
+  const t = labels.settingsScreens.people;
+  if (new Date(until).getTime() <= now.getTime()) return t.expired;
+  return t.expires(formatDate(until, timeZone).slice(0, 5), formatClock(until, timeZone));
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

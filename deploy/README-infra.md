@@ -215,6 +215,19 @@ worker **refuse de démarrer en production** sans `noeviction` (lu par `INFO mem
 avertit seulement en local et en préproduction. Redis Cloud : *Database* → *Configuration*
 → *Data eviction policy* → `noeviction`.
 
+## Connexion : freinage et mode dégradé (ADR 0078)
+
+Le freinage par compte (`rl:acct:{sha256(slug|identifiant)}`) et le plafond de connexion
+par IP vivent dans Redis. **Si Redis manque**, `/auth/login` (et lui seul) passe sur un
+compteur **en mémoire du processus** (10 000 clés au plus, les plus anciennes évincées) ;
+les autres routes perdent leur limite, comme avant. L'incident est journalisé et envoyé à
+Sentry (« limitation de connexion en mode dégradé », une fois par minute au plus).
+
+Sur Vercel, chaque instance de la fonction a sa propre mémoire, et une instance froide
+repart de zéro : c'est un **frein dégradé, pas une garantie**. Une panne de Redis en
+production se répare, elle ne s'attend pas. L'alerte « Plusieurs tentatives de connexion
+échouées » passe par une tâche du worker : sans Redis, elle se perd (le freinage tient).
+
 ## Secrets par environnement
 
 | Où | Variable | Préproduction | Production |
@@ -227,6 +240,8 @@ avertit seulement en local et en préproduction. Redis Cloud : *Database* → *C
 | | `COGES_TRUST_PROXY_HEADERS` | `true` | `true` |
 | | `COGES_OPS_TOKEN` | `openssl rand -hex 32` | idem, distinct |
 | | `COGES_OPS_OUTBOX_MAX_LAG_SECONDS` | `900` | `600` |
+| | `COGES_TEMP_PASSWORD_TTL_HOURS` (ADR 0078) | `48` (défaut, à ne poser que pour changer) | `48` |
+| | `COGES_LOGIN_THROTTLE_*` (ADR 0078) | défauts : 5 échecs / 15 min, 30 min au plus, alerte au 10e | idem |
 | Poste / hôte workers | `COGES_DATABASE_URL_APP`, `…_RELAY`, `…_ANALYTICS` | hôte pooler | idem |
 | | `COGES_OUTBOX_IDLE_MAX_SECONDS` | `600` | `1` |
 | | `COGES_JOB_PING_URLS` | JSON des URL de Healthchecks.io (facultatif) | idem |

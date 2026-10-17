@@ -470,7 +470,7 @@
           "users"
         ],
         "summary": "Change Password",
-        "description": "Remplace le mot de passe d'un compte.",
+        "description": "Remplace le mot de passe d'un compte ; corps vide : provisoire tiré, rendu une fois.",
         "operationId": "change_password_api_v1_users__user_id__password_post",
         "parameters": [
           {
@@ -500,7 +500,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserRead"
+                  "$ref": "#/components/schemas/UserCreated"
                 }
               }
             }
@@ -11606,7 +11606,8 @@
           "debt_due",
           "sale_cancelled",
           "forecast_alert",
-          "insight_critical"
+          "insight_critical",
+          "login_failures"
         ],
         "title": "NotificationType",
         "description": "Liste **fermée**, identique au `CHECK` de `notifications.type` (§ 8.8).\n\nLes deux dernières valeurs appartiennent à CoGes Intelligence (phase 09) ; elles\nfigurent ici parce que le `CHECK` les porte déjà, et qu'une énumération qui\ndiverge de la base est un 500 qui attend son heure."
@@ -11816,18 +11817,23 @@
       "PasswordChange": {
         "properties": {
           "new_password": {
-            "type": "string",
-            "maxLength": 128,
-            "minLength": 12,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 12
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "New Password"
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "new_password"
-        ],
-        "title": "PasswordChange"
+        "title": "PasswordChange",
+        "description": "Sans `new_password`, le serveur tire un provisoire lisible, rendu une fois (ADR 0078)."
       },
       "PasswordUpdate": {
         "properties": {
@@ -16067,6 +16073,18 @@
             "type": "boolean",
             "title": "Must Change Password"
           },
+          "must_change_password_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Must Change Password Until"
+          },
           "last_login_at": {
             "anyOf": [
               {
@@ -16124,6 +16142,7 @@
           "full_name",
           "is_active",
           "must_change_password",
+          "must_change_password_until",
           "last_login_at",
           "deactivated_at",
           "created_at"
@@ -16205,6 +16224,18 @@
             "type": "boolean",
             "title": "Must Change Password"
           },
+          "must_change_password_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Must Change Password Until"
+          },
           "last_login_at": {
             "anyOf": [
               {
@@ -16251,6 +16282,7 @@
           "full_name",
           "is_active",
           "must_change_password",
+          "must_change_password_until",
           "last_login_at",
           "deactivated_at",
           "created_at"

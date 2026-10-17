@@ -42,7 +42,13 @@ function rememberedSlug(): string {
 
 /** Le message d'un refus, en phrase : jamais « Identifiants invalides. ». */
 function failure(error: unknown): string {
+  // Provisoire expiré (ADR 0078) : ne s'apprend qu'avec le bon mot de passe.
+  if (isApiError(error) && error.code === "temporary_password_expired") return t.temporaryExpired;
   if (isApiError(error) && error.status === 401) return t.invalid;
+  // Freinage par compte : le serveur dit combien de minutes attendre.
+  if (isApiError(error) && error.status === 429 && error.details.scope === "account") {
+    return error.message;
+  }
   if (isApiError(error) && error.status === 429) return t.tooMany;
   return errorMessage(error);
 }

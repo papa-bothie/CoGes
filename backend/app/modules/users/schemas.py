@@ -35,6 +35,8 @@ class UserRead(BaseModel):
     is_active: bool
     #: Vrai tant que le mot de passe provisoire n'a pas été remplacé (ADR 0074).
     must_change_password: bool
+    #: Échéance du mot de passe provisoire (ADR 0078) ; `null` : aucune.
+    must_change_password_until: datetime | None
     last_login_at: datetime | None
     #: Moment où l'accès a été coupé (ADR 0075), `null` s'il est ouvert.
     deactivated_at: datetime | None
@@ -92,9 +94,11 @@ class UserUpdate(BaseModel):
 
 
 class PasswordChange(BaseModel):
+    """Sans `new_password`, le serveur tire un provisoire lisible, rendu une fois (ADR 0078)."""
+
     model_config = ConfigDict(extra="forbid")
 
-    new_password: str = Field(min_length=12, max_length=128)
+    new_password: str | None = Field(default=None, min_length=12, max_length=128)
 
 
 class UserPage(BaseModel):

@@ -3,10 +3,14 @@
 Connexion par le couple (slug d'entreprise, e-mail), jetons courts, refresh
 **rotatif** avec détection de réutilisation (décision 16).
 
-Trois règles de non-divulgation :
+Quatre règles de non-divulgation :
 
 * slug inconnu, e-mail inconnu, mot de passe faux et compte désactivé renvoient
   **exactement** le même message et le même statut ;
+* le freinage par compte (ADR 0078) compte ce qui a été **tapé**, que le compte existe
+  ou non, et répond pareil dans les deux cas ;
+* l'échéance d'un mot de passe provisoire ne se révèle qu'**après** le mot de passe
+  vérifié : seul qui le connaît apprend qu'il a expiré ;
 * un mot de passe est toujours vérifié, même sans identité trouvée, pour ne pas
   créer d'oracle temporel ;
 * la connexion réussie relève de l'audit **asynchrone**, pas du canal critique.
@@ -20,8 +24,10 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
+from app.core import queue, rate_limit
 from app.core.audit import AuditAction, audit_critical
-from app.core.errors import AuthenticationRequiredError
+from app.core.config import get_settings
+from app.core.errors import AuthenticationRequiredError, TemporaryPasswordExpiredError
 from app.core.phone import normalise_phone
 from app.core.security import (
     create_access_token,
@@ -34,6 +40,7 @@ from app.core.security import (
 from app.core.tenancy import TenantContext, tenant_transaction
 from app.modules.auth.models import AuthSession
 from app.modules.auth.repository import (
+    AuthIdentity,
     AuthSessionRepository,
     auth_lookup_transaction,
     lookup_identity,
@@ -48,6 +55,9 @@ from app.modules.users import service as users_service
 _DECOY_HASH = hash_password("mot-de-passe-leurre-sans-usage")
 
 _INVALID_CREDENTIALS = "Identifiants invalides."
+
+#: Tâche du worker qui écrit l'alerte d'échecs répétés (`app/workers/tasks/notifications.py`).
+LOGIN_FAILURES_TASK = "notifications.login_failures"
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +128,10 @@ def login(
     """
     raw = payload.login_identifier
     key = raw.lower() if "@" in raw else normalise_phone(raw)
+    # Le compteur suit ce qui a été tapé, ramené à la même forme que la recherche.
+    throttle_id = key or raw.strip().lower()
+    rate_limit.check_account(payload.company_slug, throttle_id)
+
     identity = None
     if key:
         with auth_lookup_transaction() as lookup_session:
@@ -127,7 +141,17 @@ def login(
     password_matches = verify_password(payload.password, password_hash)
 
     if identity is None or not password_matches or not identity.is_active:
+        failure = rate_limit.record_account_failure(payload.company_slug, throttle_id)
+        if identity is not None and failure.failures >= get_settings().login_throttle_alert_after:
+            _alert_repeated_failures(identity, failure.failures)
         raise AuthenticationRequiredError(_INVALID_CREDENTIALS)
+
+    if _temporary_password_expired(identity):
+        # Ni échec ni succès pour le freinage : le mot de passe tapé était le bon.
+        _audit_expired_temporary_password(identity, ip_address)
+        raise TemporaryPasswordExpiredError()
+
+    rate_limit.reset_account(payload.company_slug, throttle_id)
 
     ctx = TenantContext(user_id=identity.user_id, company_id=identity.company_id)
     with tenant_transaction(ctx) as session:
@@ -149,6 +173,48 @@ def login(
         refresh_token=raw_token,
         company_id=identity.company_id,
         user_id=identity.user_id,
+    )
+
+
+def _temporary_password_expired(identity: AuthIdentity) -> bool:
+    """Heure réelle, jamais `app.core.clock` : une échéance de sécurité, comme un jeton."""
+    deadline = identity.must_change_password_until
+    return identity.must_change_password and deadline is not None and deadline <= datetime.now(UTC)
+
+
+def _audit_expired_temporary_password(identity: AuthIdentity, ip_address: str | None) -> None:
+    """Trace la tentative refusée, dans sa propre transaction validée avant le refus."""
+    ctx = TenantContext(user_id=identity.user_id, company_id=identity.company_id)
+    with tenant_transaction(ctx) as session:
+        audit_critical(
+            session,
+            ctx,
+            action=AuditAction.LOGIN,
+            entity_table="users",
+            entity_id=identity.user_id,
+            before={"must_change_password_until": _iso(identity.must_change_password_until)},
+            after={"refused": "temporary_password_expired"},
+            ip_address=ip_address,
+        )
+
+
+def _iso(moment: datetime | None) -> str | None:
+    return moment.isoformat() if moment is not None else None
+
+
+def _alert_repeated_failures(identity: AuthIdentity, failures: int) -> None:
+    """Demande au worker de prévenir qui gère les personnes (ADR 0078).
+
+    Auth est de la Plateforme, les alertes de la Restitution : la tâche est désignée
+    par son nom, et c'est le worker qui écrit l'alerte. Si Redis manque, l'alerte se
+    perd, le freinage, lui, tient.
+    """
+    queue.enqueue(
+        LOGIN_FAILURES_TASK,
+        countdown=0,
+        company_id=str(identity.company_id),
+        user_id=str(identity.user_id),
+        failures=failures,
     )
 
 

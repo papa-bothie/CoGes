@@ -123,6 +123,18 @@ class Settings(BaseSettings):
     rate_limit_ip_per_minute: int = Field(default=300, ge=0)
     rate_limit_tenant_per_minute: int = Field(default=1200, ge=0)
     rate_limit_login_per_minute: int = Field(default=10, ge=0)
+    # Freinage progressif par compte (ADR 0078) : au-delà de `free_failures` échecs dans
+    # la fenêtre, attente de 1 min doublée à chaque nouvel échec, `max_wait` au plus.
+    # Une alerte part vers le gérant à `alert_after` échecs d'un compte réel.
+    login_throttle_free_failures: int = Field(default=5, ge=1)
+    login_throttle_window_minutes: int = Field(default=15, ge=1)
+    login_throttle_max_wait_minutes: int = Field(default=30, ge=1)
+    login_throttle_alert_after: int = Field(default=10, ge=1)
+    # Plafond du compteur en mémoire quand Redis manque (ADR 0078, mode dégradé).
+    login_throttle_memory_keys: int = Field(default=10_000, ge=100)
+
+    # Durée de vie d'un mot de passe provisoire (ADR 0078), en heures.
+    temp_password_ttl_hours: int = Field(default=48, ge=1)
 
     # Derrière Vercel, l'adresse du client arrive dans `X-Forwarded-For`, que la
     # plate-forme réécrit. En local, l'en-tête viendrait du client : on l'ignore.

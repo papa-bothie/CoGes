@@ -117,6 +117,7 @@ SQL
     export COGES_RATE_LIMIT_IP_PER_MINUTE=0
     export COGES_RATE_LIMIT_TENANT_PER_MINUTE=0
     export COGES_RATE_LIMIT_LOGIN_PER_MINUTE=0
+    export COGES_LOGIN_THROTTLE_FREE_FAILURES=1000000
     export COGES_FROZEN_NOW="$MAQUETTE_NOW"
     # Le cache du tableau de bord ne doit pas mêler l'heure figée et l'heure réelle.
     export COGES_REDIS_URL="${COGES_REDIS_URL%/*}/2"
@@ -131,6 +132,10 @@ SQL
     export COGES_RATE_LIMIT_IP_PER_MINUTE=0
     export COGES_RATE_LIMIT_TENANT_PER_MINUTE=0
     export COGES_RATE_LIMIT_LOGIN_PER_MINUTE=0
+    # Freinage par compte (ADR 0078) hors d'atteinte : les refus volontaires des parcours
+    # s'additionneraient d'une suite à l'autre sur les mêmes comptes.
+    export COGES_LOGIN_THROTTLE_FREE_FAILURES=1000000
+    export COGES_LOGIN_THROTTLE_ALERT_AFTER=1000000
     exec uv run --directory backend uvicorn app.main:app --port "$E2E_API_PORT"
     ;;
   front)
