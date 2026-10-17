@@ -15,7 +15,10 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
-set -a; [ -f .env ] && . ./.env; set +a
+set -a
+# shellcheck source=/dev/null
+[ -f .env ] && . ./.env
+set +a
 
 SOURCE_DB="${SOURCE_DB:-coges}"
 TARGET_DB="coges_restore"

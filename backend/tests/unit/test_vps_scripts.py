@@ -126,7 +126,8 @@ def test_bootstrap_dry_run_on_ubuntu_24_04_changes_nothing() -> None:
     assert "[essai] ufw allow 2222/tcp comment ssh" in out
     assert "[essai] écrirait /etc/ssh/sshd_config.d/10-coges.conf" in out
     assert "[essai] écrirait /etc/apt/apt.conf.d/52coges-unattended" in out
-    assert "[essai] fallocate -l 2G /swapfile" in out
+    # Le conteneur voit le swap de l'hôte : déjà actif sur certains runners.
+    assert "[essai] fallocate -l 2G /swapfile" in out or "swap : déjà actif" in out
     assert "[essai] install -m 0755 -o root -g root /vps/deploy.sh /opt/coges/deploy.sh" in out
 
 
