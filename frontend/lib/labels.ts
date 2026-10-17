@@ -1872,6 +1872,16 @@ export const labels = {
       tooMuch: "C’est le total ou plus : choisissez « Tout payé »",
     },
   },
+  /** Lien « ← … » des écrans d'action : le nom de l'écran d'où l'on vient (ADR 0082). */
+  back: {
+    generic: "Retour",
+    customer: "Fiche du client",
+    supplier: "Fiche du fournisseur",
+    product: "Fiche de l'article",
+    sale: (number: string) => (number ? `Vente n° ${number}` : "La vente"),
+    allMovements: "Tous les mouvements",
+    suppliers: "Fournisseurs",
+  },
   kit: {
     currencyShort: "F",
     numericPad: "Pavé numérique",

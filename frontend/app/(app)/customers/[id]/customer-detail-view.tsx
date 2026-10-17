@@ -12,6 +12,7 @@ import { HistoryTabs, PersonHeader, SheetTile } from "@/components/people/person
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale, useMe } from "@/hooks/use-me";
 import { usePermission } from "@/hooks/use-permission";
+import { withFrom } from "@/lib/back-target";
 import { api, unwrap } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queries/keys";
 import { compareDecimal } from "@/lib/decimal";
@@ -105,7 +106,7 @@ export function CustomerDetailView({ customerId }: { customerId: string }) {
       <div className="flex flex-wrap gap-2.5">
         {money && owes && canPay && (
           <Link
-            href={`/finance/collect?customer=${customerId}`}
+            href={withFrom(`/finance/collect?customer=${customerId}`, `/customers/${customerId}`)}
             className={cn(ACTION, RUBRIQUE_CLASSES.clients.solid)}
           >
             {t.collect}

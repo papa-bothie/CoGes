@@ -1,5 +1,6 @@
 "use client";
 
+import { BackLink } from "@/components/back-link";
 import { ErrorState } from "@/components/error-state";
 import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +17,11 @@ export function EditProductView({ productId }: { productId: string }) {
   if (!product.data) return <Skeleton className="h-96 w-full" />;
   return (
     <>
+      <BackLink
+        fixed
+        tone="stock"
+        fallback={{ href: `/products/${productId}`, label: product.data.name }}
+      />
       <PageHeader title={labels.products.editTitle(product.data.name)} />
       <ProductForm product={product.data} />
     </>

@@ -10,6 +10,7 @@ import { HistoryTabs, PersonHeader, SheetTile } from "@/components/people/person
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { usePermission } from "@/hooks/use-permission";
+import { withFrom } from "@/lib/back-target";
 import { api, unwrap } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queries/keys";
 import { compareDecimal } from "@/lib/decimal";
@@ -106,14 +107,14 @@ export function SupplierDetailView({ supplierId }: { supplierId: string }) {
       <div className="flex flex-wrap gap-2.5">
         {money && owes && canPay && (
           <Link
-            href={`/finance/pay?supplier=${supplierId}`}
+            href={withFrom(`/finance/pay?supplier=${supplierId}`, `/suppliers/${supplierId}`)}
             className={cn(ACTION, RUBRIQUE_CLASSES.argent.solid)}
           >
             {t.pay}
           </Link>
         )}
         <Link
-          href={`/inventory/receive?supplier=${supplierId}`}
+          href={withFrom(`/inventory/receive?supplier=${supplierId}`, `/suppliers/${supplierId}`)}
           className={cn(ACTION, RUBRIQUE_CLASSES.stock.solid)}
         >
           {t.receive}

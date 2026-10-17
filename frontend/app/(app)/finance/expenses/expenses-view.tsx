@@ -5,6 +5,7 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
+import { BackLink } from "@/components/back-link";
 import { ErrorState } from "@/components/error-state";
 import { FieldError } from "@/components/field-error";
 import { AmountField, NumericPad } from "@/components/kit/amount-field";
@@ -114,6 +115,7 @@ export function ExpensesView() {
 
   return (
     <div className="mx-auto flex max-w-page flex-col gap-5">
+      <BackLink fallback={{ href: "/finance", label: labels.moneyScreens.title }} />
       <div>
         <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{t.title}</h1>
         <p className="text-lg text-muted-foreground">

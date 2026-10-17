@@ -23,13 +23,13 @@ describe("alertes (écran 23)", () => {
 
   it("mènent là où l'on agit", () => {
     expect(notificationHref(alert("stock_low", { product_id: ID }))).toBe(
-      `/inventory/receive?product=${ID}`,
+      `/inventory/receive?product=${ID}&from=%2Fnotifications`,
     );
     expect(notificationHref(alert("debt_due", { party_type: "supplier", party_id: ID }))).toBe(
-      `/finance/pay?supplier=${ID}`,
+      `/finance/pay?supplier=${ID}&from=%2Fnotifications`,
     );
     expect(notificationHref(alert("debt_due", { party_type: "customer", party_id: ID }))).toBe(
-      `/finance/collect?customer=${ID}`,
+      `/finance/collect?customer=${ID}&from=%2Fnotifications`,
     );
     expect(notificationHref(alert("login_failures", { user_id: ID }))).toBe("/settings/people");
     expect(alertLook(alert("login_failures", { user_id: ID }))).toEqual({

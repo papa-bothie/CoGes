@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
+import { BackLink, keepFrom } from "@/components/back-link";
 import { ErrorState } from "@/components/error-state";
 import { FieldError } from "@/components/field-error";
 import { PaymentAmount } from "@/components/kit/payment-amount";
@@ -109,11 +110,16 @@ export function SettleScreen({ kind }: { kind: Kind }) {
   const today = todayIn(timeZone);
   const tone = RUBRIQUE_CLASSES[setup.rubrique];
 
+  const from = searchParams.get("from");
   const pick = (id: string) =>
-    router.replace(`${setup.path}?${setup.param}=${id}`, { scroll: false });
+    router.replace(
+      `${setup.path}?${new URLSearchParams(keepFrom({ [setup.param]: id }, from)).toString()}`,
+      { scroll: false },
+    );
 
   return (
     <div className="mx-auto flex max-w-page flex-col gap-5">
+      <BackLink fallback={{ href: "/finance", label: labels.moneyScreens.title }} />
       <div>
         <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{setup.copy.title}</h1>
         <p className="text-lg text-muted-foreground">

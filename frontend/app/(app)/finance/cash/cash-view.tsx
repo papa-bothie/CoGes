@@ -5,6 +5,7 @@ import { ArrowDownLeft, ArrowUpRight, Loader2, Undo2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { BackLink, keepFrom } from "@/components/back-link";
 import { ErrorState } from "@/components/error-state";
 import { Chip } from "@/components/kit/chip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -47,10 +48,13 @@ export function CashView() {
     queryFn: () => unwrap(api.GET("/api/v1/analytics/cash", { params: { query: { day } } })),
   });
 
-  const go = (next: string) => table.replaceAll(next === today ? {} : { day: next });
+  const from = table.get("from");
+  const go = (next: string) =>
+    table.replaceAll(keepFrom(next === today ? {} : { day: next }, from));
 
   return (
     <div className="mx-auto flex max-w-page flex-col gap-5">
+      <BackLink fallback={{ href: "/finance", label: labels.moneyScreens.title }} />
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{t.title}</h1>
         <div role="group" aria-label={t.day} className="flex flex-wrap gap-2">
