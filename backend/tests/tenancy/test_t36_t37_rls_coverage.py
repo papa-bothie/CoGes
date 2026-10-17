@@ -21,6 +21,7 @@ ANALYTICS_ROLE = "coges_analytics"
 BUS_ROLE = "coges_bus"
 #: Propriétaire des fonctions de surveillance (ADR 0077).
 OPS_ROLE = "coges_ops"
+BACKUP_ROLE = "coges_backup"
 
 #: Seules tables où le rôle analytique peut supprimer. Elles sont intégralement
 #: reconstruisibles depuis le transactionnel : c'est ce qui justifie l'exception.
@@ -245,9 +246,76 @@ def test_t36_no_login_role_can_bypass_rls(app_engine: Engine) -> None:
             )
         ).all()
 
-    offenders = [row.rolname for row in rows if row.rolcanlogin]
+    # Seule exception, nommée : la sauvegarde externe (ADR 0084), en lecture seule et
+    # jamais sur le VPS ; ses droits sont bornés par les tests qui suivent.
+    offenders = [row.rolname for row in rows if row.rolcanlogin and row.rolname != BACKUP_ROLE]
     assert offenders == [], f"Rôles connectables avec BYPASSRLS : {offenders}"
     assert AUTH_ROLE in [row.rolname for row in rows]
+
+
+def test_t36_backup_role_only_reads(app_engine: Engine) -> None:
+    """T36 — `coges_backup` lit tout (pg_dump complet) et n'écrit rien (ADR 0084)."""
+    with app_engine.connect() as connection:
+        role = connection.execute(
+            text(
+                "SELECT rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolinherit, "
+                "rolconfig FROM pg_roles WHERE rolname = :role"
+            ),
+            {"role": BACKUP_ROLE},
+        ).one()
+        tables = connection.execute(
+            text(
+                """
+                SELECT c.relname,
+                       has_table_privilege(:role, c.oid, 'SELECT') AS can_select,
+                       has_table_privilege(:role, c.oid,
+                         'INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER') AS can_write
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
+                ORDER BY c.relname
+                """
+            ),
+            {"role": BACKUP_ROLE},
+        ).all()
+        memberships = connection.execute(
+            text(
+                "SELECT count(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.member "
+                "WHERE r.rolname = :role"
+            ),
+            {"role": BACKUP_ROLE},
+        ).scalar_one()
+        can_create = connection.execute(
+            text("SELECT has_schema_privilege(:role, 'public', 'CREATE')"),
+            {"role": BACKUP_ROLE},
+        ).scalar_one()
+        definer_functions = (
+            connection.execute(
+                text(
+                    """
+                SELECT p.proname FROM pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname = 'public' AND p.prosecdef
+                  AND has_function_privilege(:role, p.oid, 'EXECUTE')
+                """
+                ),
+                {"role": BACKUP_ROLE},
+            )
+            .scalars()
+            .all()
+        )
+
+    assert not (role.rolsuper or role.rolcreatedb or role.rolcreaterole or role.rolreplication)
+    assert role.rolinherit is False
+    assert "default_transaction_read_only=on" in (role.rolconfig or [])
+    assert tables, "aucune table dans public"
+    unreadable = [row.relname for row in tables if not row.can_select]
+    writable = [row.relname for row in tables if row.can_write]
+    assert unreadable == [], f"Tables que la sauvegarde ne lit pas : {unreadable}"
+    assert writable == [], f"Tables que la sauvegarde peut modifier : {writable}"
+    assert memberships == 0, "coges_backup ne doit emprunter aucun autre rôle"
+    assert can_create is False
+    assert definer_functions == [], f"Fonctions privilégiées ouvertes : {definer_functions}"
 
 
 def test_t36_application_role_is_not_a_member_of_the_auth_role(app_engine: Engine) -> None:
