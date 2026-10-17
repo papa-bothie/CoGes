@@ -1,0 +1,16 @@
+# Contexte de l'image du front (Dockerfile, ADR 0083) : le code et le lockfile, rien
+# de local. Les secrets (.env*), les builds et les rapports de tests ne partent jamais.
+node_modules
+.next
+.next-e2e
+.next-maquette
+.vercel
+.env*
+!.env.example
+playwright-report
+test-results
+coverage
+e2e
+*.tsbuildinfo
+Dockerfile
+.dockerignore

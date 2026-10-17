@@ -1,0 +1,71 @@
+# Caddy, seul service exposé du VPS (ADR 0083). Certificats Let's Encrypt automatiques,
+# HTTP redirigé vers HTTPS, un seul domaine vu par le navigateur (« même origine ») :
+#   /api/v1/*  → API FastAPI (un saut de moins que la réécriture de Next)
+#   le reste   → front Next.js
+# La préproduction (sous-domaine preprod.) passe par le même Caddy ; arrêtée, elle
+# répond 502.
+#
+# X-Forwarded-For : Caddy ne fait confiance à aucun en-tête venu du client (aucun
+# `trusted_proxies`) et transmet l'adresse du pair TCP. L'API lit l'entrée la plus à
+# droite (app/core/deps.py) : un client qui envoie son propre en-tête ne change pas son
+# compteur de limitation de débit.
+{
+	email {$COGES_ACME_EMAIL}
+	# Journal des requêtes : ni corps (Caddy ne les journalise jamais), ni cookie, ni jeton.
+	log {
+		output stdout
+		format json
+	}
+	servers {
+		# HTTP/3 ouvert (443/udp), délais pour ne pas garder une connexion lente indéfiniment.
+		timeouts {
+			read_header 10s
+			idle 2m
+		}
+	}
+}
+
+(securite) {
+	encode zstd gzip
+	header {
+		# Repris de next.config.ts, plus HSTS (HTTPS imposé, un an).
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+		-Via
+	}
+	log {
+		output stdout
+		format filter {
+			request>headers>Cookie delete
+			request>headers>Authorization delete
+			request>headers>Idempotency-Key delete
+			resp_headers>Set-Cookie delete
+		}
+	}
+}
+
+(pile) {
+	import securite
+	# Corps de requête bornés aussi à l'entrée (l'API garde ses propres limites, ADR 0042).
+	request_body {
+		max_size 25MB
+	}
+	handle /api/v1/* {
+		reverse_proxy {args[0]}-api:8000
+	}
+	handle {
+		reverse_proxy {args[0]}-front:3000
+	}
+}
+
+{$COGES_DOMAIN} {
+	import pile production
+}
+
+preprod.{$COGES_DOMAIN} {
+	import pile preprod
+}

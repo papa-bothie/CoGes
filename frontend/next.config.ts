@@ -3,19 +3,16 @@ import type { NextConfig } from "next";
 import pkg from "./package.json" with { type: "json" };
 
 /**
- * L'API est servie **sous la même origine** que le front : `/api/v1/*` est réécrit vers
- * `COGES_API_URL` (ADR 0047). Le cookie de rafraîchissement (`SameSite=Lax`, chemin
- * `/api/v1/auth`, ADR 0006) reste ainsi un cookie « first-party » : deux domaines
- * `*.vercel.app` sont deux sites distincts, et le navigateur ne l'enverrait pas sur un
- * appel direct.
+ * L'API est servie **sous la même origine** que le front (ADR 0047, ADR 0083) : le
+ * navigateur ne voit qu'un domaine. Sur le VPS, Caddy envoie `/api/v1/*` directement à
+ * l'API (un saut de moins) ; cette réécriture sert le développement, les parcours e2e et
+ * de filet si une requête `/api/v1` atteignait quand même le front. Le cookie de
+ * rafraîchissement (`SameSite=Lax`, chemin `/api/v1/auth`, ADR 0006) reste ainsi un cookie
+ * « first-party ».
  */
 function apiOrigin(): string {
   const value = process.env.COGES_API_URL;
-  if (value) return value.replace(/\/+$/, "");
-  if (process.env.NODE_ENV === "production" && process.env.VERCEL) {
-    throw new Error("COGES_API_URL est obligatoire pour construire le front sur Vercel.");
-  }
-  return "http://localhost:8000";
+  return value ? value.replace(/\/+$/, "") : "http://localhost:8000";
 }
 
 const isDev = process.env.NODE_ENV !== "production";
@@ -37,8 +34,10 @@ const contentSecurityPolicy = [
 
 const nextConfig: NextConfig = {
   // Le front des parcours e2e tourne à côté de celui de développement, dans son propre
-  // répertoire de build (deploy/scripts/e2e.sh, ADR 0059). Vercel et `pnpm dev` : `.next`.
+  // répertoire de build (deploy/scripts/e2e.sh, ADR 0059). Image Docker et `pnpm dev` : `.next`.
   distDir: process.env.COGES_NEXT_DIST_DIR || ".next",
+  // Image Docker du VPS (ADR 0083) : `server.js` et le strict nécessaire de `node_modules`.
+  output: "standalone",
   poweredByHeader: false,
   // Le bouton « N » de développement ne doit pas apparaître sur les captures d'écran.
   devIndicators: false,

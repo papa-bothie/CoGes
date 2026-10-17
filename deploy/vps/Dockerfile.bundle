@@ -1,0 +1,9 @@
+# « Bundle » de déploiement d'une version (ADR 0083) : le compose, le Caddyfile et le
+# contrôle des secrets qui vont avec CETTE version des images. deploy.sh l'extrait dans
+# /opt/coges/releases/<version>/ : revenir en arrière ramène aussi la configuration.
+# Aucun processus ne tourne dans cette image ; elle ne sert qu'à transporter des fichiers.
+#
+#   docker build -f deploy/vps/Dockerfile.bundle -t coges/bundle:local .
+FROM scratch
+COPY deploy/vps/docker-compose.yml deploy/vps/Caddyfile deploy/vps/coges.env.example /bundle/
+COPY deploy/scripts/check_runtime_env.py /bundle/

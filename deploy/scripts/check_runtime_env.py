@@ -5,36 +5,52 @@
 * une variable `COGES_DATABASE_URL_OWNER` (ou sa jumelle de test) ;
 * une valeur quelconque qui désigne l'utilisateur `coges_owner` dans un DSN.
 
-Deux sources sont contrôlées :
+Sources contrôlées :
 
-1. `deploy/docker-compose.worker.yml` (zone B), lu tel quel ;
-2. les variables du projet Vercel (zone A), lues par l'API Vercel avec
-   `VERCEL_TOKEN`, `VERCEL_PROJECT_ID` et, pour une équipe, `VERCEL_TEAM_ID`.
-   Sans jeton, ce contrôle est sauté **et le dit** : la CI de déploiement, elle, le
-   fournit toujours.
+1. les fichiers compose versionnés (`--compose`, répétable ; par défaut celui du VPS et
+   celui des workers du poste), lus tels quels ;
+2. avec `--require-vps` et `--env-file`, le fichier de secrets d'une pile du VPS
+   (`/etc/coges/coges.env`, ADR 0083). Il doit en plus : désigner Neon en
+   `sslmode=require` pour chaque DSN, garder Redis sur le réseau interne (aucune URL
+   Redis vers l'extérieur), donner un domaine public servi en HTTPS (nom d'hôte nu,
+   jamais `http://`) et des secrets assez longs (JWT et Redis, 32 caractères au moins).
 
-Usage : python deploy/scripts/check_runtime_env.py [--compose FICHIER] [--require-vercel]
+`deploy.sh` le lance avant chaque démarrage sur le VPS ; la CI, sur les fichiers versionnés.
+
+Usage : python deploy/scripts/check_runtime_env.py [--compose FICHIER]…
+        [--require-vps --env-file FICHIER]
 Bibliothèque standard seulement : le script tourne avant toute installation.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
-import os
 import re
 import sys
 import urllib.parse
-import urllib.request
 from collections.abc import Iterable
 from pathlib import Path
 
 FORBIDDEN_KEYS = frozenset({"COGES_DATABASE_URL_OWNER", "COGES_TEST_DATABASE_URL_OWNER"})
 #: `postgresql+psycopg://coges_owner:…@` — l'utilisateur d'un DSN, quel que soit le schéma.
 OWNER_IN_DSN = re.compile(r"://coges_owner(?::|@)")
+#: DSN d'exécution attendus sur le VPS (le propriétaire n'y figure jamais).
+RUNTIME_DSNS = (
+    "COGES_DATABASE_URL_APP",
+    "COGES_DATABASE_URL_RELAY",
+    "COGES_DATABASE_URL_ANALYTICS",
+)
+#: Nom d'hôte nu : `app.exemple.sn`, sans schéma, port ni chemin.
+HOSTNAME = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
+#: Hôtes Redis du réseau Docker interne.
+INTERNAL_REDIS_HOSTS = frozenset({"redis"})
+MIN_SECRET_LENGTH = 32
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_COMPOSE = REPO_ROOT / "deploy" / "docker-compose.worker.yml"
+DEFAULT_COMPOSES = (
+    REPO_ROOT / "deploy" / "vps" / "docker-compose.yml",
+    REPO_ROOT / "deploy" / "docker-compose.worker.yml",
+)
 
 
 def violations(pairs: Iterable[tuple[str, str]], *, source: str) -> list[str]:
@@ -50,48 +66,84 @@ def violations(pairs: Iterable[tuple[str, str]], *, source: str) -> list[str]:
 
 def compose_violations(text: str, *, source: str) -> list[str]:
     """Le fichier compose est lu comme du texte : toute mention suffit à refuser."""
-    found = [
-        f"{source} : mention de {key}" for key in sorted(FORBIDDEN_KEYS) if key in text
-    ]
+    found = [f"{source} : mention de {key}" for key in sorted(FORBIDDEN_KEYS) if key in text]
     if OWNER_IN_DSN.search(text):
         found.append(f"{source} : un DSN désigne l'utilisateur coges_owner")
     return found
 
 
-def vercel_env(token: str, project: str, team: str | None) -> list[tuple[str, str]]:
-    query = {"decrypt": "true"}
-    if team:
-        query["teamId"] = team
-    url = (
-        f"https://api.vercel.com/v9/projects/{urllib.parse.quote(project)}/env?"
-        + urllib.parse.urlencode(query)
-    )
-    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-    with urllib.request.urlopen(request, timeout=20) as response:  # noqa: S310 - URL fixe
-        payload = json.load(response)
-    return [(item["key"], str(item.get("value", ""))) for item in payload.get("envs", [])]
+def read_env_file(text: str) -> list[tuple[str, str]]:
+    """Couples (nom, valeur) d'un fichier `NOM=valeur`, sans rien exécuter."""
+    pairs: list[tuple[str, str]] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        pairs.append((key.strip(), value))
+    return pairs
+
+
+def vps_violations(pairs: list[tuple[str, str]], *, source: str) -> list[str]:
+    """Règles propres au VPS (ADR 0083), en plus du garde-fou sur le propriétaire."""
+    values = dict(pairs)
+    found = violations(pairs, source=source)
+
+    for key in RUNTIME_DSNS:
+        dsn = values.get(key, "")
+        if not dsn:
+            found.append(f"{source} : {key} est vide")
+            continue
+        parsed = urllib.parse.urlsplit(dsn)
+        query = urllib.parse.parse_qs(parsed.query)
+        if query.get("sslmode") != ["require"] and query.get("sslmode") != ["verify-full"]:
+            found.append(f"{source} : {key} doit imposer sslmode=require (Neon)")
+        if parsed.hostname in {None, "localhost", "127.0.0.1", "postgres"}:
+            found.append(f"{source} : {key} doit viser Neon, pas une base locale")
+
+    redis_url = values.get("COGES_REDIS_URL", "")
+    if redis_url and urllib.parse.urlsplit(redis_url).hostname not in INTERNAL_REDIS_HOSTS:
+        found.append(f"{source} : COGES_REDIS_URL doit rester sur le Redis interne du VPS")
+
+    domain = values.get("COGES_DOMAIN", "")
+    if "://" in domain:
+        found.append(f"{source} : COGES_DOMAIN est un nom d'hôte nu (HTTPS imposé par Caddy)")
+    elif not HOSTNAME.match(domain):
+        found.append(f"{source} : COGES_DOMAIN invalide ou vide")
+
+    for key in ("COGES_JWT_SECRET", "COGES_REDIS_PASSWORD"):
+        if len(values.get(key, "")) < MIN_SECRET_LENGTH:
+            found.append(f"{source} : {key} doit compter {MIN_SECRET_LENGTH} caractères au moins")
+    return found
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--compose", type=Path, default=DEFAULT_COMPOSE)
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
+    parser.add_argument("--compose", type=Path, action="append")
     parser.add_argument(
-        "--require-vercel", action="store_true", help="Échouer si le jeton Vercel manque"
+        "--require-vps",
+        action="store_true",
+        help="Contrôler aussi le fichier de secrets d'une pile du VPS (--env-file)",
     )
+    parser.add_argument("--env-file", type=Path)
     args = parser.parse_args(argv)
 
-    problems = compose_violations(args.compose.read_text(encoding="utf-8"), source=str(args.compose))
+    problems: list[str] = []
+    for compose in args.compose or DEFAULT_COMPOSES:
+        problems += compose_violations(compose.read_text(encoding="utf-8"), source=str(compose))
 
-    token = os.environ.get("VERCEL_TOKEN")
-    project = os.environ.get("VERCEL_PROJECT_ID")
-    if token and project:
-        problems += violations(
-            vercel_env(token, project, os.environ.get("VERCEL_TEAM_ID")), source="Vercel"
-        )
-    elif args.require_vercel:
-        problems.append("VERCEL_TOKEN et VERCEL_PROJECT_ID sont requis pour contrôler Vercel")
-    else:
-        print("Contrôle Vercel sauté : VERCEL_TOKEN ou VERCEL_PROJECT_ID absent.")
+    if args.require_vps:
+        if args.env_file is None:
+            problems.append("--require-vps exige --env-file (fichier de secrets de la pile)")
+        else:
+            pairs = read_env_file(args.env_file.read_text(encoding="utf-8"))
+            problems += vps_violations(pairs, source=str(args.env_file))
+    elif args.env_file is not None:
+        pairs = read_env_file(args.env_file.read_text(encoding="utf-8"))
+        problems += violations(pairs, source=str(args.env_file))
 
     for problem in problems:
         print(f"REFUS — {problem}", file=sys.stderr)

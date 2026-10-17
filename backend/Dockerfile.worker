@@ -1,6 +1,6 @@
 # Workers Celery, tâches ML et batchs — zone B du Diagramme 2 (hors Vercel).
 # Même code applicatif que l'API, autre point d'entrée.
-FROM python:3.12-slim-bookworm
+FROM python:3.12.11-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
