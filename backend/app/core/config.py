@@ -136,8 +136,8 @@ class Settings(BaseSettings):
     # Durée de vie d'un mot de passe provisoire (ADR 0078), en heures.
     temp_password_ttl_hours: int = Field(default=48, ge=1)
 
-    # Derrière Vercel, l'adresse du client arrive dans `X-Forwarded-For`, que la
-    # plate-forme réécrit. En local, l'en-tête viendrait du client : on l'ignore.
+    # Derrière Caddy (VPS, ADR 0083), l'adresse du client arrive dans `X-Forwarded-For`,
+    # que Caddy réécrit. En local, l'en-tête viendrait du client : on l'ignore.
     trust_proxy_headers: bool = False
 
     # --- Observabilité ---

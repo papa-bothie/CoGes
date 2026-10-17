@@ -182,14 +182,16 @@ def client_ip(request: Request) -> str | None:
 
 
 def raw_client_ip(forwarded_for: str | None, client: object | None) -> str | None:
-    """Adresse brute : `X-Forwarded-For` derrière Vercel, sinon le pair TCP.
+    """Adresse brute : `X-Forwarded-For` derrière Caddy, sinon le pair TCP.
 
     L'en-tête n'est lu que si `trust_proxy_headers` est actif : en dehors d'un proxy
     qui le réécrit, n'importe quel client pourrait choisir son adresse, donc son
-    compteur de limitation de débit.
+    compteur de limitation de débit. On garde l'entrée **la plus à droite**, celle
+    qu'écrit notre propre proxy (ADR 0083) : les précédentes viennent du client, qui
+    peut envoyer son propre `X-Forwarded-For` pour se faire passer pour un autre.
     """
     if forwarded_for and get_settings().trust_proxy_headers:
-        return forwarded_for.split(",", 1)[0].strip()
+        return forwarded_for.rsplit(",", 1)[-1].strip()
     return getattr(client, "host", None)
 
 

@@ -54,6 +54,27 @@ def test_ip_limit_returns_429_with_retry_after(low_limits: None, client: TestCli
     assert 1 <= int(response.headers["retry-after"]) <= 60
 
 
+def test_a_forged_forwarded_for_does_not_escape_the_ip_limit(
+    low_limits: None, client: TestClient
+) -> None:
+    """Le client invente une adresse à gauche ; Caddy ajoute la vraie à droite (ADR 0083).
+
+    Chaque requête porte une fausse adresse différente : si l'API lisait la gauche,
+    chacune tomberait dans un compteur neuf et la limite ne jouerait jamais.
+    """
+    import os
+
+    real = os.environ["TEST_CLIENT_IP"]
+    statuses = [
+        client.get(
+            "/api/v1/health", headers={"x-forwarded-for": f"198.51.100.{n}, {real}"}
+        ).status_code
+        for n in range(7)
+    ]
+    assert statuses[:5] == [200] * 5
+    assert statuses[5:] == [429, 429]
+
+
 def test_login_has_a_stricter_bucket(low_limits: None, client: TestClient) -> None:
     body = {"company_slug": "inconnue", "email": "x@example.com", "password": "mauvais-mot"}
     statuses = [
