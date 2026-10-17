@@ -60,11 +60,10 @@ jobs:
         with: { enable-cache: true }
       - uses: pnpm/action-setup@v4
         with: { package_json_file: frontend/package.json }
+      # Sans `cache: pnpm` : `pnpm audit` lit le lockfile sans rien installer, et un
+      # magasin pnpm absent fait échouer le nettoyage de fin de job.
       - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
+        with: { node-version: 22 }
       - uses: actions/cache@v4
         with:
           path: ~/.cache/coges
