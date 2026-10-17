@@ -1,70 +1,138 @@
-name: Déploiement
+name: Déployer
 
-# Diagramme 2 et ADR 0040. Trois étapes, dans cet ordre, et rien ne part si la CI
-# n'est pas entièrement verte (décision 07 : une fuite inter-tenant bloque tout) :
+# CoGes sur le VPS (ADR 0083). Plus de Vercel : images construites ici, poussées sur
+# ghcr.io (privé), migrations contre Neon depuis ce job, puis deploy.sh sur le VPS par
+# une clé SSH bridée. Rien ne part si la CI n'est pas entièrement verte (décision 07).
 #
-#   1. contrôle des environnements d'exécution (garde-fou 2, ADR 0042) ;
-#   2. migrations Alembic sous `coges_owner` — seul job qui connaît ce DSN ;
-#   3. déploiement Vercel de l'API, puis test de fumée ;
-#   4. déploiement Vercel du front (`coges-web`), puis test de fumée à travers sa
-#      réécriture `/api/v1` (ADR 0058).
+# Déclencheurs :
+#   • à la main (« Run workflow ») : préprod ou production, et la version à déployer ;
+#   • un tag vX.Y.Z poussé : préproduction seulement. La production est toujours manuelle.
 #
-# Environnements GitHub, aux secrets distincts :
-#   • `preprod`    — Neon offre gratuite, Vercel Hobby. Déployé à chaque push sur `main`.
-#   • `production` — Neon Launch, Vercel Pro. Manuel, derrière une approbation.
-#   • `preview`    — une branche, à la demande, sur la base de préprod **sans migration** :
-#                    une branche qui ajoute une migration attend son merge (décision 17).
+# Environnements GitHub, aux secrets distincts (`preprod`, `production`) :
+#   secrets  NEON_OWNER_DSN        DSN de coges_owner, connexion DIRECTE (jamais le pooler) ;
+#            DEPLOY_SSH_KEY        clé privée de l'utilisateur `deploy` (bridée sur deploy.sh) ;
+#            DEPLOY_KNOWN_HOSTS    empreinte SSH du VPS (ssh-keyscan -p PORT HÔTE) ;
+#            SMOKE_SLUG / SMOKE_EMAIL / SMOKE_PASSWORD   compte du test de fumée ;
+#   vars     DEPLOY_HOST, DEPLOY_PORT   adresse et port SSH du VPS ;
+#            COGES_PUBLIC_URL      https://<domaine> (ou https://preprod.<domaine>).
+#
+# Sans DEPLOY_SSH_KEY, le job s'arrête après les migrations et affiche la commande à
+# lancer sur le VPS : le pipeline marche dans les deux modes.
 
 on:
   push:
-    branches: [main]
+    tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
       target:
         description: Environnement cible
         type: choice
-        options: [preview, preprod, production]
-        default: preview
+        options: [preprod, production]
+        default: preprod
+      version:
+        description: Version à déployer (vX.Y.Z) ; vide = le SHA du commit
+        type: string
+        required: false
 
 concurrency:
   group: deploy-${{ inputs.target || 'preprod' }}
   cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io/${{ github.repository_owner }}/coges
 
 jobs:
   ci:
     name: CI complète
     uses: ./.github/workflows/ci.yml
 
-  deploy:
-    name: Déployer
+  images:
+    name: Images (ghcr.io)
     needs: ci
     runs-on: ubuntu-latest
-    environment: ${{ inputs.target || 'preprod' }}
-    env:
-      TARGET: ${{ inputs.target || 'preprod' }}
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-      VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v5
-
-      - name: Garde-fou 2 — aucun DSN propriétaire à l'exécution (API puis front)
+      - name: Version
+        id: version
         env:
-          VERCEL_WEB_PROJECT_ID: ${{ secrets.VERCEL_WEB_PROJECT_ID }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          python3 deploy/scripts/check_runtime_env.py --require-vercel
-          VERCEL_PROJECT_ID="$VERCEL_WEB_PROJECT_ID" \
-            python3 deploy/scripts/check_runtime_env.py --require-vercel
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            version="$GITHUB_REF_NAME"
+          elif [ -n "$INPUT_VERSION" ]; then
+            version="$INPUT_VERSION"
+          else
+            version="${GITHUB_SHA::12}"
+          fi
+          if ! [[ "$version" =~ ^(v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?|[0-9a-f]{7,40})$ ]]; then
+            echo "::error::version refusée : $version (vX.Y.Z ou SHA)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Version : \`$version\`" >> "$GITHUB_STEP_SUMMARY"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Étiquetées avec la version et le SHA complet du commit.
+      - uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          push: true
+          tags: ${{ env.REGISTRY }}/front:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/front:${{ github.sha }}
+          cache-from: type=gha,scope=front
+          cache-to: type=gha,mode=max,scope=front
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile.api
+          push: true
+          tags: ${{ env.REGISTRY }}/api:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/api:${{ github.sha }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile.worker
+          push: true
+          tags: ${{ env.REGISTRY }}/worker:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/worker:${{ github.sha }}
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/vps/Dockerfile.bundle
+          push: true
+          tags: ${{ env.REGISTRY }}/bundle:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/bundle:${{ github.sha }}
 
+  migrate:
+    name: Migrations (Neon, coges_owner)
+    needs: images
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target || 'preprod' }}
+    steps:
+      - uses: actions/checkout@v5
+      # Garde-fou 2 (ADR 0042) : aucun DSN propriétaire dans les fichiers d'exécution.
+      - run: python3 deploy/scripts/check_runtime_env.py
       - uses: astral-sh/setup-uv@v6
         with: { enable-cache: true }
-
-      - name: Migrations (coges_owner, connexion directe Neon — jamais le pooler)
-        if: env.TARGET != 'preview'
+      # Règle (ADR 0083) : une migration reste compatible avec la version précédente du
+      # code (on ajoute d'abord, on supprime à la version suivante). Revenir en arrière ne
+      # touche donc jamais la base.
+      - name: alembic upgrade head
         env:
-          COGES_ENV: ${{ env.TARGET == 'production' && 'production' || 'staging' }}
-          # Le seul endroit où ce DSN existe (ADR 0042).
+          COGES_ENV: ${{ inputs.target == 'production' && 'production' || 'staging' }}
+          # Le seul endroit où ce DSN existe (ADR 0042) : jamais sur le VPS.
           COGES_DATABASE_URL_OWNER: ${{ secrets.NEON_OWNER_DSN }}
           # Requis par la configuration, jamais utilisé par Alembic.
           COGES_DATABASE_URL_APP: postgresql+psycopg://unused@localhost/unused
@@ -72,98 +140,80 @@ jobs:
           uv sync --directory backend --frozen --no-dev --no-group ml
           uv run --directory backend --no-sync alembic upgrade head
 
-      - name: Déploiement Vercel
-        id: vercel
-        working-directory: backend
-        run: |
-          npm install --global vercel@latest
-          if [ "$TARGET" = "preview" ]; then
-            vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
-            vercel build --token="$VERCEL_TOKEN"
-            url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
-          else
-            vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-            vercel build --prod --token="$VERCEL_TOKEN"
-            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
-          fi
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-          echo "Déployé : $url" >> "$GITHUB_STEP_SUMMARY"
+  deploy:
+    name: VPS (deploy.sh, test de fumée)
+    needs: [images, migrate]
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target || 'preprod' }}
+    env:
+      TARGET: ${{ inputs.target || 'preprod' }}
+      VERSION: ${{ needs.images.outputs.version }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+    steps:
+      - uses: actions/checkout@v5
 
-      - name: Test de fumée (santé, connexion, tableau de bord)
+      - name: Sans clé de déploiement — commande à lancer sur le VPS
+        if: env.DEPLOY_SSH_KEY == ''
+        run: |
+          {
+            echo "### Déploiement à finir à la main"
+            echo "Images poussées et migrations jouées. Sur le VPS :"
+            echo '```'
+            echo "sudo -u deploy /opt/coges/deploy.sh $TARGET $VERSION"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice::Aucune clé DEPLOY_SSH_KEY : lancer « deploy.sh $TARGET $VERSION » sur le VPS."
+
+      - name: Clé SSH bridée
+        if: env.DEPLOY_SSH_KEY != ''
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          # Empreinte connue d'avance : jamais d'acceptation aveugle d'un hôte inconnu.
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: deploy.sh sur le VPS (vérification et retour automatique compris)
+        if: env.DEPLOY_SSH_KEY != ''
+        # La clé ne peut lancer que /opt/coges/deploy.sh : ce texte devient ses arguments.
+        run: ssh -i ~/.ssh/deploy -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes -o BatchMode=yes "deploy@$DEPLOY_HOST" "$TARGET $VERSION"
+
+      - name: Test de fumée
+        id: smoke
+        if: env.DEPLOY_SSH_KEY != ''
         env:
-          # preprod / production : le domaine public de l'environnement (variable
-          # d'environnement GitHub), celui que les utilisateurs atteignent — les URL propres
-          # à chaque déploiement restent derrière la protection Vercel. preview : pas de
-          # variable, l'URL du déploiement et le jeton de contournement ci-dessous.
-          COGES_SMOKE_URL: ${{ vars.COGES_PUBLIC_URL || steps.vercel.outputs.url }}
+          COGES_SMOKE_URL: ${{ vars.COGES_PUBLIC_URL }}
           COGES_SMOKE_SLUG: ${{ secrets.SMOKE_SLUG }}
           COGES_SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
           COGES_SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
-          # Les déploiements de préversion sont protégés par Vercel ; ce jeton
-          # (« Protection Bypass for Automation ») laisse passer le seul test de fumée.
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: python3 deploy/scripts/smoke.py
 
-      # ------------------------------------------------------------- front (ADR 0058)
-      # Après l'API : le front réécrit /api/v1 vers elle (ADR 0047) et ne doit pas partir
-      # vers une API qui n'aurait pas passé son test de fumée.
-      - uses: pnpm/action-setup@v4
-        with: { package_json_file: frontend/package.json }
+      - name: Retour à la version précédente
+        if: failure() && steps.smoke.conclusion == 'failure'
+        run: ssh -i ~/.ssh/deploy -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes -o BatchMode=yes "deploy@$DEPLOY_HOST" "$TARGET rollback"
 
-      - uses: actions/setup-node@v5
+      - name: Nettoyage de la clé
+        if: always()
+        run: rm -f ~/.ssh/deploy
+
+  cleanup:
+    name: Registre — garder les 5 dernières versions
+    needs: [images, deploy]
+    if: always() && needs.images.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        package: [front, api, worker, bundle]
+    steps:
+      # Une version = une image ; ses deux étiquettes (vX.Y.Z et SHA) n'en font qu'une.
+      - uses: actions/delete-package-versions@v5
         with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
-
-      - name: Déploiement Vercel du front
-        id: web
-        working-directory: frontend
-        env:
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_WEB_PROJECT_ID }}
-        run: |
-          if [ "$TARGET" = "preview" ]; then
-            vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
-            vercel build --token="$VERCEL_TOKEN"
-            url=$(vercel deploy --prebuilt --token="$VERCEL_TOKEN")
-          else
-            vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-            vercel build --prod --token="$VERCEL_TOKEN"
-            url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
-          fi
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-          echo "Front déployé : $url" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Test de fumée du front (page de connexion, puis l'API à travers la réécriture)
-        env:
-          # preprod / production : l'adresse stable du front ; preview : l'URL du déploiement.
-          COGES_SMOKE_URL: ${{ vars.COGES_WEB_PUBLIC_URL || steps.web.outputs.url }}
-          COGES_SMOKE_SLUG: ${{ secrets.SMOKE_SLUG }}
-          COGES_SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
-          COGES_SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
-          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_WEB_AUTOMATION_BYPASS_SECRET }}
-        run: |
-          headers=()
-          if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
-            headers=(-H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET")
-          fi
-          # L'adresse stable bascule sur le nouveau déploiement quelques secondes après
-          # `vercel deploy` et répond par intermittence 404 (NOT_FOUND de Vercel) pendant
-          # la bascule : un seul succès ne suffit pas, on en exige 5 d'affilée (2 min au plus).
-          ok=0
-          for _ in $(seq 40); do
-            if page=$(curl --fail --silent "${headers[@]}" "$COGES_SMOKE_URL/login") \
-              && grep -q "Connexion · CoGes" <<< "$page"; then
-              ok=$((ok + 1))
-              [ "$ok" -ge 5 ] && break
-            else
-              ok=0
-            fi
-            sleep 3
-          done
-          if [ "$ok" -lt 5 ]; then
-            echo "::error::$COGES_SMOKE_URL/login ne sert pas la page de connexion de façon stable"
-            exit 1
-          fi
-          echo "GET $COGES_SMOKE_URL/login → page de connexion servie (5 fois d'affilée)"
-          python3 deploy/scripts/smoke.py
+          package-name: coges/${{ matrix.package }}
+          package-type: container
+          min-versions-to-keep: 5
+          delete-only-untagged-versions: false

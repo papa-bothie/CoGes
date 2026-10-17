@@ -15,7 +15,7 @@ PNPM := pnpm --dir frontend
 API_PORT ?= 8000
 COGES_API_URL ?= http://localhost:$(API_PORT)
 
-.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format security-scan dev api worker relay ops-status seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front
+.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format security-scan shellcheck dev api worker relay ops-status seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front
 
 help: ## Liste les cibles disponibles
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -52,6 +52,9 @@ lint: ## ruff (lint + format) puis mypy --strict sur app/
 	$(UV) ruff check .
 	$(UV) ruff format --check .
 	$(UV) mypy
+
+shellcheck: ## shellcheck des scripts du VPS (deploy/vps) et de deploy/scripts
+	uvx --from shellcheck-py==0.11.0.1 shellcheck -x deploy/vps/*.sh deploy/scripts/*.sh
 
 security-scan: ## gitleaks (tout l'historique), pip-audit et pnpm audit --prod ; exceptions dans security/
 	python3 deploy/scripts/security_scan.py all
