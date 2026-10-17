@@ -1,18 +1,28 @@
 # Infrastructure — CoGes
 
 Répartition des composants : Diagramme 2 de
-`docs/architecture/pdf/architecture-technique-v1.1.pdf`. Règle unique : un composant
-persistant, long, planifié ou gourmand en mémoire vit **hors Vercel**. Choix des
-hébergeurs : ADR 0040. Sécurité et observabilité : ADR 0042.
+`docs/architecture/pdf/architecture-technique-v1.1.pdf`. Hébergement : **ADR 0083**
+(tout sur un VPS sauf la base ; remplace l'ADR 0040). Sécurité et observabilité :
+ADR 0042. Guides : `docs/runbooks/vps.md`, `docs/runbooks/deploiement.md`,
+`docs/runbooks/workers.md`.
 
-| Composant | Préproduction | Production (à ouvrir) | Fichier |
+| Composant | Production (VPS) | Préproduction | Fichier |
 |---|---|---|---|
-| API FastAPI | Vercel **Hobby** (fonction Python) | Vercel **Pro** | `backend/vercel.json`, `backend/api/index.py` |
-| PostgreSQL 16 | **Neon**, offre gratuite (mise en veille) | Neon **Launch**, veille désactivée | `deploy/postgres/init/01-roles.sql` |
-| Redis 7 | **Redis Cloud**, offre gratuite (30 Mo) | Redis Cloud | — |
-| Worker, beat, relais, ML | **Poste local**, docker compose | hôte à choisir (ADR 0040) | `backend/Dockerfile.worker`, `deploy/docker-compose.worker.yml` |
-| Migrations Alembic | job `Déploiement` de GitHub Actions | idem | `.github/workflows/deploy.yml` |
+| HTTPS, routage `/api/v1` | **Caddy 2.10**, certificats Let's Encrypt | même Caddy, `preprod.<domaine>` | `deploy/vps/Caddyfile` |
+| Front Next.js | conteneur `front` (standalone) | projet `coges-preprod`, arrêté par défaut | `frontend/Dockerfile` |
+| API FastAPI | conteneur `api` (uvicorn, 2 processus) | idem | `backend/Dockerfile.api` |
+| Worker, beat, relais, ML | conteneurs `worker`, `beat`, `relay` | idem | `backend/Dockerfile.worker` |
+| Redis 7 | conteneur `redis`, réseau interne, `noeviction` | son propre Redis | `deploy/vps/docker-compose.yml` |
+| PostgreSQL 16 | **Neon** offre payante (Francfort), `sslmode=require` | branche Neon de préprod | `deploy/postgres/init/01-roles.sql` |
+| Images | `ghcr.io/papa-bothie/coges/{front,api,worker,bundle}` (privé) | mêmes images | `.github/workflows/deploy.yml` |
+| Migrations Alembic | job « Déployer » de GitHub Actions (`coges_owner`) | idem | `.github/workflows/deploy.yml` |
+| Système du VPS | Ubuntu 24.04, ufw, fail2ban, Docker | même machine | `deploy/vps/bootstrap.sh` |
 | Erreurs | Sentry (offre Developer) | idem | `app/core/observability.py` |
+
+Transition : la préproduction historique (API et front sur Vercel, workers sur le poste,
+`deploy/docker-compose.worker.yml`) reste en place jusqu'à l'ouverture du VPS ; plus aucun
+workflow ne déploie sur Vercel. Le propriétaire supprime les projets Vercel une fois la
+production stable.
 
 Aucun service payant n'est ouvert sans accord explicite.
 
@@ -231,6 +241,9 @@ production se répare, elle ne s'attend pas. L'alerte « Plusieurs tentatives de
 
 ## Secrets par environnement
 
+> Tableau de la préproduction **Vercel** actuelle, valable jusqu'à l'ouverture du VPS.
+> Sur le VPS, voir « Secrets et variables du VPS » ci-dessous (ADR 0083).
+
 | Où | Variable | Préproduction | Production |
 |---|---|---|---|
 | Vercel (API) | `COGES_ENV` | `staging` | `production` |
@@ -275,29 +288,38 @@ des valeurs aléatoires hachées en base (`auth_sessions`), indépendantes de la
 
 ## Déploiement
 
-`.github/workflows/deploy.yml`, à chaque push sur `main` (préprod) ou à la demande :
+Tout est décrit dans `docs/runbooks/deploiement.md`. En bref (ADR 0083) :
 
-1. **CI complète** (`ci.yml`, appelé) : lint, fichiers générés, T1–T40 avec leur tableau
-   récapitulatif, tests de fuite, reste de la suite, migrations réversibles, latence. Un
-   seul échec, dont une fuite inter-tenant, arrête tout ;
-2. contrôle des environnements d'exécution (garde-fou 2) ;
-3. `alembic upgrade head` sous `coges_owner`, hôte direct — jamais au démarrage de l'API ;
-4. `vercel build` puis `vercel deploy --prebuilt` : les déploiements automatiques depuis
-   Git sont **désactivés** (`git.deploymentEnabled: false`), pour qu'aucun code ne parte
-   sans la CI ;
-5. test de fumée : `deploy/scripts/smoke.py` (santé, connexion, tableau de bord), sur le
-   domaine public `COGES_PUBLIC_URL` ; les URL propres à chaque déploiement restent derrière
-   la protection Vercel (seule la préversion passe par le jeton de contournement) ;
-6. **front** (`coges-web`, ADR 0058) : même `vercel build` puis `vercel deploy --prebuilt`
-   depuis `frontend/` (projet `VERCEL_WEB_PROJECT_ID`), **après** le test de fumée de l'API ;
-7. test de fumée du front sur `COGES_WEB_PUBLIC_URL` : page `/login` servie, puis
-   `smoke.py` **à travers la réécriture** `/api/v1` du front (le chemin d'un utilisateur).
+1. la **CI** tourne sur chaque push et chaque PR (lint, tests, T1–T40, fuites, analyses de
+   sécurité, et le job `vps` : shellcheck, Caddyfile, compose, quatre images sans push) ;
+2. le workflow **« Déployer »** part d'un tag `vX.Y.Z` (préprod) ou à la main (préprod ou
+   production) : CI, images poussées sur ghcr.io, `alembic upgrade head` sous
+   `coges_owner` depuis le job, puis `deploy.sh` sur le VPS par une clé SSH bridée, test de
+   fumée (`deploy/scripts/smoke.py` : `/health/ready`, `/login`, connexion, tableau de
+   bord) et retour automatique à la version précédente en cas d'échec ;
+3. sans clé de déploiement, le workflow s'arrête après les migrations et affiche la
+   commande à lancer sur le VPS.
 
-Une migration destructive se déploie en deux temps (décision 17) : d'abord la version
-compatible avec l'ancien et le nouveau code, puis le nettoyage.
+Une migration reste compatible avec la version précédente du code (on ajoute d'abord, on
+supprime à la version suivante) : un retour arrière ne touche jamais la base.
 
-Les images workers se reconstruisent sur leur hôte (`up -d --build`) après chaque
-déploiement qui touche `backend/`.
+### Secrets et variables du VPS (ADR 0083)
+
+| Où | Nom | Contenu |
+|---|---|---|
+| VPS, `/etc/coges/coges.env` (root:deploy, 0640) | modèle `deploy/vps/coges.env.example` | `COGES_DOMAIN`, `COGES_ACME_EMAIL`, DSN Neon d'exécution (`sslmode=require`), `COGES_REDIS_PASSWORD`, `COGES_JWT_SECRET`, `COGES_OPS_TOKEN`, `COGES_SENTRY_DSN`, `COGES_JOB_PING_URLS` |
+| VPS, `/etc/coges/preprod.env` | même modèle | valeurs de la préprod (branche Neon de préprod) |
+| VPS, `/etc/coges/ghcr-user`, `ghcr-token` | jeton GitHub **`read:packages` seulement** | lecture des images |
+| GitHub, environnements `preprod` / `production` | secrets `NEON_OWNER_DSN`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`, `SMOKE_SLUG`, `SMOKE_EMAIL`, `SMOKE_PASSWORD` | voir `docs/runbooks/deploiement.md` |
+| GitHub, variables d'environnement | `DEPLOY_HOST`, `DEPLOY_PORT`, `COGES_PUBLIC_URL` | adresse SSH du VPS, `https://<domaine>` |
+
+`check_runtime_env.py --require-vps` refuse un fichier de secrets qui contient un DSN
+propriétaire, un DSN sans `sslmode=require`, un Redis externe, un domaine avec schéma ou
+des secrets de moins de 32 caractères ; `deploy.sh` le lance avant chaque démarrage.
+
+Registre : une version pèse ≈ 460 Mo compressés (worker ≈ 295 Mo), cinq versions ≈ 0,7 Go.
+Le quota gratuit d'un dépôt privé (500 Mo) ne suffit pas : GitHub Pro (2 Go) ou moins de
+versions gardées (ADR 0083).
 
 ## Restauration
 
