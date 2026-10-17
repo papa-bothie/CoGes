@@ -14,11 +14,13 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.tenancy import TenantContext, tenant_transaction
 from app.seed import DAYS, seed
 from tests.conftest import TEST_PASSWORD
+from tests.helpers.invariants import assert_consistent
 from tests.integration import facts_harness as facts
 
 pytestmark = pytest.mark.integration
@@ -70,6 +72,7 @@ def test_the_demo_shows_every_state(
     app_bound_to_test_database: None,
     session_factory: sessionmaker[Any],
     analytics_session_factory: sessionmaker[Any],
+    owner_engine: Engine,
 ) -> None:
     company_id: UUID = seed(f"demo-{uuid4().hex[:8]}", password=TEST_PASSWORD)
     today = facts.today_in_company(session_factory, company_id)
@@ -96,3 +99,5 @@ def test_the_demo_shows_every_state(
     assert counts["clients soldés"] >= 1, counts
     assert counts["articles sous le seuil"] >= 3, counts
     assert counts["dettes fournisseurs dues sous 7 jours"] >= 2, counts
+    # Trois mois d'activité semée : stock, ventes, dettes et lettrages se recoupent (C5).
+    assert_consistent(owner_engine, company_id)

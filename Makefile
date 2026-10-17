@@ -15,7 +15,7 @@ PNPM := pnpm --dir frontend
 API_PORT ?= 8000
 COGES_API_URL ?= http://localhost:$(API_PORT)
 
-.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format security-scan shellcheck dev api worker relay ops-status seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front
+.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format security-scan shellcheck invariants dev api worker relay ops-status seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front
 
 help: ## Liste les cibles disponibles
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -80,6 +80,9 @@ ops-status: ## Bilan des workers, de beat, du relais et des tâches de nuit (COG
 
 seed-demo: ## Épicerie de démonstration `demo` : 46 articles, 15 clients, 90 jours (≈ 1 200 ventes)
 	$(UV) python -m app.seed
+
+invariants: ## Contrôles croisés des chiffres d'une entreprise locale (SLUG=demo par défaut)
+	$(UV) python -m tests.helpers.invariants $(or $(SLUG),demo)
 
 seed-maquette: ## Données de la maquette v2 `maquette` (Keur Fatou, 6 octobre 2026 à 10 h 45)
 	$(UV) python -m app.seed_maquette --intelligence
