@@ -27,6 +27,8 @@ env:
   COGES_APP_PASSWORD: ci-app
   COGES_RELAY_PASSWORD: ci-relay
   COGES_ANALYTICS_PASSWORD: ci-analytics
+  # Rôle de la sauvegarde externe (ADR 0084), créé par 01-roles.sql.
+  COGES_BACKUP_PASSWORD: ci-backup
   COGES_ENV: ci
   COGES_DATABASE_URL_OWNER: postgresql+psycopg://coges_owner:ci-owner@localhost:5432/coges
   COGES_DATABASE_URL_APP: postgresql+psycopg://coges_app:ci-app@localhost:5432/coges
@@ -182,6 +184,8 @@ jobs:
             id: migrations
           - name: Latence du tableau de bord
             id: perf
+          - name: "Sauvegarde : chaîne complète"
+            id: backup
 
     services:
       postgres:
@@ -236,6 +240,19 @@ jobs:
           make migrate
           uv run --directory backend alembic downgrade base
           make migrate
+
+      # ADR 0084 : sauvegarde chiffrée (rôle coges_backup) → faux stockage → restauration
+      # dans une base vide → verify_restore.py. Aucun envoi réel.
+      - name: "Sauvegarde : dump chiffré, restauration, vérification"
+        if: matrix.suite.id == 'backup'
+        env:
+          BACKUP_SOURCE_URL: postgresql://coges_backup:ci-backup@localhost:5432/coges
+          RESTORE_ADMIN_URL: postgresql://postgres:ci-postgres@localhost:5432/postgres
+        run: |
+          sudo apt-get install -y -qq age rclone >/dev/null
+          make migrate
+          make seed-demo
+          bash deploy/scripts/backup_chain_check.sh
 
       # La cible « moins de 200 ms » de la phase 08, sur le jeu de `make seed-demo`.
       - name: Latence du tableau de bord
