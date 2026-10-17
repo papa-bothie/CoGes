@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { Can, usePermission } from "@/hooks/use-permission";
 import { useTableParams } from "@/hooks/use-table-params";
+import { withFrom } from "@/lib/back-target";
 import { api, unwrap } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
@@ -162,7 +163,12 @@ const LOOKS: Record<InsightType, Look> = {
     tone: "bg-stock",
     action: t.actions.order,
     href: (insight) =>
-      insight.entity_id ? `/inventory/receive?product=${insight.entity_id}` : "/inventory/receive",
+      withFrom(
+        insight.entity_id
+          ? `/inventory/receive?product=${insight.entity_id}`
+          : "/inventory/receive",
+        "/insights",
+      ),
   },
   debt_overdue: {
     icon: Clock,
@@ -174,7 +180,7 @@ const LOOKS: Record<InsightType, Look> = {
     icon: Zap,
     tone: "bg-depenses",
     action: t.actions.expenses,
-    href: () => "/finance/expenses",
+    href: () => withFrom("/finance/expenses", "/insights"),
   },
   demand_spike: { icon: TrendingUp, tone: "bg-conseils", action: t.actions.article, href: article },
   slow_mover: { icon: Tag, tone: "bg-ventes", action: t.actions.price, href: article },
@@ -189,7 +195,7 @@ const LOOKS: Record<InsightType, Look> = {
     icon: Wallet,
     tone: "bg-argent",
     action: t.actions.cash,
-    href: () => "/finance/cash",
+    href: () => withFrom("/finance/cash", "/insights"),
   },
   insufficient_history: { icon: Clock, tone: "bg-muted", action: "", href: () => "/insights" },
 };

@@ -82,9 +82,13 @@ test("ajouter un client en deux champs ; sa fiche dit ce qu'il doit et le lui ra
 
   // « Encaisser sa dette » ouvre l'écran 18, ce client déjà choisi (ADR 0073).
   await page.getByRole("link", { name: "Encaisser sa dette" }).click();
-  await expect(page).toHaveURL(new RegExp(`/finance/collect\\?customer=${customerId}$`));
+  await expect(page).toHaveURL(
+    new RegExp(`/finance/collect\\?customer=${customerId}&from=%2Fcustomers%2F${customerId}$`),
+  );
   await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
-  await page.goBack();
+  // Le retour ramène à la fiche d'où l'on vient, nommée (ADR 0082).
+  await page.getByRole("link", { name, exact: true }).first().click();
+  await expect(page).toHaveURL(new RegExp(`/customers/${customerId}$`));
 
   // « Lui vendre » : la vente s'ouvre avec ce client déjà choisi.
   await page.getByRole("link", { name: "Lui vendre" }).click();

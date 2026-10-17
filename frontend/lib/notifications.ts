@@ -3,6 +3,7 @@
  * identifiant (produit, vente, insight), sinon vers l'écran qui permet d'agir.
  */
 import type { Schemas } from "@/lib/api/schema";
+import { withFrom } from "@/lib/back-target";
 import { labels } from "@/lib/labels";
 
 export type AppNotification = Schemas["NotificationRead"];
@@ -14,6 +15,9 @@ function id(data: Record<string, unknown>, key: string): string | null {
   return typeof value === "string" && UUID.test(value) ? value : null;
 }
 
+/** Les écrans d'action ouverts depuis une alerte y ramènent (ADR 0082). */
+const ALERTS = "/notifications";
+
 export function notificationHref(notification: Pick<AppNotification, "type" | "data">): string {
   const data = notification.data as Record<string, unknown>;
   switch (notification.type) {
@@ -21,7 +25,10 @@ export function notificationHref(notification: Pick<AppNotification, "type" | "d
     case "stock_out": {
       // « Commander » : la livraison s'ouvre avec l'article déjà sur la liste (ADR 0071).
       const product = id(data, "product_id");
-      return product ? `/inventory/receive?product=${product}` : "/inventory/receive";
+      return withFrom(
+        product ? `/inventory/receive?product=${product}` : "/inventory/receive",
+        ALERTS,
+      );
     }
     case "sale_cancelled": {
       const sale = id(data, "sale_id");
@@ -32,9 +39,12 @@ export function notificationHref(notification: Pick<AppNotification, "type" | "d
       // dettes échues.
       const party = id(data, "party_id");
       if (!party) return "/finance/debts?overdue=1";
-      return data.party_type === "supplier"
-        ? `/finance/pay?supplier=${party}`
-        : `/finance/collect?customer=${party}`;
+      return withFrom(
+        data.party_type === "supplier"
+          ? `/finance/pay?supplier=${party}`
+          : `/finance/collect?customer=${party}`,
+        ALERTS,
+      );
     }
     case "insight_critical": {
       const type = typeof data.insight_type === "string" ? data.insight_type : null;

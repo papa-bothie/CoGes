@@ -18,6 +18,7 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 
+import { BackLink } from "@/components/back-link";
 import { FieldError } from "@/components/field-error";
 import { ChoiceTiles } from "@/components/kit/choice-tile";
 import { ProductSquare } from "@/components/kit/list-row";
@@ -159,6 +160,7 @@ export function StockCorrection({ productId }: { productId?: string }) {
 
   return (
     <div className="mx-auto flex max-w-page flex-col gap-5">
+      <BackLink fallback={{ href: "/products", label: labels.kit.nav.stock }} tone="stock" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{t.title}</h1>
         <div className="flex flex-wrap gap-2.5">

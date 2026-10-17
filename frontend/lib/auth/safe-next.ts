@@ -19,20 +19,28 @@ export const DEFAULT_NEXT = "/dashboard";
 const FORBIDDEN = /[\\\u0000-\u001f\u007f]/;
 
 export function safeNext(next: string | null | undefined, origin: string): string {
-  if (!next || FORBIDDEN.test(next)) return DEFAULT_NEXT;
+  return safePath(next, origin) ?? DEFAULT_NEXT;
+}
+
+/**
+ * Le chemin `next` s'il reste sur `origin`, sinon `null`. Même règle que `safeNext`,
+ * pour qui a sa propre destination de repli (lien de retour, ADR 0082).
+ */
+export function safePath(next: string | null | undefined, origin: string): string | null {
+  if (!next || FORBIDDEN.test(next)) return null;
 
   let url: URL;
   try {
     url = new URL(next, origin);
   } catch {
-    return DEFAULT_NEXT;
+    return null;
   }
 
-  if (url.origin !== new URL(origin).origin) return DEFAULT_NEXT;
+  if (url.origin !== new URL(origin).origin) return null;
   // Même origine, mais un chemin normalisé en `//hôte` repartirait ailleurs une fois
   // réutilisé comme URL relative (`location.assign("//evil.example")`).
-  if (url.pathname.startsWith("//")) return DEFAULT_NEXT;
-  if (url.pathname === "/login" || url.pathname.startsWith("/login/")) return DEFAULT_NEXT;
+  if (url.pathname.startsWith("//")) return null;
+  if (url.pathname === "/login" || url.pathname.startsWith("/login/")) return null;
 
   return url.pathname + url.search + url.hash;
 }

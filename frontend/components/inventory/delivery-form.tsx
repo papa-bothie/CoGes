@@ -5,6 +5,7 @@ import { Check, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
+import { BackLink } from "@/components/back-link";
 import { FieldError } from "@/components/field-error";
 import { cleanAmount } from "@/components/kit/amount-field";
 import { Chip } from "@/components/kit/chip";
@@ -228,6 +229,7 @@ export function DeliveryForm({
 
   return (
     <div className="mx-auto flex max-w-page flex-col gap-5">
+      <BackLink fallback={{ href: "/products", label: labels.kit.nav.stock }} tone="stock" />
       <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{t.title}</h1>
 
       {done ? (

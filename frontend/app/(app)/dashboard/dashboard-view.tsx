@@ -14,6 +14,7 @@ import { StatTile } from "@/components/kit/stat-tile";
 import { StatusPill } from "@/components/kit/status-pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale, useMe } from "@/hooks/use-me";
+import { withFrom } from "@/lib/back-target";
 import { api, unwrap } from "@/lib/api/client";
 import type { Schemas } from "@/lib/api/schema";
 import { sumDecimals } from "@/lib/decimal";
@@ -42,7 +43,7 @@ const PHONE_RECENT = 3;
 const TILE_LINKS = {
   sales: "/sales",
   cash: "/finance",
-  receivables: "/finance/collect",
+  receivables: withFrom("/finance/collect", "/dashboard"),
   stock: "/inventory",
 } as const;
 

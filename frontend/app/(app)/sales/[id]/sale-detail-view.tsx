@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale, useMe } from "@/hooks/use-me";
 import { Can, usePermission } from "@/hooks/use-permission";
+import { withFrom } from "@/lib/back-target";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/queries/keys";
@@ -156,7 +157,10 @@ export function SaleDetailView({ saleId }: { saleId: string }) {
           </a>
           {owing && canCollect && (
             <Link
-              href={`/finance/collect?customer=${data.customer_id ?? ""}`}
+              href={withFrom(
+                `/finance/collect?customer=${data.customer_id ?? ""}`,
+                `/sales/${data.id}`,
+              )}
               className={cn(TILE, "border-clients-anneau bg-clients-teinte text-clients-encre")}
             >
               <CreditCard className="size-7" aria-hidden />

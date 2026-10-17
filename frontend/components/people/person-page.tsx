@@ -10,6 +10,7 @@ import { ErrorState } from "@/components/error-state";
 import { RUBRIQUE_CLASSES } from "@/components/kit/rubrique";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { withFrom } from "@/lib/back-target";
 import { api, unwrap } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queries/keys";
 import { labels } from "@/lib/labels";
@@ -94,7 +95,10 @@ function SavedCard({ saved, onAgain }: { saved: SavedPerson; onAgain: () => void
   const next =
     saved.kind === "customer"
       ? { href: `/sales/new?customer=${person.id}`, label: t.sell }
-      : { href: `/inventory/receive?supplier=${person.id}`, label: t.receive };
+      : {
+          href: withFrom(`/inventory/receive?supplier=${person.id}`, `/suppliers/${person.id}`),
+          label: t.receive,
+        };
   return (
     <section
       aria-live="polite"

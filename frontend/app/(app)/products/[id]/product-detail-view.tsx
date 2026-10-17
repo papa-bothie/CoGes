@@ -15,6 +15,7 @@ import { Ean13Barcode } from "@/components/products/ean13-barcode";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { Can, usePermission } from "@/hooks/use-permission";
+import { withFrom } from "@/lib/back-target";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import { useCategories } from "@/lib/api/queries/categories";
@@ -166,12 +167,18 @@ export function ProductDetailView({ productId }: { productId: string }) {
             </button>
           </Can>
           <Can permission="inventory:update">
-            <Link href={`/inventory/adjust?product=${data.id}`} className={SECONDARY}>
+            <Link
+              href={withFrom(`/inventory/adjust?product=${data.id}`, `/products/${data.id}`)}
+              className={SECONDARY}
+            >
               {t.adjust}
             </Link>
           </Can>
           <Can permission="inventory:create">
-            <Link href={`/inventory/receive?product=${data.id}`} className={PRIMARY}>
+            <Link
+              href={withFrom(`/inventory/receive?product=${data.id}`, `/products/${data.id}`)}
+              className={PRIMARY}
+            >
               {t.order}
             </Link>
           </Can>
