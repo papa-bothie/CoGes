@@ -1,0 +1,18 @@
+# Contexte des images API et worker (ADR 0083) : le code, les migrations et le lockfile.
+# Ni environnement local, ni secrets, ni tests, ni artefacts.
+.venv
+.vercel
+.env*
+tests
+.pytest_cache
+.mypy_cache
+.ruff_cache
+**/__pycache__
+.ml-artifacts
+celerybeat-schedule*
+openapi.json
+api
+vercel.json
+requirements.txt
+Dockerfile*
+.dockerignore

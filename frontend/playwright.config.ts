@@ -7,7 +7,8 @@ import { defineConfig, devices } from "@playwright/test";
  * `make front-e2e` recrée la base (`make e2e-reset` : migrations puis seed-demo), puis
  * Playwright démarre l'API e2e (:8100, débit non limité) et le front e2e (:3100, build
  * séparé) s'ils ne tournent pas déjà. Le développement (:8001 / :3000) n'est pas touché.
- * `E2E_BASE_URL` vise un front déjà déployé (préversion) : aucun serveur n'est alors lancé.
+ * `E2E_BASE_URL` vise un front déjà déployé (préversion, ou la pile du VPS lancée en local
+ * avec `E2E_IGNORE_HTTPS_ERRORS=1`) : aucun serveur n'est alors lancé.
  */
 const E2E_FRONT = "http://localhost:3100";
 
@@ -21,6 +22,8 @@ export default defineConfig({
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? E2E_FRONT,
+    // Pile du VPS essayée en local derrière Caddy (certificat interne, ADR 0083).
+    ignoreHTTPSErrors: process.env.E2E_IGNORE_HTTPS_ERRORS === "1",
     locale: "fr-FR",
     timezoneId: "Africa/Dakar",
     trace: "retain-on-failure",

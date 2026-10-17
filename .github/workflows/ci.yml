@@ -4,10 +4,9 @@ name: CI
 # jobs sont verts sur `main`. Une fuite inter-tenant arrête donc le déploiement.
 
 on:
-  # Sur `main`, la CI est jouée par le workflow « Déploiement », qui l'appelle avant
-  # de déployer : la lancer aussi ici la ferait tourner deux fois.
+  # Toutes les branches, `main` compris : le déploiement ne part plus à chaque push sur
+  # `main` (ADR 0083), il rappelle la CI quand on le lance (tag vX.Y.Z ou à la main).
   push:
-    branches-ignore: [main]
   pull_request:
   workflow_call:
   # Analyses de sécurité chaque lundi (ADR 0080) : une faille publiée depuis le dernier
@@ -92,8 +91,52 @@ jobs:
       - run: uv sync --directory backend --frozen
       # Le contrat OpenAPI versionné est la source des types du frontend.
       - run: make check-generated
-      # Garde-fou 2 (ADR 0042) : aucun DSN propriétaire dans le compose des workers.
+      # Garde-fou 2 (ADR 0042) : aucun DSN propriétaire dans les compose du VPS et du poste.
       - run: python3 deploy/scripts/check_runtime_env.py
+
+  vps:
+    name: VPS (shellcheck, Caddyfile, compose, images sans push)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # shellcheck préinstallé sur les runners Ubuntu.
+      - run: shellcheck -x deploy/vps/*.sh deploy/scripts/*.sh
+      - name: Caddyfile valide
+        run: |
+          docker run --rm -e COGES_DOMAIN=coges.example.sn -e COGES_ACME_EMAIL=ops@example.sn \
+            -v "$PWD/deploy/vps/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10.2-alpine \
+            caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Compose valide
+        run: |
+          docker network create --subnet 172.30.0.0/24 coges_edge
+          COGES_IMAGE_TAG=ci docker compose -p coges -f deploy/vps/docker-compose.yml \
+            --env-file deploy/vps/coges.env.example --profile edge config --quiet \
+            || { echo "::error::deploy/vps/docker-compose.yml invalide"; exit 1; }
+        env:
+          # Le modèle a des valeurs vides : on fournit le strict nécessaire à l'interpolation.
+          COGES_DOMAIN: coges.example.sn
+          COGES_ACME_EMAIL: ops@example.sn
+          COGES_DATABASE_URL_APP: postgresql+psycopg://coges_app:x@ep.neon.tech/coges?sslmode=require
+          COGES_DATABASE_URL_RELAY: postgresql+psycopg://coges_relay:x@ep.neon.tech/coges?sslmode=require
+          COGES_DATABASE_URL_ANALYTICS: postgresql+psycopg://coges_analytics:x@ep.neon.tech/coges?sslmode=require
+          COGES_REDIS_PASSWORD: ci-redis
+          COGES_JWT_SECRET: ci-jwt-secret-0000000000000000000000
+      - uses: docker/setup-buildx-action@v3
+      # Les quatre images du VPS se construisent : un Dockerfile cassé se voit sur la PR,
+      # pas le jour du déploiement. Rien n'est poussé ici.
+      - name: Image front
+        uses: docker/build-push-action@v6
+        with: { context: frontend, push: false, cache-from: "type=gha,scope=front", cache-to: "type=gha,mode=max,scope=front" }
+      - name: Image API
+        uses: docker/build-push-action@v6
+        with: { context: backend, file: backend/Dockerfile.api, push: false, cache-from: "type=gha,scope=api", cache-to: "type=gha,mode=max,scope=api" }
+      - name: Image worker
+        uses: docker/build-push-action@v6
+        with: { context: backend, file: backend/Dockerfile.worker, push: false, cache-from: "type=gha,scope=worker", cache-to: "type=gha,mode=max,scope=worker" }
+      - name: Bundle de déploiement
+        uses: docker/build-push-action@v6
+        with: { context: ., file: deploy/vps/Dockerfile.bundle, push: false }
 
   frontend:
     name: Frontend (types, lint, typecheck, Vitest, build)

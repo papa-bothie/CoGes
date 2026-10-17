@@ -1,0 +1,210 @@
+# CoGes sur le VPS Infomaniak (ADR 0083) : tout sauf la base, qui reste chez Neon.
+#
+# Production (profil `edge` : Caddy et autoheal en plus de l'application) :
+#   docker compose -p coges --env-file /etc/coges/coges.env --profile edge up -d
+# Préproduction, ARRÊTÉE par défaut, lancée à la demande (même Caddy, autre projet) :
+#   docker compose -p coges-preprod --env-file /etc/coges/preprod.env up -d
+#
+# C'est `deploy.sh` qui lance ces commandes ; à la main, voir docs/runbooks/vps.md.
+#
+# Réseaux :
+#   • coges_edge (externe, 172.30.0.0/24, créé par deploy.sh) : Caddy, front et API des
+#     deux piles. Seul Caddy publie des ports. L'API ne croit X-Forwarded-For que venu
+#     de ce réseau (--forwarded-allow-ips).
+#   • data (interne, sans sortie) : Redis et ceux qui lui parlent.
+#   • jobs : sortie vers Neon et Sentry pour worker, beat et relais.
+#
+# Mémoire (VPS de 4 Go + 2 Go de swap) : environ 3,1 Go de plafonds cumulés pour la
+# production. La préprod en ajoute ≈ 2,6 Go : sur 4 Go, ne la lancer que brièvement ;
+# 8 Go sont recommandés pour la garder allumée.
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "5" }
+
+x-app-env: &app-env
+  COGES_ENV: ${COGES_ENV:?}
+  COGES_REDIS_URL: redis://:${COGES_REDIS_PASSWORD:?}@redis:6379/0
+  COGES_JWT_SECRET: ${COGES_JWT_SECRET:?}
+  COGES_SENTRY_DSN: ${COGES_SENTRY_DSN:-}
+  COGES_JOB_PING_URLS: ${COGES_JOB_PING_URLS:-}
+  COGES_DB_POOLER: ${COGES_DB_POOLER:-transaction}
+
+x-healthcheck: &healthcheck
+  interval: 60s
+  timeout: 15s
+  retries: 3
+  start_period: 60s
+
+x-service: &service
+  restart: unless-stopped
+  logging: *logging
+  # Relancé par `autoheal` quand il devient « unhealthy » (ADR 0077).
+  labels: { autoheal: "true" }
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  # ------------------------------------------------------------------ bord (production)
+  caddy:
+    profiles: [edge]
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
+    ports:
+      - "${COGES_HTTP_PORT:-80}:80"
+      - "${COGES_HTTPS_PORT:-443}:443"
+      - "${COGES_HTTPS_PORT:-443}:443/udp"
+    environment:
+      COGES_DOMAIN: ${COGES_DOMAIN:?}
+      COGES_ACME_EMAIL: ${COGES_ACME_EMAIL:?COGES_ACME_EMAIL manquant (Let's Encrypt)}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [edge]
+    mem_limit: 128m
+
+  # Relance les conteneurs « unhealthy » étiquetés `autoheal=true`, des deux piles.
+  autoheal:
+    profiles: [edge]
+    image: willfarrell/autoheal:1.2.0
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: 30
+      AUTOHEAL_START_PERIOD: 120
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    network_mode: none
+    mem_limit: 32m
+
+  # ------------------------------------------------------------------ application
+  front:
+    <<: *service
+    image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/front:${COGES_IMAGE_TAG:?}
+    networks:
+      edge: { aliases: ["${COGES_STACK:?}-front"] }
+    mem_limit: 320m
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
+  api:
+    <<: *service
+    image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/api:${COGES_IMAGE_TAG:?}
+    depends_on: { redis: { condition: service_healthy } }
+    environment:
+      <<: *app-env
+      COGES_DATABASE_URL_APP: ${COGES_DATABASE_URL_APP:?}
+      COGES_TRUST_PROXY_HEADERS: "true"
+      COGES_FORWARDED_ALLOW_IPS: 172.30.0.0/24
+      COGES_API_WORKERS: ${COGES_API_WORKERS:-2}
+      COGES_OPS_TOKEN: ${COGES_OPS_TOKEN:-}
+      COGES_CORS_ORIGINS: https://${COGES_DOMAIN:?}
+      COGES_RATE_LIMIT_IP_PER_MINUTE: ${COGES_RATE_LIMIT_IP_PER_MINUTE:-300}
+      COGES_RATE_LIMIT_LOGIN_PER_MINUTE: ${COGES_RATE_LIMIT_LOGIN_PER_MINUTE:-10}
+    networks:
+      edge: { aliases: ["${COGES_STACK:?}-api"] }
+      data: {}
+    mem_limit: 700m
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=5).status == 200 else 1)"]
+
+  # Consommateurs : agrégats, alertes, audit secondaire, exports, ML (ADR 0035).
+  worker:
+    <<: *service
+    image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/worker:${COGES_IMAGE_TAG:?}
+    depends_on: { redis: { condition: service_healthy } }
+    environment:
+      <<: *app-env
+      COGES_DATABASE_URL_APP: ${COGES_DATABASE_URL_APP:?}
+      COGES_DATABASE_URL_ANALYTICS: ${COGES_DATABASE_URL_ANALYTICS:?}
+      COGES_ML_ARTIFACTS_DIR: /var/lib/coges/ml
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    volumes: [ml-artifacts:/var/lib/coges/ml]
+    networks: [data, jobs]
+    mem_limit: 900m
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "python", "-m", "app.workers.health", "worker"]
+
+  # Planificateur : un seul exemplaire par pile, sinon chaque batch partirait deux fois.
+  beat:
+    <<: *service
+    image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/worker:${COGES_IMAGE_TAG:?}
+    depends_on: [worker]
+    environment:
+      <<: *app-env
+      COGES_DATABASE_URL_APP: ${COGES_DATABASE_URL_APP:?}
+    command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=info", "--schedule=/var/lib/coges/beat/celerybeat-schedule"]
+    volumes: [beat-state:/var/lib/coges/beat]
+    networks: [data, jobs]
+    mem_limit: 200m
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "python", "-m", "app.workers.health", "beat"]
+
+  # Relais de l'outbox sous `coges_relay` (ADR 0032).
+  relay:
+    <<: *service
+    image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/worker:${COGES_IMAGE_TAG:?}
+    depends_on: [worker]
+    environment:
+      <<: *app-env
+      COGES_DATABASE_URL_RELAY: ${COGES_DATABASE_URL_RELAY:?}
+      COGES_OUTBOX_IDLE_MAX_SECONDS: ${COGES_OUTBOX_IDLE_MAX_SECONDS:-1}
+    command: ["python", "-m", "app.workers.relay"]
+    networks: [data, jobs]
+    mem_limit: 200m
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "python", "-m", "app.workers.health", "relay"]
+
+  # File Celery, cache, limitation de débit. Réseau interne seulement : aucun port publié,
+  # donc pas de TLS. `noeviction` : la file ne doit jamais être évincée (ADR 0077).
+  redis:
+    <<: *service
+    image: redis:7.4.2-alpine
+    environment:
+      REDISCLI_AUTH: ${COGES_REDIS_PASSWORD:?}
+    command:
+      - sh
+      - -c
+      - >-
+        exec redis-server
+        --requirepass "$$REDISCLI_AUTH"
+        --maxmemory ${COGES_REDIS_MAXMEMORY:-512mb}
+        --maxmemory-policy noeviction
+        --appendonly yes
+        --rename-command FLUSHALL ""
+        --rename-command FLUSHDB ""
+        --rename-command CONFIG ""
+        --rename-command DEBUG ""
+        --rename-command SHUTDOWN ""
+        --rename-command MODULE ""
+    volumes: [redis-data:/data]
+    networks: [data]
+    mem_limit: 640m
+    healthcheck:
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+
+networks:
+  edge:
+    name: coges_edge
+    external: true
+  data:
+    internal: true
+  jobs: {}
+
+volumes:
+  caddy-data:
+  caddy-config:
+  ml-artifacts:
+  beat-state:
+  redis-data:
