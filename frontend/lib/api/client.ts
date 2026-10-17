@@ -95,6 +95,12 @@ export async function unwrap<T>(call: Promise<Result<T>>): Promise<T> {
   } catch {
     throw networkError();
   }
-  if (!result.response.ok) throw toApiError(result.response.status, result.error);
+  if (!result.response.ok) {
+    throw toApiError(
+      result.response.status,
+      result.error,
+      result.response.headers?.get("x-request-id") ?? null,
+    );
+  }
   return result.data as T;
 }

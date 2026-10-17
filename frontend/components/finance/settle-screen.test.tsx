@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/lib/api/client";
+import { ApiError } from "@/lib/api/errors";
 import type { Schemas } from "@/lib/api/schema";
 import { renderWithClient } from "@/test/render";
 
@@ -126,6 +127,32 @@ describe("Encaisser une dette (écran 18)", { timeout: 15_000 }, () => {
       }),
     );
     expect(await screen.findByText("17 500 F reçus. Il reste 7 500 F.")).toBeInTheDocument();
+  });
+
+  it("après un échec, garde la saisie et réessaie avec la même clé (ADR 0085)", async () => {
+    vi.mocked(api.POST)
+      .mockRejectedValueOnce(new ApiError(503, "server_error", "Un souci de notre côté."))
+      .mockResolvedValueOnce({ id: "p1" } as never);
+    renderWithClient(<SettleScreen kind="customer" />);
+    await screen.findByRole("heading", { name: "Moussa Fall" });
+    await userEvent.type(await screen.findByLabelText("Combien il paie ?"), "5000");
+    const submit = screen.getByRole("button", { name: /^Encaisser 5\s000\sF$/ });
+
+    await userEvent.click(submit);
+    expect(await screen.findByText("Un souci de notre côté.")).toBeInTheDocument();
+    // Rien n'est rejoué tout seul : un seul envoi, la saisie est toujours là.
+    expect(api.POST).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("Combien il paie ?")).toHaveValue("5000");
+
+    await userEvent.click(screen.getByRole("button", { name: /^Encaisser 5\s000\sF$/ }));
+    expect(api.POST).toHaveBeenCalledTimes(2);
+    const keys = vi
+      .mocked(api.POST)
+      .mock.calls.map(
+        (call) => (call[1] as { headers: Record<string, string> }).headers["Idempotency-Key"],
+      );
+    expect(keys[0]).toBeTruthy();
+    expect(keys[1]).toBe(keys[0]);
   });
 
   it("refuse plus que ce qui est dû", async () => {

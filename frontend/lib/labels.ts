@@ -90,10 +90,20 @@ export const labels = {
     network: "Le serveur est injoignable. Vérifiez votre connexion.",
     notFoundTitle: "Page introuvable",
     notFoundBody: "Cette page n'existe pas, ou la ressource demandée n'est pas accessible.",
-    backToDashboard: "Retour au tableau de bord",
     forbidden: "Vous n'avez pas la permission d'effectuer cette action.",
     retry: "Réessayer",
     loadFailed: "Impossible de charger ces données",
+  },
+  /** Erreur imprévue, coupure réseau (ADR 0085). */
+  incident: {
+    title: "Un souci de notre côté",
+    body: "Un souci de notre côté. Vos données sont en sécurité. Réessayez dans un instant.",
+    reassure: "Vos données sont en sécurité. Réessayez dans un instant.",
+    reference: "Référence à nous donner",
+    retry: "Réessayer",
+    home: "Retour à l'accueil",
+    connectionRetrying: "Connexion difficile. Nous réessayons…",
+    connectionLost: "Connexion difficile.",
   },
   table: {
     search: "Rechercher",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { errorMessage, toApiError } from "./errors";
+import { errorMessage, isTransient, networkError, toApiError } from "./errors";
 
 describe("toApiError", () => {
   it("lit l'enveloppe d'erreur de l'API", () => {
@@ -31,6 +31,30 @@ describe("toApiError", () => {
   it("reste lisible sur un corps inattendu", () => {
     const error = toApiError(502, "<html>Bad gateway</html>");
     expect(error.code).toBe("server_error");
-    expect(error.message).toMatch(/erreur inattendue/);
+    expect(error.message).toMatch(/Un souci de notre côté/);
+    expect(toApiError(418, "<html>?</html>").message).toMatch(/erreur inattendue/);
+  });
+});
+
+describe("erreur serveur et référence d'incident (ADR 0085)", () => {
+  it("lit la référence dans le corps d'une 500", () => {
+    const error = toApiError(500, {
+      error: { code: "server_error", message: "Un souci", details: {}, request_id: "abcd-1234" },
+    });
+    expect(error.requestId).toBe("abcd-1234");
+  });
+
+  it("prend l'en-tête quand le corps n'est pas celui de l'API (page de maintenance)", () => {
+    const error = toApiError(502, "<html>…</html>", "ef56-7890");
+    expect(error.code).toBe("server_error");
+    expect(error.requestId).toBe("ef56-7890");
+    expect(error.message).toContain("Vos données sont en sécurité");
+  });
+
+  it("reconnaît une coupure qui vaut un nouvel essai", () => {
+    expect(isTransient(networkError())).toBe(true);
+    expect(isTransient(toApiError(503, null))).toBe(true);
+    expect(isTransient(toApiError(500, null))).toBe(false);
+    expect(isTransient(toApiError(409, null))).toBe(false);
   });
 });
