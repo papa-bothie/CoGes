@@ -24,6 +24,8 @@ class NotificationType(StrEnum):
     SALE_CANCELLED = "sale_cancelled"
     FORECAST_ALERT = "forecast_alert"
     INSIGHT_CRITICAL = "insight_critical"
+    #: Échecs de connexion répétés sur un compte réel (ADR 0078, révision 0022).
+    LOGIN_FAILURES = "login_failures"
 
 
 class NotificationSeverity(StrEnum):

@@ -220,7 +220,7 @@ export interface paths {
     put?: never;
     /**
      * Change Password
-     * @description Remplace le mot de passe d'un compte.
+     * @description Remplace le mot de passe d'un compte ; corps vide : provisoire tiré, rendu une fois.
      */
     post: operations["change_password_api_v1_users__user_id__password_post"];
     delete?: never;
@@ -3884,7 +3884,8 @@ export interface components {
       | "debt_due"
       | "sale_cancelled"
       | "forecast_alert"
-      | "insight_critical";
+      | "insight_critical"
+      | "login_failures";
     /**
      * NotificationUpdate
      * @description Marquer comme lue, ou revenir en non lu.
@@ -3963,10 +3964,13 @@ export interface components {
     PaidAmount: components["schemas"]["Amount-Input"];
     /** @enum {string} */
     PartyType: "customer" | "supplier";
-    /** PasswordChange */
+    /**
+     * PasswordChange
+     * @description Sans `new_password`, le serveur tire un provisoire lisible, rendu une fois (ADR 0078).
+     */
     PasswordChange: {
       /** New Password */
-      new_password: string;
+      new_password?: string | null;
     };
     /**
      * PasswordUpdate
@@ -5465,6 +5469,8 @@ export interface components {
       is_active: boolean;
       /** Must Change Password */
       must_change_password: boolean;
+      /** Must Change Password Until */
+      must_change_password_until: string | null;
       /** Last Login At */
       last_login_at: string | null;
       /** Deactivated At */
@@ -5513,6 +5519,8 @@ export interface components {
       is_active: boolean;
       /** Must Change Password */
       must_change_password: boolean;
+      /** Must Change Password Until */
+      must_change_password_until: string | null;
       /** Last Login At */
       last_login_at: string | null;
       /** Deactivated At */
@@ -6011,7 +6019,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["UserRead"];
+          "application/json": components["schemas"]["UserCreated"];
         };
       };
       /** @description Validation Error */

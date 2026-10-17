@@ -72,6 +72,18 @@ class AuthenticationRequiredError(CogesError):
     default_message = "Authentification requise."
 
 
+class TemporaryPasswordExpiredError(CogesError):
+    """Le bon mot de passe provisoire, mais passé son échéance (ADR 0078).
+
+    Levée **après** la vérification du mot de passe : un mot de passe faux reste un
+    simple « identifiants invalides », et l'échéance ne se révèle qu'à qui la connaît.
+    """
+
+    code = "temporary_password_expired"
+    status_code = 401
+    default_message = "Ce mot de passe provisoire a expiré. Demandez-en un nouveau au gérant."
+
+
 class PermissionDeniedError(CogesError):
     code = "permission_denied"
     status_code = 403

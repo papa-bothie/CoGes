@@ -60,6 +60,7 @@ export const labels = {
     invalid:
       "Le code de la boutique, l'identifiant ou le mot de passe ne correspond pas. Réessayez, ou demandez à votre gérant de vous en donner un nouveau.",
     tooMany: "Trop d'essais d'affilée. Attendez une minute, puis réessayez.",
+    temporaryExpired: "Ce mot de passe provisoire a expiré. Demandez-en un nouveau au gérant.",
     sessionExpired: "Votre session a expiré. Reconnectez-vous.",
     loggedOut: "Vous êtes déconnecté.",
     firstPassword: {
@@ -1391,6 +1392,7 @@ export const labels = {
       collect: "Encaisser",
       sale: "Voir la vente",
       advice: "Voir le conseil",
+      people: "Voir les personnes",
     },
   },
   /** Réglages, maquette v2 (écrans 24 à 24e, ADR 0075). */
@@ -1459,6 +1461,12 @@ export const labels = {
       cutDone: (name: string) => `Accès de ${name} coupé.`,
       backDone: (name: string) => `Accès de ${name} redonné.`,
       lastManager: "Le dernier gérant ne peut pas être désactivé.",
+      temporaryLabel: "Mot de passe provisoire",
+      expires: (day: string, clock: string) => `Expire le ${day} à ${clock}`,
+      expired: "Expiré",
+      newPassword: "Donner un nouveau mot de passe",
+      newPasswordFor: (name: string) => `Nouveau mot de passe pour ${name} :`,
+      newPasswordHint: "· à lui donner, valable 48 h, il le changera à sa connexion.",
       invalidContact: "Tapez un numéro de 9 chiffres ou une adresse e-mail.",
       required: "Écrivez son nom.",
     },

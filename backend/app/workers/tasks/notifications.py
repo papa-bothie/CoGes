@@ -1,4 +1,4 @@
-"""Consommateurs d'alertes : stock bas, rupture, vente annulée, dette échue.
+"""Consommateurs d'alertes : stock bas, rupture, vente annulée, dette échue, connexions.
 
 Tournent sous `coges_app` : une alerte est un INSERT, jamais une suppression.
 
@@ -26,6 +26,7 @@ from app.modules.finance import service as finance_service
 from app.modules.notifications import service as notifications_service
 from app.modules.notifications.schemas import NotificationType
 from app.modules.products import service as products_service
+from app.modules.users import service as users_service
 from app.workers.beat import SCAN_DUE_DEBTS
 from app.workers.celery_app import celery_app
 from app.workers.jobs import tracked_job
@@ -33,6 +34,9 @@ from app.workers.subscriptions import ON_SALE_CANCELLED, ON_STOCK_UPDATED
 from app.workers.tenants import each_company
 
 logger = logging.getLogger(__name__)
+
+#: Nom repris tel quel par `app.modules.auth.service`, qui l'enfile sans importer le worker.
+LOGIN_FAILURES = "notifications.login_failures"
 
 STOCK_CONSUMER = "notifications.stock"
 CANCELLED_CONSUMER = "notifications.sale_cancelled"
@@ -126,6 +130,34 @@ def on_sale_cancelled(**message: Any) -> str:
 
     fresh = handle(event, consumer=CANCELLED_CONSUMER, handler=_alert)
     return "handled" if fresh else "already-processed"
+
+
+@celery_app.task(name=LOGIN_FAILURES)
+def login_failures(company_id: str, user_id: str, failures: int) -> int:
+    """Échecs de connexion répétés sur un compte réel (ADR 0078), enfilés par Auth.
+
+    Une alerte par heure au plus et par compte visé : le dédoublonnage est raccourci
+    à une heure, la clé est le compte. Un compte disparu entre-temps n'alerte personne.
+    """
+    ctx = TenantContext.bootstrap(UUID(company_id))
+    with tenant_transaction(ctx) as session:
+        names = users_service.names_by_id(session, ctx, [UUID(user_id)])
+        name = names.get(UUID(user_id))
+        if name is None:
+            return 0
+        return notifications_service.notify(
+            session,
+            ctx,
+            notification_type=NotificationType.LOGIN_FAILURES,
+            title=f"Plusieurs tentatives de connexion échouées sur le compte de {name}"[:160],
+            body=(
+                "Si ce n’est pas cette personne, donnez-lui un nouveau mot de passe "
+                "ou coupez son accès."
+            ),
+            entity_id=user_id,
+            data={"user_id": user_id, "failures": failures},
+            dedupe_hours=1,
+        )
 
 
 @celery_app.task(name="notifications.scan_due_debts")

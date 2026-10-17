@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { contactOf, historyWhen, seenWhen, shortClock, toggleAbility } from "./settings";
+import {
+  contactOf,
+  historyWhen,
+  seenWhen,
+  shortClock,
+  temporaryDeadline,
+  toggleAbility,
+} from "./settings";
 
 const DAKAR = "Africa/Dakar";
 const NOW = new Date("2026-10-06T10:45:00Z");
@@ -51,5 +58,19 @@ describe("grille « Qui peut faire quoi »", () => {
 
   it("décoche une ligne cochée", () => {
     expect(toggleAbility(order, ["sell", "collect_debt"], "sell")).toEqual(["collect_debt"]);
+  });
+});
+
+describe("échéance d'un mot de passe provisoire (ADR 0078)", () => {
+  const now = new Date("2026-10-17T10:00:00Z");
+
+  it("dit le jour et l'heure dans le fuseau de l'entreprise", () => {
+    expect(temporaryDeadline("2026-10-19T14:05:00Z", "Africa/Dakar", now)).toBe(
+      "Expire le 19/10 à 14 h 05",
+    );
+  });
+
+  it("dit « Expiré » une fois l'échéance passée", () => {
+    expect(temporaryDeadline("2026-10-17T09:59:00Z", "Africa/Dakar", now)).toBe("Expiré");
   });
 });

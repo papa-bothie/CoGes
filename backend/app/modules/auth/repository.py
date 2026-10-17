@@ -18,9 +18,10 @@ from app.modules.auth.models import AuthSession
 
 #: Point P2 : la connexion doit lire `companies` et `users` **avant** tout contexte
 #: tenant. `auth_lookup` appartient à `coges_auth` (NOLOGIN BYPASSRLS) et ne renvoie
-#: que ces quatre colonnes, pour un seul couple (slug, e-mail). Voir ADR 0005.
+#: que ces six colonnes (révision 0022), pour un seul couple (slug, e-mail). Voir ADR 0005.
 _AUTH_LOOKUP = text(
-    "SELECT company_id, user_id, password_hash, is_active "
+    "SELECT company_id, user_id, password_hash, is_active, "
+    "must_change_password, must_change_password_until "
     "FROM auth_lookup(CAST(:slug AS citext), CAST(:email AS citext))"
 )
 
@@ -33,6 +34,9 @@ class AuthIdentity:
     user_id: UUID
     password_hash: str
     is_active: bool
+    must_change_password: bool
+    #: Échéance du mot de passe provisoire (ADR 0078) ; `None` : aucune.
+    must_change_password_until: datetime | None
 
 
 @contextmanager
@@ -62,6 +66,8 @@ def lookup_identity(session: Session, *, slug: str, email: str) -> AuthIdentity 
         user_id=row.user_id,
         password_hash=row.password_hash,
         is_active=row.is_active,
+        must_change_password=row.must_change_password,
+        must_change_password_until=row.must_change_password_until,
     )
 
 

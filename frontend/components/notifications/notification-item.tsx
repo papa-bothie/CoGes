@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Bell,
   Clock,
+  KeyRound,
   LineChart,
   PackageX,
   Receipt,
@@ -30,6 +31,7 @@ const ICONS: Record<AppNotification["type"], { icon: LucideIcon; tone: string }>
   sale_cancelled: { icon: Receipt, tone: "bg-muted text-muted-foreground" },
   forecast_alert: { icon: LineChart, tone: "bg-ventes-teinte text-ventes-encre" },
   insight_critical: { icon: Sparkles, tone: "bg-destructive/10 text-danger-ink" },
+  login_failures: { icon: KeyRound, tone: "bg-warning/10 text-warning-ink" },
 };
 
 /** Marque lu / non lu ; le compteur de la cloche et le tableau de bord suivent. */

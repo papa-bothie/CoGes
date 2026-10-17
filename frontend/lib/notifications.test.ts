@@ -31,6 +31,11 @@ describe("alertes (écran 23)", () => {
     expect(notificationHref(alert("debt_due", { party_type: "customer", party_id: ID }))).toBe(
       `/finance/collect?customer=${ID}`,
     );
+    expect(notificationHref(alert("login_failures", { user_id: ID }))).toBe("/settings/people");
+    expect(alertLook(alert("login_failures", { user_id: ID }))).toEqual({
+      tone: "stock",
+      action: "Voir les personnes",
+    });
     // Une alerte d'avant le lot 3e, sans la personne : la liste des dettes échues.
     expect(notificationHref(alert("debt_due", { party_type: "customer" }))).toBe(
       "/finance/debts?overdue=1",
