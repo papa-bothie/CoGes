@@ -124,7 +124,13 @@ Si le code contredit l'architecture, c'est le code qui a tort, sauf si une déci
   `sale_not_draft`…), messages affichés en français.
 - Migrations Alembic **réversibles** (`upgrade` + `downgrade` testés), jamais lancées au démarrage
   de l'API.
-- Tests : `backend/tests/{unit,integration,tenancy,architecture}`. Les tests d'intégrité portent
+- Tests : `backend/tests/{unit,integration,tenancy,architecture}`.
+- **Registres imposés par la CI** (ADR 0086) : toute nouvelle route d'écriture se classe dans
+  `tests/integration/commit_failure_registry.py`, toute lecture sans paramètre dans `READ_ROUTES`
+  (`tests/tenancy/test_list_routes_cross_tenant.py`), toute route paramétrée dans
+  `CROSS_TENANT_ROUTES`, toute tâche planifiée dans `test_beat_tasks_tenant_isolation.py`,
+  toute table sans RLS dans `TABLES_WITHOUT_RLS` ; une clé Redis nouvelle doit suivre
+  `test_redis_keys_isolation.py`. Les tests d'intégrité portent
   le numéro du modèle dans leur nom : `test_t06_negative_stock_on_sale`.
 - Frontend : types générés depuis l'OpenAPI dans `frontend/types/`, jamais écrits à la main.
 - Formats d'affichage : `1 234 567 FCFA` (espace fine insécable, pas de décimales pour XOF),
@@ -149,6 +155,7 @@ make openapi / make requirements   # régénère backend/openapi.json / requirem
 make check-generated         # échoue si l'un des deux n'est pas à jour (CI)
 deploy/scripts/restore-check.sh    # sauvegarde → restauration → contrôles, en local
 make shellcheck              # shellcheck des scripts du VPS et de deploy/scripts
+make invariants SLUG=demo    # recoupe stock, ventes, dettes et lettrages d'une entreprise locale (ADR 0086)
 deploy/scripts/backup_chain_check.sh   # preuve sauvegarde → restauration → contrôles (ADR 0084, docs/runbooks/sauvegarde.md)
 sudo -u deploy /opt/coges/deploy.sh production vX.Y.Z   # sur le VPS : déployer (rollback, status ; preprod stop)
 /opt/coges/check.sh          # sur le VPS : bilan disque, mémoire, conteneurs, certificat, Neon
@@ -221,6 +228,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | Surveillance des workers (zone B) | `17-surveillance-workers.md` | 15 | battement absent, `job_runs` en échec, `/system/workers` en 503, fuite inter-tenant | ✅ PR n° 20 (ADR 0077, révision 0021) puis n° 22 (`/health/ready`, ADR 0081) ; `/health/ready` en 200 sur la préprod |
 | Tout CoGes sur le VPS (sauf la base) | `18-vps-zone-b.md` | 17 | shellcheck, 4 images, pile locale + e2e, `deploy.sh`, `check_runtime_env --require-vps` | 🟨 branche `feat/vps-production`, ADR 0083 |
 | Sauvegarde chiffrée et page d'erreur | `19-sauvegarde-et-page-erreur.md` | 18 | chaîne de sauvegarde en CI, refus de restauration, 500 stable, e2e coupure et rejeu | 🟨 branche `feat/backup-and-error-page`, ADR 0084 et 0085, révision 0023 |
+| Lot C Intégrité et isolation prouvées | `20-integrite-lot-c.md` | 16 | C1 à C5, registres découverts, invariants | 🟨 branche `feat/integrity-lot-c`, ADR 0086 ; correction de fond `core/deps.py` (entreprise supprimée) à relire |
 
 ## 9. Journal des décisions
 
@@ -311,6 +319,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0083 | 2026-10-17 | **CoGes sur un VPS, sauf la base** (remplace 0040 et la partie Vercel de 0047) : Caddy seul exposé, `/api/v1/*` → API, le reste → front ; images front/api/worker/bundle sur ghcr.io ; « Déployer » à la main ou par tag (préprod), migrations depuis le job, `deploy.sh` par clé SSH bridée avec vérification et retour automatique ; préprod `coges-preprod` arrêtée par défaut ; X-Forwarded-For lu à droite ; redémarrage auto à 05 h 15 UTC | `docs/decisions/0083-coges-sur-un-vps.md` |
 | 0084 | 2026-10-17 | **Sauvegarde externe chiffrée** : workflow GitHub de nuit (pas le VPS), rôle `coges_backup` LOGIN BYPASSRLS en lecture seule (révision 0023, exception nommée de T36, vérifié sur Neon), `pg_dump` → `age` (clé publique) → S3 hors Neon par rclone, relecture et seuil de 50 %, rétention 7/4/12 par un compte distinct, `restore_backup.sh` + `verify_restore.py`, chaîne prouvée en CI | `docs/decisions/0084-sauvegarde-externe-chiffree.md` |
 | 0085 | 2026-10-17 | **Erreurs et coupures** : toute 500 imprévue au format stable avec `request_id` (corps, en-tête, journal, Sentry), référence d'incident « AB12 CD34 », `error.tsx`/`global-error.tsx`, bandeau « Connexion difficile » et lectures réessayées à 2/4/8 s, écritures jamais rejouées en silence (même clé), page de maintenance de Caddy en 502/503/504 | `docs/decisions/0085-page-d-erreur-et-coupures.md` |
+| 0086 | 2026-10-17 | **Lot C, intégrité et isolation prouvées** : échec au COMMIT réel (triggers différés sur toutes les tables d'entreprise) sur 51 écritures critiques, lectures sans paramètre croisées A/B (JSON et exports), clés Redis inventoriées, tâches de beat par entreprise, concurrence par HTTP, invariants réutilisables ; registres découverts qui font échouer la CI ; **une entreprise supprimée ferme ses sessions** (`core/deps.py`) | `docs/decisions/0086-integrite-et-isolation-prouvees.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**

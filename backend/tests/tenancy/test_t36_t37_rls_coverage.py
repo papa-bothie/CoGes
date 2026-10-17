@@ -588,3 +588,31 @@ def test_t36_no_runtime_role_touches_job_runs(app_engine: Engine, role: str) -> 
             if "job_runs" in _table_privileges(connection, role, privilege)
         ]
     assert granted == [], f"{role} détient {granted} sur job_runs"
+
+
+#: Tables du schéma public SANS RLS, chacune avec sa raison (lot C, C2). Toute autre
+#: table sans RLS fait échouer la CI : une table de plateforme se déclare ici.
+TABLES_WITHOUT_RLS: dict[str, str] = {
+    "alembic_version": "révision du schéma, aucune donnée d'entreprise",
+    "permissions": "catalogue global des permissions, identique pour toutes (T37)",
+}
+
+
+def test_t37_tables_without_rls_are_named(app_engine: Engine) -> None:
+    with app_engine.connect() as connection:
+        unprotected = set(
+            connection.execute(
+                text(
+                    """
+                    SELECT c.relname FROM pg_class c
+                    WHERE c.relnamespace = 'public'::regnamespace
+                      AND c.relkind IN ('r', 'p') AND NOT c.relispartition
+                      AND NOT c.relrowsecurity
+                    """
+                )
+            ).scalars()
+        )
+    assert unprotected == set(TABLES_WITHOUT_RLS), (
+        f"Tables sans RLS non déclarées : {sorted(unprotected - set(TABLES_WITHOUT_RLS))} ; "
+        f"déclarées mais protégées ou disparues : {sorted(set(TABLES_WITHOUT_RLS) - unprotected)}"
+    )

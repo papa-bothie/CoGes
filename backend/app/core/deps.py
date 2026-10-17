@@ -53,6 +53,9 @@ _LOAD_IDENTITY = text(
              ARRAY[]::text[]
            ) AS permissions
     FROM users u
+    -- Une entreprise supprimée ferme toutes ses sessions, jetons encore valides compris
+    -- (lot C, ADR 0086) : la connexion le vérifiait déjà, la relecture aussi désormais.
+    JOIN companies c ON c.id = u.company_id AND c.deleted_at IS NULL
     LEFT JOIN user_roles       ur ON ur.company_id = u.company_id AND ur.user_id = u.id
     LEFT JOIN role_permissions rp ON rp.company_id = u.company_id AND rp.role_id = ur.role_id
     LEFT JOIN permissions       p ON p.id = rp.permission_id
@@ -92,8 +95,8 @@ def get_tenant_session(
     with tenant_transaction(provisional) as session:
         row = session.execute(_LOAD_IDENTITY, {"user_id": claims.user_id}).one_or_none()
         if row is None:
-            # Utilisateur inexistant, supprimé, ou rattaché à une autre entreprise :
-            # la RLS a filtré la ligne. Indiscernable d'un jeton invalide.
+            # Utilisateur inexistant, supprimé, rattaché à une autre entreprise, ou
+            # entreprise supprimée : indiscernable d'un jeton invalide.
             raise AuthenticationRequiredError("Session invalide.")
         if not row.is_active:
             raise AuthenticationRequiredError("Ce compte est désactivé.")
