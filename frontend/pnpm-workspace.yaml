@@ -1,3 +1,7 @@
 allowBuilds:
   sharp: false
   unrs-resolver: false
+# Failles connues sous une dépendance qui ne remonte pas encore le correctif
+# (ADR 0080) : à retirer quand postcss demandera lui-même source-map-js >= 1.2.2.
+overrides:
+  source-map-js: ">=1.2.2"

@@ -10,6 +10,11 @@ on:
     branches-ignore: [main]
   pull_request:
   workflow_call:
+  # Analyses de sécurité chaque lundi (ADR 0080) : une faille publiée depuis le dernier
+  # push doit se voir sans attendre le suivant. Seul le job `security` tourne alors.
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -44,8 +49,31 @@ env:
     test_t36 or test_t37 or test_t38 or test_t39 or test_t40
 
 jobs:
+  security:
+    name: Sécurité (gitleaks, pip-audit, pnpm audit)
+    runs-on: ubuntu-latest
+    steps:
+      # Tout l'historique : un secret effacé d'un fichier reste dans un ancien commit.
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - uses: astral-sh/setup-uv@v6
+        with: { enable-cache: true }
+      - uses: pnpm/action-setup@v4
+        with: { package_json_file: frontend/package.json }
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/coges
+          key: gitleaks-${{ runner.os }}-8.30.1
+      - run: make security-scan
+
   lint:
     name: Lint (ruff + mypy --strict)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -56,6 +84,7 @@ jobs:
 
   generated:
     name: Fichiers générés à jour (OpenAPI, requirements Vercel)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -69,6 +98,7 @@ jobs:
 
   frontend:
     name: Frontend (types, lint, typecheck, Vitest, build)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -94,6 +124,7 @@ jobs:
 
   database:
     name: ${{ matrix.suite.name }}
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

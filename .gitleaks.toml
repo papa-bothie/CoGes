@@ -1,0 +1,25 @@
+# Recherche de secrets sur tout l'historique git (ADR 0080, `make security-scan`).
+#
+# Règles par défaut de gitleaks, plus une liste blanche **minimale**. Chaque entrée dit
+# pourquoi elle n'est pas un secret. N'ajoutez rien ici pour faire taire une alerte sur
+# une vraie valeur : changez le secret, puis demandez avant toute réécriture d'historique.
+
+title = "CoGes"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Gabarits d'environnement versionnés : des valeurs « à remplacer », jamais réelles"
+paths = [
+  '''^\.env\.example$''',
+  '''^frontend/\.env\.example$''',
+  '''^deploy/\.env\.preprod\.example$''',
+]
+
+[[allowlists]]
+description = "Faux secrets des tests et de la CI, sans valeur hors d'un runner éphémère"
+regexes = [
+  '''ci-jwt-secret-0+''',
+  '''mot-de-passe-de-test-01''',
+]

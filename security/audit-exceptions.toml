@@ -1,0 +1,14 @@
+# Exceptions aux analyses de dépendances (ADR 0080, `make security-scan`).
+#
+# Une faille connue qu'on ne peut pas corriger tout de suite s'inscrit ici, jamais
+# ailleurs : pas de `--ignore` caché dans un script ni dans la CI. Chaque exception
+# porte son identifiant, l'outil qui la signale, sa raison et une date de fin. Passé
+# cette date, l'analyse échoue à nouveau : on corrige, ou on renouvelle en le disant.
+#
+# [[exception]]
+# id = "GHSA-xxxx-xxxx-xxxx"   # ou PYSEC-…, CVE-…
+# tool = "pnpm-audit"          # ou "pip-audit"
+# reason = "Pourquoi on ne peut pas corriger maintenant, et ce qui limite le risque."
+# until = 2026-12-31
+#
+# Aucune exception à l'ouverture du lot A (2026-10-17).
