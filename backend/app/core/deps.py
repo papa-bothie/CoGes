@@ -117,7 +117,10 @@ def get_tenant_session(
         yield TenantSession(session=session, ctx=ctx)
 
 
-CurrentTenant = Annotated[TenantSession, Depends(get_tenant_session)]
+#: Portée `function` (ADR 0079) : la transaction est validée à la sortie du handler,
+#: **avant** l'envoi de la réponse. En portée `request` (défaut de FastAPI), le COMMIT
+#: aurait lieu après l'envoi, et un COMMIT refusé laisserait au client un 2xx menteur.
+CurrentTenant = Annotated[TenantSession, Depends(get_tenant_session, scope="function")]
 
 
 def require_permission(code: str) -> Callable[[TenantSession], TenantSession]:
@@ -156,7 +159,7 @@ def require_ops_token(request: Request) -> None:
         raise AuthenticationRequiredError("Jeton d'exploitation absent ou invalide.")
 
 
-def get_platform_session() -> Iterator[Session]:
+def get_platform_session() -> Iterator[Session]:  # à prendre en portée `function`
     """Transaction sans entreprise, pour les lectures de plate-forme (ADR 0077).
 
     Le contexte est l'entreprise nulle : la RLS ne laisse rien voir de métier. Seules

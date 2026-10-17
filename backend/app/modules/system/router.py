@@ -35,7 +35,7 @@ def outbox_health(
 )
 def workers_health(
     _: Annotated[None, Depends(require_ops_token)],
-    session: Annotated[Session, Depends(get_platform_session)],
+    session: Annotated[Session, Depends(get_platform_session, scope="function")],
 ) -> JSONResponse:
     """Bilan des workers, de beat, du relais et des tâches de nuit (ADR 0077).
 
