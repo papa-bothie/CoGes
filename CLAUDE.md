@@ -212,7 +212,8 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ✅ 92 Vitest, 26 e2e locaux (dont paiement réparti, métrique, insight écarté, vendeur sans paramètres) ; 674 tests backend ; captures `docs/design/captures/phase-13/` |
 | 14 Finition visuelle (Impeccable) | `14-polish-impeccable.md` | 13 | audit Impeccable | ✅ audit 13/20 → 18/20, axe 241 → 0 violation (clair + sombre), 96 Vitest, 30 e2e ; `docs/design/DESIGN.md` ; captures `docs/design/captures/phase-14/` |
 | 15 Simplicité d'abord | `15-refonte-simplicite.md` | 14 | bugs B1–B3, test du commerçant, axe, captures | ✅ lots 0, F, 1, 2, 3a à 3e-2 fusionnés (PR n° 8 à 17) : maquette v2 sur les 26 écrans (41 écrans et états comparés, `make maquette-check`), bugs B1–B3, test du commerçant en e2e, axe 0 en clair et en sombre, Lighthouse accessibilité 100 (`make lighthouse`), audit Impeccable 18/20 conservé (`docs/design/audit-phase-15.md`), démo garantie par test ; révisions 0015 à 0020 ; ADR 0063 à 0076 |
-| Lot A Sécurité avant la production | prompt du 2026-10-17 | 15 | expiration du provisoire, freinage A2/A3, échec au COMMIT, analyses de sécurité | 🟨 branche `feat/security-lot-a`, ADR 0078 à 0080, révision 0022 |
+| Lot A Sécurité avant la production | `16-securite-lot-a.md` | 15 | expiration du provisoire, freinage A2/A3, échec au COMMIT, analyses de sécurité | ✅ PR n° 21 : ADR 0078 à 0080, révision 0022, 977 tests backend, CI verte (gitleaks, pip-audit, pnpm audit) ; préprod migrée |
+| Surveillance des workers (zone B) | `17-surveillance-workers.md` | 15 | battement absent, `job_runs` en échec, `/system/workers` en 503, fuite inter-tenant | ✅ PR n° 20 (ADR 0077, révision 0021) puis n° 22 (`/health/ready`, ADR 0081) ; `/health/ready` en 200 sur la préprod |
 
 ## 9. Journal des décisions
 
