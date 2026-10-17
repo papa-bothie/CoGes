@@ -141,3 +141,24 @@ def test_bootstrap_refuses_an_invalid_ssh_port() -> None:
     )
     assert result.returncode == 2
     assert "port SSH invalide" in result.stderr
+
+
+def test_the_maintenance_page_stands_alone() -> None:
+    """Servie par Caddy quand le front ou l'API est arrêté (ADR 0085) : rien d'extérieur."""
+    page = (VPS / "maintenance.html").read_text(encoding="utf-8")
+    assert page.startswith("<!doctype html>")
+    assert '<html lang="fr">' in page
+    assert "Vos données sont en sécurité" in page
+    for outside in ("<script", "<link", "src=", "url(", "http://", "https://", "@import"):
+        assert outside not in page, outside
+    assert "prefers-color-scheme: dark" in page
+
+
+def test_caddy_serves_the_maintenance_page_on_gateway_errors() -> None:
+    caddyfile = (VPS / "Caddyfile").read_text(encoding="utf-8")
+    compose = (VPS / "docker-compose.yml").read_text(encoding="utf-8")
+    bundle = (VPS / "Dockerfile.bundle").read_text(encoding="utf-8")
+    assert "handle_errors 502 503 504" in caddyfile
+    assert "rewrite * /maintenance.html" in caddyfile
+    assert "./maintenance.html:/srv/maintenance/maintenance.html:ro" in compose
+    assert "deploy/vps/maintenance.html" in bundle

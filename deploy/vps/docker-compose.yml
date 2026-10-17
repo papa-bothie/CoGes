@@ -60,6 +60,7 @@ services:
       COGES_ACME_EMAIL: ${COGES_ACME_EMAIL:?COGES_ACME_EMAIL manquant (Let's Encrypt)}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./maintenance.html:/srv/maintenance/maintenance.html:ro
       - caddy-data:/data
       - caddy-config:/config
     networks: [edge]
