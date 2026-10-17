@@ -49,7 +49,13 @@ pytestmark = pytest.mark.tenancy
 OPS_PATHS = frozenset({"/api/v1/system/workers"})
 
 PUBLIC_PATHS = frozenset(
-    {"/api/v1/health", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout"}
+    {
+        "/api/v1/health",
+        "/api/v1/health/ready",
+        "/api/v1/auth/login",
+        "/api/v1/auth/refresh",
+        "/api/v1/auth/logout",
+    }
 )
 
 

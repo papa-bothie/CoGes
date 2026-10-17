@@ -31,6 +31,38 @@
         }
       }
     },
+    "/api/v1/health/ready": {
+      "get": {
+        "tags": [
+          "platform"
+        ],
+        "summary": "Health Ready",
+        "description": "Sonde pour la surveillance externe : l'API, PostgreSQL et Redis (ADR 0081).\n\n200 si tout répond, 503 sinon, avec le même corps : l'état de chaque dépendance\n(`ok`, `down`, ou `not_configured` pour un Redis sans adresse), sans détail d'erreur.",
+        "operationId": "health_ready_api_v1_health_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessRead"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Une dépendance ne répond pas.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessRead"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "tags": [
@@ -13383,6 +13415,56 @@
       },
       "Rate-Output": {
         "type": "string"
+      },
+      "ReadinessChecks": {
+        "properties": {
+          "database": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "down",
+              "not_configured"
+            ],
+            "title": "Database"
+          },
+          "redis": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "down",
+              "not_configured"
+            ],
+            "title": "Redis"
+          }
+        },
+        "type": "object",
+        "required": [
+          "database",
+          "redis"
+        ],
+        "title": "ReadinessChecks"
+      },
+      "ReadinessRead": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status"
+          },
+          "checks": {
+            "$ref": "#/components/schemas/ReadinessChecks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "checks"
+        ],
+        "title": "ReadinessRead",
+        "description": "Corps de `/health/ready`, le même en 200 et en 503."
       },
       "ReceiptCompany": {
         "properties": {
