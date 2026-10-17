@@ -1,0 +1,61 @@
+name: Sauvegarde
+
+# Sauvegarde externe chiffrée de la base Neon (ADR 0084). Ici, pas sur le VPS : elle
+# continue si le VPS tombe, et aucun accès « lecture de toute la base » n'y est déposé.
+#
+# Chaque nuit à 02 h 15 UTC (hors des tâches de beat.py qui écrivent beaucoup), et à la
+# main. pg_dump 16 (même version majeure que Neon) → age (clé PUBLIQUE seulement) →
+# stockage objet S3 hors Neon, par rclone, avec des clés d'écriture et de liste, sans
+# droit de suppression. Le dump en clair ne touche jamais un disque ni un artefact.
+#
+# Environnement GitHub `backup`, secrets :
+#   BACKUP_DATABASE_URL     DSN de coges_backup (sslmode=require)
+#   BACKUP_AGE_RECIPIENT    clé publique age (age1…)
+#   BACKUP_S3_ACCESS_KEY_ID / BACKUP_S3_SECRET_ACCESS_KEY   clés d'ÉCRITURE + liste
+#   BACKUP_PING_URL         Healthchecks.io (grâce 26 h), facultatif
+# variables :
+#   BACKUP_S3_PROVIDER      Cloudflare, Other… (rclone)   BACKUP_S3_ENDPOINT, BACKUP_S3_REGION
+#   BACKUP_REMOTE_PATH      bucket/préfixe, par ex. coges-sauvegardes/prod
+
+on:
+  schedule:
+    - cron: "15 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: pg_dump chiffré vers le stockage externe
+    runs-on: ubuntu-24.04
+    environment: backup
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      # Ubuntu 24.04 : postgresql-client-16 (même version majeure que Neon), age 1.1, rclone.
+      - name: Outils
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-16 age rclone >/dev/null
+          pg_dump --version; age --version; rclone version | head -1
+      - name: Sauvegarde
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+          BACKUP_PING_URL: ${{ secrets.BACKUP_PING_URL }}
+          BACKUP_REMOTE: coges:${{ vars.BACKUP_REMOTE_PATH }}
+          RCLONE_CONFIG: /dev/null
+          RCLONE_CONFIG_COGES_TYPE: s3
+          RCLONE_CONFIG_COGES_PROVIDER: ${{ vars.BACKUP_S3_PROVIDER }}
+          RCLONE_CONFIG_COGES_ENDPOINT: ${{ vars.BACKUP_S3_ENDPOINT }}
+          RCLONE_CONFIG_COGES_REGION: ${{ vars.BACKUP_S3_REGION }}
+          RCLONE_CONFIG_COGES_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_COGES_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+          # Clés sans droit de création de bucket : ne pas essayer.
+          RCLONE_S3_NO_CHECK_BUCKET: "true"
+        run: bash deploy/scripts/backup.sh

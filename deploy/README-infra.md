@@ -321,6 +321,28 @@ Registre : une version pèse ≈ 460 Mo compressés (worker ≈ 295 Mo), cinq ve
 Le quota gratuit d'un dépôt privé (500 Mo) ne suffit pas : GitHub Pro (2 Go) ou moins de
 versions gardées (ADR 0083).
 
+## Sauvegarde externe chiffrée (ADR 0084)
+
+Guide complet : `docs/runbooks/sauvegarde.md`. Chaque nuit à 02 h 15 UTC, GitHub Actions
+(`backup.yml`) fait `pg_dump` sous `coges_backup`, chiffre en tube avec `age` (clé
+publique seulement) et dépose `coges-AAAA-MM-JJ-HHMM.dump.age` + `.sha256` sur un stockage
+objet hors Neon et hors VPS. Purge (`backup-purge.yml`) avec un compte distinct.
+
+| Où | Nom | Contenu |
+|---|---|---|
+| Neon, chaque cluster, **avant la migration 0023** | `deploy/sql/create_backup_role.sql` | rôle `coges_backup` LOGIN BYPASSRLS, lecture seule |
+| GitHub, environnement `backup` | secrets `BACKUP_DATABASE_URL` (coges_backup, `sslmode=require`), `BACKUP_AGE_RECIPIENT` (age1…), `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` (écriture + liste), `BACKUP_PING_URL` | — |
+| | variables `BACKUP_S3_PROVIDER`, `BACKUP_S3_ENDPOINT`, `BACKUP_S3_REGION`, `BACKUP_REMOTE_PATH` | bucket/préfixe |
+| GitHub, environnement `backup-purge` | secrets `BACKUP_PURGE_S3_ACCESS_KEY_ID`, `BACKUP_PURGE_S3_SECRET_ACCESS_KEY` (liste + suppression) ; mêmes variables | — |
+| Chez le propriétaire seulement | clé PRIVÉE age | gestionnaire de mots de passe + copie hors ligne |
+
+| Sauvegarde | Gardée | Restauration |
+|---|---|---|
+| Quotidienne (02 h 15 UTC) | 7 jours, toujours | `restore_backup.sh` puis `verify_restore.py` |
+| Celle du dimanche | 4 semaines | idem |
+| Celle du 1er du mois | 12 mois | idem |
+| PITR de Neon | fenêtre de l'offre | console Neon (branche à un instant) |
+
 ## Restauration
 
 **Testée en local** par `deploy/scripts/restore-check.sh` (après `make up`) : sauvegarde

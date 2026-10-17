@@ -149,6 +149,7 @@ make openapi / make requirements   # régénère backend/openapi.json / requirem
 make check-generated         # échoue si l'un des deux n'est pas à jour (CI)
 deploy/scripts/restore-check.sh    # sauvegarde → restauration → contrôles, en local
 make shellcheck              # shellcheck des scripts du VPS et de deploy/scripts
+deploy/scripts/backup_chain_check.sh   # preuve sauvegarde → restauration → contrôles (ADR 0084, docs/runbooks/sauvegarde.md)
 sudo -u deploy /opt/coges/deploy.sh production vX.Y.Z   # sur le VPS : déployer (rollback, status ; preprod stop)
 /opt/coges/check.sh          # sur le VPS : bilan disque, mémoire, conteneurs, certificat, Neon
 make lint                    # ruff check + ruff format --check + mypy --strict
@@ -188,7 +189,7 @@ coges/
 │   ├── decisions/             ← ADR (une décision = un fichier)
 │   ├── guides/                ← guides d'usage (formats d'import…)
 │   ├── prompts/               ← prompts de phase 00 → 20
-│   └── runbooks/              ← guides d'intervention (vps, déploiement, workers)
+│   └── runbooks/              ← guides d'intervention (vps, déploiement, workers, sauvegarde)
 ├── backend/                   ← FastAPI, modules, workers, migrations, tests (dont tests/perf)
 ├── frontend/                  ← Next.js App Router
 └── deploy/                    ← vps/ (compose, Caddyfile, bootstrap, deploy.sh), scripts, README-infra
@@ -219,6 +220,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | Lot A Sécurité avant la production | `16-securite-lot-a.md` | 15 | expiration du provisoire, freinage A2/A3, échec au COMMIT, analyses de sécurité | ✅ PR n° 21 : ADR 0078 à 0080, révision 0022, 977 tests backend, CI verte (gitleaks, pip-audit, pnpm audit) ; préprod migrée |
 | Surveillance des workers (zone B) | `17-surveillance-workers.md` | 15 | battement absent, `job_runs` en échec, `/system/workers` en 503, fuite inter-tenant | ✅ PR n° 20 (ADR 0077, révision 0021) puis n° 22 (`/health/ready`, ADR 0081) ; `/health/ready` en 200 sur la préprod |
 | Tout CoGes sur le VPS (sauf la base) | `18-vps-zone-b.md` | 17 | shellcheck, 4 images, pile locale + e2e, `deploy.sh`, `check_runtime_env --require-vps` | 🟨 branche `feat/vps-production`, ADR 0083 |
+| Sauvegarde chiffrée et page d'erreur | `19-sauvegarde-et-page-erreur.md` | 18 | chaîne de sauvegarde en CI, refus de restauration, 500 stable, e2e coupure et rejeu | 🟨 branche `feat/backup-and-error-page`, ADR 0084 et 0085, révision 0023 |
 
 ## 9. Journal des décisions
 
@@ -307,6 +309,8 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0081 | 2026-10-17 | **`GET /api/v1/health/ready`** (complète le prompt 17) : `SELECT 1` sous `coges_app` et `PING` Redis sur un client neuf, 200/503, même corps sans détail ; Redis sans `COGES_REDIS_URL` = `not_configured`, pas une panne ; sur Neon gratuit la sonde réveille la base | `docs/decisions/0081-sonde-de-disponibilite-complete.md` |
 | 0082 | 2026-10-17 | **Liens de retour des écrans d'action** (caisse, encaisser, payer, dépenses, corriger, recevoir, modifier un article) : `BackLink` au-dessus du titre, `?from=` posé par le lien d'entrée et vérifié par `safePath` (ADR 0049), libellé = la fiche ou la rubrique d'origine, sinon l'écran parent ; écart à la maquette noté | `docs/decisions/0082-liens-de-retour-des-ecrans-d-action.md` |
 | 0083 | 2026-10-17 | **CoGes sur un VPS, sauf la base** (remplace 0040 et la partie Vercel de 0047) : Caddy seul exposé, `/api/v1/*` → API, le reste → front ; images front/api/worker/bundle sur ghcr.io ; « Déployer » à la main ou par tag (préprod), migrations depuis le job, `deploy.sh` par clé SSH bridée avec vérification et retour automatique ; préprod `coges-preprod` arrêtée par défaut ; X-Forwarded-For lu à droite ; redémarrage auto à 05 h 15 UTC | `docs/decisions/0083-coges-sur-un-vps.md` |
+| 0084 | 2026-10-17 | **Sauvegarde externe chiffrée** : workflow GitHub de nuit (pas le VPS), rôle `coges_backup` LOGIN BYPASSRLS en lecture seule (révision 0023, exception nommée de T36, vérifié sur Neon), `pg_dump` → `age` (clé publique) → S3 hors Neon par rclone, relecture et seuil de 50 %, rétention 7/4/12 par un compte distinct, `restore_backup.sh` + `verify_restore.py`, chaîne prouvée en CI | `docs/decisions/0084-sauvegarde-externe-chiffree.md` |
+| 0085 | 2026-10-17 | **Erreurs et coupures** : toute 500 imprévue au format stable avec `request_id` (corps, en-tête, journal, Sentry), référence d'incident « AB12 CD34 », `error.tsx`/`global-error.tsx`, bandeau « Connexion difficile » et lectures réessayées à 2/4/8 s, écritures jamais rejouées en silence (même clé), page de maintenance de Caddy en 502/503/504 | `docs/decisions/0085-page-d-erreur-et-coupures.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**

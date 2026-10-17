@@ -25,8 +25,7 @@
 	}
 }
 
-(securite) {
-	encode zstd gzip
+(entetes) {
 	header {
 		# Repris de next.config.ts, plus HSTS (HTTPS imposé, un an).
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
@@ -37,6 +36,11 @@
 		-Server
 		-Via
 	}
+}
+
+(securite) {
+	encode zstd gzip
+	import entetes
 	log {
 		output stdout
 		format filter {
@@ -59,6 +63,13 @@
 	}
 	handle {
 		reverse_proxy {args[0]}-front:3000
+	}
+	# Site ou API arrêté : page de maintenance autonome, statut d'origine gardé (ADR 0085).
+	handle_errors 502 503 504 {
+		import entetes
+		root * /srv/maintenance
+		rewrite * /maintenance.html
+		file_server
 	}
 }
 

@@ -34,6 +34,8 @@ from pathlib import Path
 FORBIDDEN_KEYS = frozenset({"COGES_DATABASE_URL_OWNER", "COGES_TEST_DATABASE_URL_OWNER"})
 #: `postgresql+psycopg://coges_owner:…@` — l'utilisateur d'un DSN, quel que soit le schéma.
 OWNER_IN_DSN = re.compile(r"://coges_owner(?::|@)")
+#: Le rôle de sauvegarde (ADR 0084) lit tout malgré la RLS : jamais à l'exécution.
+BACKUP_IN_DSN = re.compile(r"://coges_backup(?::|@)")
 #: DSN d'exécution attendus sur le VPS (le propriétaire n'y figure jamais).
 RUNTIME_DSNS = (
     "COGES_DATABASE_URL_APP",
@@ -61,6 +63,8 @@ def violations(pairs: Iterable[tuple[str, str]], *, source: str) -> list[str]:
             found.append(f"{source} : la variable {key} ne doit pas exister à l'exécution")
         elif OWNER_IN_DSN.search(value or ""):
             found.append(f"{source} : {key} désigne l'utilisateur coges_owner")
+        elif BACKUP_IN_DSN.search(value or ""):
+            found.append(f"{source} : {key} désigne l'utilisateur coges_backup")
     return found
 
 
@@ -69,6 +73,8 @@ def compose_violations(text: str, *, source: str) -> list[str]:
     found = [f"{source} : mention de {key}" for key in sorted(FORBIDDEN_KEYS) if key in text]
     if OWNER_IN_DSN.search(text):
         found.append(f"{source} : un DSN désigne l'utilisateur coges_owner")
+    if BACKUP_IN_DSN.search(text):
+        found.append(f"{source} : un DSN désigne l'utilisateur coges_backup")
     return found
 
 

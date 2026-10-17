@@ -13,6 +13,7 @@
 \set app_password       `echo "$COGES_APP_PASSWORD"`
 \set relay_password     `echo "$COGES_RELAY_PASSWORD"`
 \set analytics_password `echo "$COGES_ANALYTICS_PASSWORD"`
+\set backup_password    `echo "${COGES_BACKUP_PASSWORD:-}"`
 
 -- Propriétaire du schéma et des migrations : ni superutilisateur, ni BYPASSRLS.
 CREATE ROLE coges_owner LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE
@@ -52,6 +53,14 @@ CREATE ROLE coges_bus NOLOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE;
 -- planifiées (ADR 0077). Même patron que coges_bus : NOLOGIN, BYPASSRLS confiné à
 -- quatre fonctions et à une table.
 CREATE ROLE coges_ops NOLOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE;
+
+-- Sauvegarde externe (ADR 0084) : pg_dump doit lire malgré FORCE ROW LEVEL SECURITY.
+-- Seul rôle connectable avec BYPASSRLS (exception nommée de T36), SELECT seul (révision
+-- 0023), jamais sur le VPS. Sans COGES_BACKUP_PASSWORD, le mot de passe est vide : le rôle
+-- existe, personne ne s'y connecte.
+CREATE ROLE coges_backup LOGIN BYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT
+    NOREPLICATION CONNECTION LIMIT 2 PASSWORD :'backup_password';
+ALTER ROLE coges_backup SET default_transaction_read_only = on;
 
 -- coges_owner doit pouvoir transférer la propriété des fonctions à leur rôle final.
 -- WITH INHERIT FALSE : aucune élévation implicite, il faut un SET ROLE explicite.
