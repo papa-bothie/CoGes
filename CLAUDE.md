@@ -150,6 +150,7 @@ make check-generated         # échoue si l'un des deux n'est pas à jour (CI)
 deploy/scripts/restore-check.sh    # sauvegarde → restauration → contrôles, en local
 make lint                    # ruff check + ruff format --check + mypy --strict
 make format                  # ruff format + ruff check --fix
+make security-scan           # gitleaks (tout l'historique), pip-audit, pnpm audit --prod ; exceptions dans security/
 make api                     # uvicorn → http://localhost:8000/api/v1/health
 make worker                  # celery worker + beat
 make relay                   # relais de l'outbox (rôle coges_relay, processus séparé)
@@ -211,6 +212,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 13 Front : finance, pilotage, paramètres | `13-front-pilotage.md` | 12 | e2e | ✅ 92 Vitest, 26 e2e locaux (dont paiement réparti, métrique, insight écarté, vendeur sans paramètres) ; 674 tests backend ; captures `docs/design/captures/phase-13/` |
 | 14 Finition visuelle (Impeccable) | `14-polish-impeccable.md` | 13 | audit Impeccable | ✅ audit 13/20 → 18/20, axe 241 → 0 violation (clair + sombre), 96 Vitest, 30 e2e ; `docs/design/DESIGN.md` ; captures `docs/design/captures/phase-14/` |
 | 15 Simplicité d'abord | `15-refonte-simplicite.md` | 14 | bugs B1–B3, test du commerçant, axe, captures | ✅ lots 0, F, 1, 2, 3a à 3e-2 fusionnés (PR n° 8 à 17) : maquette v2 sur les 26 écrans (41 écrans et états comparés, `make maquette-check`), bugs B1–B3, test du commerçant en e2e, axe 0 en clair et en sombre, Lighthouse accessibilité 100 (`make lighthouse`), audit Impeccable 18/20 conservé (`docs/design/audit-phase-15.md`), démo garantie par test ; révisions 0015 à 0020 ; ADR 0063 à 0076 |
+| Lot A Sécurité avant la production | prompt du 2026-10-17 | 15 | expiration du provisoire, freinage A2/A3, échec au COMMIT, analyses de sécurité | 🟨 branche `feat/security-lot-a`, ADR 0078 à 0080, révision 0022 |
 
 ## 9. Journal des décisions
 
@@ -293,6 +295,9 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0075 | 2026-10-15 | **Réglages, lot 3e-2** : une page par rubrique (`/settings`, `people`, `rights`, `history`, `files`), anciens `?tab=` redirigés ; grille de 8 gestes `GET /roles/abilities` et `PUT /roles/{id}/abilities` (gérant et « Gérer les personnes » verrouillés, droits hors grille gardés, Vendeur et Comptable modifiables par la grille seule) ; `GET /analytics/history` raconte le journal en phrases, sans le geste courant ; `users.deactivated_at` (révision 0020) ; `settings.receipt_format` lu par `/auth/me` ; `ExportRead.params` ; pas de logo | `docs/decisions/0075-reglages.md` |
 | 0076 | 2026-10-15 | **Clôture de la phase 15** : `lighthouse@13.5.0` en dépendance de dev et `make lighthouse` (26 écrans, page d'arrivée vérifiée, 100 partout) ; audit Impeccable 18/20 conservé, constats P2/P3 reportés ; états de la démo garantis par `test_seed_demo_states` | `docs/decisions/0076-cloture-de-la-phase-15.md` |
 | 0077 | 2026-10-15 | **Surveillance des workers** : battements Redis (30 s, TTL 120 s) et sonde Docker + `autoheal`, chien de garde du relais (5 min), `job_runs` (révision 0021) par les fonctions du rôle `coges_ops` (NOLOGIN BYPASSRLS, aucune lecture directe), `outbox_lag()` de `coges_bus`, `GET /system/workers` sous `COGES_OPS_TOKEN` (200/503, 404 sans jeton configuré), fenêtres 26 h / 8 jours, pings `COGES_JOB_PING_URLS`, `beat_tick` dans Redis seulement, partitions d'audit 3 mois d'avance, Redis `noeviction` exigé en production ; guide `docs/runbooks/workers.md` | `docs/decisions/0077-surveillance-des-workers.md` |
+| 0078 | 2026-10-17 | **Lot A, connexion** : provisoire à 48 h (`users.must_change_password_until`, révision 0022, `NULL` pour les anciens), `temporary_password_expired` après le mot de passe vérifié, « Donner un nouveau mot de passe » (corps vide ⇒ provisoire tiré) ; freinage par compte `rl:acct:{sha256}` (5 échecs / 15 min ⇒ 1, 2, 4… 30 min, sans verrou, sans Argon2 pendant l'attente), alerte `login_failures` au 10ᵉ échec par tâche worker ; compteur en mémoire pour `/auth/login` sans Redis (frein dégradé) | `docs/decisions/0078-mot-de-passe-provisoire-et-freinage-de-la-connexion.md` |
+| 0079 | 2026-10-17 | **COMMIT avant la réponse** : dépendances transactionnelles en `scope="function"` (FastAPI fermait la transaction après l'envoi : 2xx sur COMMIT refusé, démontré), test d'architecture | `docs/decisions/0079-commit-avant-la-reponse.md` |
+| 0080 | 2026-10-17 | **Analyses de sécurité en CI** : gitleaks 8.30.1 (binaire + SHA-256, tout l'historique), pip-audit (toute faille), `pnpm audit --prod` (haute/critique), exceptions datées dans `security/audit-exceptions.toml`, chaque lundi ; PyJWT 2.15.1, Next 16.3.8, `shadcn` en dev, override `source-map-js` | `docs/decisions/0080-analyses-de-securite-en-ci.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**
