@@ -24,6 +24,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/health/ready": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Health Ready
+     * @description Sonde pour la surveillance externe : l'API, PostgreSQL et Redis (ADR 0081).
+     *
+     *     200 si tout répond, 503 sinon, avec le même corps : l'état de chaque dépendance
+     *     (`ok`, `down`, ou `not_configured` pour un Redis sans adresse), sans détail d'erreur.
+     */
+    get: operations["health_ready_api_v1_health_ready_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/auth/login": {
     parameters: {
       query?: never;
@@ -4481,6 +4504,31 @@ export interface components {
     };
     "Rate-Input": number | string;
     "Rate-Output": string;
+    /** ReadinessChecks */
+    ReadinessChecks: {
+      /**
+       * Database
+       * @enum {string}
+       */
+      database: "ok" | "down" | "not_configured";
+      /**
+       * Redis
+       * @enum {string}
+       */
+      redis: "ok" | "down" | "not_configured";
+    };
+    /**
+     * ReadinessRead
+     * @description Corps de `/health/ready`, le même en 200 et en 503.
+     */
+    ReadinessRead: {
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "ok" | "unavailable";
+      checks: components["schemas"]["ReadinessChecks"];
+    };
     /**
      * ReceiptCompany
      * @description En-tête du reçu : qui vend.
@@ -5657,6 +5705,35 @@ export interface operations {
           "application/json": {
             [key: string]: string;
           };
+        };
+      };
+    };
+  };
+  health_ready_api_v1_health_ready_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReadinessRead"];
+        };
+      };
+      /** @description Une dépendance ne répond pas. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReadinessRead"];
         };
       };
     };

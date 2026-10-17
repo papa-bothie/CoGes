@@ -151,7 +151,7 @@ deploy/scripts/restore-check.sh    # sauvegarde → restauration → contrôles,
 make lint                    # ruff check + ruff format --check + mypy --strict
 make format                  # ruff format + ruff check --fix
 make security-scan           # gitleaks (tout l'historique), pip-audit, pnpm audit --prod ; exceptions dans security/
-make api                     # uvicorn → http://localhost:8000/api/v1/health
+make api                     # uvicorn → http://localhost:8000/api/v1/health (et /health/ready : base + Redis)
 make worker                  # celery worker + beat
 make relay                   # relais de l'outbox (rôle coges_relay, processus séparé)
 make ops-status              # bilan workers/beat/relais/tâches de nuit (COGES_OPS_TOKEN ; COGES_OPS_URL) — docs/runbooks/workers.md
@@ -298,6 +298,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0078 | 2026-10-17 | **Lot A, connexion** : provisoire à 48 h (`users.must_change_password_until`, révision 0022, `NULL` pour les anciens), `temporary_password_expired` après le mot de passe vérifié, « Donner un nouveau mot de passe » (corps vide ⇒ provisoire tiré) ; freinage par compte `rl:acct:{sha256}` (5 échecs / 15 min ⇒ 1, 2, 4… 30 min, sans verrou, sans Argon2 pendant l'attente), alerte `login_failures` au 10ᵉ échec par tâche worker ; compteur en mémoire pour `/auth/login` sans Redis (frein dégradé) | `docs/decisions/0078-mot-de-passe-provisoire-et-freinage-de-la-connexion.md` |
 | 0079 | 2026-10-17 | **COMMIT avant la réponse** : dépendances transactionnelles en `scope="function"` (FastAPI fermait la transaction après l'envoi : 2xx sur COMMIT refusé, démontré), test d'architecture | `docs/decisions/0079-commit-avant-la-reponse.md` |
 | 0080 | 2026-10-17 | **Analyses de sécurité en CI** : gitleaks 8.30.1 (binaire + SHA-256, tout l'historique), pip-audit (toute faille), `pnpm audit --prod` (haute/critique), exceptions datées dans `security/audit-exceptions.toml`, chaque lundi ; PyJWT 2.15.1, Next 16.3.8, `shadcn` en dev, override `source-map-js` | `docs/decisions/0080-analyses-de-securite-en-ci.md` |
+| 0081 | 2026-10-17 | **`GET /api/v1/health/ready`** (complète le prompt 17) : `SELECT 1` sous `coges_app` et `PING` Redis sur un client neuf, 200/503, même corps sans détail ; Redis sans `COGES_REDIS_URL` = `not_configured`, pas une panne ; sur Neon gratuit la sonde réveille la base | `docs/decisions/0081-sonde-de-disponibilite-complete.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**

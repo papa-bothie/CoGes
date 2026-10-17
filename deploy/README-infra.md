@@ -149,6 +149,7 @@ bloqué, ou qu'une tâche de nuit n'a pas tourné. Quoi faire de chaque alerte :
 | `GET /api/v1/system/workers` (jeton `COGES_OPS_TOKEN`), `make ops-status` | 503 + liste `problems` | à la demande |
 | Pings « homme mort » (`COGES_JOB_PING_URLS`) | Healthchecks.io ou Sentry Crons | délai de grâce du check |
 | Tâche en échec | Sentry, étiquettes `component`, `job`, `company_id` | immédiat |
+| `GET /api/v1/health/ready` (public) : PostgreSQL et Redis | sonde externe, 503 si l'un ne répond pas (ADR 0081) ; sur Neon gratuit, chaque appel réveille la base | intervalle de la sonde |
 
 **Aucun service payant n'est ouvert sans accord** : les comptes se créent à la main, puis
 leurs URL passent par les variables ci-dessous.

@@ -183,6 +183,21 @@ mais la file Celery est dans Redis : plus rien d'asynchrone ne part.
 
 **Urgence : immédiat.**
 
+## `/api/v1/health/ready` en 503 (sonde externe)
+
+**Ce que ça veut dire.** Le corps dit quelle dépendance manque : `database: down`
+(PostgreSQL injoignable par `coges_app`) ou `redis: down` (Redis configuré mais muet).
+`redis: not_configured` n'est pas une panne (ADR 0081).
+
+**Impact.** `database: down` : plus aucune vente ni lecture, tout l'écran est en erreur.
+`redis: down` : voir `redis_unreachable` ci-dessus.
+
+**Réparer.** Base : console Neon (projet suspendu, quota de calcul, mot de passe de
+`coges_app` changé ?), `COGES_DATABASE_URL_APP` dans Vercel. Le détail de l'erreur est dans
+les journaux de la fonction Vercel (« Sonde de disponibilité : … »).
+
+**Urgence : immédiat.**
+
 ## Redis en éviction
 
 **Ce que ça veut dire.** Au démarrage, le worker a lu une `maxmemory-policy` autre que

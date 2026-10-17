@@ -23,6 +23,7 @@ from app.core.http_security import (
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
 from app.core.observability import init_sentry
+from app.core.readiness import ReadinessRead, readiness
 from app.modules.analytics.router import router as analytics_router
 from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
@@ -88,6 +89,25 @@ api_router = APIRouter(prefix="/api/v1")
 def health() -> dict[str, str]:
     """Sonde de disponibilité du process API."""
     return {"status": "ok"}
+
+
+@api_router.get(
+    "/health/ready",
+    tags=["platform"],
+    response_model=ReadinessRead,
+    responses={503: {"model": ReadinessRead, "description": "Une dépendance ne répond pas."}},
+)
+def health_ready() -> JSONResponse:
+    """Sonde pour la surveillance externe : l'API, PostgreSQL et Redis (ADR 0081).
+
+    200 si tout répond, 503 sinon, avec le même corps : l'état de chaque dépendance
+    (`ok`, `down`, ou `not_configured` pour un Redis sans adresse), sans détail d'erreur.
+    """
+    result = readiness()
+    return JSONResponse(
+        status_code=200 if result.status == "ok" else 503,
+        content=result.model_dump(),
+    )
 
 
 api_router.include_router(auth_router)
