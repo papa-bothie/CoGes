@@ -60,11 +60,15 @@ def test_the_reference_is_in_the_log(broken_client: TestClient) -> None:
 
     handler = Collect(level=logging.ERROR)
     access = logging.getLogger("coges.access")
+    # Une migration jouée plus tôt dans la suite (`fileConfig` d'Alembic) désactive les
+    # loggers existants ; l'API, elle, ne joue jamais de migration (ADR 0042).
+    was_disabled, access.disabled = access.disabled, False
     access.addHandler(handler)
     try:
         response = broken_client.get("/api/v1/health/ready")
     finally:
         access.removeHandler(handler)
+        access.disabled = was_disabled
     request_id = response.headers["x-request-id"]
     mine = [r for r in records if getattr(r, "request_id", None) == request_id]
     assert mine, "aucune ligne de journal ne porte la référence d'incident"
