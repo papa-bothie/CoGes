@@ -107,3 +107,51 @@ def test_vps_env_file_rules(
     text = _GOOD_ENV.replace(*change)
     assert _module().main(_env(tmp_path, text)) == 1
     assert reason in capsys.readouterr().err
+
+
+# ---------------------------------------------- contournements de la revue (P2.18, ADR 0088)
+
+
+@pytest.mark.parametrize(
+    ("change", "reason"),
+    [
+        # Le propriétaire Neon, qui n'est pas « coges_owner » mais a tous les droits.
+        (("coges_app:x", "neondb_owner:x"), "neondb_owner"),
+        # Encodé : « coges%5Fowner » se lit coges_owner une fois décodé.
+        (("coges_app:x", "coges%5Fowner:x"), "coges_owner"),
+        # Utilisateur passé en paramètre, sans rien avant « @ ».
+        (
+            (
+                "coges_app:x@ep-1.eu-central-1.aws.neon.tech/coges?sslmode=require",
+                "ep-1.eu-central-1.aws.neon.tech/coges?sslmode=require&user=coges_owner",
+            ),
+            "coges_owner",
+        ),
+        # Le bon rôle au mauvais endroit : le relais sous coges_app.
+        (("coges_relay:x", "coges_app:x"), "coges_relay"),
+    ],
+)
+def test_vps_dsn_users_are_an_allow_list(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], change: tuple[str, str], reason: str
+) -> None:
+    text = _GOOD_ENV.replace(*change, 1)
+    assert _module().main(_env(tmp_path, text)) == 1
+    assert reason in capsys.readouterr().err
+
+
+def test_an_encoded_owner_in_a_compose_file_is_refused(tmp_path: Path) -> None:
+    compose = tmp_path / "compose.yml"
+    compose.write_text(
+        "environment:\n  COGES_DATABASE_URL_APP: postgresql://coges%5Fowner:x@h/db\n",
+        encoding="utf-8",
+    )
+    assert _module().main(["--compose", str(compose)]) == 1
+
+
+def test_the_stack_of_the_env_file_must_match(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Une préproduction copiée du modèle de production ne prend jamais ses alias."""
+    assert _module().main([*_env(tmp_path, _GOOD_ENV), "--stack", "preprod"]) == 1
+    assert "COGES_STACK" in capsys.readouterr().err
+    assert _module().main([*_env(tmp_path, _GOOD_ENV), "--stack", "production"]) == 0

@@ -36,12 +36,16 @@ FORBIDDEN_KEYS = frozenset({"COGES_DATABASE_URL_OWNER", "COGES_TEST_DATABASE_URL
 OWNER_IN_DSN = re.compile(r"://coges_owner(?::|@)")
 #: Le rôle de sauvegarde (ADR 0084) lit tout malgré la RLS : jamais à l'exécution.
 BACKUP_IN_DSN = re.compile(r"://coges_backup(?::|@)")
-#: DSN d'exécution attendus sur le VPS (le propriétaire n'y figure jamais).
-RUNTIME_DSNS = (
-    "COGES_DATABASE_URL_APP",
-    "COGES_DATABASE_URL_RELAY",
-    "COGES_DATABASE_URL_ANALYTICS",
-)
+#: DSN d'exécution attendus sur le VPS, et le seul rôle que chacun peut désigner : une
+#: liste blanche, pas une liste noire (ADR 0088) — « neondb_owner », « coges%5Fowner »
+#: ou `?user=` passaient l'ancien contrôle.
+RUNTIME_DSNS: dict[str, str] = {
+    "COGES_DATABASE_URL_APP": "coges_app",
+    "COGES_DATABASE_URL_RELAY": "coges_relay",
+    "COGES_DATABASE_URL_ANALYTICS": "coges_analytics",
+}
+#: Rôles qu'un environnement d'exécution peut désigner, quelle que soit la variable.
+RUNTIME_ROLES = frozenset(RUNTIME_DSNS.values())
 #: Nom d'hôte nu : `app.exemple.sn`, sans schéma, port ni chemin.
 HOSTNAME = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 #: Hôtes Redis du réseau Docker interne.
@@ -55,23 +59,40 @@ DEFAULT_COMPOSES = (
 )
 
 
+def dsn_users(value: str) -> list[str]:
+    """Utilisateurs que désigne un DSN, **décodés** : avant « @ » et en `?user=`."""
+    if "://" not in value:
+        return []
+    parsed = urllib.parse.urlsplit(value)
+    users = [urllib.parse.unquote(parsed.username)] if parsed.username else []
+    users += urllib.parse.parse_qs(parsed.query).get("user", [])
+    return users
+
+
 def violations(pairs: Iterable[tuple[str, str]], *, source: str) -> list[str]:
     """Variables interdites parmi des couples (nom, valeur)."""
     found: list[str] = []
     for key, value in pairs:
+        users = dsn_users(value or "")
+        decoded = urllib.parse.unquote(value or "")
         if key in FORBIDDEN_KEYS:
             found.append(f"{source} : la variable {key} ne doit pas exister à l'exécution")
-        elif OWNER_IN_DSN.search(value or ""):
+        elif "coges_owner" in users or OWNER_IN_DSN.search(decoded):
             found.append(f"{source} : {key} désigne l'utilisateur coges_owner")
-        elif BACKUP_IN_DSN.search(value or ""):
+        elif "coges_backup" in users or BACKUP_IN_DSN.search(decoded):
             found.append(f"{source} : {key} désigne l'utilisateur coges_backup")
+        elif any(user not in RUNTIME_ROLES for user in users) and key.startswith("COGES_DATABASE"):
+            strangers = ", ".join(user for user in users if user not in RUNTIME_ROLES)
+            found.append(f"{source} : {key} désigne {strangers}, hors des rôles d'exécution")
     return found
 
 
 def compose_violations(text: str, *, source: str) -> list[str]:
     """Le fichier compose est lu comme du texte : toute mention suffit à refuser."""
     found = [f"{source} : mention de {key}" for key in sorted(FORBIDDEN_KEYS) if key in text]
-    if OWNER_IN_DSN.search(text):
+    # Décodé d'abord : « coges%5Fowner » est coges_owner (ADR 0088).
+    text = urllib.parse.unquote(text)
+    if OWNER_IN_DSN.search(text) or re.search(r"[?&]user=coges_owner\b", text):
         found.append(f"{source} : un DSN désigne l'utilisateur coges_owner")
     if BACKUP_IN_DSN.search(text):
         found.append(f"{source} : un DSN désigne l'utilisateur coges_backup")
@@ -93,16 +114,29 @@ def read_env_file(text: str) -> list[tuple[str, str]]:
     return pairs
 
 
-def vps_violations(pairs: list[tuple[str, str]], *, source: str) -> list[str]:
+def vps_violations(
+    pairs: list[tuple[str, str]], *, source: str, stack: str | None = None
+) -> list[str]:
     """Règles propres au VPS (ADR 0083), en plus du garde-fou sur le propriétaire."""
     values = dict(pairs)
     found = violations(pairs, source=source)
 
-    for key in RUNTIME_DSNS:
+    # Une préproduction copiée du modèle de production prendrait ses alias réseau sur
+    # `coges_edge` (ADR 0088) : la pile annoncée doit être celle qu'on démarre.
+    declared = values.get("COGES_STACK")
+    if stack is not None and declared is not None and declared != stack:
+        found.append(f"{source} : COGES_STACK vaut « {declared} » pour la pile « {stack} »")
+
+    for key, role in RUNTIME_DSNS.items():
         dsn = values.get(key, "")
         if not dsn:
             found.append(f"{source} : {key} est vide")
             continue
+        users = dsn_users(dsn)
+        if users != [role]:
+            found.append(
+                f"{source} : {key} doit se connecter sous {role} (lu : {users or 'aucun'})"
+            )
         parsed = urllib.parse.urlsplit(dsn)
         query = urllib.parse.parse_qs(parsed.query)
         if query.get("sslmode") != ["require"] and query.get("sslmode") != ["verify-full"]:
@@ -135,6 +169,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Contrôler aussi le fichier de secrets d'une pile du VPS (--env-file)",
     )
     parser.add_argument("--env-file", type=Path)
+    parser.add_argument(
+        "--stack", help="pile démarrée (production, preprod) : COGES_STACK doit concorder"
+    )
     args = parser.parse_args(argv)
 
     problems: list[str] = []
@@ -146,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
             problems.append("--require-vps exige --env-file (fichier de secrets de la pile)")
         else:
             pairs = read_env_file(args.env_file.read_text(encoding="utf-8"))
-            problems += vps_violations(pairs, source=str(args.env_file))
+            problems += vps_violations(pairs, source=str(args.env_file), stack=args.stack)
     elif args.env_file is not None:
         pairs = read_env_file(args.env_file.read_text(encoding="utf-8"))
         problems += violations(pairs, source=str(args.env_file))
