@@ -14,6 +14,8 @@ export function splitAcrossDebts(
   let remaining = amount;
   for (const debt of debts) {
     if (compareDecimal(remaining, "0") !== 1) break;
+    // Une dette sans solde (déjà réglée, ou négative par erreur) ne reçoit rien (ADR 0088).
+    if (compareDecimal(debt.balance, "0") !== 1) continue;
     const takesAll = compareDecimal(remaining, debt.balance) !== -1;
     const share = takesAll ? debt.balance : remaining;
     result[debt.id] = share;

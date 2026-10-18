@@ -13,9 +13,13 @@ export function wholeUnits(value: string | null | undefined): bigint {
   return integer ? BigInt(integer) : 0n;
 }
 
-/** Montant tapé (chiffres seuls) en `bigint`. */
+/**
+ * Montant tapé en `bigint`, chiffres seuls. Signe, décimale, exposant ou espace : 0, que
+ * l'écran signale comme un montant manquant (ADR 0088). `BigInt("1.5")` levait une
+ * erreur, et `BigInt("-500")` rendait un montant négatif.
+ */
 export function typedAmount(typed: string): bigint {
-  return typed ? BigInt(typed) : 0n;
+  return /^\d+$/.test(typed) ? BigInt(typed) : 0n;
 }
 
 function money(value: bigint, currency: string): string {

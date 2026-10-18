@@ -32,3 +32,12 @@ describe("écran d'incident (ADR 0085)", () => {
     expect(retry).toHaveBeenCalledOnce();
   });
 });
+
+describe("(b) référence d'incident (ADR 0088)", () => {
+  it("n'invente jamais une référence à partir d'un digest de Next", () => {
+    const error = Object.assign(new Error("rendu"), { digest: "NEXT_DIGEST_abc" });
+    render(<IncidentScreen error={error} onRetry={() => {}} />);
+    expect(screen.queryByText("0000 0000")).toBeNull();
+    expect(screen.getByText("NEXT_DIGEST_abc")).toBeVisible();
+  });
+});
