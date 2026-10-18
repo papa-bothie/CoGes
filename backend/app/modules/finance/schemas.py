@@ -20,6 +20,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.clock import ZonedDatetime
 from app.core.money import Amount
 
 #: Les cinq moyens par lesquels de l'argent entre ou sort réellement (§ 8.1).
@@ -143,7 +144,7 @@ class PaymentCreate(BaseModel):
     direction: CashDirection
     method: PaymentMethod
     amount: PositiveAmount
-    paid_at: datetime | None = None
+    paid_at: ZonedDatetime | None = None
     reference: Annotated[str, Field(max_length=REFERENCE_MAX_LENGTH)] | None = None
     note: Annotated[str, Field(max_length=NOTE_MAX_LENGTH)] | None = None
     expense_id: UUID | None = None

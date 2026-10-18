@@ -651,6 +651,11 @@ def confirm_sale(
 
     sale.status = "confirmed"
     sale.confirmed_at = datetime.now(UTC)
+    # Une vente sans date saisie est vendue quand elle est confirmée (ADR 0088) : le
+    # brouillon de la veille ne range pas son chiffre d'affaires sur la veille, ni sur
+    # un mois clos. `sold_at = created_at` : personne n'a touché à la date.
+    if sale.sold_at == sale.created_at:
+        sale.sold_at = sale.confirmed_at
     _flush(session, sale, details={"sale_id": str(sale.id)})
 
     # 7. Volet financier : ce qui est encaissé, puis ce qui reste dû.

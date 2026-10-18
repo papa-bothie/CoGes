@@ -14,6 +14,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from app.core.clock import ZonedDatetime
 from app.core.money import Amount
 from app.modules.finance.schemas import REFERENCE_MAX_LENGTH, PaymentMethod
 
@@ -118,7 +119,7 @@ class ExpensePaymentInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     method: PaymentMethod
-    paid_at: datetime | None = None
+    paid_at: ZonedDatetime | None = None
     reference: Annotated[str, Field(max_length=REFERENCE_MAX_LENGTH)] | None = None
 
     @model_validator(mode="after")
