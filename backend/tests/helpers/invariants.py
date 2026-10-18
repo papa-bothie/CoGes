@@ -44,6 +44,21 @@ CHECKS: dict[str, str] = {
           AND (s.subtotal <> coalesce(l.sub, 0) OR s.discount_total <> coalesce(l.disc, 0)
                OR s.tax_total <> coalesce(l.tax, 0) OR s.total <> coalesce(l.lt, 0))
     """,
+    # Une vente confirmée sort chaque ligne suivie, à sa quantité (ADR 0087). La vente
+    # écrite directement en SQL par les harnais n'a aucune sortie : elle est écartée,
+    # seules les ventes passées par `confirm_sale` sont recoupées.
+    "vente confirmée : une sortie par ligne suivie": """
+        SELECT s.sale_no FROM sales s
+        JOIN sale_items i ON i.sale_id = s.id
+        JOIN products p ON p.id = i.product_id
+        WHERE s.status <> 'draft' AND p.is_stock_tracked
+          AND EXISTS (SELECT 1 FROM inventory_movements m
+                      JOIN sale_items o ON m.ref_type = 'sale_item' AND m.ref_id = o.id
+                      WHERE o.sale_id = s.id AND m.type = 'sale_out')
+          AND NOT EXISTS (SELECT 1 FROM inventory_movements m
+                          WHERE m.ref_type = 'sale_item' AND m.ref_id = i.id
+                            AND m.type = 'sale_out' AND m.qty_delta = -i.qty)
+    """,
     "payé + reste dû = total": """
         SELECT s.sale_no FROM sales s
         LEFT JOIN debts d ON d.sale_id = s.id
