@@ -317,9 +317,27 @@ supprime à la version suivante) : un retour arrière ne touche jamais la base.
 propriétaire, un DSN sans `sslmode=require`, un Redis externe, un domaine avec schéma ou
 des secrets de moins de 32 caractères ; `deploy.sh` le lance avant chaque démarrage.
 
-Registre : une version pèse ≈ 460 Mo compressés (worker ≈ 295 Mo), cinq versions ≈ 0,7 Go.
-Le quota gratuit d'un dépôt privé (500 Mo) ne suffit pas : GitHub Pro (2 Go) ou moins de
-versions gardées (ADR 0083).
+### Registre d'images (ADR 0083, 0087)
+
+Une version pèse ≈ 460 Mo compressés (worker ≈ 295 Mo). Le quota gratuit d'un dépôt privé
+est de 500 Mo : le registre ne garde donc, par paquet, que trois versions au plus.
+
+| Gardée | Comment on la reconnaît |
+|---|---|
+| celle qui tourne en production | étiquette **`production`**, posée par le job `deploy` après la fumée de production |
+| la précédente (retour arrière, reconstruction du VPS) | étiquette **`production-previous`**, déplacée au même moment |
+| la dernière préproduction | la plus récente des autres |
+
+Tout le reste est supprimé par le job `cleanup` (`deploy/scripts/registry_cleanup.py`) ;
+une version sans étiquette n'est jamais touchée. Sur le VPS, les mêmes versions se lisent
+dans `/opt/coges/state/<pile>.version` (en service) et `<pile>.previous` (précédente),
+écrits par `deploy.sh`. Après un `deploy.sh production rollback` lancé à la main, les
+étiquettes du registre ne bougent pas : les deux images restent protégées.
+
+Une version `vX.Y.Z` se construit **depuis son étiquette git**, qui doit exister. Si elle
+est déjà dans le registre, son image est réutilisée telle quelle quand c'est celle du même
+commit (préproduction puis production), et refusée sinon : on ne repousse jamais du code
+différent sous une étiquette existante. Un SHA (préproduction) se reconstruit toujours.
 
 ## Sauvegarde externe chiffrée (ADR 0084)
 
