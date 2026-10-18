@@ -144,6 +144,9 @@ class ImportState:
     """Ce qu'un import apprend en avançant : noms de catégories, codes déjà vus."""
 
     categories: dict[str, list[UUID]] = field(default_factory=dict)
+    #: Chemin complet (« boissons > lait ») → catégorie, et l'inverse (ADR 0088).
+    category_paths: dict[str, UUID] = field(default_factory=dict)
+    path_of: dict[UUID, str] = field(default_factory=dict)
     seen: dict[str, int] = field(default_factory=dict)
 
 
@@ -274,6 +277,18 @@ def _check_unique(state: ImportState, row: Row, column: str, value: str | None) 
 
 
 def _category_id(state: ImportState, row: Row, column: str, name: str) -> UUID:
+    # Un chemin « Boissons > Lait » désigne une seule catégorie, même quand deux
+    # rayons ont chacun leur « Lait » (ADR 0088).
+    if categories_service.PATH_SEPARATOR.strip() in name:
+        normalised = categories_service.PATH_SEPARATOR.join(
+            part.strip() for part in name.split(categories_service.PATH_SEPARATOR.strip())
+        )
+        found = state.category_paths.get(normalised.casefold())
+        if found is None:
+            raise RowRejectedError(
+                [_error(row, column, "category_not_found", f"Catégorie « {name} » introuvable.")]
+            )
+        return found
     matches = state.categories.get(name.casefold(), [])
     if not matches:
         raise RowRejectedError(
@@ -307,7 +322,7 @@ def _prepare_category(row: Row, state: ImportState) -> CategoryCreate:
     parent = row.cells.get(_PARENT.key, "").strip()
     if parent:
         data["parent_id"] = _category_id(state, row, _PARENT.header, parent)
-    _check_unique(state, row, _NAME.header, f"{parent}/{data.get('name', '')}")
+    _check_unique(state, row, _NAME.header, f"{parent}/{data.get('name', '')}".casefold())
     return _validate(CategoryCreate, data, row, _CATEGORY_COLUMNS)
 
 
@@ -321,6 +336,14 @@ def _write_category(
     category = categories_service.create_category(session, ctx, payload)
     # Visible des lignes suivantes : un produit du même lot peut s'y rattacher.
     state.categories.setdefault(payload.name.casefold(), []).append(category.id)
+    parent_path = state.path_of.get(payload.parent_id) if payload.parent_id else None
+    path = (
+        f"{parent_path}{categories_service.PATH_SEPARATOR}{payload.name}"
+        if parent_path
+        else payload.name
+    )
+    state.path_of[category.id] = path
+    state.category_paths[path.casefold()] = category.id
 
 
 # ------------------------------------------------------------------- produits
@@ -500,4 +523,9 @@ WRITE_ERROR_COLUMNS = {
 
 
 def initial_state(session: Session, ctx: TenantContext) -> ImportState:
-    return ImportState(categories=categories_service.ids_by_name(session, ctx))
+    paths = categories_service.paths_by_id(session, ctx)
+    return ImportState(
+        categories=categories_service.ids_by_name(session, ctx),
+        category_paths={path.casefold(): category_id for category_id, path in paths.items()},
+        path_of=dict(paths),
+    )

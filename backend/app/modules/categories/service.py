@@ -116,6 +116,39 @@ def ids_by_name(session: Session, ctx: TenantContext) -> dict[str, list[UUID]]:
     return index
 
 
+#: Séparateur d'un chemin de catégorie dans les fichiers (« Boissons > Lait », ADR 0088).
+PATH_SEPARATOR = " > "
+
+
+def paths_by_id(session: Session, ctx: TenantContext) -> dict[UUID, str]:
+    """Chemin complet de chaque catégorie vivante : « Boissons > Lait ».
+
+    Un nom n'est unique que sous son parent ; le chemin, lui, l'est dans l'entreprise,
+    et c'est lui qu'un export écrit pour que le fichier se réimporte (ADR 0088).
+    """
+    index = {
+        category_id: (name, parent)
+        for category_id, name, parent in CategoryRepository(session, ctx).live_name_index()
+    }
+    paths: dict[UUID, str] = {}
+
+    def path(category_id: UUID, seen: frozenset[UUID] = frozenset()) -> str:
+        if category_id in paths:
+            return paths[category_id]
+        name, parent = index[category_id]
+        prefix = (
+            path(parent, seen | {category_id}) + PATH_SEPARATOR
+            if parent in index and parent not in seen
+            else ""
+        )
+        paths[category_id] = prefix + name
+        return paths[category_id]
+
+    for category_id in index:
+        path(category_id)
+    return paths
+
+
 # ------------------------------------------------------------------- écritures
 
 

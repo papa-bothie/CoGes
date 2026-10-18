@@ -6421,7 +6421,7 @@
           "exports"
         ],
         "summary": "Request Sales Export",
-        "description": "Demande l'export des ventes d'une période ; le fichier est produit par le worker.",
+        "description": "Demande l'export des ventes d'une période ; le fichier est produit par le worker.\n\n`Idempotency-Key` exigée (ADR 0088) : une demande rejouée rend le même export, sans\nen enfiler un second. Au plus trois exports en préparation par entreprise.",
         "operationId": "request_sales_export_api_v1_exports_sales_post",
         "requestBody": {
           "content": {

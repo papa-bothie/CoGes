@@ -1988,6 +1988,9 @@ export interface paths {
     /**
      * Request Sales Export
      * @description Demande l'export des ventes d'une période ; le fichier est produit par le worker.
+     *
+     *     `Idempotency-Key` exigée (ADR 0088) : une demande rejouée rend le même export, sans
+     *     en enfiler un second. Au plus trois exports en préparation par entreprise.
      */
     post: operations["request_sales_export_api_v1_exports_sales_post"];
     delete?: never;

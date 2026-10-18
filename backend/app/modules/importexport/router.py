@@ -38,6 +38,7 @@ exports_router = APIRouter(prefix="/exports", tags=["exports"])
 #: Gabarit de l'endpoint enregistré avec la clé (ADR 0039) : le type fait partie de
 #: la ressource. L'empreinte, elle, porte le condensat du fichier.
 IMPORT_ENDPOINT = "POST /api/v1/imports/{kind}"
+SALES_EXPORT_ENDPOINT = "POST /api/v1/exports/sales"
 
 #: Tâche worker qui produit un export de ventes, désignée par son nom.
 BUILD_SALES_EXPORT_TASK = "exports.build_sales"
@@ -160,8 +161,22 @@ def export_referential(
 def request_sales_export(
     payload: SalesExportCreate,
     tenant: Annotated[TenantSession, Depends(require_permission("importexport:export"))],
-) -> ExportRead:
-    """Demande l'export des ventes d'une période ; le fichier est produit par le worker."""
+    idempotency_key: IdempotencyKey,
+) -> Response:
+    """Demande l'export des ventes d'une période ; le fichier est produit par le worker.
+
+    `Idempotency-Key` exigée (ADR 0088) : une demande rejouée rend le même export, sans
+    en enfiler un second. Au plus trois exports en préparation par entreprise.
+    """
+    replay = idempotency.reserve(
+        tenant.session,
+        tenant.ctx,
+        key=idempotency_key,
+        endpoint=SALES_EXPORT_ENDPOINT,
+        payload=payload,
+    )
+    if replay is not None:
+        return idempotency.replay_response(replay)
     export = service.request_sales_export(tenant.session, tenant.ctx, payload)
     queue.enqueue(
         BUILD_SALES_EXPORT_TASK,
@@ -169,7 +184,13 @@ def request_sales_export(
         user_id=str(tenant.ctx.user_id),
         export_id=str(export.id),
     )
-    return ExportRead.model_validate(export)
+    return idempotency.completed(
+        tenant.session,
+        tenant.ctx,
+        key=idempotency_key,
+        status_code=status.HTTP_202_ACCEPTED,
+        model=ExportRead.model_validate(export),
+    )
 
 
 @exports_router.get("", response_model=ExportList)
