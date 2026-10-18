@@ -117,6 +117,30 @@ def _issue_session(
     return auth_session, raw_token
 
 
+def reopen_session(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    user_agent: str | None = None,
+    ip_address: str | None = None,
+) -> str:
+    """Ouvre une famille neuve pour la personne du contexte et rend son jeton en clair.
+
+    Après un changement de mot de passe par la personne elle-même, toutes ses sessions
+    viennent de tomber (`users_revoke_sessions`, ADR 0088) : celle du navigateur qui a
+    fait le geste repart sur un jeton neuf, les autres — un jeton volé — restent mortes.
+    """
+    _, raw_token = _issue_session(
+        ctx,
+        AuthSessionRepository(session, ctx),
+        user_id=ctx.user_id,
+        family_id=uuid4(),
+        user_agent=user_agent,
+        ip_address=ip_address,
+    )
+    return raw_token
+
+
 def login(
     payload: LoginRequest, *, user_agent: str | None = None, ip_address: str | None = None
 ) -> IssuedTokens:
