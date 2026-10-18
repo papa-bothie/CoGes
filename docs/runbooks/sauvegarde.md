@@ -10,7 +10,7 @@ garder la clé sans laquelle elles ne servent à rien.
 
 | Quoi | Où | Quand |
 |---|---|---|
-| Copie chiffrée de toute la base (`coges-AAAA-MM-JJ-HHMM.dump.age` + `.sha256`) | stockage objet choisi (R2, B2 ou Swiss Backup), dossier `BACKUP_REMOTE_PATH` | chaque nuit à 02 h 15 UTC (workflow « Sauvegarde ») |
+| Copie chiffrée de toute la base (`coges-AAAA-MM-JJ-HHMM.dump.age` + `.sha256` + `.manifest.json`) | stockage objet choisi (R2, B2 ou Swiss Backup), dossier `BACKUP_REMOTE_PATH` | chaque nuit à 02 h 15 UTC (workflow « Sauvegarde ») |
 | Rétention | 7 quotidiennes, 4 du dimanche, 12 du 1er du mois | purge le dimanche à 03 h 45 UTC (workflow « Sauvegarde — purge ») |
 | Alerte | Healthchecks.io, délai de grâce 26 h | e-mail si aucune sauvegarde réussie depuis 26 h |
 | Clé de déchiffrement (clé PRIVÉE age) | **chez vous seulement** : gestionnaire de mots de passe + copie hors ligne | — |
@@ -43,10 +43,13 @@ Il vous faut : la clé privée, un poste avec `age`, `rclone` et le client Postg
 lecture au stockage.
 
 1. **Choisir** la sauvegarde : `rclone lsf coges:<BACKUP_REMOTE_PATH>` (la plus récente
-   AVANT l'incident). La télécharger avec son `.sha256` :
+   AVANT l'incident) — jamais une qui porte un `.suspect` (trop petite, ADR 0088). La
+   télécharger avec son `.sha256` et son manifeste (lignes des tables clés, comptées
+   avant le dump) :
    ```bash
    rclone copy coges:<chemin>/coges-2026-10-18-0215.dump.age .
    rclone copy coges:<chemin>/coges-2026-10-18-0215.dump.age.sha256 .
+   rclone copy coges:<chemin>/coges-2026-10-18-0215.dump.age.manifest.json .
    ```
 2. **Préparer une base vide**, JAMAIS la production :
    - Neon : nouvelle branche (ou nouveau projet) → base `coges_secours`. Sur un projet
@@ -62,9 +65,11 @@ lecture au stockage.
    deploy/scripts/restore_backup.sh coges-2026-10-18-0215.dump.age ~/coges-backup.key \
      "postgresql://neondb_owner:…@<hôte de la cible>/coges_secours?sslmode=require"
    ```
-   Le script refuse un fichier abîmé (sha256), la base de production et une base non
-   vide. Il déchiffre sans écrire de copie en clair, restaure, puis lance
-   `verify_restore.py` : tout doit être **vert**.
+   Le script refuse un fichier abîmé (sha256), un manifeste absent, la base de
+   production et une base non vide. Il déchiffre sans écrire de copie en clair, restaure,
+   puis lance `verify_restore.py` : tout doit être **vert**, y compris « autant de lignes
+   qu'à la sauvegarde ». Une sauvegarde antérieure au manifeste (avant l'ADR 0088) se
+   restaure avec `RESTORE_WITHOUT_MANIFEST=1`.
 4. **Basculer** (si on remplace la production) : mettre la nouvelle base dans
    `/etc/coges/coges.env` du VPS (`COGES_DATABASE_URL_*`), redéployer la même version
    (`deploy.sh production <version>`), prévenir les commerçants de la période perdue.

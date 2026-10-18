@@ -58,6 +58,17 @@ cleanup() { rm -rf "$WORKDIR"; }
 
 NAME="coges-$(date -u +%Y-%m-%d-%H%M).dump.age"
 FILE="$WORKDIR/$NAME"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+echo "0/4 — manifeste : lignes des tables clés, comptées avant le dump"
+# Ces tables ne perdent jamais de ligne : la base restaurée doit en avoir au moins
+# autant (verify_restore.py, ADR 0088).
+psql "$BACKUP_DATABASE_URL" -X -A -t -F $'\t' -v ON_ERROR_STOP=1 \
+  -c "$(python3 "$SCRIPT_DIR/verify_restore.py" --print-manifest-query)" \
+  | python3 -c 'import json,sys
+rows=[line.split("\t") for line in sys.stdin.read().splitlines() if line]
+print(json.dumps({"tables": {table: int(count) for table, count in rows}}, sort_keys=True))' \
+  >"$FILE.manifest.json"
 
 echo "1/4 — pg_dump $(pg_dump --version | awk '{print $NF}') chiffré par age → $NAME"
 pg_dump --format=custom --no-password --dbname="$BACKUP_DATABASE_URL" \
@@ -93,6 +104,7 @@ fi
 echo "3/4 — envoi vers $BACKUP_REMOTE"
 # --immutable : ne jamais écraser un fichier existant ; aucun droit de suppression ici.
 rclone copyto --immutable "$FILE.sha256" "$BACKUP_REMOTE/$NAME.sha256"
+rclone copyto --immutable "$FILE.manifest.json" "$BACKUP_REMOTE/$NAME.manifest.json"
 rclone copyto --immutable "$FILE" "$BACKUP_REMOTE/$NAME"
 
 echo "4/4 — relecture du fichier distant"

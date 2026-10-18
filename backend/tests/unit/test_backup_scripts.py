@@ -94,6 +94,7 @@ def archive(tmp_path: Path) -> Path:
     path.write_bytes(b"contenu chiffre de test")
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     (tmp_path / f"{path.name}.sha256").write_text(f"{digest}  {path.name}\n")
+    (tmp_path / f"{path.name}.manifest.json").write_text('{"tables": {"sales": 3}}\n')
     (tmp_path / "test.key").write_text("AGE-SECRET-KEY-TEST\n")
     return path
 
@@ -257,6 +258,10 @@ folder = path if os.path.isdir(path) else os.path.dirname(path)
 sizes = [{"Name": n, "Size": os.path.getsize(os.path.join(folder, n))} for n in names]
 print(json.dumps(sizes))
 """,
+    # Le comptage des tables clés, avant le dump : « table<TAB>lignes ».
+    "psql": """#!/usr/bin/env bash
+printf 'users\\t3\\nsales\\t12\\n'
+""",
     "rclone": """#!/usr/bin/env bash
 local_path() { echo "$FAKE_REMOTE_ROOT/${1#fake:}"; }
 cmd=$1; shift
@@ -337,3 +342,50 @@ def test_the_ratio_is_a_number_never_code(tmp_path: Path) -> None:
     result = _run_backup(tmp_path, size=10, ratio="__import__('sys').exit(0) or 0")
     assert result.returncode != 0, "BACKUP_MIN_RATIO exécuté comme du code Python"
     assert "BACKUP_MIN_RATIO" in result.stderr
+
+
+# ------------------------------------------------- manifeste de comptes (P2.17, ADR 0088)
+
+
+def test_a_restore_with_fewer_rows_than_the_manifest_fails() -> None:
+    verify = _load("verify_restore")
+    gaps = verify.manifest_gaps({"sales": 12, "users": 3}, {"sales": 7, "users": 3})
+    assert gaps == ["sales : 7 restaurées, 12 au moment de la sauvegarde"]
+
+
+def test_rows_written_during_the_dump_are_not_a_gap() -> None:
+    """Le comptage précède le dump : la base restaurée peut en avoir davantage."""
+    verify = _load("verify_restore")
+    assert verify.manifest_gaps({"sales": 12}, {"sales": 13}) == []
+
+
+def test_a_table_missing_from_the_restore_is_a_gap() -> None:
+    verify = _load("verify_restore")
+    assert verify.manifest_gaps({"debts": 2}, {}) == [
+        "debts : 0 restaurées, 2 au moment de la sauvegarde"
+    ]
+
+
+def test_restore_refuses_without_manifest(archive: Path) -> None:
+    Path(f"{archive}.manifest.json").unlink()
+    result = _restore(archive, "postgresql://u@secours.local/db", production_host="prod.neon.tech")
+    assert result.returncode == 1
+    assert "manifeste absent" in result.stderr
+
+
+def test_the_backup_uploads_a_manifest_of_counts(tmp_path: Path) -> None:
+    result = _run_backup(tmp_path, size=1000)
+    assert result.returncode == 0, result.stderr
+    folder = tmp_path / "remote" / "sauvegardes" / "prod"
+    manifests = [p for p in folder.iterdir() if p.name.endswith(".manifest.json")]
+    assert len(manifests) == 1, "aucun manifeste envoyé avec la sauvegarde"
+    assert '"sales": 12' in manifests[0].read_text(encoding="utf-8")
+
+
+def test_retention_deletes_a_manifest_with_its_dump() -> None:
+    retention = _load("backup_retention")
+    names = [*_names("2025-10-02-0215"), "coges-2025-10-02-0215.dump.age.manifest.json"]
+    names += _names(*(f"2026-10-{day:02d}-0215" for day in range(11, 18)))
+    assert "coges-2025-10-02-0215.dump.age.manifest.json" in retention.to_delete(
+        names, date(2026, 10, 17)
+    )

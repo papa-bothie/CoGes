@@ -10,6 +10,8 @@
 #
 # Refus :
 #   • sha256 absent ou différent (le fichier .sha256 doit être à côté) ;
+#   • manifeste `.manifest.json` absent (RESTORE_WITHOUT_MANIFEST=1 pour une sauvegarde
+#     antérieure à l'ADR 0088) ;
 #   • COGES_PRODUCTION_DB_HOST non donné, ou cible sur cet hôte : on ne restaure jamais
 #     par-dessus la production ;
 #   • base cible non vide (une table dans le schéma public).
@@ -46,6 +48,14 @@ expected=$(cut -d' ' -f1 "$SUM_FILE")
 actual=$(sha256sum "$ARCHIVE" | cut -d' ' -f1)
 [[ "$expected" == "$actual" ]] || die "sha256 différent : fichier abîmé ou modifié"
 echo "    sha256 conforme"
+MANIFEST="$ARCHIVE.manifest.json"
+manifest_args=(--manifest "$MANIFEST")
+if [[ ! -f "$MANIFEST" ]]; then
+  # Sauvegarde antérieure à l'ADR 0088 : il faut le dire, sinon on refuse.
+  [[ "${RESTORE_WITHOUT_MANIFEST:-0}" == 1 ]] \
+    || die "manifeste absent : $MANIFEST (RESTORE_WITHOUT_MANIFEST=1 pour une ancienne sauvegarde)"
+  manifest_args=()
+fi
 
 echo "2/4 — cible"
 : "${COGES_PRODUCTION_DB_HOST:?donner COGES_PRODUCTION_DB_HOST (hôte de la base de production, pour ne jamais l écraser)}"
@@ -64,4 +74,4 @@ age --decrypt --identity "$KEY" "$ARCHIVE" \
 echo "    restauration terminée"
 
 echo "4/4 — vérifications"
-python3 "$SCRIPT_DIR/verify_restore.py" "$TARGET"
+python3 "$SCRIPT_DIR/verify_restore.py" "${manifest_args[@]}" "$TARGET"

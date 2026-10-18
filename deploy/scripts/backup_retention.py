@@ -9,9 +9,10 @@ Règle, à la date du jour (UTC), sur les seuls `.dump.age` (ADR 0084, 0088) :
   • les 7 sauvegardes les plus récentes : gardées, même si elles sont anciennes ;
   • 4 semaines : le premier jour sauvegardé de chaque semaine (sa dernière sauvegarde) ;
   • 12 mois : le premier jour sauvegardé de chaque mois (sa dernière sauvegarde) ;
-  • le reste, et l'empreinte `.sha256` qui l'accompagne, est supprimé ; une empreinte
-    orpheline n'est jamais touchée.
-Un nom qui ne suit pas `coges-AAAA-MM-JJ-HHMM.dump.age[.sha256]` n'est jamais touché.
+  • le reste, avec son empreinte `.sha256`, son manifeste et son marqueur `.suspect`,
+    est supprimé ; un compagnon orphelin n'est jamais touché.
+Un nom qui ne suit pas `coges-AAAA-MM-JJ-HHMM.dump.age[.sha256|.manifest.json|.suspect]`
+n'est jamais touché.
 
 Usage : rclone lsf coges:… | python3 deploy/scripts/backup_retention.py [--today AAAA-MM-JJ]
 """
@@ -24,7 +25,11 @@ import sys
 from collections.abc import Iterable
 from datetime import UTC, date, datetime
 
-NAME = re.compile(r"^coges-(\d{4})-(\d{2})-(\d{2})-(\d{4})\.dump\.age(\.sha256)?$")
+NAME = re.compile(
+    r"^coges-(\d{4})-(\d{2})-(\d{2})-(\d{4})\.dump\.age(\.sha256|\.manifest\.json|\.suspect)?$"
+)
+#: Ce qui accompagne un dump et part avec lui (ADR 0084, 0088).
+COMPANIONS = (".sha256", ".manifest.json", ".suspect")
 KEEP_ALL_DAYS = 7
 WEEKLY_DAYS = 28
 MONTHLY_DAYS = 366
@@ -79,8 +84,7 @@ def to_delete(names: Iterable[str], today: date) -> list[str]:
     for name in dumps:
         if not keep(name):
             doomed.append(name)
-            if f"{name}.sha256" in present:
-                doomed.append(f"{name}.sha256")
+            doomed += [name + suffix for suffix in COMPANIONS if name + suffix in present]
     return sorted(doomed)
 
 
