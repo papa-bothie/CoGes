@@ -339,6 +339,26 @@ est déjà dans le registre, son image est réutilisée telle quelle quand c'est
 commit (préproduction puis production), et refusée sinon : on ne repousse jamais du code
 différent sous une étiquette existante. Un SHA (préproduction) se reconstruit toujours.
 
+### Protections des environnements GitHub (à régler par le propriétaire, ADR 0088)
+
+Les workflows ne lisent les secrets de déploiement et de sauvegarde que depuis `main` ou
+une étiquette `v*` (condition `if:` des jobs `migrate`, `deploy`, `backup`, `purge`).
+GitHub doit le doubler, dans **Settings → Environments** :
+
+| Environnement | Branches et étiquettes autorisées | Relecteur obligatoire |
+|---|---|---|
+| `production` | `main`, étiquettes `v*` | **oui** (le propriétaire) |
+| `preprod` | `main`, étiquettes `v*` | non |
+| `backup` | `main` | non |
+| `backup-purge` | `main` | non |
+
+Réglage : « Deployment branches and tags » → « Selected branches and tags » → ajouter
+`main` et le motif d'étiquette `v*` ; pour `production`, cocher « Required reviewers ».
+Les actions tierces sont figées par condensat (`@<sha> # vN`) : pour les mettre à jour,
+résoudre la nouvelle version (`gh api repos/<éditeur>/<action>/commits/<étiquette> --jq
+.sha`) et remplacer le condensat ; `tests/unit/test_workflows.py` refuse une étiquette
+seule.
+
 ## Sauvegarde externe chiffrée (ADR 0084)
 
 Guide complet : `docs/runbooks/sauvegarde.md`. Chaque nuit à 02 h 15 UTC, GitHub Actions

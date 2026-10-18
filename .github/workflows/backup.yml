@@ -34,6 +34,9 @@ jobs:
     name: pg_dump chiffré vers le stockage externe
     runs-on: ubuntu-24.04
     environment: backup
+    # Secrets de sauvegarde ou de déploiement : jamais depuis une branche quelconque
+    # lancée à la main (ADR 0088). Les protections d'environnement GitHub le doublent.
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5

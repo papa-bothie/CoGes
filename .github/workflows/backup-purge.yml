@@ -32,6 +32,9 @@ jobs:
     name: Appliquer la rétention
     runs-on: ubuntu-24.04
     environment: backup-purge
+    # Secrets de sauvegarde ou de déploiement : jamais depuis une branche quelconque
+    # lancée à la main (ADR 0088). Les protections d'environnement GitHub le doublent.
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     env:
       REMOTE: coges:${{ vars.BACKUP_REMOTE_PATH }}
       DRY_RUN: ${{ inputs.dry_run == true && '1' || '0' }}
