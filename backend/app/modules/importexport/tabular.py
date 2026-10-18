@@ -22,6 +22,7 @@ import csv
 import io
 import re
 import unicodedata
+import zipfile
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -30,6 +31,13 @@ from typing import Any
 
 #: Signature d'une archive ZIP : un .xlsx en est une.
 _XLSX_MAGIC = b"PK\x03\x04"
+
+#: Bornes d'un fichier importé (ADR 0088). Un .xlsx est un zip : quelques Ko peuvent se
+#: décompresser en Go. On lit la table des matières **avant** d'ouvrir le classeur.
+MAX_UNCOMPRESSED_BYTES = 30 * 1024 * 1024
+MAX_COMPRESSION_RATIO = 100
+MAX_COLUMNS = 100
+MAX_CELL_CHARS = 2000
 
 #: Petits mots ignorés dans un en-tête.
 _STOP_WORDS = frozenset({"de", "d", "du", "des", "la", "le", "l", "en"})
@@ -113,9 +121,28 @@ def _cell_text(value: Any) -> str:
     return str(value).strip()
 
 
+def _check_archive(content: bytes) -> None:
+    """Refuse une bombe zip sans rien décompresser : tailles lues dans l'en-tête."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            entries = archive.infolist()
+    except zipfile.BadZipFile as exc:
+        raise UnreadableFileError("Le fichier Excel est illisible.") from exc
+    unpacked = sum(entry.file_size for entry in entries)
+    packed = sum(entry.compress_size for entry in entries) or 1
+    if unpacked > MAX_UNCOMPRESSED_BYTES:
+        raise UnreadableFileError(
+            f"Le fichier Excel est trop gros une fois décompressé ({unpacked // 1_048_576} Mo, "
+            f"{MAX_UNCOMPRESSED_BYTES // 1_048_576} au plus)."
+        )
+    if unpacked > 1_048_576 and unpacked / packed > MAX_COMPRESSION_RATIO:
+        raise UnreadableFileError("Le fichier Excel est compressé de façon anormale : refusé.")
+
+
 def _read_xlsx(content: bytes, *, max_rows: int) -> list[list[str]]:
     from openpyxl import load_workbook  # noqa: PLC0415 - chargé seulement pour un .xlsx
 
+    _check_archive(content)
     try:
         workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     except Exception as exc:  # zip corrompu, XML invalide…
@@ -123,8 +150,13 @@ def _read_xlsx(content: bytes, *, max_rows: int) -> list[list[str]]:
     try:
         sheet = workbook.worksheets[0]
         lines: list[list[str]] = []
-        for values in sheet.iter_rows(values_only=True):
-            lines.append([_cell_text(value) for value in values])
+        # Une colonne de plus que la borne suffit à refuser, sans lire le reste de la ligne.
+        for values in sheet.iter_rows(values_only=True, max_col=MAX_COLUMNS + 1):
+            cells = [_cell_text(value) for value in values]
+            # `max_col` complète la ligne de cellules vides : elles ne comptent pas.
+            while cells and not cells[-1]:
+                cells.pop()
+            lines.append(cells)
             if len(lines) > max_rows + 1:
                 break
         return lines
@@ -136,8 +168,16 @@ def _decode(content: bytes) -> str:
     try:
         return content.decode("utf-8-sig")
     except UnicodeDecodeError:
-        # Excel français enregistre en Windows-1252 : « é » y est l'octet 0xE9.
-        return content.decode("cp1252", errors="replace")
+        pass
+    # Excel français enregistre en Windows-1252 : « é » y est l'octet 0xE9. Un octet que
+    # ce codage ne connaît pas est signalé, jamais remplacé par « � » (ADR 0088).
+    try:
+        return content.decode("cp1252")
+    except UnicodeDecodeError as exc:
+        raise UnreadableFileError(
+            "Le fichier n'est ni en UTF-8 ni en Windows-1252 : enregistrez-le depuis Excel "
+            "en « CSV UTF-8 », puis réessayez."
+        ) from exc
 
 
 def _delimiter(first_line: str) -> str:
@@ -161,6 +201,19 @@ def _read_csv(content: bytes, *, max_rows: int) -> list[list[str]]:
     return lines
 
 
+def _check_shape(lines: list[list[str]]) -> None:
+    """Colonnes et longueur de cellule bornées (ADR 0088)."""
+    for number, values in enumerate(lines, start=1):
+        if len(values) > MAX_COLUMNS:
+            raise UnreadableFileError(
+                f"Le fichier a trop de colonnes ({MAX_COLUMNS} au plus, ligne {number})."
+            )
+        if any(len(value) > MAX_CELL_CHARS for value in values):
+            raise UnreadableFileError(
+                f"Une cellule dépasse {MAX_CELL_CHARS} caractères (ligne {number})."
+            )
+
+
 def read_table(content: bytes, *, max_rows: int) -> Table:
     """Lit un CSV ou un .xlsx ; lignes entièrement vides ignorées.
 
@@ -176,7 +229,16 @@ def read_table(content: bytes, *, max_rows: int) -> Table:
     )
     if not lines:
         raise UnreadableFileError("Le fichier est vide.")
+    _check_shape(lines)
     headers = [normalise_header(value) for value in lines[0]]
+    seen: set[str] = set()
+    for position, header in enumerate(headers):
+        if header and header in seen:
+            raise UnreadableFileError(
+                f"La colonne « {lines[0][position].strip()} » apparaît deux fois : "
+                "gardez-en une seule."
+            )
+        seen.add(header)
     rows: list[Row] = []
     for index, values in enumerate(lines[1:], start=2):
         if not any(values):

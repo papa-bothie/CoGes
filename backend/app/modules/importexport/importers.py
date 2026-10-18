@@ -17,6 +17,7 @@ réimporte tel quel.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
@@ -86,13 +87,28 @@ _UNITS = {
 }
 
 
+#: Un seul séparateur suivi d'exactement trois chiffres : « 1.500 » vaut mille cinq cents
+#: en français et un et demi en anglais (ADR 0088).
+_AMBIGUOUS_NUMBER = re.compile(r"^-?\d{1,3}[.,]\d{3}$")
+
+
+class AmbiguousNumberError(ValueError):
+    """Nombre qu'on ne peut pas lire sans deviner : la ligne est rejetée."""
+
+
 def number_text(value: str) -> str:
     """`1 234,50` → `1234.50` ; `1.234,50` → `1234.50` ; `12.5` inchangé.
 
     Rend une **chaîne** : la conversion en `Decimal` et ses bornes restent l'affaire
-    des validateurs de `app.core.money`, qui refusent les flottants.
+    des validateurs de `app.core.money`, qui refusent les flottants. Lève
+    `AmbiguousNumberError` sur « 1.500 » ou « 1,500 ».
     """
     compact = value.translate(_SPACES)
+    if _AMBIGUOUS_NUMBER.match(compact):
+        raise AmbiguousNumberError(
+            f"« {value.strip()} » est ambigu : écrivez 1500 pour mille cinq cents, 1,5 pour "
+            "un et demi. Écrivez 1500 sans séparateur."
+        )
     if "," in compact and "." in compact:
         compact = compact.replace(".", "").replace(",", ".")
     elif "," in compact:
@@ -201,8 +217,20 @@ def _values(row: Row, columns: tuple[Column, ...]) -> tuple[dict[str, Any], list
                 )
             continue
         if column.field is not None:
-            data[column.field] = column.convert(raw) if column.convert else raw
+            try:
+                data[column.field] = column.convert(raw) if column.convert else raw
+            except AmbiguousNumberError as exc:
+                errors.append(_error(row, column.header, "ambiguous_number", str(exc)))
     return data, errors
+
+
+def _number_cell(row: Row, column: Column) -> str:
+    """Une cellule numérique lue hors schéma ; un nombre ambigu rejette la ligne."""
+    raw = row.cells.get(column.key, "").strip()
+    try:
+        return number_text(raw)
+    except AmbiguousNumberError as exc:
+        raise RowRejectedError([_error(row, column.header, "ambiguous_number", str(exc))]) from exc
 
 
 def _validate[ModelT: BaseModel](
@@ -337,7 +365,7 @@ def _prepare_product(row: Row, state: ImportState) -> PreparedProduct:
         data["category_id"] = _category_id(state, row, _CATEGORY.header, category)
     product = _validate(ProductCreate, data, row, _PRODUCT_COLUMNS)
 
-    quantity = number_text(row.cells.get(_INITIAL_QTY.key, "").strip())
+    quantity = _number_cell(row, _INITIAL_QTY)
     if not quantity or quantity in {"0", "0.0", "0.000"}:
         return PreparedProduct(product=product, initial=None)
     if not product.is_stock_tracked:
@@ -351,7 +379,7 @@ def _prepare_product(row: Row, state: ImportState) -> PreparedProduct:
                 )
             ]
         )
-    cost = number_text(row.cells.get(_INITIAL_COST.key, "").strip())
+    cost = _number_cell(row, _INITIAL_COST)
     if not cost and product.cost_price is not None:
         cost = str(product.cost_price)
     if not cost:
