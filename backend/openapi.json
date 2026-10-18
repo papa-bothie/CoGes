@@ -11955,18 +11955,6 @@
             ],
             "title": "Note"
           },
-          "sale_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sale Id"
-          },
           "expense_id": {
             "anyOf": [
               {
@@ -11997,7 +11985,7 @@
           "amount"
         ],
         "title": "PaymentCreate",
-        "description": "Encaissement ou décaissement saisi à la main.\n\n`method` exclut `offset` : une compensation ne se saisit pas, elle naît d'un\nretour (ADR 0024)."
+        "description": "Encaissement ou décaissement saisi à la main.\n\n`method` exclut `offset` : une compensation ne se saisit pas, elle naît d'un\nretour (ADR 0024).\n\nAucun `sale_id` : une vente se règle en lettrant sa dette, jamais en direct. Un\npaiement direct rattaché ici échappait au statut de la vente, à son total et à sa\ndette — le client aurait pu payer deux fois (ADR 0062, 0087). L'encaissement de\nla confirmation passe par `record_sale_payment`."
       },
       "PaymentDetail": {
         "properties": {

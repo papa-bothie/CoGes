@@ -4019,6 +4019,11 @@ export interface components {
      *
      *     `method` exclut `offset` : une compensation ne se saisit pas, elle naît d'un
      *     retour (ADR 0024).
+     *
+     *     Aucun `sale_id` : une vente se règle en lettrant sa dette, jamais en direct. Un
+     *     paiement direct rattaché ici échappait au statut de la vente, à son total et à sa
+     *     dette — le client aurait pu payer deux fois (ADR 0062, 0087). L'encaissement de
+     *     la confirmation passe par `record_sale_payment`.
      */
     PaymentCreate: {
       direction: components["schemas"]["CashDirection"];
@@ -4030,8 +4035,6 @@ export interface components {
       reference?: string | null;
       /** Note */
       note?: string | null;
-      /** Sale Id */
-      sale_id?: string | null;
       /** Expense Id */
       expense_id?: string | null;
       /**
