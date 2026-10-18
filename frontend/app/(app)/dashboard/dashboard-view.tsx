@@ -73,7 +73,7 @@ export function DashboardView() {
     queryFn: () => unwrap(api.GET("/api/v1/dashboard")),
   });
   const permissions = me.data?.permissions;
-  const money = (value: string | undefined) => formatAmount(value, currency);
+  const money = (value: string | null | undefined) => formatAmount(value ?? undefined, currency);
 
   if (query.isError) {
     return (
@@ -115,7 +115,8 @@ export function DashboardView() {
         value: money(data.cash_on_hand),
         detail: t.cashHint,
         href: TILE_LINKS.cash,
-        visible: show.cash,
+        // Le serveur ne l'envoie qu'avec `analytics:read` (ADR 0087).
+        visible: show.cash && data.cash_on_hand !== null,
       },
       {
         key: "receivables",
@@ -124,9 +125,9 @@ export function DashboardView() {
         label: t.receivables,
         short: t.receivablesShort,
         value: money(data.receivables_open),
-        detail: t.receivablesHint(data.receivables_customer_count),
+        detail: t.receivablesHint(data.receivables_customer_count ?? 0),
         href: TILE_LINKS.receivables,
-        visible: show.receivables,
+        visible: show.receivables && data.receivables_open !== null,
       },
       {
         key: "stock",

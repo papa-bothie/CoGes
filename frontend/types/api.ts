@@ -2735,15 +2735,15 @@ export interface components {
       month_to: string;
       revenue_today: components["schemas"]["Amount-Output"];
       revenue_month: components["schemas"]["Amount-Output"];
-      estimated_margin_month: components["schemas"]["Amount-Output"];
+      estimated_margin_month: components["schemas"]["Amount-Output"] | null;
       /** Sales Today */
       sales_today: number;
-      receivables_open: components["schemas"]["Amount-Output"];
+      receivables_open: components["schemas"]["Amount-Output"] | null;
       /** Receivables Customer Count */
-      receivables_customer_count: number;
+      receivables_customer_count: number | null;
       /** Stock Alert Count */
       stock_alert_count: number;
-      cash_on_hand: components["schemas"]["Amount-Output"];
+      cash_on_hand: components["schemas"]["Amount-Output"] | null;
       /** Watch Stock */
       watch_stock: components["schemas"]["WatchStock"][];
       watch_debt: components["schemas"]["WatchDebt"] | null;

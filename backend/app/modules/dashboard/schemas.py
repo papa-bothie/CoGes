@@ -107,16 +107,18 @@ class Dashboard(BaseModel):
 
     revenue_today: Amount
     revenue_month: Amount
-    estimated_margin_month: Amount
+    #: `null` sans `analytics:read` (ADR 0030, 0087).
+    estimated_margin_month: Amount | None
     sales_today: int
-    receivables_open: Amount
+    #: `null` sans `debts:read` (ADR 0072, 0087), comme le nombre et `watch_debt`.
+    receivables_open: Amount | None
     #: Nombre de clients qui doivent encore quelque chose (« 5 clients »).
-    receivables_customer_count: int
+    receivables_customer_count: int | None
     stock_alert_count: int
     #: Dans la caisse : tout ce qui est entré moins tout ce qui est sorti, depuis le début,
     #: paiements vivants seulement, compensations exclues (ADR 0024, ADR 0070). Aucun fond
-    #: de caisse de départ en V1.
-    cash_on_hand: Amount
+    #: de caisse de départ en V1. `null` sans `analytics:read`, le droit de `/analytics/cash`.
+    cash_on_hand: Amount | None
     #: Carte « À surveiller » : articles les plus bas, puis la plus grosse dette client.
     watch_stock: list[WatchStock]
     watch_debt: WatchDebt | None

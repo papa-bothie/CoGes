@@ -57,8 +57,30 @@ def invalidate(company_id: UUID) -> None:
     cache.invalidate(company_id, CACHE_KEY)
 
 
+#: Champs réservés à un droit : sans lui, ils partent à `null` (ADR 0087). La marge
+#: suit `analytics:read` (ADR 0030), ce qui est dû `debts:read` (ADR 0072), la caisse
+#: le droit de `/analytics/cash`, où elle se détaille.
+RESTRICTED_FIELDS: dict[str, str] = {
+    "estimated_margin_month": "analytics:read",
+    "cash_on_hand": "analytics:read",
+    "receivables_open": "debts:read",
+    "receivables_customer_count": "debts:read",
+    "watch_debt": "debts:read",
+}
+
+
 def dashboard(session: Session, ctx: TenantContext, *, use_cache: bool = True) -> Dashboard:
-    """Indicateurs d'accueil de l'entreprise, cache court compris."""
+    """Indicateurs d'accueil de l'entreprise, cache court compris, vus par `ctx`.
+
+    Le cache est **par entreprise** : il ne garde que ce qui est commun à tous ses
+    lecteurs. Ce qui dépend de la personne — ses alertes, ce que ses droits lui
+    laissent lire — est posé à chaque requête, après le cache (ADR 0087).
+    """
+    shared = _shared(session, ctx, use_cache=use_cache)
+    return _for_viewer(session, ctx, shared)
+
+
+def _shared(session: Session, ctx: TenantContext, *, use_cache: bool) -> Dashboard:
     if use_cache:
         cached = cache.get_json(ctx.company_id, CACHE_KEY)
         if cached is not None:
@@ -76,6 +98,17 @@ def dashboard(session: Session, ctx: TenantContext, *, use_cache: bool = True) -
         ttl_seconds=get_settings().dashboard_cache_ttl_seconds,
     )
     return fresh
+
+
+def _for_viewer(session: Session, ctx: TenantContext, shared: Dashboard) -> Dashboard:
+    """Les alertes de la personne, et rien de ce que ses droits ne lui ouvrent pas."""
+    update: dict[str, object] = {
+        field: None
+        for field, permission in RESTRICTED_FIELDS.items()
+        if not ctx.has_permission(permission)
+    }
+    update["active_alerts"] = _active_alerts(session, ctx)
+    return shared.model_copy(update=update)
 
 
 def _compose(session: Session, ctx: TenantContext) -> Dashboard:
@@ -139,7 +172,8 @@ def _compose(session: Session, ctx: TenantContext) -> Dashboard:
         watch_debt=_watch_debt(session, ctx, today=today, zone=zone),
         revenue_trend=_trend(by_day, trend_from, today),
         recent_sales=_recent_sales(session, ctx),
-        active_alerts=_active_alerts(session, ctx),
+        # Propres à la personne : posées par `_for_viewer`, jamais mises en cache.
+        active_alerts=[],
         computed_at=clock.now_in(zone.key),
     )
 
