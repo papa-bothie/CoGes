@@ -10,11 +10,17 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, audit_critical
 from app.core.config import get_settings
-from app.core.errors import BusinessRuleError, NotFoundError, ValidationFailedError
+from app.core.errors import (
+    BusinessRuleError,
+    NotFoundError,
+    ValidationFailedError,
+    constraint_name,
+)
 from app.core.passwords import readable_password
 from app.core.security import hash_password, verify_password
 from app.core.tenancy import TenantContext
@@ -104,6 +110,29 @@ def temporary_password_deadline() -> datetime:
     return datetime.now(UTC) + timedelta(hours=get_settings().temp_password_ttl_hours)
 
 
+#: Index uniques partiels de la révision 0024 et le message de chacun.
+_IDENTIFIER_TAKEN = {
+    "users_email_uq": "Un compte utilise déjà cet e-mail dans cette entreprise.",
+    "users_phone_uq": "Un compte utilise déjà ce numéro dans cette entreprise.",
+}
+
+
+def _flush(session: Session) -> None:
+    """`flush` qui traduit une violation d'unicité d'identifiant en 422.
+
+    La vérification de `create_user` lit avant d'écrire : deux créations simultanées la
+    passent toutes les deux, et l'index tranche. La seconde reçoit alors le même 422
+    que si elle était arrivée après (ADR 0087), jamais une 500.
+    """
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        message = _IDENTIFIER_TAKEN.get(constraint_name(exc) or "")
+        if message is None:
+            raise
+        raise ValidationFailedError(message) from exc
+
+
 def create_user(
     session: Session,
     ctx: TenantContext,
@@ -145,7 +174,7 @@ def create_user(
             must_change_password_until=temporary_password_deadline() if temporary else None,
         )
     )
-    session.flush()
+    _flush(session)
 
     for role_id in payload.role_ids:
         rbac_service.assign_role(session, ctx, user.id, role_id, ip_address=ip_address)
