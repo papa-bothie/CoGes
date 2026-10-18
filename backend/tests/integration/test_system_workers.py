@@ -23,6 +23,7 @@ from app.core.tenancy import TenantContext, tenant_transaction
 from app.workers.beat import JOB_FRESHNESS, ML_TRAIN, REBUILD_STOCK
 from tests.conftest import DemoCompany, login_token
 from tests.integration.ops_harness import OPS_TOKEN, add_run, clear_job_runs, ops_settings
+from tests.integration.relay_harness import bury_dead_letters
 from tests.tenancy.harness import Tenant
 
 URL = "/api/v1/system/workers"
@@ -54,6 +55,7 @@ def healthy(
     clear_job_runs(owner_engine)
     for job in JOB_FRESHNESS:
         add_run(owner_engine, job)
+    bury_dead_letters(owner_engine)
     yield api_client
     clear_job_runs(owner_engine)
 
@@ -132,6 +134,45 @@ def test_lagging_outbox_is_503(
                 text("UPDATE business_events SET published_at = now() WHERE id = :id"),
                 {"id": event_id},
             )
+
+
+def test_dead_lettered_event_is_503(
+    healthy: TestClient,
+    session_factory: sessionmaker[Any],
+    owner_engine: Engine,
+    tenant_a: Tenant,
+) -> None:
+    """Un événement au rebut ne repart jamais seul : le bilan le dit, avec le compte."""
+    with tenant_transaction(
+        TenantContext.bootstrap(tenant_a.company_id), session_factory=session_factory
+    ) as session:
+        session.execute(
+            text(
+                """
+                INSERT INTO business_events
+                       (company_id, event_type, aggregate_type, aggregate_id, payload)
+                VALUES (:company_id, 'stock.updated', 'product', gen_random_uuid(), '{}'::jsonb)
+                """
+            ),
+            {"company_id": tenant_a.company_id},
+        )
+    with owner_engine.begin() as connection:
+        connection.execute(text("SET LOCAL ROLE coges_bus"))
+        connection.execute(
+            text(
+                "UPDATE business_events SET attempts = 10 "
+                "WHERE company_id = :company_id AND published_at IS NULL"
+            ),
+            {"company_id": tenant_a.company_id},
+        )
+    try:
+        response = healthy.get(URL, headers=AUTH)
+        assert response.status_code == 503
+        body = response.json()
+        assert body["problems"] == [f"outbox_dead_lettered:{body['outbox']['dead_lettered']}"]
+        assert body["outbox"]["dead_lettered"] >= 1
+    finally:
+        bury_dead_letters(owner_engine)
 
 
 def test_failed_nightly_job_is_503(healthy: TestClient, owner_engine: Engine) -> None:

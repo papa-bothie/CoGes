@@ -41,13 +41,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
 from app.core.database import get_relay_session_factory
+from app.core.events.bus import TransportUnavailableError
 from app.core.events.inbox import Event
 from app.core.events.types import EventType
 from app.core.logging import configure_logging
 
 logger = logging.getLogger(__name__)
 
-#: Les deux seuls appels autorisés à voir toutes les entreprises. Le SQL vit ici et
+#: Les seuls appels autorisés à voir toutes les entreprises. Le SQL vit ici et
 #: nulle part ailleurs : un test d'architecture le vérifie.
 _CLAIM = text(
     """
@@ -57,6 +58,8 @@ _CLAIM = text(
     """
 )
 _MARK_PUBLISHED = text("SELECT outbox_mark_published(:ids) AS marked")
+#: Rend la tentative consommée par le claim quand le transport est tombé (ADR 0087).
+_RELEASE = text("SELECT outbox_release(:ids) AS released")
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,8 +229,24 @@ class OutboxRelay:
         finally:
             session.close()
 
+    def _release(self, event_ids: list[int]) -> int:
+        session: Session = self._session_factory()
+        try:
+            with session.begin():
+                released = session.execute(_RELEASE, {"ids": event_ids}).scalar_one()
+            return int(released)
+        finally:
+            session.close()
+
     def run_once(self) -> RelayPass:
-        """Un lot : réclamer, publier, marquer. Ne lève pas sur un échec de publication."""
+        """Un lot : réclamer, publier, marquer. Ne lève pas sur un échec de publication.
+
+        Deux sortes d'échec, deux traitements (ADR 0087). Un échec **propre à
+        l'événement** consomme sa tentative : au dixième, c'est le rebut. Une **panne
+        de transport** n'est la faute d'aucun événement : le passage s'arrête, et la
+        tentative est rendue à tout ce qui n'est pas parti — sans quoi quelques minutes
+        sans Redis mettraient au rebut des événements sains.
+        """
         claimed = self._claim()
         if not claimed:
             return RelayPass(claimed=0, published=0, failed=0, dead_lettered=0)
@@ -235,9 +254,19 @@ class OutboxRelay:
         published: list[int] = []
         failed = 0
         dead_lettered = 0
-        for item in claimed:
+        for index, item in enumerate(claimed):
             try:
                 self._bus.publish(item.event)
+            except TransportUnavailableError:
+                unsent = [pending.event.id for pending in claimed[index:]]
+                failed += len(unsent)
+                self._release(unsent)
+                logger.error(
+                    "Transport injoignable : passage interrompu, tentatives rendues",
+                    extra={"event_id": item.event.id, "released": len(unsent)},
+                    exc_info=True,
+                )
+                break
             except Exception:
                 failed += 1
                 # `attempts` a déjà été incrémenté par `outbox_claim` : l'événement

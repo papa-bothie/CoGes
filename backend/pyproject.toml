@@ -72,9 +72,9 @@ strict = false
 module = ["statsmodels.*", "pandas.*"]
 ignore_missing_imports = true
 
-# Celery ne publie ni stubs ni marqueur py.typed.
+# Celery et kombu ne publient ni stubs ni marqueur py.typed.
 [[tool.mypy.overrides]]
-module = "celery.*"
+module = ["celery.*", "kombu.*"]
 ignore_missing_imports = true
 
 # `@celery_app.task` vient d'une bibliothèque non typée : sous --strict, il rend

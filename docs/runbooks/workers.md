@@ -107,12 +107,51 @@ relais attend jusqu'à 10 min quand la file est vide).
 1. Le relais bat-il ? Sinon, voir la fiche du relais.
 2. S'il bat : `dc logs relay | grep -E "Publication impossible|en échec"`. Publication
    impossible → Redis : vérifier `COGES_REDIS_URL`, la mémoire de la base Redis Cloud.
-3. `outbox.dead_lettered` > 0 : des événements ont épuisé leurs 10 tentatives et ne
-   repartiront plus seuls. Ils restent en base. Corriger la cause, puis les rejouer
-   délibérément (remettre `attempts` à 0 sous `coges_bus`, avec l'accord du responsable
-   technique) ; le rebut n'entre pas dans le calcul du retard.
+3. `outbox.dead_lettered` > 0 : voir la fiche suivante.
 
 **Urgence : immédiat.**
+
+## `outbox_dead_lettered:<nombre>`
+
+**Ce que ça veut dire.** Des événements ont échoué 10 fois **pour une raison qui leur est
+propre** (type sans abonné, corps illisible) et ne repartiront plus seuls. Une panne de
+Redis n'en produit pas : le relais rend alors la tentative et attend (ADR 0087).
+
+**Impact.** L'effet de ces événements (tableau de bord, faits du jour, alertes) manque
+tant qu'ils ne sont pas rejoués. Aucune donnée métier n'est perdue : ils restent en base.
+
+**Réparer.**
+
+1. Trouver la cause : `dc logs relay | grep "Publication impossible"` (le journal donne
+   `event_id` et `event_type`), ou Sentry. La corriger et redéployer d'abord : rejouer
+   sans corriger renvoie l'événement au rebut dix passages plus tard.
+2. Lister le rebut, depuis le poste qui détient `NEON_OWNER_DSN` (jamais le VPS) :
+
+   ```sql
+   BEGIN;
+   SET LOCAL ROLE coges_bus;   -- propriétaire des fonctions du bus, BYPASSRLS
+   SELECT id, company_id, event_type, occurred_at
+     FROM business_events
+    WHERE published_at IS NULL AND attempts >= 10
+    ORDER BY id;
+   COMMIT;
+   ```
+
+3. Rejouer, avec l'accord du responsable technique, en nommant les identifiants :
+
+   ```sql
+   BEGIN;
+   SET LOCAL ROLE coges_bus;
+   UPDATE business_events SET attempts = 0
+    WHERE id = ANY('{123,124}'::bigint[]) AND published_at IS NULL;
+   COMMIT;
+   ```
+
+   Le relais les reprend au passage suivant. Les consommateurs sont idempotents
+   (`processed_events`) : un événement déjà appliqué ne l'est pas deux fois.
+4. `make ops-status` doit revenir en 200.
+
+**Urgence : dans la journée.**
 
 ## File Celery qui grossit
 

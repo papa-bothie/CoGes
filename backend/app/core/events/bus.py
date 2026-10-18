@@ -17,6 +17,14 @@ from typing import Protocol
 from app.core.events.inbox import Event
 
 
+class TransportUnavailableError(Exception):
+    """Le transport ne répond pas (broker injoignable, délai dépassé).
+
+    Ce n'est pas un défaut de l'événement : le relais rend la tentative consommée et
+    arrête son passage, au lieu de rapprocher des événements sains du rebut (ADR 0087).
+    """
+
+
 class EventBus(Protocol):
     """Contrat de publication, implémenté par le relais."""
 
@@ -25,5 +33,8 @@ class EventBus(Protocol):
 
         Au moins une fois : l'implémentation peut republier après un incident. C'est
         aux consommateurs d'être idempotents (`app.core.events.inbox.handle`).
+
+        Lève `TransportUnavailableError` quand le transport lui-même est en panne ;
+        toute autre exception est un échec propre à cet événement.
         """
         ...

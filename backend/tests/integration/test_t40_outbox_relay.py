@@ -16,10 +16,16 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
 from app.workers.relay import OutboxRelay
-from tests.integration.relay_harness import RecordingBus, read_state, write_event
+from tests.integration.relay_harness import (
+    RecordingBus,
+    bury_dead_letters,
+    read_state,
+    write_event,
+)
 from tests.tenancy.harness import Tenant
 
 pytestmark = pytest.mark.integration
@@ -117,6 +123,7 @@ def test_an_idle_relay_does_nothing(relay_session_factory: sessionmaker[Any]) ->
 def test_an_exhausted_event_is_no_longer_claimed(
     session_factory: sessionmaker[Any],
     relay_session_factory: sessionmaker[Any],
+    owner_engine: Engine,
     tenant_a: Tenant,
 ) -> None:
     """Après dix tentatives, l'événement devient un rebut : plus aucune reprise.
@@ -129,21 +136,24 @@ def test_an_exhausted_event_is_no_longer_claimed(
     `attempts < 10` dans `outbox_claim`, la onzième lèverait 23514 et casserait le
     relais pour tous les autres.
     """
-    event_id, _ = write_event(session_factory, tenant_a.ctx)
+    try:
+        event_id, _ = write_event(session_factory, tenant_a.ctx)
 
-    broken = RecordingBus(fail_all=True)
-    relay = _relay(relay_session_factory, broken)
-    for _ in range(10):
-        relay.run_once()
+        broken = RecordingBus(fail_all=True)
+        relay = _relay(relay_session_factory, broken)
+        for _ in range(10):
+            relay.run_once()
 
-    exhausted = read_state(session_factory, tenant_a.ctx, event_id)
-    assert exhausted.attempts == 10
-    assert exhausted.published_at is None
+        exhausted = read_state(session_factory, tenant_a.ctx, event_id)
+        assert exhausted.attempts == 10
+        assert exhausted.published_at is None
 
-    # Onzième passage : l'événement n'est plus réclamé, et rien ne lève.
-    working = RecordingBus()
-    result = _relay(relay_session_factory, working).run_once()
+        # Onzième passage : l'événement n'est plus réclamé, et rien ne lève.
+        working = RecordingBus()
+        result = _relay(relay_session_factory, working).run_once()
 
-    assert event_id not in working.published_ids, "un rebut continue d'être réclamé"
-    assert result.dead_lettered == 0, "le rebut est recompté alors qu'il n'est plus réclamé"
-    assert read_state(session_factory, tenant_a.ctx, event_id).attempts == 10
+        assert event_id not in working.published_ids, "un rebut continue d'être réclamé"
+        assert result.dead_lettered == 0, "le rebut est recompté alors qu'il n'est plus réclamé"
+        assert read_state(session_factory, tenant_a.ctx, event_id).attempts == 10
+    finally:
+        bury_dead_letters(owner_engine)
