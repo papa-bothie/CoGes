@@ -8,12 +8,15 @@ Fenêtre fixe d'une minute, compteur Redis `INCR` + `EXPIRE` :
   `get_tenant_session` **après** la relecture de l'utilisateur : le `company_id`
   vient du serveur, jamais du client.
 
-Freinage **par compte** (ADR 0078), clé ``rl:acct:{sha256(slug|identifiant)}`` : aucun
-identifiant en clair dans Redis, et la clé est posée pour ce qui a été **tapé**, que le
-compte existe ou non. Au-delà de `login_throttle_free_failures` échecs dans la fenêtre,
-chaque échec impose une attente (1, 2, 4… minutes, `login_throttle_max_wait_minutes` au
-plus). On freine, on ne verrouille jamais : un verrou permettrait à n'importe qui de
-bloquer la gérante.
+Freinage **par compte** (ADR 0078, 0088), clé ``rl:acct:{sha256(…)}`` : aucun
+identifiant en clair dans Redis. La clé suit le compte quand l'identifiant tapé en
+désigne un, sinon ce qui a été tapé. Au-delà de `login_throttle_free_failures` échecs
+gardés `window + max_wait` (45 min), chaque échec impose une attente (1, 2, 4…
+minutes, `login_throttle_max_wait_minutes` au plus). L'essai est réservé **avant**
+Argon2 : une rafale parallèle ne passe pas avant le premier échec compté. On freine, on
+ne verrouille jamais : un verrou permettrait à n'importe qui de bloquer la gérante.
+Limite assumée : environ huit essais par 45 minutes suffisent encore à gêner une
+personne en continu ; ils déclenchent l'alerte du gérant au dixième (ADR 0088).
 
 Une panne de Redis **désactive** la limite au lieu de faire échouer la requête : la
 limitation protège la disponibilité, elle ne doit pas devenir la cause d'une panne
@@ -33,7 +36,7 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import sentry_sdk
 
@@ -47,29 +50,6 @@ WINDOW_SECONDS = 60
 
 #: Horloge substituable par les tests, pour qu'une fenêtre ne bascule pas en plein cas.
 _clock = time.time
-
-#: Un échec du compte : incrémente, pose l'attente au-delà du seuil, prolonge la clé.
-#: Atomique côté Redis : deux échecs simultanés ne peuvent pas lire le même compte.
-_ACCOUNT_FAILURE_LUA = """
-local fails = redis.call('HINCRBY', KEYS[1], 'fails', 1)
-local now = tonumber(ARGV[1])
-local free = tonumber(ARGV[2])
-local window = tonumber(ARGV[3])
-local max_wait = tonumber(ARGV[4])
-local until_at = 0
-if fails >= free then
-  local wait = math.min(max_wait, 60 * 2 ^ (fails - free))
-  until_at = now + wait
-  redis.call('HSET', KEYS[1], 'until', until_at)
-  local ttl = redis.call('TTL', KEYS[1])
-  if ttl < wait + window then
-    redis.call('EXPIRE', KEYS[1], math.ceil(wait + window))
-  end
-elseif fails == 1 then
-  redis.call('EXPIRE', KEYS[1], window)
-end
-return {fails, tostring(until_at)}
-"""
 
 
 class _MemoryCounters:
@@ -109,31 +89,6 @@ class _MemoryCounters:
                 return 1
             values["count"] += 1
             return int(values["count"])
-
-    def account_until(self, key: str, now: float) -> float:
-        with self._lock:
-            values = self._entry(key, now)
-            return values.get("until", 0.0) if values else 0.0
-
-    def account_failure(
-        self, key: str, now: float, *, free: int, window: float, max_wait: float
-    ) -> tuple[int, float]:
-        with self._lock:
-            found = self._data.get(key)
-            values = self._entry(key, now)
-            expires_at = found[1] if values is not None and found is not None else now + window
-            if values is None:
-                values = {"fails": 0}
-            values["fails"] += 1
-            fails = int(values["fails"])
-            until_at = 0.0
-            if fails >= free:
-                wait = min(max_wait, 60 * 2 ** (fails - free))
-                until_at = now + wait
-                values["until"] = until_at
-                expires_at = max(expires_at, now + wait + window)
-            self._store(key, values, expires_at)
-            return fails, until_at
 
     def delete(self, key: str) -> None:
         with self._lock:
@@ -205,21 +160,104 @@ def hit_tenant(company_id: UUID) -> None:
 
 
 # ------------------------------------------------------------- freinage par compte
+#
+# Trois clés par compte, toutes sous le même condensat (ADR 0078, 0088) :
+#   <clé>     ZSET des échecs, score = instant de l'échec ;
+#   <clé>:p   ZSET des essais en cours (comptés avant Argon2, ADR 0088) ;
+#   <clé>:u   instant de fin de l'attente en vigueur.
+# Un échec compte pendant `window + max_wait` (45 min au barème) : assez longtemps pour
+# que l'attente monte jusqu'à son plafond, assez peu pour qu'un essai isolé toutes les
+# 30 min ne bloque plus la personne en continu.
+
+#: Durée de vie d'un essai réservé dont le processus n'a jamais dit l'issue (plantage).
+PENDING_SECONDS = 60
+
+#: Réserve un essai : refus si une attente court, ou si trop d'essais sont déjà en
+#: cours (une rafale parallèle passe avant le premier échec compté). Atomique.
+_ACCOUNT_BEGIN_LUA = """
+local now = tonumber(ARGV[1])
+local member = ARGV[2]
+local free = tonumber(ARGV[3])
+local horizon = tonumber(ARGV[4])
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now - horizon)
+redis.call('ZREMRANGEBYSCORE', KEYS[2], '-inf', now - 60)
+local until_at = tonumber(redis.call('GET', KEYS[3]) or '0')
+if until_at > now then
+  return {-1, tostring(until_at)}
+end
+local fails = redis.call('ZCARD', KEYS[1])
+local pending = redis.call('ZCARD', KEYS[2])
+if pending >= math.max(1, free - fails) then
+  return {-1, tostring(now + 1)}
+end
+redis.call('ZADD', KEYS[2], now, member)
+redis.call('EXPIRE', KEYS[2], 120)
+return {fails, '0'}
+"""
+
+#: L'essai réservé a échoué : il devient un échec ; au-delà du seuil, l'attente
+#: (1, 2, 4… minutes, `max_wait` au plus) est posée pour les essais suivants.
+_ACCOUNT_FAIL_LUA = """
+local now = tonumber(ARGV[1])
+local member = ARGV[2]
+local free = tonumber(ARGV[3])
+local horizon = tonumber(ARGV[4])
+local max_wait = tonumber(ARGV[5])
+redis.call('ZREM', KEYS[2], member)
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now - horizon)
+redis.call('ZADD', KEYS[1], now, member)
+redis.call('EXPIRE', KEYS[1], math.ceil(horizon))
+local fails = redis.call('ZCARD', KEYS[1])
+local until_at = 0
+if fails >= free then
+  local wait = math.min(max_wait, 60 * 2 ^ (fails - free))
+  until_at = now + wait
+  redis.call('SET', KEYS[3], tostring(until_at), 'EX', math.ceil(wait) + 1)
+end
+return {fails, tostring(until_at)}
+"""
 
 
 @dataclass(frozen=True, slots=True)
 class AccountFailure:
-    """Effet d'un échec sur le compteur du compte tapé."""
+    """Effet d'un échec sur le compteur du compte."""
 
     failures: int
     #: Instant (epoch) jusqu'auquel la connexion est freinée ; 0 : aucune attente.
     wait_until: float
 
 
+@dataclass(frozen=True, slots=True)
+class AccountAttempt:
+    """Un essai réservé, en attente de son issue (échec, succès ou ni l'un ni l'autre)."""
+
+    key: str
+    member: str
+    #: Vrai pour un compte réel (clé de l'identifiant du compte, ADR 0088).
+    known: bool
+
+
 def account_key(company_slug: str, identifier: str) -> str:
     """Clé du compteur : un condensat, jamais l'identifiant en clair."""
     digest = hashlib.sha256(f"{company_slug.lower()}|{identifier}".encode()).hexdigest()
     return f"{cache.NAMESPACE}:rl:acct:{digest}"
+
+
+def account_identity(company_slug: str, *, user_id: UUID | None, typed: str) -> tuple[str, bool]:
+    """La clé suit le **compte** quand l'identifiant tapé en désigne un (ADR 0088) :
+    e-mail et téléphone d'une même personne partagent alors un seul compteur. Sinon,
+    elle suit ce qui a été tapé. Même forme de clé dans les deux cas : rien ne dit, de
+    l'extérieur, si le compte existe."""
+    if user_id is not None:
+        return account_key(company_slug, f"user:{user_id}"), True
+    return account_key(company_slug, typed), False
+
+
+def _settings_tuple() -> tuple[int, float, float]:
+    settings = get_settings()
+    window = settings.login_throttle_window_minutes * 60
+    max_wait = settings.login_throttle_max_wait_minutes * 60
+    return settings.login_throttle_free_failures, window + max_wait, max_wait
 
 
 def _wait_error(wait_until: float, now: float) -> RateLimitedError:
@@ -231,59 +269,193 @@ def _wait_error(wait_until: float, now: float) -> RateLimitedError:
     return error
 
 
-def check_account(company_slug: str, identifier: str) -> None:
-    """Lève 429 si le compte tapé est en attente. À appeler **avant** toute vérification.
+class _MemoryAccounts:
+    """Freinage par compte en mémoire du processus, quand Redis manque (ADR 0078, 0088).
 
-    Même réponse que le compte existe ou non, et aucun hachage Argon2 offert à
-    l'attaquant pendant l'attente.
+    Deux réservoirs bornés et séparés : les comptes réels et les identifiants inconnus.
+    Un flot d'identifiants fantaisistes n'évince donc jamais le compteur d'une victime.
     """
-    key = account_key(company_slug, identifier)
+
+    def __init__(self, capacity: int) -> None:
+        self.capacity = capacity
+        self._lock = threading.Lock()
+        self._pools: dict[bool, OrderedDict[str, dict[str, Any]]] = {
+            True: OrderedDict(),
+            False: OrderedDict(),
+        }
+
+    def _entry(self, key: str, known: bool, now: float, horizon: float) -> dict[str, Any]:
+        pool = self._pools[known]
+        entry = pool.get(key)
+        if entry is None:
+            entry = {"fails": [], "pending": {}, "until": 0.0}
+            pool[key] = entry
+            while len(pool) > self.capacity:
+                pool.popitem(last=False)
+        pool.move_to_end(key)
+        entry["fails"] = [at for at in entry["fails"] if at > now - horizon]
+        entry["pending"] = {
+            member: at for member, at in entry["pending"].items() if at > now - PENDING_SECONDS
+        }
+        return entry
+
+    def begin(
+        self, key: str, known: bool, member: str, now: float, *, free: int, horizon: float
+    ) -> tuple[int, float]:
+        with self._lock:
+            entry = self._entry(key, known, now, horizon)
+            if entry["until"] > now:
+                return -1, float(entry["until"])
+            fails = len(entry["fails"])
+            if len(entry["pending"]) >= max(1, free - fails):
+                return -1, now + 1
+            entry["pending"][member] = now
+            return fails, 0.0
+
+    def fail(
+        self,
+        key: str,
+        known: bool,
+        member: str,
+        now: float,
+        *,
+        free: int,
+        horizon: float,
+        max_wait: float,
+    ) -> tuple[int, float]:
+        with self._lock:
+            entry = self._entry(key, known, now, horizon)
+            entry["pending"].pop(member, None)
+            entry["fails"].append(now)
+            fails = len(entry["fails"])
+            until_at = 0.0
+            if fails >= free:
+                until_at = now + min(max_wait, 60 * 2 ** (fails - free))
+                entry["until"] = until_at
+            return fails, until_at
+
+    def cancel(self, key: str, known: bool, member: str) -> None:
+        with self._lock:
+            entry = self._pools[known].get(key)
+            if entry is not None:
+                entry["pending"].pop(member, None)
+
+    def peek(self, key: str, known: bool) -> dict[str, Any] | None:
+        with self._lock:
+            entry = self._pools[known].get(key)
+            return None if entry is None else {**entry, "fails": list(entry["fails"])}
+
+    def pop(self, key: str, known: bool) -> dict[str, Any] | None:
+        """Retire et rend l'état d'un compte : à reporter dans Redis revenu, ou à oublier."""
+        with self._lock:
+            return self._pools[known].pop(key, None)
+
+    def __len__(self) -> int:
+        return sum(len(pool) for pool in self._pools.values())
+
+
+_memory_accounts = _MemoryAccounts(get_settings().login_throttle_memory_keys)
+
+
+def _carry_over(client: Any, attempt_key: str, known: bool) -> None:
+    """Redis revenu : les échecs gardés en mémoire pendant la panne comptent encore.
+
+    L'état n'est retiré de la mémoire qu'une fois écrit dans Redis : si Redis ne répond
+    toujours pas, il reste là pour le repli.
+    """
+    carried = _memory_accounts.peek(attempt_key, known)
+    if not carried or (not carried["fails"] and carried["until"] <= 0):
+        return
+    pipeline = client.pipeline()
+    for at in carried["fails"]:
+        pipeline.zadd(attempt_key, {f"memoire-{at!r}": at})
+    if carried["fails"]:
+        pipeline.expire(attempt_key, math.ceil(_settings_tuple()[1]))
+    until_at = float(carried["until"])
+    if until_at > _clock():
+        pipeline.set(f"{attempt_key}:u", repr(until_at), ex=math.ceil(until_at - _clock()) + 1)
+    pipeline.execute()
+    _memory_accounts.pop(attempt_key, known)
+
+
+def begin_attempt(company_slug: str, *, user_id: UUID | None, typed: str) -> AccountAttempt:
+    """Réserve un essai de connexion **avant** Argon2, ou lève 429 (ADR 0078, 0088).
+
+    Même réponse que le compte existe ou non, et aucun hachage offert pendant l'attente.
+    """
+    key, known = account_identity(company_slug, user_id=user_id, typed=typed)
+    member = uuid4().hex
+    free, horizon, _ = _settings_tuple()
     now = _clock()
-    wait_until: float | None = None
+    result: tuple[int, float] | None = None
     client = _redis()
     if client is not None:
         try:
-            raw = client.hget(key, "until")
-            wait_until = float(raw) if raw else 0.0
+            _carry_over(client, key, known)
+            raw_fails, raw_until = client.eval(
+                _ACCOUNT_BEGIN_LUA, 3, key, f"{key}:p", f"{key}:u", repr(now), member, free, horizon
+            )
+            result = (int(raw_fails), float(raw_until))
         except Exception:
-            wait_until = None
-    if wait_until is None:
+            result = None
+    if result is None:
         _report_degraded()
-        wait_until = _memory.account_until(key, now)
-    if wait_until > now:
-        raise _wait_error(wait_until, now)
+        result = _memory_accounts.begin(key, known, member, now, free=free, horizon=horizon)
+    fails, until_at = result
+    if fails < 0:
+        raise _wait_error(until_at, now)
+    return AccountAttempt(key=key, member=member, known=known)
 
 
-def record_account_failure(company_slug: str, identifier: str) -> AccountFailure:
-    """Compte un échec ; au-delà du seuil, pose l'attente (doublée, plafonnée)."""
-    settings = get_settings()
-    key = account_key(company_slug, identifier)
+def record_failure(attempt: AccountAttempt) -> AccountFailure:
+    """L'essai a échoué : il compte, et pose l'attente au-delà du seuil."""
+    free, horizon, max_wait = _settings_tuple()
     now = _clock()
-    free = settings.login_throttle_free_failures
-    window = settings.login_throttle_window_minutes * 60
-    max_wait = settings.login_throttle_max_wait_minutes * 60
+    key = attempt.key
     client = _redis()
     if client is not None:
         try:
             fails, until_at = client.eval(
-                _ACCOUNT_FAILURE_LUA, 1, key, repr(now), free, window, max_wait
+                _ACCOUNT_FAIL_LUA,
+                3,
+                key,
+                f"{key}:p",
+                f"{key}:u",
+                repr(now),
+                attempt.member,
+                free,
+                horizon,
+                max_wait,
             )
             return AccountFailure(failures=int(fails), wait_until=float(until_at))
         except Exception:
             pass
     _report_degraded()
-    fails, until_at = _memory.account_failure(key, now, free=free, window=window, max_wait=max_wait)
+    fails, until_at = _memory_accounts.fail(
+        key, attempt.known, attempt.member, now, free=free, horizon=horizon, max_wait=max_wait
+    )
     return AccountFailure(failures=fails, wait_until=until_at)
 
 
-def reset_account(company_slug: str, identifier: str) -> None:
-    """Remise à zéro après une connexion réussie."""
-    key = account_key(company_slug, identifier)
-    _memory.delete(key)
+def cancel_attempt(attempt: AccountAttempt) -> None:
+    """Ni échec ni succès (provisoire expiré, ADR 0078) : l'essai réservé est rendu."""
+    _memory_accounts.cancel(attempt.key, attempt.known, attempt.member)
     client = _redis()
     if client is None:
         return
     try:
-        client.delete(key)
+        client.zrem(f"{attempt.key}:p", attempt.member)
+    except Exception:
+        _report_degraded()
+
+
+def reset_account(attempt: AccountAttempt) -> None:
+    """Remise à zéro après une connexion réussie."""
+    _memory_accounts.pop(attempt.key, attempt.known)
+    client = _redis()
+    if client is None:
+        return
+    try:
+        client.delete(attempt.key, f"{attempt.key}:p", f"{attempt.key}:u")
     except Exception:
         _report_degraded()

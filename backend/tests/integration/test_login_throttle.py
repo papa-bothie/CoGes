@@ -66,6 +66,7 @@ def throttle(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(rate_limit, "get_settings", lambda: settings)
     monkeypatch.setattr(auth_service, "get_settings", lambda: settings)
     monkeypatch.setattr(rate_limit, "_memory", rate_limit._MemoryCounters(10_000))
+    monkeypatch.setattr(rate_limit, "_memory_accounts", rate_limit._MemoryAccounts(10_000))
 
 
 @pytest.fixture
@@ -102,14 +103,23 @@ def test_five_failures_then_one_minute_then_doubling_up_to_30(
     assert blocked.headers["retry-after"] == "60"
     assert blocked.json()["error"]["message"] == "Trop d'essais. Réessayez dans 1 minute."
 
-    # Chaque nouvel échec, une fois l'attente passée, double la suivante.
-    for expected_minutes in (2, 4, 8, 16, 30, 30):
-        clock.advance(60 * 30 + 1)
+    # Chaque nouvel échec, une fois l'attente passée, double la suivante — tant que les
+    # échecs précédents ont moins de 45 min (fenêtre + attente maximale, ADR 0088).
+    previous = 1
+    for expected_minutes in (2, 4, 8, 16, 30):
+        clock.advance(60 * previous + 1)
         assert _fail(client, company, 1) == [401]
         waiting = _login(client, company.slug, company.email, TEST_PASSWORD)
         assert waiting.status_code == 429
         assert int(waiting.headers["retry-after"]) == expected_minutes * 60
         assert f"Réessayez dans {expected_minutes} minutes." in waiting.json()["error"]["message"]
+        previous = expected_minutes
+
+    # Les échecs du début ont maintenant plus de 45 min : il n'en reste que deux, le
+    # compte n'est plus freiné et la gérante entre.
+    clock.advance(60 * 30 + 1)
+    assert _fail(client, company, 1) == [401]
+    assert _login(client, company.slug, company.email, TEST_PASSWORD).status_code == 200
 
 
 @pytest.mark.usefixtures("redis_required", "throttle")
@@ -151,11 +161,9 @@ def test_a_success_resets_the_counter(
 def test_the_window_forgets_old_failures(
     client: TestClient, company: DemoCompany, clock: _Clock
 ) -> None:
-    """« 5 échecs en 15 min » : passé la fenêtre, le compte repart de zéro."""
+    """Un échec compte 45 min (fenêtre + attente maximale, ADR 0088), puis s'efface."""
     assert _fail(client, company, 4) == [401] * 4
-    redis_client = cache.get_client()
-    assert redis_client is not None
-    redis_client.delete(rate_limit.account_key(company.slug, company.email))  # TTL écoulé
+    clock.advance(45 * 60 + 1)
     assert _fail(client, company, 4) == [401] * 4
 
 
@@ -184,13 +192,15 @@ def test_the_tenth_failure_of_a_real_account_alerts_the_manager(
         "enqueue",
         lambda name, **kwargs: queued.append((name, kwargs)) or True,
     )
-    for _ in range(10):
+    # Dix échecs en moins de 45 min, chacun à la fin de l'attente du précédent (ADR 0088).
+    waits = [0, 0, 0, 0, 61, 121, 241, 481, 961, 0]
+    for wait in waits:
         _fail(client, company, 1)
-        clock.advance(60 * 30 + 1)
+        clock.advance(wait)
     ghost = f"personne-{uuid4().hex[:6]}@example.com"
-    for _ in range(10):
+    for wait in waits:
         _fail(client, company, 1, ghost)
-        clock.advance(60 * 30 + 1)
+        clock.advance(wait)
 
     assert [name for name, _ in queued] == [auth_service.LOGIN_FAILURES_TASK], (
         "une seule demande d'alerte, pour le compte réel, au 10e échec"
