@@ -18,7 +18,7 @@ from collections.abc import Callable, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from decimal import Decimal
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.engine import Engine
@@ -33,7 +33,7 @@ from app.modules.sales.schemas import SaleConfirm, SaleItemCreate, SaleItemUpdat
 from tests.helpers.invariants import assert_consistent
 from tests.integration.sales_harness import add_line, make_sale
 from tests.integration.stock_harness import insert_movement, make_product
-from tests.tenancy.harness import Tenant
+from tests.tenancy.harness import Tenant, create_tenant
 
 pytestmark = pytest.mark.integration
 
@@ -69,6 +69,13 @@ def concurrent_session_factory(
         yield sessionmaker(bind=engine, expire_on_commit=False, future=True)
     finally:
         engine.dispose()
+
+
+@pytest.fixture
+def shop(session_factory: sessionmaker[Any], owner_engine: Engine) -> Tenant:
+    """Une entreprise par test : les invariants portent sur toute l'entreprise, et
+    `tenant_a` garde des ventes écrites en SQL brut par d'autres suites."""
+    return create_tenant(session_factory, owner_engine, f"verrou-{uuid4().hex[:6]}")
 
 
 def _sellable(session: Session, tenant: Tenant) -> UUID:
@@ -138,59 +145,59 @@ def _assert_refused_as_not_draft(written: Future[Any]) -> None:
 
 
 def test_a_line_added_during_confirmation_is_refused(
-    concurrent_session_factory: sessionmaker[Any], owner_engine: Engine, tenant_a: Tenant
+    concurrent_session_factory: sessionmaker[Any], owner_engine: Engine, shop: Tenant
 ) -> None:
-    sale_id, _, second = _draft(concurrent_session_factory, tenant_a)
+    sale_id, _, second = _draft(concurrent_session_factory, shop)
 
     confirmed, written = _race(
         concurrent_session_factory,
-        tenant_a,
+        shop,
         sale_id,
         lambda session: sales_service.add_item(
-            session, tenant_a.ctx, sale_id, SaleItemCreate(product_id=second, qty=Decimal("3"))
+            session, shop.ctx, sale_id, SaleItemCreate(product_id=second, qty=Decimal("3"))
         ),
     )
 
     assert confirmed.exception() is None
     _assert_refused_as_not_draft(written)
-    assert_consistent(owner_engine, tenant_a.company_id)
+    assert_consistent(owner_engine, shop.company_id)
 
 
 def test_a_line_changed_during_confirmation_is_refused(
-    concurrent_session_factory: sessionmaker[Any], owner_engine: Engine, tenant_a: Tenant
+    concurrent_session_factory: sessionmaker[Any], owner_engine: Engine, shop: Tenant
 ) -> None:
-    sale_id, item_id, _ = _draft(concurrent_session_factory, tenant_a)
+    sale_id, item_id, _ = _draft(concurrent_session_factory, shop)
 
     confirmed, written = _race(
         concurrent_session_factory,
-        tenant_a,
+        shop,
         sale_id,
         lambda session: sales_service.update_item(
-            session, tenant_a.ctx, sale_id, item_id, SaleItemUpdate(qty=Decimal("5"))
+            session, shop.ctx, sale_id, item_id, SaleItemUpdate(qty=Decimal("5"))
         ),
     )
 
     assert confirmed.exception() is None
     _assert_refused_as_not_draft(written)
-    assert_consistent(owner_engine, tenant_a.company_id)
+    assert_consistent(owner_engine, shop.company_id)
 
 
 def test_a_customer_changed_during_confirmation_is_refused(
-    concurrent_session_factory: sessionmaker[Any], owner_engine: Engine, tenant_a: Tenant
+    concurrent_session_factory: sessionmaker[Any], owner_engine: Engine, shop: Tenant
 ) -> None:
     from app.modules.sales.schemas import SaleUpdate  # noqa: PLC0415
 
-    sale_id, _, _ = _draft(concurrent_session_factory, tenant_a)
+    sale_id, _, _ = _draft(concurrent_session_factory, shop)
 
     confirmed, written = _race(
         concurrent_session_factory,
-        tenant_a,
+        shop,
         sale_id,
         lambda session: sales_service.update_sale(
-            session, tenant_a.ctx, sale_id, SaleUpdate(customer_id=None)
+            session, shop.ctx, sale_id, SaleUpdate(customer_id=None)
         ),
     )
 
     assert confirmed.exception() is None
     _assert_refused_as_not_draft(written)
-    assert_consistent(owner_engine, tenant_a.company_id)
+    assert_consistent(owner_engine, shop.company_id)
