@@ -10,6 +10,11 @@
   `CG003` changer `is_stock_tracked` d'un article qui a des mouvements, `CG004`
   supprimer un article qui a du stock, `CG005` supprimer un client qui a une dette
   ouverte.
+* **P2.13** — `sale_recompute_totals` arrondit le sous-total **ligne par ligne**, comme
+  `net_amount` et `line_total` : total de la vente = somme de ses lignes, même au kilo.
+  Les brouillons sont recalculés (aucun effet de bord) ; les ventes confirmées restent
+  telles quelles, leurs dettes et paiements ayant été calculés sur leur total (choix du
+  propriétaire). Leur nombre d'écarts est écrit dans le journal de migration.
 """
 
 from __future__ import annotations
@@ -27,9 +32,12 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     _revoke_sessions_on_access_change()
     _referential_guards()
+    op.execute(_RECOMPUTE.format(subtotal="SUM(round(qty * unit_price, 2))"))
+    _recompute_drafts_and_count_confirmed_gaps()
 
 
 def downgrade() -> None:
+    op.execute(_RECOMPUTE.format(subtotal="SUM(qty * unit_price)"))
     op.execute("DROP TRIGGER IF EXISTS customers_guard_soft_delete ON customers")
     op.execute("DROP FUNCTION IF EXISTS customers_guard_soft_delete()")
     op.execute("DROP TRIGGER IF EXISTS products_guard_stock ON products")
@@ -122,3 +130,53 @@ def _referential_guards() -> None:
           EXECUTE FUNCTION customers_guard_soft_delete()
         """
     )
+
+
+_RECOMPUTE = """
+        CREATE OR REPLACE FUNCTION sale_recompute_totals() RETURNS trigger AS $$
+        DECLARE v_sale uuid; v_co uuid;
+        BEGIN
+           v_sale := COALESCE(NEW.sale_id, OLD.sale_id);
+           v_co   := COALESCE(NEW.company_id, OLD.company_id);
+           UPDATE sales s SET
+              subtotal       = COALESCE(t.sub, 0),
+              discount_total = COALESCE(t.dis, 0),
+              tax_total      = COALESCE(t.tax, 0),
+              updated_at     = now()
+           FROM (SELECT {subtotal} sub, SUM(discount) dis, SUM(tax_amount) tax
+                   FROM sale_items
+                  WHERE company_id = v_co AND sale_id = v_sale) t
+           WHERE s.company_id = v_co AND s.id = v_sale;
+           RETURN NULL;
+        END $$ LANGUAGE plpgsql
+"""
+
+
+def _recompute_drafts_and_count_confirmed_gaps() -> None:
+    # `sales` est sous RLS FORCE : levé le temps de ces seules lectures et écritures
+    # de données (révision 0019).
+    op.execute("ALTER TABLE sales NO FORCE ROW LEVEL SECURITY")
+    op.execute(
+        """
+        UPDATE sales s
+           SET subtotal = t.sub, updated_at = now()
+          FROM (SELECT sale_id, SUM(round(qty * unit_price, 2)) AS sub
+                  FROM sale_items GROUP BY sale_id) t
+         WHERE t.sale_id = s.id AND s.status = 'draft' AND s.subtotal <> t.sub
+        """
+    )
+    op.execute(
+        """
+        DO $$
+        DECLARE gaps integer;
+        BEGIN
+           SELECT count(*) INTO gaps
+             FROM sales s
+             JOIN (SELECT sale_id, SUM(round(qty * unit_price, 2)) AS sub
+                     FROM sale_items GROUP BY sale_id) t ON t.sale_id = s.id
+            WHERE s.status <> 'draft' AND s.subtotal <> t.sub;
+           RAISE NOTICE 'Ventes confirmées dont le sous-total diffère de leurs lignes, laissées telles quelles : %', gaps;
+        END $$
+        """
+    )
+    op.execute("ALTER TABLE sales FORCE ROW LEVEL SECURITY")
