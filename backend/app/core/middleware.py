@@ -29,7 +29,8 @@ logger = logging.getLogger("coges.access")
 REQUEST_ID_HEADER = "x-request-id"
 #: Identifiant fourni par l'appelant, repris seulement s'il est sage : il finit dans les
 #: journaux et dans un en-tête de réponse (pas d'injection de ligne ni d'en-tête).
-_SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9-]{8,64}$")
+#: `fullmatch` : avec `match`, « $ » accepte un saut de ligne final (ADR 0088).
+_SAFE_REQUEST_ID = re.compile(r"[A-Za-z0-9-]{8,64}")
 
 #: Message de toute erreur imprévue (ADR 0085) : rien d'interne, de quoi rassurer.
 SERVER_ERROR_MESSAGE = (
@@ -39,7 +40,7 @@ SERVER_ERROR_MESSAGE = (
 
 def _request_id(request: Request) -> str:
     supplied = request.headers.get(REQUEST_ID_HEADER, "")
-    return supplied if _SAFE_REQUEST_ID.match(supplied) else str(uuid4())
+    return supplied if _SAFE_REQUEST_ID.fullmatch(supplied) else str(uuid4())
 
 
 def server_error_response(request_id: str) -> JSONResponse:

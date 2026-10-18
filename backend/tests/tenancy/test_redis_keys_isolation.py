@@ -46,8 +46,12 @@ UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
 #: Clés globales permises, et pourquoi elles ne portent aucune entreprise.
 GLOBAL_KEYS: dict[str, str] = {
-    r"^coges:rl:ip:[^:]+:\d+$": "plafond par adresse IP (ADR 0042), sans entreprise",
-    r"^coges:rl:login:[^:]+:\d+$": "plafond de connexion par IP, avant toute entreprise",
+    r"^coges:rl:ip:([^:]+|[0-9A-Fa-f:]+/64):\d+$": (
+        "plafond par adresse IP (ADR 0042), /64 en IPv6 (ADR 0088), sans entreprise"
+    ),
+    r"^coges:rl:login:([^:]+|[0-9A-Fa-f:]+/64):\d+$": (
+        "plafond de connexion par IP, avant toute entreprise"
+    ),
     r"^coges:rl:acct:[0-9a-f]{64}(:p|:u)?$": (
         "freinage par compte : sha256(slug|compte ou identifiant), échecs, essais en cours "
         "(:p) et fin d'attente (:u), ADR 0078 et 0088"

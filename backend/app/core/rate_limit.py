@@ -29,6 +29,7 @@ un frein dégradé, pas une garantie.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import logging
 import math
 import threading
@@ -147,12 +148,31 @@ def _hit(bucket: str, limit: int, *, degraded_in_memory: bool = False) -> None:
         raise RateLimitedError(retry_after, scope=bucket.split(":", 1)[0])
 
 
+def ip_bucket(ip: str) -> str:
+    """Compteur d'une adresse : elle-même en IPv4, son /64 en IPv6 (ADR 0088).
+
+    Un abonné IPv6 dispose d'au moins un /64 : compter par adresse lui donnerait 2⁶⁴
+    compteurs neufs, donc aucune limite.
+    """
+    try:
+        address = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip
+    if address.version == 6:
+        return str(ipaddress.ip_network(f"{address}/64", strict=False).network_address) + "/64"
+    return str(address)
+
+
 def hit_ip(ip: str) -> None:
-    _hit(f"ip:{ip}", get_settings().rate_limit_ip_per_minute)
+    _hit(f"ip:{ip_bucket(ip)}", get_settings().rate_limit_ip_per_minute)
 
 
 def hit_login(ip: str) -> None:
-    _hit(f"login:{ip}", get_settings().rate_limit_login_per_minute, degraded_in_memory=True)
+    _hit(
+        f"login:{ip_bucket(ip)}",
+        get_settings().rate_limit_login_per_minute,
+        degraded_in_memory=True,
+    )
 
 
 def hit_tenant(company_id: UUID) -> None:
