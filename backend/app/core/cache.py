@@ -20,7 +20,8 @@ from __future__ import annotations
 
 import json
 import logging
-from functools import lru_cache
+import threading
+import time
 from typing import Any, cast
 from uuid import UUID
 
@@ -41,27 +42,61 @@ DASHBOARD_KEY = "dashboard"
 NAMESPACE = "coges"
 
 
-@lru_cache
+#: Délai avant de retenter une connexion après un échec (ADR 0088).
+RETRY_SECONDS = 5.0
+
+#: Horloge substituable par les tests.
+_monotonic = time.monotonic
+
+_client: redis.Redis | None = None
+_failed_at: float | None = None
+_client_lock = threading.Lock()
+
+
 def get_client() -> redis.Redis | None:
     """Client Redis du processus, ou `None` si la connexion est impossible.
 
     Le `None` est un état normal, pas une erreur : il signifie « pas de cache », et
-    tous les appels ci-dessous savent s'en passer.
+    tous les appels ci-dessous savent s'en passer. Un client qui a répondu est gardé ;
+    un **échec** ne l'est que `RETRY_SECONDS` : Redis démarré après l'API, ou revenu
+    d'une panne, est repris sans redémarrage — le cache comme les limites de débit
+    (ADR 0088). Entre deux essais, aucune connexion n'est tentée.
     """
-    try:
-        client = redis.Redis.from_url(
-            get_settings().redis_url,
-            decode_responses=True,
-            socket_connect_timeout=1,
-            socket_timeout=1,
-        )
-        client.ping()
-    except Exception:  # pragma: no cover - dépend d'un service externe
-        logger.warning(
-            "Redis injoignable : le cache est désactivé pour ce processus", exc_info=True
-        )
-        return None
-    return client
+    global _client, _failed_at
+    if _client is not None:
+        return _client
+    with _client_lock:
+        if _client is not None:
+            return _client
+        now = _monotonic()
+        if _failed_at is not None and now - _failed_at < RETRY_SECONDS:
+            return None
+        try:
+            client = redis.Redis.from_url(
+                get_settings().redis_url,
+                decode_responses=True,
+                socket_connect_timeout=1,
+                socket_timeout=1,
+            )
+            client.ping()
+        except Exception:  # pragma: no cover - dépend d'un service externe
+            if _failed_at is None:
+                logger.warning(
+                    "Redis injoignable : cache et limites coupés, nouvel essai dans %.0f s",
+                    RETRY_SECONDS,
+                    exc_info=True,
+                )
+            _failed_at = now
+            return None
+        _client, _failed_at = client, None
+        return _client
+
+
+def reset_client() -> None:
+    """Oublie le client et l'échec mémorisés (tests)."""
+    global _client, _failed_at
+    with _client_lock:
+        _client, _failed_at = None, None
 
 
 def key(company_id: UUID, name: str) -> str:
