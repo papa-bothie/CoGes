@@ -166,6 +166,9 @@ Révision Alembic : **0024** (P1.1, P1.6, P1.8).
     Traduit en 409 `entry_reversal_superseded` : « D'autres mouvements ont suivi cette
     entrée : elle ne peut plus être annulée. Faites plutôt une correction de stock. »
   - Rendre une perte ou une correction négative reste libre (son inverse est une entrée).
+  - **Limite** : seule la **dernière** entrée d'un produit est annulable, car l'annulation
+    d'une entrée est elle-même un mouvement qui suit les précédentes. Achat A, achat B,
+    annulation de B : l'annulation de A est ensuite refusée.
 - Invariant ajouté : « valeur du stock = quantité × CMP » (structurel, `stock_value` est
   générée) et CMP jamais négatif ; les tests vérifient aussi que le recalcul de nuit ne
   diverge pas du trigger.
