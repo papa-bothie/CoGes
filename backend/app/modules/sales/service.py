@@ -1152,7 +1152,7 @@ def create_return(
         )
     returned_items = [items[item_id] for item_id in items if item_id in requested]
     summaries = products_service.get_summaries(
-        session, ctx, [item.product_id for item in returned_items]
+        session, ctx, [item.product_id for item in returned_items], include_deleted=True
     )
 
     # 4. En-tête. `total_refund`, `refunded_total` et `refund_status` ne sont pas

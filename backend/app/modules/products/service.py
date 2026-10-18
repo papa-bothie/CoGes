@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, audit_critical
@@ -178,14 +178,25 @@ def assert_sellable(session: Session, ctx: TenantContext, product_id: UUID) -> C
 
 
 def get_summaries(
-    session: Session, ctx: TenantContext, product_ids: Sequence[UUID]
+    session: Session,
+    ctx: TenantContext,
+    product_ids: Sequence[UUID],
+    *,
+    include_deleted: bool = False,
 ) -> dict[UUID, ProductSummary]:
     """Fiches résumées d'un lot de produits, pour Inventory.
 
     Renvoie un dictionnaire, et non une liste : l'appelant a déjà ses identifiants
-    et veut les rattacher. Un produit supprimé est simplement absent du résultat.
+    et veut les rattacher. Un produit supprimé est absent du résultat, sauf
+    `include_deleted` : un retour sur un article supprimé depuis la vente doit encore
+    savoir s'il remet la marchandise en stock (ADR 0088).
     """
-    products = ProductRepository(session, ctx).live_by_ids(product_ids)
+    repository = ProductRepository(session, ctx)
+    products = (
+        repository.by_ids_including_deleted(product_ids)
+        if include_deleted
+        else repository.live_by_ids(product_ids)
+    )
     return {
         product_id: ProductSummary(
             id=product.id,
@@ -384,6 +395,47 @@ def create_product(
     return product, price
 
 
+class StockTrackingLockedError(BusinessRuleError):
+    """`CG003` (révision 0025, ADR 0088)."""
+
+    code = "stock_tracking_locked"
+    default_message = (
+        "Cet article a déjà des mouvements de stock : on ne peut plus changer s'il est "
+        "suivi en stock."
+    )
+
+
+class ProductHasStockError(BusinessRuleError):
+    """`CG004` (révision 0025, ADR 0088)."""
+
+    code = "product_has_stock"
+    default_message = (
+        "Cet article a encore du stock : corrigez le stock à zéro avant de le supprimer."
+    )
+
+
+_GUARD_ERRORS: dict[str, type[BusinessRuleError]] = {
+    "CG003": StockTrackingLockedError,
+    "CG004": ProductHasStockError,
+}
+
+
+def _flush_guarded(session: Session, product: Product) -> None:
+    """`flush` qui traduit les refus de `products_guard_stock` (ADR 0014, 0088).
+
+    L'identifiant est lu **avant** : après un refus, la transaction est morte et relire
+    un attribut expiré échouerait à son tour (ADR 0010).
+    """
+    details = {"product_id": str(product.id)}
+    try:
+        session.flush()
+    except DBAPIError as exc:
+        error = _GUARD_ERRORS.get(sqlstate(exc) or "")
+        if error is None:
+            raise
+        raise error(details=details) from exc
+
+
 def update_product(
     session: Session,
     ctx: TenantContext,
@@ -410,7 +462,7 @@ def update_product(
 
     for field, value in changes.items():
         setattr(product, field, value)
-    session.flush()
+    _flush_guarded(session, product)
     return product, prices.current(product.id)
 
 
@@ -432,7 +484,7 @@ def delete_product(
     before = {"is_active": product.is_active, "deleted_at": product.deleted_at}
     product.is_active = False
     product.deleted_at = datetime.now(UTC)
-    session.flush()
+    _flush_guarded(session, product)
 
     audit_critical(
         session,

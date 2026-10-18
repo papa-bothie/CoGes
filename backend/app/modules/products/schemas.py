@@ -12,12 +12,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.core.money import Amount, Quantity, Rate, UnitCost
+from app.core.validation import reject_explicit_nulls
 
 if TYPE_CHECKING:  # pragma: no cover - uniquement pour le typage
     from app.modules.products.models import Product, ProductPrice
@@ -156,6 +157,13 @@ class ProductUpdate(BaseModel):
     default_tax_rate: TaxRate | None = None
     reorder_point: ReorderPoint | None = None
     is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def _no_null_on_required_fields(self) -> Self:
+        reject_explicit_nulls(
+            self, ("sku", "name", "unit", "is_stock_tracked", "default_tax_rate", "is_active")
+        )
+        return self
 
 
 class ProductPage(BaseModel):

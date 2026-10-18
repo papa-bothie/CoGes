@@ -61,6 +61,13 @@ class ProductRepository(TenantRepository[Product]):
         stmt = self._live().where(Product.id.in_(product_ids))
         return {product.id: product for product in self.session.execute(stmt).scalars()}
 
+    def by_ids_including_deleted(self, product_ids: Sequence[UUID]) -> dict[UUID, Product]:
+        """Fiches d'une page d'identifiants, supprimées comprises (retours, ADR 0088)."""
+        if not product_ids:
+            return {}
+        stmt = self._select().where(Product.id.in_(product_ids))
+        return {product.id: product for product in self.session.execute(stmt).scalars()}
+
     def active_ids(self) -> list[UUID]:
         """Identifiants des produits vivants et actifs, dans un ordre stable."""
         stmt = self._live().where(Product.is_active.is_(True)).order_by(Product.id)

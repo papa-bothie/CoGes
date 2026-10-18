@@ -7,10 +7,12 @@ silencieusement (Pydantic strict, § Sécurité de CLAUDE.md).
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+
+from app.core.validation import reject_explicit_nulls
 
 #: Longueur maximale d'un nom de catégorie. La base n'impose que « non vide » ;
 #: la borne haute est une règle de saisie, elle appartient au schéma.
@@ -61,6 +63,11 @@ class CategoryUpdate(BaseModel):
     parent_id: UUID | None = None
     #: `null` explicite efface la couleur : le front la tire alors du nom.
     color: CategoryColor | None = None
+
+    @model_validator(mode="after")
+    def _no_null_on_required_fields(self) -> Self:
+        reject_explicit_nulls(self, ("name",))
+        return self
 
 
 class CategoryPage(BaseModel):

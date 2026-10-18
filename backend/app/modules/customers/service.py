@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, audit_critical
@@ -186,6 +186,13 @@ def update_customer(
     return customer
 
 
+class CustomerHasOpenDebtsError(BusinessRuleError):
+    """`CG005` (révision 0025, ADR 0088) : la créance resterait sans débiteur visible."""
+
+    code = "customer_has_open_debts"
+    default_message = "Ce client doit encore de l'argent : il ne peut pas être supprimé."
+
+
 def delete_customer(
     session: Session,
     ctx: TenantContext,
@@ -197,8 +204,14 @@ def delete_customer(
     customer = get_customer(session, ctx, customer_id)
 
     before = {"name": customer.name, "deleted_at": customer.deleted_at}
+    details = {"customer_id": str(customer.id)}  # lu avant un refus possible (ADR 0010)
     customer.deleted_at = datetime.now(UTC)
-    session.flush()
+    try:
+        session.flush()
+    except DBAPIError as exc:
+        if sqlstate(exc) != "CG005":
+            raise
+        raise CustomerHasOpenDebtsError(details=details) from exc
 
     audit_critical(
         session,

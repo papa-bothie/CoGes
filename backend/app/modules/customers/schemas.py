@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, model_validator
 
 from app.core.money import Amount
+from app.core.validation import reject_explicit_nulls
 
 NAME_MAX_LENGTH = 200
 CODE_MAX_LENGTH = 32
@@ -67,6 +68,11 @@ class CustomerUpdate(BaseModel):
     phone: Phone | None = None
     email: EmailStr | None = None
     credit_limit: CreditLimit | None = None
+
+    @model_validator(mode="after")
+    def _no_null_on_required_fields(self) -> Self:
+        reject_explicit_nulls(self, ("name",))
+        return self
 
 
 class CustomerPage(BaseModel):
