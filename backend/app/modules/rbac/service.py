@@ -12,7 +12,12 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, audit_critical
-from app.core.errors import BusinessRuleError, NotFoundError, ValidationFailedError
+from app.core.errors import (
+    BusinessRuleError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationFailedError,
+)
 from app.core.tenancy import TenantContext
 from app.modules.rbac.matrix import (
     ABILITIES,
@@ -110,6 +115,35 @@ def _resolve_permission_ids(session: Session, codes: Sequence[str]) -> list[UUID
     return [known[code] for code in codes]
 
 
+#: Droits réservés au rôle gérant (ADR 0075, 0088) : qui gère les personnes ou les rôles
+#: peut se donner tout le reste. Le verrou de la grille vaut pour toutes les routes.
+_MANAGER_ONLY_PREFIXES = ("users:", "roles:")
+
+
+def _assert_no_manager_only_rights(codes: Sequence[str]) -> None:
+    reserved = sorted(code for code in codes if code.startswith(_MANAGER_ONLY_PREFIXES))
+    if reserved:
+        raise ValidationFailedError(
+            "Gérer les personnes et les rôles reste réservé au gérant.",
+            details={"reserved_permissions": reserved},
+        )
+
+
+def assert_delegable(session: Session, ctx: TenantContext, role_id: UUID) -> None:
+    """Refuse d'attribuer un rôle qui donne plus que les droits de l'appelant (ADR 0088).
+
+    Sans ce contrôle, qui peut créer des comptes peut créer un gérant. Le contexte de
+    la requête porte les droits relus en base (`deps.py`), jamais ceux du client.
+    """
+    get_role(session, ctx, role_id)  # 404 si le rôle appartient à une autre entreprise
+    beyond = sorted(set(role_permissions(session, ctx, role_id)) - ctx.permissions)
+    if beyond:
+        raise PermissionDeniedError(
+            "Ce rôle donne plus de droits que les vôtres : demandez au gérant.",
+            details={"permissions": beyond},
+        )
+
+
 def create_role(
     session: Session,
     ctx: TenantContext,
@@ -122,6 +156,7 @@ def create_role(
     if repository.get_by_name(payload.name) is not None:
         raise ValidationFailedError("Un rôle porte déjà ce nom.", details={"name": payload.name})
 
+    _assert_no_manager_only_rights(payload.permissions)
     permission_ids = _resolve_permission_ids(session, payload.permissions)
     role = repository.add(
         Role(
@@ -168,6 +203,7 @@ def update_role(
     if payload.permissions is not None:
         if role.is_system:
             raise ValidationFailedError("Les permissions d'un rôle système ne se modifient pas.")
+        _assert_no_manager_only_rights(payload.permissions)
         link_repository.replace(role_id, _resolve_permission_ids(session, payload.permissions))
     session.flush()
 

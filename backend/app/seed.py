@@ -354,10 +354,11 @@ def fill(manager: TenantContext, *, slug: str, password: str, days: int, scale: 
     rng = random.Random(SEED)
     with tenant_transaction(manager) as session:
         tz = ZoneInfo(companies_service.get_timezone(session, manager))
-        salesperson_id = _salesperson(session, manager, slug=slug, password=password)
         # Les permissions réelles de chacun, comme la dépendance d'authentification les
-        # pose : un service qui vérifie un droit le vérifie aussi ici.
+        # pose : un service qui vérifie un droit le vérifie aussi ici — y compris
+        # l'attribution du rôle du vendeur (ADR 0088).
         manager = _with_permissions(session, manager, manager.user_id)
+        salesperson_id = _salesperson(session, manager, slug=slug, password=password)
         shop = Shop(
             company_id=manager.company_id,
             manager=manager,
