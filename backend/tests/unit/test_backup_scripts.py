@@ -46,22 +46,28 @@ def test_the_last_seven_days_are_always_kept() -> None:
 
 def test_sundays_are_kept_four_weeks_and_firsts_twelve_months() -> None:
     retention = _load("backup_retention")
+    # Premier jour sauvegardé de chaque semaine, puis de chaque mois (ADR 0088) ; les
+    # sept plus récentes forment le plancher.
+    recent = [f"2026-10-{day:02d}-0215" for day in range(11, 18)]
     names = _names(
-        "2026-10-04-0215",  # dimanche, 13 jours : gardée
-        "2026-10-05-0215",  # lundi, 12 jours : supprimée
-        "2026-09-13-0215",  # dimanche, 34 jours : supprimée
-        "2026-10-01-0215",  # 1er octobre : gardée
-        "2025-11-01-0215",  # 1er, moins d'un an : gardée
-        "2025-10-01-0215",  # 1er, plus d'un an : supprimée
+        *recent,
+        "2026-10-05-0215",  # lundi, premier de sa semaine, 12 jours : gardée
+        "2026-10-06-0215",  # mardi de la même semaine : supprimée
+        "2026-09-14-0215",  # premier de sa semaine, 33 jours : premier de septembre, gardée
+        "2026-09-21-0215",  # premier de sa semaine, 26 jours : gardée
+        "2026-09-22-0215",  # même semaine : supprimée
+        "2025-11-01-0215",  # premier de novembre, moins d'un an : gardée
+        "2025-10-01-0215",  # premier d'octobre, plus d'un an : supprimée
     )
     assert retention.to_delete(names, date(2026, 10, 17)) == _names(
-        "2025-10-01-0215", "2026-09-13-0215", "2026-10-05-0215"
+        "2025-10-01-0215", "2026-09-22-0215", "2026-10-06-0215"
     )
 
 
 def test_only_the_last_backup_of_a_kept_day_survives() -> None:
     retention = _load("backup_retention")
-    names = _names("2026-10-04-0215", "2026-10-04-1830")
+    recent = [f"2026-10-{day:02d}-0215" for day in range(11, 18)]
+    names = _names("2026-10-04-0215", "2026-10-04-1830", *recent)
     assert retention.to_delete(names, date(2026, 10, 17)) == _names("2026-10-04-0215")
 
 
@@ -191,3 +197,39 @@ def test_backup_refuses_unsafe_settings(
     )
     assert result.returncode == 1
     assert message in result.stderr
+
+
+# ----------------------------------------------- rétention, constats de la revue (P2.15)
+
+
+def test_an_orphan_checksum_is_never_a_reason_to_keep_or_delete() -> None:
+    """Un `.sha256` sans son dump ne représente aucun jour, et on ne le touche pas."""
+    retention = _load("backup_retention")
+    names = [*_names("2026-10-16-0215"), "coges-2026-08-03-0215.dump.age.sha256"]
+    assert retention.to_delete(names, date(2026, 10, 17)) == []
+
+
+def test_the_first_backup_of_a_week_without_sunday_is_kept() -> None:
+    """Semaine du 28 sept. au 4 oct. sans dimanche (panne) : le premier de la semaine reste."""
+    retention = _load("backup_retention")
+    names = _names(
+        "2026-09-29-0215", "2026-09-30-0215", *(f"2026-10-{d:02d}-0215" for d in range(11, 18))
+    )
+    assert retention.to_delete(names, date(2026, 10, 17)) == _names("2026-09-30-0215")
+
+
+def test_the_first_backup_of_a_month_without_the_first_is_kept() -> None:
+    retention = _load("backup_retention")
+    names = _names(
+        "2026-03-02-0215", "2026-03-03-0215", *(f"2026-10-{d:02d}-0215" for d in range(11, 18))
+    )
+    assert retention.to_delete(names, date(2026, 10, 17)) == _names("2026-03-03-0215")
+
+
+def test_the_latest_backups_survive_even_when_the_last_week_is_empty() -> None:
+    """Sauvegarde en panne depuis trois semaines : jamais moins des 7 plus récentes."""
+    retention = _load("backup_retention")
+    old = [f"2026-09-{d:02d}-0215" for d in range(14, 26)]  # 12 jours, tous de plus de 21 j
+    kept = retention.to_delete(_names(*old), date(2026, 10, 17))
+    for stamp in old[-7:]:
+        assert f"coges-{stamp}.dump.age" not in kept, f"{stamp} supprimée alors que plus récente"
