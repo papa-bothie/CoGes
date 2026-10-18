@@ -35,6 +35,12 @@ CHECKS: dict[str, str] = {
         WHERE s.qty_on_hand <> coalesce(m.total, 0)
     """,
     "stock jamais négatif": "SELECT product_id::text FROM product_stock WHERE qty_on_hand < 0",
+    # Structurel (`stock_value` est une colonne générée), gardé pour que le recoupement
+    # échoue si la projection change de forme ; le CMP, lui, n'est jamais négatif (ADR 0087).
+    "valeur du stock = quantité × CMP": """
+        SELECT product_id::text FROM product_stock
+        WHERE avg_cost < 0 OR stock_value <> round(qty_on_hand * avg_cost, 2)
+    """,
     "total de la vente = ses lignes": """
         SELECT s.sale_no FROM sales s
         LEFT JOIN (SELECT sale_id, sum(round(qty * unit_price, 2)) AS sub,
