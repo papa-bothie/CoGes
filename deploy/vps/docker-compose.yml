@@ -69,7 +69,8 @@ services:
   # Relance les conteneurs « unhealthy » étiquetés `autoheal=true`, des deux piles.
   autoheal:
     profiles: [edge]
-    image: willfarrell/autoheal:1.2.0
+    # Figée par condensat : elle lit le socket Docker (ADR 0088).
+    image: willfarrell/autoheal:1.2.0@sha256:31f580ef0279eaced5b38d631b08c474d70d8403c1c2fdd6ddcf2e879d5f3f7c
     restart: unless-stopped
     logging: *logging
     environment:
@@ -182,7 +183,7 @@ services:
       - >-
         exec redis-server
         --requirepass "$$REDISCLI_AUTH"
-        --maxmemory ${COGES_REDIS_MAXMEMORY:-512mb}
+        --maxmemory ${COGES_REDIS_MAXMEMORY:-384mb}
         --maxmemory-policy noeviction
         --appendonly yes
         --rename-command FLUSHALL ""
