@@ -51,6 +51,8 @@ def test_frozen_time_is_refused_outside_local_and_ci(
 ) -> None:
     monkeypatch.setenv("COGES_FROZEN_NOW", FROZEN)
     monkeypatch.setenv("COGES_ENV", env)
+    # Un vrai secret : hors `local` et `ci`, celui du modèle est refusé lui aussi (ADR 0087).
+    monkeypatch.setenv("COGES_JWT_SECRET", "secret-de-test-tire-au-hasard-" + "x" * 32)
     with pytest.raises(
         ValidationError, match="COGES_FROZEN_NOW n'est accepté qu'en local et en CI"
     ):

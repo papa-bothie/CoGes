@@ -137,6 +137,10 @@ jobs:
           # Requis par la configuration, jamais utilisé par Alembic.
           COGES_DATABASE_URL_APP: postgresql+psycopg://unused@localhost/unused
         run: |
+          # Requis par la configuration hors local/CI (ADR 0087), jamais utilisé par
+          # Alembic : un secret jetable, tiré pour ce seul job.
+          COGES_JWT_SECRET="$(openssl rand -hex 32)"
+          export COGES_JWT_SECRET
           uv sync --directory backend --frozen --no-dev --no-group ml
           uv run --directory backend --no-sync alembic upgrade head
 

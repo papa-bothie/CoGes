@@ -27,6 +27,10 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 MIN_JWT_SECRET_LENGTH = 32
 
 
+#: Environnements où les défauts de développement restent acceptés.
+DEVELOPMENT_ENVS = ("local", "ci")
+
+
 class Settings(BaseSettings):
     """Paramètres du processus (API ou worker)."""
 
@@ -189,9 +193,25 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
+    def _development_secret_only_in_local_and_ci(self) -> "Settings":
+        """Refuse au démarrage un secret JWT de modèle hors `local` et `ci` (ADR 0087).
+
+        Le défaut est dans le dépôt, donc public ; « CHANGE-ME-… » est celui des
+        modèles de fichiers d'environnement. Signer des jetons avec l'un ou l'autre,
+        c'est laisser n'importe qui en fabriquer.
+        """
+        secret = self.jwt_secret.get_secret_value()
+        if self.env not in DEVELOPMENT_ENVS and secret.lower().startswith("change-me"):
+            raise ValueError(
+                "COGES_JWT_SECRET garde sa valeur de modèle : tirez-en une "
+                f"(openssl rand -hex 32) — COGES_ENV vaut « {self.env} »."
+            )
+        return self
+
+    @model_validator(mode="after")
     def _frozen_clock_only_in_local_and_ci(self) -> "Settings":
         """Refuse au démarrage une heure figée hors `local` et `ci` (ADR 0065)."""
-        if self.frozen_now is not None and self.env not in ("local", "ci"):
+        if self.frozen_now is not None and self.env not in DEVELOPMENT_ENVS:
             raise ValueError(
                 "COGES_FROZEN_NOW n'est accepté qu'en local et en CI "
                 f"(COGES_ENV vaut « {self.env} »)."
