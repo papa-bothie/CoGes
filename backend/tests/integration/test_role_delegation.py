@@ -22,7 +22,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy.engine import Engine
 from sqlalchemy.sql import text
 
-from tests.conftest import TEST_PASSWORD, DemoCompany, auth_headers
+from tests.conftest import (
+    TEST_PASSWORD,
+    DemoCompany,
+    _create_demo_company,
+    auth_headers,
+    login_token,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -165,14 +171,20 @@ def test_a_custom_role_never_carries_people_or_role_rights(
     assert patched.status_code == 422, patched.text
 
 
-def test_the_manager_still_creates_any_account(api_client: TestClient, alpha_token: str) -> None:
+def test_the_manager_still_creates_any_account(
+    api_client: TestClient, app_bound_to_test_database: None
+) -> None:
+    """Dans une entreprise à part : un second gérant chez `alpha` recevrait les alertes
+    que d'autres suites y comptent."""
+    company = _create_demo_company(f"deleg-{uuid4().hex[:6]}")
+    token = login_token(api_client, company)
     created = api_client.post(
         "/api/v1/users",
-        headers=auth_headers(alpha_token),
+        headers=auth_headers(token),
         json={
-            "email": f"second-gerant-{uuid4().hex[:6]}@alpha.example.com",
+            "email": f"second-gerant-{uuid4().hex[:6]}@example.com",
             "full_name": "Second gérant",
-            "role_ids": [_role_id(api_client, alpha_token, "gerant")],
+            "role_ids": [_role_id(api_client, token, "gerant")],
         },
     )
     assert created.status_code == 201, created.text

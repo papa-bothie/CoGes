@@ -42,8 +42,8 @@ STOCK_CONSUMER = "notifications.stock"
 CANCELLED_CONSUMER = "notifications.sale_cancelled"
 
 
-@celery_app.task(name=ON_STOCK_UPDATED)
-def on_stock_updated(**message: Any) -> str:
+@celery_app.task(name=ON_STOCK_UPDATED, bind=True, max_retries=3, default_retry_delay=30)
+def on_stock_updated(self: Any, **message: Any) -> str:
     """Alerte de stock bas ou de rupture, si le mouvement a franchi le seuil.
 
     `below_reorder_point` et `qty_on_hand` viennent du corps de l'événement : aucun
@@ -97,12 +97,16 @@ def on_stock_updated(**message: Any) -> str:
             extra={"company_id": str(ctx.company_id), "type": kind.value, "recipients": sent},
         )
 
-    fresh = handle(event, consumer=STOCK_CONSUMER, handler=_alert)
+    try:
+        fresh = handle(event, consumer=STOCK_CONSUMER, handler=_alert)
+    except Exception as exc:
+        # Comme l'analytique : une base qui flanche ne perd pas l'alerte (ADR 0088).
+        raise self.retry(exc=exc) from exc
     return "handled" if fresh else "already-processed"
 
 
-@celery_app.task(name=ON_SALE_CANCELLED)
-def on_sale_cancelled(**message: Any) -> str:
+@celery_app.task(name=ON_SALE_CANCELLED, bind=True, max_retries=3, default_retry_delay=30)
+def on_sale_cancelled(self: Any, **message: Any) -> str:
     """Prévient ceux qui peuvent annuler une vente qu'une vente a été annulée.
 
     L'annulation touche à la fois le stock, la finance et la dette (ADR 0007) : elle
@@ -128,36 +132,42 @@ def on_sale_cancelled(**message: Any) -> str:
             data={"sale_id": str(received.aggregate_id), "sale_no": sale_no, "total": total},
         )
 
-    fresh = handle(event, consumer=CANCELLED_CONSUMER, handler=_alert)
+    try:
+        fresh = handle(event, consumer=CANCELLED_CONSUMER, handler=_alert)
+    except Exception as exc:
+        raise self.retry(exc=exc) from exc
     return "handled" if fresh else "already-processed"
 
 
-@celery_app.task(name=LOGIN_FAILURES)
-def login_failures(company_id: str, user_id: str, failures: int) -> int:
+@celery_app.task(name=LOGIN_FAILURES, bind=True, max_retries=3, default_retry_delay=30)
+def login_failures(self: Any, company_id: str, user_id: str, failures: int) -> int:
     """Échecs de connexion répétés sur un compte réel (ADR 0078), enfilés par Auth.
 
     Une alerte par heure au plus et par compte visé : le dédoublonnage est raccourci
     à une heure, la clé est le compte. Un compte disparu entre-temps n'alerte personne.
     """
-    ctx = TenantContext.bootstrap(UUID(company_id))
-    with tenant_transaction(ctx) as session:
-        names = users_service.names_by_id(session, ctx, [UUID(user_id)])
-        name = names.get(UUID(user_id))
-        if name is None:
-            return 0
-        return notifications_service.notify(
-            session,
-            ctx,
-            notification_type=NotificationType.LOGIN_FAILURES,
-            title=f"Plusieurs tentatives de connexion échouées sur le compte de {name}"[:160],
-            body=(
-                "Si ce n’est pas cette personne, donnez-lui un nouveau mot de passe "
-                "ou coupez son accès."
-            ),
-            entity_id=user_id,
-            data={"user_id": user_id, "failures": failures},
-            dedupe_hours=1,
-        )
+    try:
+        ctx = TenantContext.bootstrap(UUID(company_id))
+        with tenant_transaction(ctx) as session:
+            names = users_service.names_by_id(session, ctx, [UUID(user_id)])
+            name = names.get(UUID(user_id))
+            if name is None:
+                return 0
+            return notifications_service.notify(
+                session,
+                ctx,
+                notification_type=NotificationType.LOGIN_FAILURES,
+                title=f"Plusieurs tentatives de connexion échouées sur le compte de {name}"[:160],
+                body=(
+                    "Si ce n’est pas cette personne, donnez-lui un nouveau mot de passe "
+                    "ou coupez son accès."
+                ),
+                entity_id=user_id,
+                data={"user_id": user_id, "failures": failures},
+                dedupe_hours=1,
+            )
+    except Exception as exc:
+        raise self.retry(exc=exc) from exc
 
 
 @celery_app.task(name="notifications.scan_due_debts")

@@ -58,6 +58,9 @@ GLOBAL_KEYS: dict[str, str] = {
     ),
     r"^coges:heartbeat:(worker|beat|relay):[^:]+$": "battement d'un processus (ADR 0077)",
     r"^coges:ops:beat_tick$": "dernier tic de beat (ADR 0077)",
+    r"^coges:celery:deliveries:[0-9a-f-]{32,36}$": (
+        "livraisons interrompues d'une tâche Celery, par identifiant de tâche (ADR 0088)"
+    ),
 }
 
 

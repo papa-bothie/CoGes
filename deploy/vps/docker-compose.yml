@@ -117,6 +117,9 @@ services:
   # Consommateurs : agrégats, alertes, audit secondaire, exports, ML (ADR 0035).
   worker:
     <<: *service
+    # Tâches jusqu'à 360 s : 10 s par défaut couperaient un redéploiement en plein
+    # travail (ADR 0088). Celery termine sa tâche en cours avant de s'arrêter.
+    stop_grace_period: 120s
     image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/worker:${COGES_IMAGE_TAG:?}
     depends_on: { redis: { condition: service_healthy } }
     environment:
@@ -135,6 +138,7 @@ services:
   # Planificateur : un seul exemplaire par pile, sinon chaque batch partirait deux fois.
   beat:
     <<: *service
+    stop_grace_period: 120s
     image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/worker:${COGES_IMAGE_TAG:?}
     depends_on: [worker]
     environment:
@@ -151,6 +155,7 @@ services:
   # Relais de l'outbox sous `coges_relay` (ADR 0032).
   relay:
     <<: *service
+    stop_grace_period: 120s
     image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/worker:${COGES_IMAGE_TAG:?}
     depends_on: [worker]
     environment:

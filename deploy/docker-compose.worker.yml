@@ -46,6 +46,9 @@ services:
   # ne peut supprimer que cela.
   worker:
     <<: *common
+    # Tâches jusqu'à 360 s : 10 s par défaut couperaient un redéploiement en plein
+    # travail (ADR 0088). Celery termine sa tâche en cours avant de s'arrêter.
+    stop_grace_period: 120s
     environment:
       <<: *common-env
       COGES_DATABASE_URL_APP: ${COGES_DATABASE_URL_APP:?}
@@ -64,6 +67,7 @@ services:
   # tourne sous un utilisateur sans droit d'écriture sur le code.
   beat:
     <<: *common
+    stop_grace_period: 120s
     depends_on: [worker]
     environment:
       <<: *common-env
@@ -86,6 +90,7 @@ services:
   # quand la file est vide, pour laisser la base s'endormir (ADR 0040).
   relay:
     <<: *common
+    stop_grace_period: 120s
     depends_on: [worker]
     environment:
       <<: *common-env
