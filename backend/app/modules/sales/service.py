@@ -1270,8 +1270,13 @@ def refund_return(
     """
     # 1. Retour verrouillé, reste dû calculé sous ce verrou. Sans lui, deux
     #    remboursements concurrents liraient le même `refunded_total` et
-    #    concluraient tous deux qu'il reste de quoi payer.
+    #    concluraient tous deux qu'il reste de quoi payer. La dette de la vente se
+    #    verrouille **avant** : c'est l'ordre de l'annulation d'un paiement, dont le
+    #    trigger `refund_rollup` atteint le retour après la dette (ADR 0088).
     repository = SaleReturnRepository(session, ctx)
+    unlocked = repository.get(return_id)
+    if unlocked is not None:
+        finance_service.lock_sale_debt(session, ctx, unlocked.sale_id)
     sale_return = repository.get_for_update(return_id)
     if sale_return is None:
         raise NotFoundError("Retour introuvable.")

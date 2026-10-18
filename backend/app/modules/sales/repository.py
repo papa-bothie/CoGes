@@ -434,8 +434,15 @@ class SaleReturnRepository(TenantRepository[SaleReturn]):
 
         Sans ce verrou, deux remboursements concurrents liraient le même
         `refunded_total` et conclueraient tous deux qu'il reste de quoi payer.
+        `populate_existing` : un retour déjà lu sans verrou dans la session (pour en
+        trouver la vente, ADR 0088) est relu, jamais servi périmé.
         """
-        stmt = self._select().where(SaleReturn.id == return_id).with_for_update()
+        stmt = (
+            self._select()
+            .where(SaleReturn.id == return_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
         return self.session.execute(stmt).scalar_one_or_none()
 
     def by_ids(self, return_ids: Sequence[UUID]) -> Sequence[SaleReturn]:
