@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID, uuid4
 
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import text
 
@@ -74,3 +75,16 @@ def read_state(session_factory: sessionmaker[Any], ctx: TenantContext, event_id:
     """`(published_at, attempts)` d'un événement, lu sous RLS comme le fait l'API."""
     with tenant_transaction(ctx, session_factory=session_factory) as session:
         return session.execute(_READ_STATE, {"company_id": ctx.company_id, "id": event_id}).one()
+
+
+def bury_dead_letters(owner_engine: Engine) -> None:
+    """Marque publiés les rebuts laissés par les tests : sans cela, `/system/workers`
+    signalerait `outbox_dead_lettered` dans toutes les suites suivantes (ADR 0087)."""
+    with owner_engine.begin() as connection:
+        connection.execute(text("SET LOCAL ROLE coges_bus"))
+        connection.execute(
+            text(
+                "UPDATE business_events SET published_at = now() "
+                "WHERE published_at IS NULL AND attempts >= 10"
+            )
+        )

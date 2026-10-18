@@ -12,12 +12,25 @@ from __future__ import annotations
 
 import logging
 
+import redis.exceptions
 from celery import Celery
+from kombu.exceptions import OperationalError
 
+from app.core.events.bus import TransportUnavailableError
 from app.core.events.inbox import Event
 from app.workers import subscriptions
 
 logger = logging.getLogger(__name__)
+
+#: Ce que lèvent Celery, kombu et redis-py quand le broker ne répond pas. Une panne
+#: de transport, pas un événement empoisonné (ADR 0087).
+TRANSPORT_ERRORS: tuple[type[BaseException], ...] = (
+    OperationalError,
+    redis.exceptions.ConnectionError,
+    redis.exceptions.TimeoutError,
+    ConnectionError,
+    TimeoutError,
+)
 
 
 class CeleryEventBus:
@@ -35,7 +48,10 @@ class CeleryEventBus:
         """
         message = event.as_message()
         for task_name in subscriptions.subscribers(event.event_type):
-            self._celery.send_task(task_name, kwargs=message)
+            try:
+                self._celery.send_task(task_name, kwargs=message)
+            except TRANSPORT_ERRORS as exc:
+                raise TransportUnavailableError(str(exc)) from exc
             logger.debug(
                 "Événement publié",
                 extra={

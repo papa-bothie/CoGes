@@ -41,6 +41,7 @@ PRIVILEGED_FUNCTIONS = {
     "ensure_audit_partition",
     "outbox_claim",
     "outbox_mark_published",
+    "outbox_release",
     "active_company_ids",
     "purge_expired_idempotency_keys",
     "outbox_lag",
@@ -472,6 +473,10 @@ def test_t36_who_may_call_the_privileged_functions(app_engine: Engine) -> None:
         ("outbox_claim", ANALYTICS_ROLE): False,
         ("outbox_mark_published", RELAY_ROLE): True,
         ("outbox_mark_published", APP_ROLE): False,
+        # Rend la tentative après une panne de transport (ADR 0087) : le relais seul.
+        ("outbox_release", RELAY_ROLE): True,
+        ("outbox_release", APP_ROLE): False,
+        ("outbox_release", ANALYTICS_ROLE): False,
         ("active_company_ids", RELAY_ROLE): True,
         ("active_company_ids", APP_ROLE): True,
         ("active_company_ids", ANALYTICS_ROLE): True,
@@ -496,6 +501,7 @@ def test_t36_who_may_call_the_privileged_functions(app_engine: Engine) -> None:
     signatures = {
         "outbox_claim": "outbox_claim(integer)",
         "outbox_mark_published": "outbox_mark_published(bigint[])",
+        "outbox_release": "outbox_release(bigint[])",
         "active_company_ids": "active_company_ids()",
         "purge_expired_idempotency_keys": "purge_expired_idempotency_keys()",
         "auth_lookup": "auth_lookup(citext, citext)",

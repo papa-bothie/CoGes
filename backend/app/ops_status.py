@@ -61,7 +61,8 @@ def render(body: dict[str, Any]) -> str:
     if outbox:
         lines.append("")
         lines.append(
-            f"Outbox  {mark[outbox['healthy']]} {outbox['pending']} en attente, "
+            f"Outbox  {mark[outbox['healthy'] and not outbox['dead_lettered']]} "
+            f"{outbox['pending']} en attente, "
             f"retard {_age(outbox['lag_seconds'])} (seuil {_age(outbox['max_lag_seconds'])}), "
             f"{outbox['dead_lettered']} au rebut"
         )

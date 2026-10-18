@@ -424,6 +424,23 @@ def _assert_draft(sale: Sale) -> None:
         raise SaleNotDraftError(details={"sale_id": str(sale.id), "status": sale.status})
 
 
+def _locked_draft(session: Session, ctx: TenantContext, sale_id: UUID) -> Sale:
+    """Le brouillon, verrouillé comme le fait `confirm_sale` (ADR 0087).
+
+    Sans ce verrou, une ligne écrite pendant la confirmation passait
+    `sale_items_no_change` (la vente était encore `draft` pour elle), puis son recalcul
+    des totaux attendait le COMMIT de la confirmation et changeait le total après le
+    calcul de la dette, sans sortie de stock. Verrouillée d'abord, l'écriture attend la
+    confirmation et relit `confirmed` : refus propre. Même premier verrou que
+    `confirm_sale`, donc aucun interblocage entre les deux.
+    """
+    sale = SaleRepository(session, ctx).get_for_update(sale_id)
+    if sale is None:
+        raise NotFoundError("Vente introuvable.")
+    _assert_draft(sale)
+    return sale
+
+
 def create_sale(session: Session, ctx: TenantContext, payload: SaleCreate) -> Sale:
     """Ouvre un brouillon. **Aucun effet de bord** (§ 5.1, étape 0).
 
@@ -459,8 +476,7 @@ def create_sale(session: Session, ctx: TenantContext, payload: SaleCreate) -> Sa
 
 def update_sale(session: Session, ctx: TenantContext, sale_id: UUID, payload: SaleUpdate) -> Sale:
     """Change le client ou la date d'un brouillon."""
-    sale = get_sale(session, ctx, sale_id)
-    _assert_draft(sale)
+    sale = _locked_draft(session, ctx, sale_id)
 
     changes = payload.model_dump(exclude_unset=True)
     if not changes:
@@ -486,8 +502,7 @@ def add_item(
     anticipation inutile — sans eux, le brouillon afficherait un total à zéro, et
     le caissier ne saurait pas ce qu'il doit encaisser.
     """
-    sale = get_sale(session, ctx, sale_id)
-    _assert_draft(sale)
+    sale = _locked_draft(session, ctx, sale_id)
 
     price = products_service.assert_sellable(session, ctx, payload.product_id)
     tax_rate = _line_tax_rate(session, ctx, payload.product_id)
@@ -525,8 +540,7 @@ def update_item(
     payload: SaleItemUpdate,
 ) -> SaleItem:
     """Corrige la quantité ou la remise d'une ligne de brouillon."""
-    sale = get_sale(session, ctx, sale_id)
-    _assert_draft(sale)
+    sale = _locked_draft(session, ctx, sale_id)
     item = _get_item(session, ctx, sale, item_id)
 
     changes = payload.model_dump(exclude_unset=True)
@@ -543,8 +557,7 @@ def update_item(
 
 def remove_item(session: Session, ctx: TenantContext, sale_id: UUID, item_id: UUID) -> None:
     """Retire une ligne d'un brouillon (ADR 0020)."""
-    sale = get_sale(session, ctx, sale_id)
-    _assert_draft(sale)
+    sale = _locked_draft(session, ctx, sale_id)
     item = _get_item(session, ctx, sale, item_id)
 
     repository = SaleItemRepository(session, ctx)

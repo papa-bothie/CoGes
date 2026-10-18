@@ -59,8 +59,12 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
+      # Historique complet : une version vX.Y.Z se construit depuis son étiquette git,
+      # jamais depuis la branche d'où le workflow a été lancé (ADR 0087).
       - uses: actions/checkout@v5
-      - name: Version
+        with:
+          fetch-depth: 0
+      - name: Version et commit
         id: version
         env:
           INPUT_VERSION: ${{ inputs.version }}
@@ -76,44 +80,86 @@ jobs:
             echo "::error::version refusée : $version (vX.Y.Z ou SHA)"
             exit 1
           fi
+          # Le script de décision vient de ce commit-ci, pas de l'étiquette (qui peut
+          # être plus ancienne que lui).
+          cp deploy/scripts/registry_cleanup.py "$RUNNER_TEMP/"
+          if [[ "$version" == v* ]]; then
+            if ! sha=$(git rev-parse --verify --quiet "refs/tags/$version^{commit}"); then
+              echo "::error::l'étiquette git $version n'existe pas : poussez-la d'abord (git tag $version && git push origin $version)"
+              exit 1
+            fi
+            git checkout --quiet --detach "$sha"
+          else
+            sha="$GITHUB_SHA"
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Version : \`$version\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Version : \`$version\` (commit \`$sha\`)" >> "$GITHUB_STEP_SUMMARY"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # Étiquetées avec la version et le SHA complet du commit.
+      # Version déjà dans le registre : réutilisée si c'est l'image du même commit
+      # (préproduction puis production), refusée sinon (deploy/scripts/registry_cleanup.py).
+      - name: Construire, réutiliser ou refuser
+        id: decide
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA: ${{ steps.version.outputs.sha }}
+        run: |
+          digest() {
+            docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' 2>/dev/null \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])' 2>/dev/null || true
+          }
+          for package in front api worker bundle; do
+            decision=$(python3 "$RUNNER_TEMP/registry_cleanup.py" decide --version "$VERSION" \
+              --version-digest "$(digest "$REGISTRY/$package:$VERSION")" \
+              --sha-digest "$(digest "$REGISTRY/$package:$SHA")")
+            echo "$package : $decision" >> "$GITHUB_STEP_SUMMARY"
+            echo "$package=$decision" >> "$GITHUB_OUTPUT"
+          done
+      # Étiquetées avec la version et le SHA complet du commit. Sans attestation de
+      # provenance : chaque image reste un seul manifeste, sans enfant sans étiquette
+      # que le nettoyage devrait épargner.
       - uses: docker/build-push-action@v6
+        if: steps.decide.outputs.front == 'build'
         with:
           context: frontend
           push: true
-          tags: ${{ env.REGISTRY }}/front:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/front:${{ github.sha }}
+          provenance: false
+          tags: ${{ env.REGISTRY }}/front:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/front:${{ steps.version.outputs.sha }}
           cache-from: type=gha,scope=front
           cache-to: type=gha,mode=max,scope=front
       - uses: docker/build-push-action@v6
+        if: steps.decide.outputs.api == 'build'
         with:
           context: backend
           file: backend/Dockerfile.api
           push: true
-          tags: ${{ env.REGISTRY }}/api:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/api:${{ github.sha }}
+          provenance: false
+          tags: ${{ env.REGISTRY }}/api:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/api:${{ steps.version.outputs.sha }}
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
       - uses: docker/build-push-action@v6
+        if: steps.decide.outputs.worker == 'build'
         with:
           context: backend
           file: backend/Dockerfile.worker
           push: true
-          tags: ${{ env.REGISTRY }}/worker:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/worker:${{ github.sha }}
+          provenance: false
+          tags: ${{ env.REGISTRY }}/worker:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/worker:${{ steps.version.outputs.sha }}
           cache-from: type=gha,scope=worker
           cache-to: type=gha,mode=max,scope=worker
       - uses: docker/build-push-action@v6
+        if: steps.decide.outputs.bundle == 'build'
         with:
           context: .
           file: deploy/vps/Dockerfile.bundle
           push: true
-          tags: ${{ env.REGISTRY }}/bundle:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/bundle:${{ github.sha }}
+          provenance: false
+          tags: ${{ env.REGISTRY }}/bundle:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/bundle:${{ steps.version.outputs.sha }}
 
   migrate:
     name: Migrations (Neon, coges_owner)
@@ -137,6 +183,10 @@ jobs:
           # Requis par la configuration, jamais utilisé par Alembic.
           COGES_DATABASE_URL_APP: postgresql+psycopg://unused@localhost/unused
         run: |
+          # Requis par la configuration hors local/CI (ADR 0087), jamais utilisé par
+          # Alembic : un secret jetable, tiré pour ce seul job.
+          COGES_JWT_SECRET="$(openssl rand -hex 32)"
+          export COGES_JWT_SECRET
           uv sync --directory backend --frozen --no-dev --no-group ml
           uv run --directory backend --no-sync alembic upgrade head
 
@@ -145,6 +195,9 @@ jobs:
     needs: [images, migrate]
     runs-on: ubuntu-latest
     environment: ${{ inputs.target || 'preprod' }}
+    permissions:
+      contents: read
+      packages: write
     env:
       TARGET: ${{ inputs.target || 'preprod' }}
       VERSION: ${{ needs.images.outputs.version }}
@@ -191,6 +244,29 @@ jobs:
           COGES_SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
         run: python3 deploy/scripts/smoke.py
 
+      # Les deux images que le nettoyage ne supprime jamais (ADR 0087) : celle qui tourne
+      # et la précédente, dont dépendent `deploy.sh rollback` et la reconstruction du VPS.
+      - name: Étiquettes production et production-previous
+        if: env.TARGET == 'production' && env.DEPLOY_SSH_KEY != ''
+        env:
+          GH_ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          digest() {
+            docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' 2>/dev/null \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])' 2>/dev/null || true
+          }
+          for package in front api worker bundle; do
+            image="$REGISTRY/$package"
+            current=$(digest "$image:production")
+            if [ -n "$current" ] && [ "$current" != "$(digest "$image:$VERSION")" ]; then
+              docker buildx imagetools create --tag "$image:production-previous" "$image:production"
+            fi
+            docker buildx imagetools create --tag "$image:production" "$image:$VERSION"
+          done
+          docker logout ghcr.io
+
       - name: Retour à la version précédente
         if: failure() && steps.smoke.conclusion == 'failure'
         run: ssh -i ~/.ssh/deploy -p "$DEPLOY_PORT" -o StrictHostKeyChecking=yes -o BatchMode=yes "deploy@$DEPLOY_HOST" "$TARGET rollback"
@@ -200,20 +276,34 @@ jobs:
         run: rm -f ~/.ssh/deploy
 
   cleanup:
-    name: Registre — garder les 5 dernières versions
+    name: Registre — production, précédente et la dernière préproduction
     needs: [images, deploy]
     if: always() && needs.images.result == 'success'
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       packages: write
     strategy:
       matrix:
         package: [front, api, worker, bundle]
     steps:
-      # Une version = une image ; ses deux étiquettes (vX.Y.Z et SHA) n'en font qu'une.
+      - uses: actions/checkout@v5
+      # Quota gratuit de 500 Mo (ADR 0087) : jamais `production` ni
+      # `production-previous`, jamais une version sans étiquette, et la dernière
+      # préproduction ; tout le reste part (deploy/scripts/registry_cleanup.py).
+      - name: Versions à supprimer
+        id: plan
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          ids=$(gh api --paginate "/users/$OWNER/packages/container/coges%2F${{ matrix.package }}/versions" \
+            | python3 deploy/scripts/registry_cleanup.py plan)
+          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+          echo "${{ matrix.package }} : ${ids:-rien} à supprimer" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/delete-package-versions@v5
+        if: steps.plan.outputs.ids != ''
         with:
           package-name: coges/${{ matrix.package }}
           package-type: container
-          min-versions-to-keep: 5
-          delete-only-untagged-versions: false
+          package-version-ids: ${{ steps.plan.outputs.ids }}

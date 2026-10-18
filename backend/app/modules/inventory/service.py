@@ -117,6 +117,20 @@ class FlowMovementNotReversibleError(BusinessRuleError):
     )
 
 
+class EntryReversalSupersededError(BusinessRuleError):
+    """L'entrée à annuler a été suivie d'autres mouvements (ADR 0087, `CG022`).
+
+    Les sorties qui l'ont suivie ont été coûtées avec elle : la retirer après coup
+    fausserait le CMP. La correction se fait par un ajustement daté.
+    """
+
+    code = "entry_reversal_superseded"
+    default_message = (
+        "D'autres mouvements ont suivi cette entrée : elle ne peut plus être annulée. "
+        "Faites plutôt une correction de stock."
+    )
+
+
 class DuplicateMovementError(BusinessRuleError):
     code = "duplicate_movement"
     default_message = "Ce mouvement a déjà été enregistré avec la même clé d'idempotence."
@@ -134,12 +148,13 @@ class UnitCostRequiredError(BusinessRuleError):
     )
 
 
-#: SQLSTATE applicatifs levés par les triggers de la migration 0004 (ADR 0018).
+#: SQLSTATE applicatifs levés par les triggers des révisions 0004 (ADR 0018) et 0024.
 _TRIGGER_ERRORS: dict[str, type[BusinessRuleError]] = {
     "CG010": MovementBackdatedTooFarError,
     "CG011": MovementInFutureError,
     "CG020": InsufficientStockError,
     "CG021": ProductNotStockTrackedError,
+    "CG022": EntryReversalSupersededError,
 }
 _UNIQUE_VIOLATION = "23505"
 

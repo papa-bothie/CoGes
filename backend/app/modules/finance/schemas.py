@@ -131,6 +131,11 @@ class PaymentCreate(BaseModel):
 
     `method` exclut `offset` : une compensation ne se saisit pas, elle naît d'un
     retour (ADR 0024).
+
+    Aucun `sale_id` : une vente se règle en lettrant sa dette, jamais en direct. Un
+    paiement direct rattaché ici échappait au statut de la vente, à son total et à sa
+    dette — le client aurait pu payer deux fois (ADR 0062, 0087). L'encaissement de
+    la confirmation passe par `record_sale_payment`.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -141,20 +146,17 @@ class PaymentCreate(BaseModel):
     paid_at: datetime | None = None
     reference: Annotated[str, Field(max_length=REFERENCE_MAX_LENGTH)] | None = None
     note: Annotated[str, Field(max_length=NOTE_MAX_LENGTH)] | None = None
-    sale_id: UUID | None = None
     expense_id: UUID | None = None
     allocations: Annotated[list[AllocationInput], Field(max_length=MAX_ALLOCATIONS)] = []
 
     @model_validator(mode="after")
     def _check_shape(self) -> Self:
-        """Ce qui se voit sans lire la base : contexte unique, date non future.
+        """Ce qui se voit sans lire la base : date non future.
 
-        Le contexte est doublé par `payments_context_one` ; la date ne l'est par
-        rien — le § 8.6 ne borne pas `paid_at`. Un encaissement daté de demain
-        n'est pourtant pas un encaissement, c'est une prévision.
+        La date n'est bornée par rien d'autre — le § 8.6 ne borne pas `paid_at`. Un
+        encaissement daté de demain n'est pourtant pas un encaissement, c'est une
+        prévision.
         """
-        if self.sale_id is not None and self.expense_id is not None:
-            raise ValueError("Un paiement porte au plus un contexte : une vente ou une dépense.")
         if self.paid_at is not None and self.paid_at > datetime.now(UTC):
             raise ValueError("La date d'un paiement ne peut pas être dans le futur.")
         return self

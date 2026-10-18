@@ -8467,17 +8467,38 @@
             "$ref": "#/components/schemas/Amount-Output"
           },
           "estimated_margin_month": {
-            "$ref": "#/components/schemas/Amount-Output"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Amount-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "sales_today": {
             "type": "integer",
             "title": "Sales Today"
           },
           "receivables_open": {
-            "$ref": "#/components/schemas/Amount-Output"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Amount-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "receivables_customer_count": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Receivables Customer Count"
           },
           "stock_alert_count": {
@@ -8485,7 +8506,14 @@
             "title": "Stock Alert Count"
           },
           "cash_on_hand": {
-            "$ref": "#/components/schemas/Amount-Output"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Amount-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "watch_stock": {
             "items": {
@@ -11955,18 +11983,6 @@
             ],
             "title": "Note"
           },
-          "sale_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Sale Id"
-          },
           "expense_id": {
             "anyOf": [
               {
@@ -11997,7 +12013,7 @@
           "amount"
         ],
         "title": "PaymentCreate",
-        "description": "Encaissement ou décaissement saisi à la main.\n\n`method` exclut `offset` : une compensation ne se saisit pas, elle naît d'un\nretour (ADR 0024)."
+        "description": "Encaissement ou décaissement saisi à la main.\n\n`method` exclut `offset` : une compensation ne se saisit pas, elle naît d'un\nretour (ADR 0024).\n\nAucun `sale_id` : une vente se règle en lettrant sa dette, jamais en direct. Un\npaiement direct rattaché ici échappait au statut de la vente, à son total et à sa\ndette — le client aurait pu payer deux fois (ADR 0062, 0087). L'encaissement de\nla confirmation passe par `record_sale_payment`."
       },
       "PaymentDetail": {
         "properties": {

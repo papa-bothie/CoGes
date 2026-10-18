@@ -63,7 +63,8 @@ def workers_health(
     * le plus vieil événement en attente dépasse `COGES_OPS_OUTBOX_MAX_LAG_SECONDS` ;
     * une tâche planifiée n'a pas réussi dans sa fenêtre (26 h ou 8 jours), sa
       dernière exécution a échoué, ou une entreprise a vu échouer sa sous-tâche ;
-    * `system.beat_tick` n'a pas tourné depuis 15 min.
+    * `system.beat_tick` n'a pas tourné depuis 15 min ;
+    * un événement de l'outbox est au rebut (`outbox_dead_lettered:<nombre>`, ADR 0087).
 
     Le calcul se fait sur l'horloge réelle, jamais sur l'heure figée des lectures
     métier (`COGES_FROZEN_NOW`) : une panne n'attend pas la maquette.
@@ -111,10 +112,15 @@ def workers_health(
     outbox_ok = lag_seconds <= settings.ops_outbox_max_lag_seconds
     if not outbox_ok:
         problems.append("outbox_lagging")
+    # Le rebut ne repart jamais seul : il attend qu'on le rejoue à la main
+    # (docs/runbooks/workers.md). Le taire, c'est perdre l'effet de l'événement.
+    dead_lettered = cast(int, lag["dead_lettered"])
+    if dead_lettered:
+        problems.append(f"outbox_dead_lettered:{dead_lettered}")
     outbox = OutboxLag(
         healthy=outbox_ok,
         pending=cast(int, lag["pending"]),
-        dead_lettered=cast(int, lag["dead_lettered"]),
+        dead_lettered=dead_lettered,
         oldest_pending_at=oldest,
         lag_seconds=round(lag_seconds, 1),
         max_lag_seconds=settings.ops_outbox_max_lag_seconds,

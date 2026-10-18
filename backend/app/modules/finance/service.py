@@ -870,7 +870,6 @@ def record_payment(
             direction=payload.direction,
             method=payload.method,
             amount=payload.amount,
-            sale_id=payload.sale_id,
             expense_id=payload.expense_id,
             reference=payload.reference,
             note=payload.note,
