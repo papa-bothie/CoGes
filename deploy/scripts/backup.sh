@@ -25,6 +25,11 @@ set -euo pipefail
 : "${BACKUP_AGE_RECIPIENT:?BACKUP_AGE_RECIPIENT manquant}"
 : "${BACKUP_REMOTE:?BACKUP_REMOTE manquant}"
 MIN_RATIO=${BACKUP_MIN_RATIO:-0.5}
+# Un nombre, jamais du code : il n'est passé à Python qu'en argument (ADR 0088).
+[[ "$MIN_RATIO" =~ ^(0(\.[0-9]+)?|1(\.0+)?)$ ]] || {
+  echo "ÉCHEC : BACKUP_MIN_RATIO doit être un nombre entre 0 et 1 (reçu : $MIN_RATIO)" >&2
+  exit 1
+}
 
 ping() {
   # Jamais bloquant, aucune donnée envoyée (comme les pings des tâches, ADR 0077).
@@ -62,23 +67,27 @@ size=$(stat -c %s "$FILE")
 (cd "$WORKDIR" && sha256sum "$NAME" >"$NAME.sha256")
 echo "    $((size / 1024)) Kio, sha256 $(cut -c1-16 "$FILE.sha256")…"
 
-echo "2/4 — comparaison à la sauvegarde précédente"
-previous=$(rclone lsjson --files-only "$BACKUP_REMOTE" 2>/dev/null \
-  | python3 -c 'import json,sys
-items=[i for i in json.load(sys.stdin) if i["Name"].endswith(".dump.age")]
-items.sort(key=lambda i: i["Name"])
-print(items[-1]["Size"] if items else 0)')
+echo "2/4 — comparaison à la dernière sauvegarde validée"
+# Premier lancement : le préfixe distant n'existe pas encore, la liste est vide.
+listing=$(rclone lsjson --files-only "$BACKUP_REMOTE" 2>/dev/null || echo '[]')
+# La référence est la dernière sauvegarde **validée** : une sauvegarde jugée trop
+# petite porte un marqueur `.suspect` et ne sert jamais de mesure (ADR 0088).
+previous=$(printf '%s' "$listing" | python3 -c 'import json,sys
+items=json.load(sys.stdin) or []
+names={i["Name"] for i in items}
+dumps=[i for i in items if i["Name"].endswith(".dump.age") and i["Name"] + ".suspect" not in names]
+dumps.sort(key=lambda i: i["Name"])
+print(dumps[-1]["Size"] if dumps else 0)')
+too_small=0
 if ((previous > 0)); then
-  if python3 -c "import sys; sys.exit(0 if $size >= $MIN_RATIO * $previous else 1)"; then
-    echo "    précédente : $((previous / 1024)) Kio — taille cohérente"
-    too_small=0
+  if python3 -c 'import sys; size, ratio, previous = int(sys.argv[1]), float(sys.argv[2]), int(sys.argv[3]); sys.exit(0 if size >= ratio * previous else 1)' "$size" "$MIN_RATIO" "$previous"; then
+    echo "    validée : $((previous / 1024)) Kio — taille cohérente"
   else
-    echo "    précédente : $((previous / 1024)) Kio — moins de ${MIN_RATIO} fois : dump tronqué ou base vidée ?"
+    echo "    validée : $((previous / 1024)) Kio — moins de ${MIN_RATIO} fois : dump tronqué ou base vidée ?"
     too_small=1
   fi
 else
-  echo "    aucune sauvegarde précédente"
-  too_small=0
+  echo "    aucune sauvegarde validée"
 fi
 
 echo "3/4 — envoi vers $BACKUP_REMOTE"
@@ -94,7 +103,10 @@ remote_sum=$(rclone cat "$BACKUP_REMOTE/$NAME" | sha256sum | cut -d' ' -f1)
 echo "    taille et sha256 identiques"
 
 if ((too_small)); then
-  fail "sauvegarde envoyée, mais moins de ${MIN_RATIO} fois la précédente : vérifier la base"
+  # Gardée pour l'enquête, jamais comme référence de la nuit suivante.
+  printf 'moins de %s fois la dernière sauvegarde validée (%s octets)\n' "$MIN_RATIO" "$previous" >"$FILE.suspect"
+  rclone copyto --immutable "$FILE.suspect" "$BACKUP_REMOTE/$NAME.suspect"
+  fail "sauvegarde envoyée et marquée suspecte : moins de ${MIN_RATIO} fois la dernière validée, vérifier la base"
 fi
 ping "${BACKUP_PING_URL:-}"
 echo "Sauvegarde $NAME : OK"

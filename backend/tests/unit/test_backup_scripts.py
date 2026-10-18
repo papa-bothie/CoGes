@@ -233,3 +233,107 @@ def test_the_latest_backups_survive_even_when_the_last_week_is_empty() -> None:
     kept = retention.to_delete(_names(*old), date(2026, 10, 17))
     for stamp in old[-7:]:
         assert f"coges-{stamp}.dump.age" not in kept, f"{stamp} supprimée alors que plus récente"
+
+
+# ----------------------------------------------------- backup.sh, constats de la revue (P2.16)
+
+_STUBS = {
+    "pg_dump": """#!/usr/bin/env bash
+if [[ "${1:-}" == --version ]]; then echo "pg_dump (PostgreSQL) 16.4"; exit 0; fi
+head -c "${FAKE_DUMP_SIZE:-1000}" /dev/zero
+""",
+    "age": """#!/usr/bin/env bash
+while [[ $# -gt 0 ]]; do [[ "$1" == --output ]] && out=$2; shift; done
+cat >"$out"
+""",
+    # Un distant « fake:dossier » rangé dans $FAKE_REMOTE_ROOT/dossier.
+    "lsjson.py": """import json
+import os
+import sys
+
+path = sys.argv[1]
+names = sorted(os.listdir(path)) if os.path.isdir(path) else [os.path.basename(path)]
+folder = path if os.path.isdir(path) else os.path.dirname(path)
+sizes = [{"Name": n, "Size": os.path.getsize(os.path.join(folder, n))} for n in names]
+print(json.dumps(sizes))
+""",
+    "rclone": """#!/usr/bin/env bash
+local_path() { echo "$FAKE_REMOTE_ROOT/${1#fake:}"; }
+cmd=$1; shift
+args=(); for a in "$@"; do [[ "$a" == --* ]] || args+=("$a"); done
+case "$cmd" in
+  lsjson)
+    p=$(local_path "${args[0]}")
+    [[ -e "$p" ]] || { echo "directory not found" >&2; exit 3; }
+    python3 "$(dirname "$0")/lsjson.py" "$p" ;;
+  copyto) dst=$(local_path "${args[1]}"); mkdir -p "$(dirname "$dst")"; cp "${args[0]}" "$dst" ;;
+  cat) cat "$(local_path "${args[0]}")" ;;
+  *) exit 9 ;;
+esac
+""",
+}
+
+
+def _run_backup(
+    tmp_path: Path, *, size: int, ratio: str | None = None
+) -> subprocess.CompletedProcess[str]:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    for name, body in _STUBS.items():
+        stub = bin_dir / name
+        stub.write_text(body, encoding="utf-8")
+        stub.chmod(0o755)
+    env = {
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "BACKUP_DATABASE_URL": "postgresql://coges_backup@localhost/coges",
+        "BACKUP_ALLOW_LOCAL": "1",
+        "BACKUP_AGE_RECIPIENT": "age1testrecipient",
+        "BACKUP_REMOTE": "fake:sauvegardes/prod",
+        "FAKE_REMOTE_ROOT": str(tmp_path / "remote"),
+        "FAKE_DUMP_SIZE": str(size),
+    }
+    if ratio is not None:
+        env["BACKUP_MIN_RATIO"] = ratio
+    return subprocess.run(
+        ["bash", str(SCRIPTS / "backup.sh")], env=env, capture_output=True, text=True, check=False
+    )
+
+
+def _remote_dump(tmp_path: Path, stamp: str, size: int, *, suspect: bool = False) -> None:
+    folder = tmp_path / "remote" / "sauvegardes" / "prod"
+    folder.mkdir(parents=True, exist_ok=True)
+    name = f"coges-{stamp}.dump.age"
+    (folder / name).write_bytes(b"\0" * size)
+    (folder / f"{name}.sha256").write_text("x", encoding="utf-8")
+    if suspect:
+        (folder / f"{name}.suspect").write_text("trop petite", encoding="utf-8")
+
+
+def test_the_first_backup_on_an_empty_remote_succeeds(tmp_path: Path) -> None:
+    result = _run_backup(tmp_path, size=1000)
+    assert result.returncode == 0, result.stderr
+
+
+def test_a_suspect_backup_is_never_the_reference(tmp_path: Path) -> None:
+    """Valide de 1 000, suspecte de 100 : un dump de 120 se compare à 1 000, et échoue."""
+    _remote_dump(tmp_path, "2026-10-15-0215", 1000)
+    _remote_dump(tmp_path, "2026-10-16-0215", 100, suspect=True)
+    result = _run_backup(tmp_path, size=120)
+    assert result.returncode != 0, "comparé à la sauvegarde suspecte, le dump tronqué passe"
+
+
+def test_a_too_small_backup_is_marked_suspect(tmp_path: Path) -> None:
+    _remote_dump(tmp_path, "2026-10-15-0215", 1000)
+    result = _run_backup(tmp_path, size=100)
+    assert result.returncode != 0
+    folder = tmp_path / "remote" / "sauvegardes" / "prod"
+    assert any(path.name.endswith(".suspect") for path in folder.iterdir()), (
+        "la sauvegarde trop petite deviendrait la référence de la nuit suivante"
+    )
+
+
+def test_the_ratio_is_a_number_never_code(tmp_path: Path) -> None:
+    _remote_dump(tmp_path, "2026-10-15-0215", 1000)
+    result = _run_backup(tmp_path, size=10, ratio="__import__('sys').exit(0) or 0")
+    assert result.returncode != 0, "BACKUP_MIN_RATIO exécuté comme du code Python"
+    assert "BACKUP_MIN_RATIO" in result.stderr
