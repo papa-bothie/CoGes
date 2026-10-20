@@ -26,6 +26,12 @@ from app.core.errors import AuthenticationRequiredError
 
 ALGORITHM: Final = "HS256"
 ACCESS_TOKEN_TYPE: Final = "access"
+#: Deux familles de jetons, jamais interchangeables (ADR 0089) : chacune exige son
+#: `typ` **et** son audience. Un jeton commerçant n'ouvre rien sous `/platform`, un
+#: jeton plateforme rien ailleurs, même signés par la même clé.
+TENANT_AUDIENCE: Final = "coges-tenant"
+PLATFORM_TOKEN_TYPE: Final = "platform_access"
+PLATFORM_AUDIENCE: Final = "coges-platform"
 REFRESH_TOKEN_BYTES: Final = 32
 
 # Paramètres Argon2id : valeurs par défaut d'argon2-cffi, adaptées à une API web.
@@ -71,6 +77,7 @@ def create_access_token(user_id: UUID, company_id: UUID) -> tuple[str, int]:
         "sub": str(user_id),
         "company_id": str(company_id),
         "typ": ACCESS_TOKEN_TYPE,
+        "aud": TENANT_AUDIENCE,
         "jti": str(uuid4()),
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(seconds=ttl)).timestamp()),
@@ -92,7 +99,8 @@ def decode_access_token(token: str) -> AccessClaims:
             token,
             settings.jwt_secret.get_secret_value(),
             algorithms=[ALGORITHM],
-            options={"require": ["exp", "sub", "typ"]},
+            audience=TENANT_AUDIENCE,
+            options={"require": ["exp", "sub", "typ", "aud"]},
         )
     except jwt.PyJWTError as exc:
         raise AuthenticationRequiredError("Jeton d'accès invalide ou expiré.") from exc
@@ -104,6 +112,60 @@ def decode_access_token(token: str) -> AccessClaims:
         return AccessClaims(
             user_id=UUID(payload["sub"]),
             company_id=UUID(payload["company_id"]),
+            token_id=UUID(payload["jti"]),
+        )
+    except (KeyError, ValueError) as exc:
+        raise AuthenticationRequiredError("Jeton d'accès malformé.") from exc
+
+
+@dataclass(frozen=True, slots=True)
+class PlatformClaims:
+    """Contenu vérifié d'un jeton de l'administration (ADR 0089). Aucune entreprise."""
+
+    platform_user_id: UUID
+    platform_role: str
+    token_id: UUID
+
+
+def create_platform_access_token(platform_user_id: UUID, platform_role: str) -> tuple[str, int]:
+    """Jeton d'accès de l'administration : `platform_role` à la place de `company_id`."""
+    settings = get_settings()
+    now = datetime.now(UTC)
+    ttl = settings.jwt_access_ttl_seconds
+    payload: dict[str, Any] = {
+        "sub": str(platform_user_id),
+        "platform_role": platform_role,
+        "typ": PLATFORM_TOKEN_TYPE,
+        "aud": PLATFORM_AUDIENCE,
+        "jti": str(uuid4()),
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=ttl)).timestamp()),
+    }
+    token = jwt.encode(payload, settings.jwt_secret.get_secret_value(), algorithm=ALGORITHM)
+    return token, ttl
+
+
+def decode_platform_token(token: str) -> PlatformClaims:
+    """Vérifie un jeton de l'administration. Comme pour un commerçant, le rôle porté par
+    le jeton ne fait pas autorité : `deps.py` relit le compte en base."""
+    settings = get_settings()
+    try:
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret.get_secret_value(),
+            algorithms=[ALGORITHM],
+            audience=PLATFORM_AUDIENCE,
+            options={"require": ["exp", "sub", "typ", "aud"]},
+        )
+    except jwt.PyJWTError as exc:
+        raise AuthenticationRequiredError("Jeton d'accès invalide ou expiré.") from exc
+
+    if payload.get("typ") != PLATFORM_TOKEN_TYPE:
+        raise AuthenticationRequiredError("Type de jeton inattendu.")
+    try:
+        return PlatformClaims(
+            platform_user_id=UUID(payload["sub"]),
+            platform_role=str(payload["platform_role"]),
             token_id=UUID(payload["jti"]),
         )
     except (KeyError, ValueError) as exc:

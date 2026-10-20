@@ -339,6 +339,21 @@ REGISTRY: dict[tuple[str, str], Critical | Exempt] = {
         "rotation de session, couverte par test_auth (réutilisation, délai de grâce)"
     ),
     ("POST", "/api/v1/auth/logout"): Exempt("révocation de session, idempotente par nature"),
+    # --- Administration de la plateforme (ADR 0089) : aucune entreprise ne s'y connecte,
+    # le harnais ci-dessous parle en commerçant. Leur COMMIT refusé est prouvé à part.
+    ("POST", "/api/v1/platform/auth/login"): Exempt(
+        "connexion de l'administration, sous coges_app_platform : test_platform_admin"
+    ),
+    ("POST", "/api/v1/platform/auth/refresh"): Exempt(
+        "rotation de session de l'administration, couverte par test_platform_admin"
+    ),
+    ("POST", "/api/v1/platform/auth/logout"): Exempt(
+        "révocation de session de l'administration, idempotente par nature"
+    ),
+    ("PATCH", "/api/v1/platform/companies/{company_id}/status"): Exempt(
+        "COMMIT refusé prouvé par test_platform_admin::test_a_refused_commit_keeps_the_status "
+        "(statut inchangé, aucun e-mail)"
+    ),
     ("POST", "/api/v1/auth/password"): Exempt(
         "mot de passe de la personne connectée : sa propre session, couverte par "
         "test_temporary_password_expiry ; aucun argent, aucun stock"

@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import DateTime, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ENUM, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
@@ -36,6 +36,12 @@ class Company(Base):
     ninea: Mapped[str | None] = mapped_column(Text, nullable=True)
     rc: Mapped[str | None] = mapped_column(Text, nullable=True)
     receipt_footer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # `trial`, `active` ou `suspended` (révision 0026, ADR 0089). Lu ici, jamais écrit :
+    # seule l'administration de la plateforme le change (trigger `companies_status_guard`).
+    status: Mapped[str] = mapped_column(
+        ENUM("trial", "active", "suspended", name="company_status", create_type=False),
+        server_default=text("'active'"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )

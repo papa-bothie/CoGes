@@ -127,6 +127,7 @@ celery_app = Celery(
         "app.workers.tasks.ml_infer",
         "app.workers.tasks.exports",
         "app.workers.tasks.system",
+        "app.workers.tasks.platform",
     ],
 )
 celery_app.conf.update(

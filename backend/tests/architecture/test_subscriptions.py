@@ -28,6 +28,7 @@ import app.workers.tasks.ml_features  # noqa: F401  isort:skip
 import app.workers.tasks.ml_train  # noqa: F401  isort:skip
 import app.workers.tasks.ml_infer  # noqa: F401  isort:skip
 import app.workers.tasks.system  # noqa: F401  isort:skip
+import app.workers.tasks.platform  # noqa: F401  isort:skip
 
 
 def test_every_event_type_has_at_least_one_subscriber() -> None:

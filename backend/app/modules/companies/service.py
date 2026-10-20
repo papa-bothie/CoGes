@@ -108,6 +108,11 @@ def get_current_company(session: Session, ctx: TenantContext) -> Company:
     return company
 
 
+def is_suspended(session: Session, ctx: TenantContext) -> bool:
+    """L'accès de l'entreprise est-il coupé par l'administration (ADR 0089) ?"""
+    return get_current_company(session, ctx).status == "suspended"
+
+
 def get_timezone(session: Session, ctx: TenantContext) -> str:
     """Fuseau de l'entreprise, pour découper une série en journées vécues.
 

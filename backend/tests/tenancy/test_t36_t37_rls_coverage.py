@@ -187,20 +187,33 @@ def test_t37_every_tenant_scoped_table_has_a_policy(app_engine: Engine) -> None:
             )
         ).all()
 
-    incomplete = [
-        r.relname for r in rows if r.polname is None or not (r.has_using and r.has_with_check)
-    ]
+    # Une table est couverte si **une** de ses politiques a USING et WITH CHECK. Les
+    # politiques de lecture de l'administration (`*_platform_read`, ADR 0089) n'ont pas
+    # de WITH CHECK : elles ne servent qu'au SELECT, et ne nomment que son rôle.
+    complete = {r.relname for r in rows if r.polname and r.has_using and r.has_with_check}
+    incomplete = sorted({r.relname for r in rows} - complete)
     assert incomplete == [], f"politique absente ou incomplète sur : {incomplete}"
 
 
 def test_t37_companies_is_protected_against_enumeration(app_engine: Engine) -> None:
-    """T37 — `companies` n'a pas de `company_id` : elle est couverte par une politique sur `id`."""
+    """T37 — `companies` n'a pas de `company_id` : elle est couverte par une politique sur `id`.
+
+    Une seule politique vaut pour tous les rôles ; les autres ne nomment que le rôle de
+    l'administration (ADR 0089), qui n'énumère les entreprises que par ses GRANT colonne
+    par colonne.
+    """
     with app_engine.connect() as connection:
         row = connection.execute(
             text(
                 """
                 SELECT c.relrowsecurity, c.relforcerowsecurity,
-                       (SELECT count(*) FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+                       (SELECT count(*) FROM pg_policy p
+                         WHERE p.polrelid = c.oid AND p.polroles = '{0}') AS policies,
+                       (SELECT array_agg(p.polname ORDER BY p.polname) FROM pg_policy p
+                         WHERE p.polrelid = c.oid AND p.polroles <> '{0}') AS role_policies,
+                       (SELECT bool_and(p.polroles = ARRAY['coges_app_platform'::regrole::oid])
+                          FROM pg_policy p
+                         WHERE p.polrelid = c.oid AND p.polroles <> '{0}') AS platform_only
                 FROM pg_class c
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 WHERE n.nspname = 'public' AND c.relname = 'companies'
@@ -211,6 +224,8 @@ def test_t37_companies_is_protected_against_enumeration(app_engine: Engine) -> N
     assert row.relrowsecurity is True
     assert row.relforcerowsecurity is True
     assert row.policies == 1
+    assert row.role_policies == ["companies_platform_read", "companies_platform_status"]
+    assert row.platform_only is True
 
 
 def test_t37_permissions_is_a_global_catalogue(app_engine: Engine) -> None:
@@ -601,6 +616,11 @@ def test_t36_no_runtime_role_touches_job_runs(app_engine: Engine, role: str) -> 
 TABLES_WITHOUT_RLS: dict[str, str] = {
     "alembic_version": "révision du schéma, aucune donnée d'entreprise",
     "permissions": "catalogue global des permissions, identique pour toutes (T37)",
+    # Administration de la plateforme (ADR 0089) : aucune n'appartient à une entreprise,
+    # `coges_app` et `coges_analytics` n'y ont aucun droit (test_platform_role_grants).
+    "platform_users": "comptes de l'équipe CoGes, hors de toute entreprise",
+    "platform_auth_sessions": "sessions de l'administration, hors de toute entreprise",
+    "platform_audit_logs": "journal de l'administration ; parle d'une entreprise, n'en est pas",
 }
 
 

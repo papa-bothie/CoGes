@@ -22,6 +22,12 @@ vérification ou un rattrapage — les mêmes étapes que les tâches nocturnes,
 `coges_analytics`, dans le processus de la commande (jamais dans l'API) :
 
     python -m app.cli run-intelligence --company-id <uuid> [--as-of 2026-09-24] [--train]
+
+Les comptes de l'équipe CoGes (administration de la plateforme, ADR 0089) naissent ici
+aussi, jamais par une route publique ; le mot de passe est demandé de la même façon :
+
+    python -m app.cli create-platform-user --email equipe@example.test \
+        --name "Prénom Nom" --role administrator
 """
 
 from __future__ import annotations
@@ -44,6 +50,7 @@ from app.core.tenancy import TenantContext, tenant_transaction
 from app.modules.companies import service as companies_service
 from app.modules.inventory import service as inventory_service
 from app.modules.inventory.schemas import StockRebuildLine
+from app.modules.platform import service as platform_service
 from app.modules.rbac import service as rbac_service
 from app.modules.rbac.matrix import MANAGER
 from app.modules.users.models import User
@@ -98,8 +105,8 @@ def create_company(
     return str(company_id), str(manager_id)
 
 
-def _prompt_password() -> str:
-    password = getpass.getpass("Mot de passe du gérant : ")
+def _prompt_password(label: str = "Mot de passe du gérant : ") -> str:
+    password = getpass.getpass(label)
     if len(password) < MIN_PASSWORD_LENGTH:
         raise SystemExit(f"Le mot de passe doit faire au moins {MIN_PASSWORD_LENGTH} caractères.")
     if password != getpass.getpass("Confirmer le mot de passe : "):
@@ -198,6 +205,23 @@ def build_parser() -> argparse.ArgumentParser:
     intelligence.add_argument(
         "--train", action="store_true", help="Réentraîner le modèle de la semaine d'abord"
     )
+    platform_user = subparsers.add_parser(
+        "create-platform-user", help="Créer un compte de l'administration de la plateforme"
+    )
+    platform_user.add_argument("--email", required=True)
+    platform_user.add_argument("--name", required=True, help="Nom affiché")
+    platform_user.add_argument("--role", required=True, choices=["administrator", "support"])
+    platform_user.add_argument(
+        "--password",
+        default=None,
+        help="Parcours e2e seulement : le mot de passe resterait dans l'historique du shell.",
+    )
+
+    deactivate = subparsers.add_parser(
+        "deactivate-platform-user", help="Couper un compte de l'administration (sessions comprises)"
+    )
+    deactivate.add_argument("--email", required=True)
+
     openapi = subparsers.add_parser(
         "export-openapi", help="Écrire le contrat OpenAPI versionné (source des types du front)"
     )
@@ -239,6 +263,21 @@ def main(argv: list[str] | None = None) -> int:
                 f"Écart produit {gap.product_id} : "
                 f"quantité {gap.qty_ecart:+}, CMP {gap.avg_ecart:+}"
             )
+
+    if args.command == "create-platform-user":
+        platform_user_id = platform_service.create_platform_user(
+            email=args.email,
+            display_name=args.name,
+            role=args.role,
+            password=args.password or _prompt_password("Mot de passe du compte : "),
+        )
+        print(f"Compte d'administration créé : {platform_user_id} ({args.role})")
+
+    if args.command == "deactivate-platform-user":
+        if not platform_service.deactivate_platform_user(email=args.email):
+            print(f"Aucun compte actif : {args.email}")
+            return 1
+        print(f"Compte coupé, sessions révoquées : {args.email}")
 
     if args.command == "export-openapi":
         Path(args.output).write_text(openapi_document(), encoding="utf-8")

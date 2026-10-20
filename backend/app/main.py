@@ -46,6 +46,7 @@ from app.modules.importexport.router import exports_router, imports_router
 from app.modules.intelligence.router import router as intelligence_router
 from app.modules.inventory.router import router as inventory_router
 from app.modules.notifications.router import router as notifications_router
+from app.modules.platform.router import router as platform_router
 from app.modules.products.router import router as products_router
 from app.modules.rbac.router import router as rbac_router
 from app.modules.sales.router import returns_router
@@ -153,6 +154,9 @@ api_router.include_router(exports_router)
 api_router.include_router(system_router)
 # Journal d'activité : lecture d'`audit_logs`, gérant et comptable (ADR 0053).
 api_router.include_router(audit_router)
+# Hors des cinq bandes : l'administration de la plateforme (ADR 0089). Un axe à part,
+# sous `/platform`, avec son jeton, son rôle PostgreSQL et son sous-domaine.
+api_router.include_router(platform_router)
 
 app.include_router(api_router)
 
