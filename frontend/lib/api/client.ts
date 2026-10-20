@@ -7,7 +7,13 @@
  */
 import createClient from "openapi-fetch";
 
-import { expireSession, refreshSession, type RefreshOutcome } from "@/lib/auth/session";
+import {
+  COMPANY_SUSPENDED,
+  expireSession,
+  refreshSession,
+  suspendSession,
+  type RefreshOutcome,
+} from "@/lib/auth/session";
 import { tokenStore } from "@/lib/auth/token-store";
 import type { paths } from "@/types/api";
 
@@ -34,6 +40,8 @@ export type AuthFetchDeps = {
   fetch: (request: Request) => Promise<Response>;
   refresh: () => Promise<RefreshOutcome>;
   onExpired: () => void;
+  /** Entreprise suspendue (403 `company_suspended`, ADR 0089). */
+  onSuspended: () => void;
   token: { fresh: () => string | null; get: () => string | null };
 };
 
@@ -41,6 +49,17 @@ export function createAuthFetch(deps: AuthFetchDeps) {
   const send = (request: Request, token: string | null): Promise<Response> => {
     if (token) request.headers.set("Authorization", `Bearer ${token}`);
     return deps.fetch(request);
+  };
+
+  /** Un 403 ne dit « suspendue » que par son code : on lit une copie du corps. */
+  const isSuspension = async (response: Response): Promise<boolean> => {
+    if (response.status !== 403) return false;
+    try {
+      const body = (await response.clone().json()) as { error?: { code?: string } };
+      return body.error?.code === COMPANY_SUSPENDED;
+    } catch {
+      return false;
+    }
   };
 
   return async function authFetch(request: Request): Promise<Response> {
@@ -56,10 +75,18 @@ export function createAuthFetch(deps: AuthFetchDeps) {
         deps.onExpired();
         return unauthenticated();
       }
+      if (outcome === "suspended") {
+        deps.onSuspended();
+        return unauthenticated();
+      }
       token = deps.token.get();
     }
 
     const response = await send(request, token);
+    if (await isSuspension(response)) {
+      deps.onSuspended();
+      return response;
+    }
     if (response.status !== 401) return response;
 
     // Une autre requête a déjà fait tourner le jeton pendant que celle-ci était en route :
@@ -71,6 +98,7 @@ export function createAuthFetch(deps: AuthFetchDeps) {
     const outcome = await deps.refresh();
     if (outcome === "ok") return send(retry, deps.token.get());
     if (outcome === "unauthenticated") deps.onExpired();
+    if (outcome === "suspended") deps.onSuspended();
     return response;
   };
 }
@@ -79,6 +107,7 @@ const authFetch = createAuthFetch({
   fetch: (request) => fetch(request),
   refresh: refreshSession,
   onExpired: expireSession,
+  onSuspended: suspendSession,
   token: tokenStore,
 });
 

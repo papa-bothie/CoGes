@@ -2130,6 +2130,137 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/platform/auth/login": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Login
+     * @description Connexion de l'équipe CoGes : e-mail et mot de passe, aucune entreprise.
+     */
+    post: operations["login_api_v1_platform_auth_login_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/auth/refresh": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Refresh
+     * @description Rotation du refresh token de l'administration.
+     */
+    post: operations["refresh_api_v1_platform_auth_refresh_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/auth/logout": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Logout */
+    post: operations["logout_api_v1_platform_auth_logout_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/auth/me": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Me */
+    get: operations["me_api_v1_platform_auth_me_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/companies": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Companies
+     * @description Entreprises clientes : nom, slug, statut, comptes, dernière activité. Aucun montant.
+     */
+    get: operations["list_companies_api_v1_platform_companies_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/companies/{company_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Company */
+    get: operations["get_company_api_v1_platform_companies__company_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/companies/{company_id}/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Set Company Status
+     * @description Suspendre ou réactiver (profil `administrator`). Audit critique, gérant prévenu.
+     */
+    patch: operations["set_company_status_api_v1_platform_companies__company_id__status_patch"];
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2448,6 +2579,45 @@ export interface components {
       parent_id?: string | null;
       color?: components["schemas"]["CategoryColor"] | null;
     };
+    /** CompanyDetail */
+    CompanyDetail: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Name */
+      name: string;
+      /** Slug */
+      slug: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "trial" | "active" | "suspended";
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** User Count */
+      user_count: number;
+      /** Last Activity At */
+      last_activity_at: string | null;
+      /** Users */
+      users: components["schemas"]["CompanyUser"][];
+    };
+    /** CompanyPage */
+    CompanyPage: {
+      /** Items */
+      items: components["schemas"]["CompanySummary"][];
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Total */
+      total: number;
+    };
     /**
      * CompanyRead
      * @description Vue publique de l'entreprise courante.
@@ -2494,6 +2664,48 @@ export interface components {
       updated_at: string;
     };
     /**
+     * CompanyStatusUpdate
+     * @description Suspendre ou réactiver. `trial` n'est jamais une cible ici (422).
+     */
+    CompanyStatusUpdate: {
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "active" | "suspended";
+      /** Reason */
+      reason: string;
+    };
+    /**
+     * CompanySummary
+     * @description Une ligne de la liste des entreprises.
+     */
+    CompanySummary: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Name */
+      name: string;
+      /** Slug */
+      slug: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "trial" | "active" | "suspended";
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** User Count */
+      user_count: number;
+      /** Last Activity At */
+      last_activity_at: string | null;
+    };
+    /**
      * CompanyUpdate
      * @description Paramètres modifiables. Chaque modification est auditée en transactionnel.
      */
@@ -2520,6 +2732,25 @@ export interface components {
       rc?: string | null;
       /** Receipt Footer */
       receipt_footer?: string | null;
+    };
+    /**
+     * CompanyUser
+     * @description Un compte de l'entreprise : qui, quels rôles, dernière connexion.
+     */
+    CompanyUser: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Full Name */
+      full_name: string;
+      /** Roles */
+      roles: string[];
+      /** Is Active */
+      is_active: boolean;
+      /** Last Login At */
+      last_login_at: string | null;
     };
     /**
      * ComponentHealth
@@ -4247,6 +4478,48 @@ export interface components {
       last_seen_at: string | null;
     };
     Phone: string;
+    /**
+     * PlatformLoginRequest
+     * @description Connexion de l'équipe : e-mail et mot de passe, aucune entreprise.
+     */
+    PlatformLoginRequest: {
+      /** Email */
+      email: string;
+      /** Password */
+      password: string;
+    };
+    /** PlatformMe */
+    PlatformMe: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Email */
+      email: string;
+      /** Display Name */
+      display_name: string;
+      /**
+       * Role
+       * @enum {string}
+       */
+      role: "administrator" | "support";
+    };
+    /**
+     * PlatformTokenResponse
+     * @description Le refresh token part en cookie `httpOnly`, jamais dans le corps.
+     */
+    PlatformTokenResponse: {
+      /** Access Token */
+      access_token: string;
+      /**
+       * Token Type
+       * @default bearer
+       */
+      token_type: string;
+      /** Expires In */
+      expires_in: number;
+    };
     PositiveAmount: components["schemas"]["Amount-Input"];
     /**
      * ProductCreate
@@ -9626,6 +9899,196 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["AuditLogPage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  login_api_v1_platform_auth_login_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PlatformLoginRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformTokenResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  refresh_api_v1_platform_auth_refresh_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformTokenResponse"];
+        };
+      };
+    };
+  };
+  logout_api_v1_platform_auth_logout_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  me_api_v1_platform_auth_me_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformMe"];
+        };
+      };
+    };
+  };
+  list_companies_api_v1_platform_companies_get: {
+    parameters: {
+      query?: {
+        page?: number;
+        page_size?: number;
+        search?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CompanyPage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_company_api_v1_platform_companies__company_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        company_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CompanyDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  set_company_status_api_v1_platform_companies__company_id__status_patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        company_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CompanyStatusUpdate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CompanyDetail"];
         };
       };
       /** @description Validation Error */
