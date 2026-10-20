@@ -212,6 +212,51 @@ Rien à restaurer : la base est chez Neon, Redis repart à vide, les artefacts M
 recalculent la nuit suivante (`celery -A app.workers.celery_app call ml_train.train_all`
 pour ne pas attendre).
 
+## Administration de la plateforme (ADR 0089)
+
+`admin.<domaine>` sert l'administration (application `admin`, comptes de l'équipe). Deux
+barrières : l'**adresse IP** (Caddy, 403 pour toute autre) puis le **compte** (API).
+
+**Ajouter ou changer une adresse autorisée** (peut attendre, sauf si l'équipe est
+bloquée dehors) :
+
+```bash
+curl -4 https://ifconfig.me             # depuis le poste à autoriser : son adresse publique
+sudo nano /etc/coges/coges.env          # COGES_ADMIN_ALLOWED_IPS="196.207.1.10 41.82.0.0/16"
+                                        # IP ou CIDR, séparées par des espaces ; jamais 0.0.0.0/0
+sudo -u deploy /opt/coges/deploy.sh production status    # note la version actuelle
+sudo -u deploy /opt/coges/deploy.sh production vX.Y.Z    # la même version : contrôle puis relance
+```
+
+Redéployer la version en place relance le contrôle (`check_runtime_env.py` refuse une liste
+vide, illisible ou ouverte à tous) et recrée Caddy avec la nouvelle liste. Vérifier depuis
+le poste autorisé que `https://admin.<domaine>/login` répond, et depuis un autre (données
+mobiles) qu'il reçoit 403. Une adresse de connexion mobile change souvent : préférer l'adresse fixe du bureau, ou le
+bloc de l'opérateur en CIDR en connaissance de cause.
+
+**Créer un compte de l'équipe** (jamais par une route publique) :
+
+```bash
+dc exec api python -m app.cli create-platform-user \
+  --email prenom@equipe.example --name "Prénom Nom" --role administrator   # ou support
+```
+
+Le mot de passe est demandé deux fois (12 caractères au moins) et ne s'affiche pas.
+`support` lit les entreprises ; seul `administrator` suspend ou réactive.
+
+**Désactiver un compte de l'équipe** (immédiat si soupçon de vol) : ses sessions tombent
+aussitôt (trigger), il ne se reconnecte plus.
+
+```bash
+dc exec api python -m app.cli deactivate-platform-user --email prenom@equipe.example
+```
+
+**Une entreprise suspendue par erreur** : la réactiver depuis l'administration (fiche de
+l'entreprise, « Réactiver ») ; ses comptes se reconnectent aussitôt, les sessions encore
+valides reprennent à la requête suivante.
+
+---
+
 ## Routine mensuelle (environ 1 h)
 
 - [ ] `/opt/coges/check.sh` : tout vert ? Noter disque, mémoire, swap.
