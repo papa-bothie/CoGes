@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+/*
+ * Habillage neutre de l'administration (ADR 0089) : volontairement distinct de l'app
+ * commerçante (ni son logo, ni ses couleurs de rubrique). Jetons sur :root, redéfinis
+ * en sombre.
+ */
+:root {
+  --fond: #f6f7f9;
+  --surface: #ffffff;
+  --encre: #1c2430;
+  --encre-douce: #556070;
+  --trait: #d9dee5;
+  --accent: #2f4b7c;
+  --accent-encre: #ffffff;
+  --danger: #a3261b;
+  --danger-teinte: #fbe9e7;
+  --succes: #1d6b3a;
+  --succes-teinte: #e5f4ea;
+  --attention: #7a5200;
+  --attention-teinte: #fdf3dc;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fond: #11161d;
+    --surface: #19202a;
+    --encre: #e7ebf0;
+    --encre-douce: #a3adba;
+    --trait: #2c3542;
+    --accent: #8fb0e8;
+    --accent-encre: #0e1520;
+    --danger: #ff9b8f;
+    --danger-teinte: #3a1c19;
+    --succes: #8fd8a7;
+    --succes-teinte: #16301f;
+    --attention: #f1c86a;
+    --attention-teinte: #33290f;
+  }
+}
+
+@theme inline {
+  --color-fond: var(--fond);
+  --color-surface: var(--surface);
+  --color-encre: var(--encre);
+  --color-encre-douce: var(--encre-douce);
+  --color-trait: var(--trait);
+  --color-accent: var(--accent);
+  --color-accent-encre: var(--accent-encre);
+  --color-danger: var(--danger);
+  --color-danger-teinte: var(--danger-teinte);
+  --color-succes: var(--succes);
+  --color-succes-teinte: var(--succes-teinte);
+  --color-attention: var(--attention);
+  --color-attention-teinte: var(--attention-teinte);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  background: var(--fond);
+  color: var(--encre);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}

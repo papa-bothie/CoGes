@@ -1,0 +1,16 @@
+/node_modules
+/coverage
+/.next/
+/.next-e2e/
+/out/
+/build
+.DS_Store
+*.pem
+npm-debug.log*
+.pnpm-debug.log*
+.env*
+!.env.example
+*.tsbuildinfo
+next-env.d.ts
+/playwright-report
+/test-results

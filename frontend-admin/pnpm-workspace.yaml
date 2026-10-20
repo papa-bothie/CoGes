@@ -1,0 +1,9 @@
+allowBuilds:
+  sharp: false
+  unrs-resolver: false
+# Même exception que frontend/ (ADR 0080) : à retirer quand postcss demandera lui-même
+# source-map-js >= 1.2.2.
+overrides:
+  source-map-js: ">=1.2.2"
+  # Une seule version de Playwright, celle de frontend/ : mêmes navigateurs installés.
+  playwright-core: "1.63.0"
