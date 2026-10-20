@@ -84,6 +84,9 @@ class World:
             "/api/v1/products",
             {"sku": f"C1-{m}", "name": f"Article C1 {m}", "unit_price": "1000.00"},
         )
+        if stock == "0":
+            # Un article qui a du stock ne se supprime pas (CG004, ADR 0088).
+            return str(product["id"])
         self.post(
             "/api/v1/inventory/movements",
             {
@@ -444,7 +447,7 @@ REGISTRY: dict[tuple[str, str], Critical | Exempt] = {
         )
     ),
     ("DELETE", "/api/v1/products/{product_id}"): Critical(
-        lambda w: Call("DELETE", f"/api/v1/products/{w.product(stock='1')}")
+        lambda w: Call("DELETE", f"/api/v1/products/{w.product(stock='0')}")
     ),
     ("POST", "/api/v1/products/{product_id}/prices"): Critical(
         lambda w: Call("POST", f"/api/v1/products/{w.product()}/prices", {"unit_price": "1100.00"})

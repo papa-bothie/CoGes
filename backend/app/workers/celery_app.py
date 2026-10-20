@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import Any
+from typing import Any, cast
 
+import sentry_sdk
 from celery import Celery, Task
 from celery.signals import (
     beat_embedded_init,
@@ -29,6 +30,7 @@ from celery.signals import (
     worker_ready,
 )
 
+from app.core import cache
 from app.core.config import get_settings
 from app.core.heartbeat import Heartbeat
 from app.core.logging import configure_logging
@@ -41,8 +43,47 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+#: Livraisons interrompues tolérées pour une même tâche (ADR 0088). Avec `acks_late` et
+#: `reject_on_worker_lost`, une tâche qui fait tomber le worker est rendue à la file et
+#: le refait tomber : au-delà, elle est écartée et signalée au lieu de boucler.
+MAX_DELIVERIES = 3
+#: Durée de vie du compteur : bien plus que `task_time_limit`, bien moins qu'éternel.
+DELIVERY_COUNTER_TTL_SECONDS = 24 * 3600
+
+
+def delivery_key(task_id: str) -> str:
+    return f"coges:celery:deliveries:{task_id}"
+
+
+def _begin_delivery(task_id: str | None) -> bool:
+    """Compte une livraison ; `False` si la tâche a déjà fait tomber `MAX_DELIVERIES`
+    workers. Redis absent : on exécute — le plafond protège, il ne bloque pas."""
+    client = cache.get_client()
+    if client is None or not task_id:
+        return True
+    try:
+        key = delivery_key(task_id)
+        started = int(cast(int, client.incr(key)))
+        client.expire(key, DELIVERY_COUNTER_TTL_SECONDS)
+    except Exception:
+        return True
+    return started <= MAX_DELIVERIES
+
+
+def _end_delivery(task_id: str | None) -> None:
+    """Fin de l'exécution, réussie, en échec ou relancée par `retry` : rien d'interrompu."""
+    client = cache.get_client()
+    if client is None or not task_id:
+        return
+    try:
+        client.delete(delivery_key(task_id))
+    except Exception:  # pragma: no cover - dépend de Redis
+        logger.debug("Compteur de livraisons non effacé", exc_info=True)
+
+
 class CogesTask(Task):  # type: ignore[misc]
-    """Tâche qui se nomme et nomme son entreprise auprès de Sentry (ADR 0077).
+    """Tâche qui se nomme et nomme son entreprise auprès de Sentry (ADR 0077), et qui
+    ne boucle pas sur un worker qu'elle fait tomber (ADR 0088).
 
     L'intégration Celery de Sentry ouvre une portée par tâche autour de `__call__` :
     les étiquettes posées ici ne valent que pour cette exécution.
@@ -55,7 +96,20 @@ class CogesTask(Task):  # type: ignore[misc]
             tag_job(self.name, company_id_of(inspect.signature(self.run), args, kwargs))
         except Exception:  # pragma: no cover - une étiquette ne fait jamais échouer une tâche
             logger.debug("Étiquettes Sentry non posées", exc_info=True)
-        return super().__call__(*args, **kwargs)
+        task_id = getattr(self.request, "id", None)
+        if not _begin_delivery(task_id):
+            logger.error(
+                "Tâche écartée : elle a interrompu trop de workers",
+                extra={"task": self.name, "task_id": task_id, "deliveries": MAX_DELIVERIES},
+            )
+            sentry_sdk.capture_message(
+                f"tâche écartée après {MAX_DELIVERIES} livraisons : {self.name}"
+            )
+            return None
+        try:
+            return super().__call__(*args, **kwargs)
+        finally:
+            _end_delivery(task_id)
 
 
 celery_app = Celery(

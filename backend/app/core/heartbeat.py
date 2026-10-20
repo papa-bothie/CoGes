@@ -51,9 +51,8 @@ BEAT_TICK_TTL_SECONDS = 2 * 24 * 3600
 def redis_client() -> redis.Redis:
     """Client Redis neuf, sans cache : la surveillance doit voir une panne de Redis.
 
-    `app.core.cache.get_client` mémorise un `None` au premier échec et ne réessaie
-    jamais ; un battement qui ferait de même resterait muet après un redémarrage de
-    Redis.
+    `app.core.cache.get_client` garde un échec quelques secondes avant de réessayer
+    (ADR 0088) ; la surveillance, elle, veut l'état de Redis à l'instant même.
     """
     return redis.Redis.from_url(
         get_settings().redis_url,

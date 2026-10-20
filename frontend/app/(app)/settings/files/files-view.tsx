@@ -70,16 +70,20 @@ function SalesCard() {
   const { timeZone } = useCompanyLocale();
   const queryClient = useQueryClient();
   const [period, setPeriod] = useState<SalesPeriod>("month");
+  // Une demande rejouée (double clic, réseau coupé) rend le même export (ADR 0088).
+  const idempotency = useIdempotencyKey();
   const request = useMutation({
     mutationFn: () => {
       const { from, to } = salesPeriod(period, todayIn(timeZone));
       return unwrap(
         api.POST("/api/v1/exports/sales", {
           body: { date_from: from, date_to: to, format: "xlsx" },
+          headers: idempotency.headers,
         }),
       );
     },
     onSuccess: () => {
+      idempotency.renew();
       toast.success(t.prepared);
       void queryClient.invalidateQueries({ queryKey: queryKeys.exports });
     },

@@ -127,6 +127,9 @@ def create_app_engine(
             echo=settings.db_echo if echo is None else echo,
             poolclass=NullPool,
             connect_args={"prepare_threshold": None},
+            # Aucune valeur liée dans les messages d'erreur, donc ni dans les journaux
+            # ni dans Sentry (ADR 0088).
+            hide_parameters=True,
             future=True,
         )
     else:
@@ -138,6 +141,7 @@ def create_app_engine(
             pool_timeout=settings.db_pool_timeout_seconds,
             pool_recycle=settings.db_pool_recycle_seconds,
             pool_pre_ping=True,
+            hide_parameters=True,
             future=True,
         )
     _install_pool_reset(engine)

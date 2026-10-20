@@ -11,10 +11,17 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DBAPIError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import get_settings
-from app.core.errors import CogesError, ValidationFailedError
+from app.core.errors import (
+    RETRYABLE_SQLSTATES,
+    CogesError,
+    ConcurrentUpdateError,
+    ValidationFailedError,
+    sqlstate,
+)
 from app.core.http_security import (
     BodySizeLimitMiddleware,
     IpRateLimitMiddleware,
@@ -160,6 +167,19 @@ def handle_coges_error(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, CogesError)  # noqa: S101 - garanti par le dispatch FastAPI
     payload: dict[str, Any] = exc.to_payload()
     return JSONResponse(status_code=exc.status_code, content=payload, headers=exc.headers)
+
+
+@app.exception_handler(DBAPIError)
+def handle_database_error(request: Request, exc: Exception) -> JSONResponse:
+    """Interblocage ou échec de sérialisation : 409 « Réessayez » (ADR 0088).
+
+    Tout autre refus de la base non traduit par un service reste une 500, au format
+    stable de l'ADR 0085.
+    """
+    if sqlstate(exc) in RETRYABLE_SQLSTATES:
+        error = ConcurrentUpdateError()
+        return JSONResponse(status_code=error.status_code, content=error.to_payload())
+    raise exc
 
 
 @app.exception_handler(RequestValidationError)

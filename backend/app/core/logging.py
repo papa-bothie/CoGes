@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from contextvars import ContextVar
 from typing import Any
 
@@ -22,6 +23,22 @@ _RESERVED = frozenset(vars(logging.LogRecord("", 0, "", 0, "", None, None)).keys
 }
 
 
+#: Ce qu'un message d'erreur ne doit jamais emporter (ADR 0088) : le détail d'une
+#: violation d'unicité (« Key (email)=(awa@…) »), une adresse e-mail, un hachage Argon2.
+_SCRUBBERS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"(Key \([^)]*\)=)\([^\n]*?\)( already exists| is not present|\.|$)"), r"\1(…)\2"),
+    (re.compile(r"\$argon2[a-z]*\$[^\s'\",)]+"), "[hachage masqué]"),
+    (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[e-mail masqué]"),
+)
+
+
+def scrub_text(value: str) -> str:
+    """Le même texte, sans valeur personnelle ni secret reconnaissable."""
+    for pattern, replacement in _SCRUBBERS:
+        value = pattern.sub(replacement, value)
+    return value
+
+
 class JsonFormatter(logging.Formatter):
     """Formate un enregistrement en une ligne JSON."""
 
@@ -30,7 +47,7 @@ class JsonFormatter(logging.Formatter):
             "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
             "level": record.levelname,
             "logger": record.name,
-            "message": record.getMessage(),
+            "message": scrub_text(record.getMessage()),
         }
 
         request_id = request_id_var.get()
@@ -45,7 +62,7 @@ class JsonFormatter(logging.Formatter):
                 payload[key] = value
 
         if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
+            payload["exception"] = scrub_text(self.formatException(record.exc_info))
 
         return json.dumps(payload, ensure_ascii=False, default=str)
 

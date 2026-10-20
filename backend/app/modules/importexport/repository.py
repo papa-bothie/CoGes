@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 
 from app.core.repository import TenantRepository
 from app.modules.importexport.models import ExportFile
@@ -14,6 +14,18 @@ from app.modules.importexport.models import ExportFile
 
 class ExportFileRepository(TenantRepository[ExportFile]):
     model = ExportFile
+
+    def pending_count(self, *, kind: str) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(ExportFile)
+            .where(
+                ExportFile.company_id == self.ctx.company_id,
+                ExportFile.kind == kind,
+                ExportFile.status == "pending",
+            )
+        )
+        return int(self.session.execute(stmt).scalar_one())
 
     def get_for_update(self, export_id: UUID) -> ExportFile | None:
         """Export du tenant, verrouillé : un seul worker le produit."""

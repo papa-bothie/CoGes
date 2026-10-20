@@ -170,7 +170,7 @@
           "auth"
         ],
         "summary": "Change Password",
-        "description": "Le titulaire remplace son mot de passe ; l'obligation de le changer tombe.\n\nOuvert à un compte qui doit changer son mot de passe provisoire (ADR 0074) :\nc'est la seule écriture qu'il puisse faire.",
+        "description": "Le titulaire remplace son mot de passe ; l'obligation de le changer tombe.\n\nOuvert à un compte qui doit changer son mot de passe provisoire (ADR 0074) :\nc'est la seule écriture qu'il puisse faire. Toutes ses autres sessions tombent ;\nce navigateur reçoit un jeton de rafraîchissement neuf (ADR 0088).",
         "operationId": "change_password_api_v1_auth_password_post",
         "requestBody": {
           "content": {
@@ -6421,7 +6421,7 @@
           "exports"
         ],
         "summary": "Request Sales Export",
-        "description": "Demande l'export des ventes d'une période ; le fichier est produit par le worker.",
+        "description": "Demande l'export des ventes d'une période ; le fichier est produit par le worker.\n\n`Idempotency-Key` exigée (ADR 0088) : une demande rejouée rend le même export, sans\nen enfiler un second. Au plus trois exports en préparation par entreprise.",
         "operationId": "request_sales_export_api_v1_exports_sales_post",
         "requestBody": {
           "content": {

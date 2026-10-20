@@ -89,11 +89,14 @@ def me(tenant: CurrentTenant) -> MeResponse:
 
 
 @router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
-def change_password(payload: PasswordUpdate, request: Request, tenant: CurrentTenant) -> None:
+def change_password(
+    payload: PasswordUpdate, request: Request, response: Response, tenant: CurrentTenant
+) -> None:
     """Le titulaire remplace son mot de passe ; l'obligation de le changer tombe.
 
     Ouvert à un compte qui doit changer son mot de passe provisoire (ADR 0074) :
-    c'est la seule écriture qu'il puisse faire.
+    c'est la seule écriture qu'il puisse faire. Toutes ses autres sessions tombent ;
+    ce navigateur reçoit un jeton de rafraîchissement neuf (ADR 0088).
     """
     users_service.change_own_password(
         tenant.session,
@@ -102,3 +105,10 @@ def change_password(payload: PasswordUpdate, request: Request, tenant: CurrentTe
         new_password=payload.new_password,
         ip_address=client_ip(request),
     )
+    raw_token = service.reopen_session(
+        tenant.session,
+        tenant.ctx,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=client_ip(request),
+    )
+    _set_refresh_cookie(response, raw_token)

@@ -14,7 +14,10 @@ chaque mouvement.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from typing import Annotated
 from zoneinfo import ZoneInfo
+
+from pydantic import AfterValidator
 
 from app.core.config import get_settings
 
@@ -38,3 +41,17 @@ def today_in(timezone: str) -> date:
 def today_utc() -> date:
     """La date du jour en UTC (bornes historiquement prises en UTC, ex. retards)."""
     return now().date()
+
+
+def _require_time_zone(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(
+            "La date doit porter un fuseau horaire (par exemple 2026-10-18T10:00:00+00:00)."
+        )
+    return value
+
+
+#: Date saisie par un client, fuseau obligatoire (ADR 0088). Sans lui, la comparaison
+#: avec « maintenant » levait `TypeError`, donc une 500 ; avec lui, un 422 qui nomme
+#: le champ, comme pour les mouvements de stock (ADR 0015).
+ZonedDatetime = Annotated[datetime, AfterValidator(_require_time_zone)]

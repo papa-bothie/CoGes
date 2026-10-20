@@ -46,11 +46,21 @@ UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
 #: Clés globales permises, et pourquoi elles ne portent aucune entreprise.
 GLOBAL_KEYS: dict[str, str] = {
-    r"^coges:rl:ip:[^:]+:\d+$": "plafond par adresse IP (ADR 0042), sans entreprise",
-    r"^coges:rl:login:[^:]+:\d+$": "plafond de connexion par IP, avant toute entreprise",
-    r"^coges:rl:acct:[0-9a-f]{64}$": "freinage par compte : sha256(slug|identifiant), ADR 0078",
+    r"^coges:rl:ip:([^:]+|[0-9A-Fa-f:]+/64):\d+$": (
+        "plafond par adresse IP (ADR 0042), /64 en IPv6 (ADR 0088), sans entreprise"
+    ),
+    r"^coges:rl:login:([^:]+|[0-9A-Fa-f:]+/64):\d+$": (
+        "plafond de connexion par IP, avant toute entreprise"
+    ),
+    r"^coges:rl:acct:[0-9a-f]{64}(:p|:u)?$": (
+        "freinage par compte : sha256(slug|compte ou identifiant), échecs, essais en cours "
+        "(:p) et fin d'attente (:u), ADR 0078 et 0088"
+    ),
     r"^coges:heartbeat:(worker|beat|relay):[^:]+$": "battement d'un processus (ADR 0077)",
     r"^coges:ops:beat_tick$": "dernier tic de beat (ADR 0077)",
+    r"^coges:celery:deliveries:[0-9a-f-]{32,36}$": (
+        "livraisons interrompues d'une tâche Celery, par identifiant de tâche (ADR 0088)"
+    ),
 }
 
 

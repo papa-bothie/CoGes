@@ -4,12 +4,15 @@ Lit sur l'entrée standard la liste des fichiers du stockage (`rclone lsf`), éc
 sortie standard ceux à supprimer. Utilisé par .github/workflows/backup-purge.yml, avec un
 compte de stockage DISTINCT de celui qui écrit.
 
-Règle, à la date du jour (UTC) :
+Règle, à la date du jour (UTC), sur les seuls `.dump.age` (ADR 0084, 0088) :
   • les 7 derniers jours : tout est gardé, toujours ;
-  • 4 semaines : la sauvegarde du dimanche (la dernière du jour) ;
-  • 12 mois : celle du 1er du mois (la dernière du jour) ;
-  • le reste, et l'empreinte `.sha256` qui l'accompagne, est supprimé.
-Un nom qui ne suit pas `coges-AAAA-MM-JJ-HHMM.dump.age[.sha256]` n'est jamais touché.
+  • les 7 sauvegardes les plus récentes : gardées, même si elles sont anciennes ;
+  • 4 semaines : le premier jour sauvegardé de chaque semaine (sa dernière sauvegarde) ;
+  • 12 mois : le premier jour sauvegardé de chaque mois (sa dernière sauvegarde) ;
+  • le reste, avec son empreinte `.sha256`, son manifeste et son marqueur `.suspect`,
+    est supprimé ; un compagnon orphelin n'est jamais touché.
+Un nom qui ne suit pas `coges-AAAA-MM-JJ-HHMM.dump.age[.sha256|.manifest.json|.suspect]`
+n'est jamais touché.
 
 Usage : rclone lsf coges:… | python3 deploy/scripts/backup_retention.py [--today AAAA-MM-JJ]
 """
@@ -22,38 +25,67 @@ import sys
 from collections.abc import Iterable
 from datetime import UTC, date, datetime
 
-NAME = re.compile(r"^coges-(\d{4})-(\d{2})-(\d{2})-(\d{4})\.dump\.age(\.sha256)?$")
+NAME = re.compile(
+    r"^coges-(\d{4})-(\d{2})-(\d{2})-(\d{4})\.dump\.age(\.sha256|\.manifest\.json|\.suspect)?$"
+)
+#: Ce qui accompagne un dump et part avec lui (ADR 0084, 0088).
+COMPANIONS = (".sha256", ".manifest.json", ".suspect")
 KEEP_ALL_DAYS = 7
 WEEKLY_DAYS = 28
 MONTHLY_DAYS = 366
 
 
 def to_delete(names: Iterable[str], today: date) -> list[str]:
-    dated: dict[str, tuple[date, str]] = {}
-    for name in names:
-        match = NAME.match(name.strip())
-        if match is None:
+    """Fichiers à supprimer : chaque dump écarté, et l'empreinte qui l'accompagne.
+
+    Seuls les `.dump.age` décident (ADR 0088) : une empreinte orpheline ne représente
+    aucun jour et n'est jamais touchée.
+    """
+    present = {name.strip() for name in names}
+    dumps: dict[str, tuple[date, str]] = {}
+    for name in present:
+        match = NAME.match(name)
+        if match is None or match.group(5):
             continue
         year, month, day, hhmm, _ = match.groups()
-        dated[name.strip()] = (date(int(year), int(month), int(day)), hhmm)
+        dumps[name] = (date(int(year), int(month), int(day)), hhmm)
 
     # La dernière sauvegarde de chaque jour représente ce jour.
     last_of_day: dict[date, str] = {}
-    for _, (day, hhmm) in dated.items():
+    for day, hhmm in dumps.values():
         if day not in last_of_day or hhmm > last_of_day[day]:
             last_of_day[day] = hhmm
+    days = sorted(last_of_day)
+    # Le premier jour sauvegardé de chaque semaine et de chaque mois, et non le dimanche
+    # ou le 1er exacts : une semaine sans dimanche garde quand même sa sauvegarde.
+    first_of_week: dict[tuple[int, int], date] = {}
+    first_of_month: dict[tuple[int, int], date] = {}
+    for day in days:
+        first_of_week.setdefault((day.isocalendar().year, day.isocalendar().week), day)
+        first_of_month.setdefault((day.year, day.month), day)
+    weekly = set(first_of_week.values())
+    monthly = set(first_of_month.values())
+    # Plancher : les KEEP_ALL_DAYS sauvegardes les plus récentes restent, même quand
+    # la chaîne s'est arrêtée depuis des semaines.
+    newest = set(sorted(dumps, key=lambda name: dumps[name], reverse=True)[:KEEP_ALL_DAYS])
 
-    def keep(day: date, hhmm: str) -> bool:
+    def keep(name: str) -> bool:
+        day, hhmm = dumps[name]
         age = (today - day).days
-        if age < KEEP_ALL_DAYS:
+        if age < KEEP_ALL_DAYS or name in newest:
             return True
         if hhmm != last_of_day[day]:
             return False
-        if day.weekday() == 6 and age < WEEKLY_DAYS:
+        if day in weekly and age < WEEKLY_DAYS:
             return True
-        return day.day == 1 and age < MONTHLY_DAYS
+        return day in monthly and age < MONTHLY_DAYS
 
-    return sorted(name for name, (day, hhmm) in dated.items() if not keep(day, hhmm))
+    doomed: list[str] = []
+    for name in dumps:
+        if not keep(name):
+            doomed.append(name)
+            doomed += [name + suffix for suffix in COMPANIONS if name + suffix in present]
+    return sorted(doomed)
 
 
 def main(argv: list[str] | None = None) -> int:

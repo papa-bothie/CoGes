@@ -651,6 +651,11 @@ def confirm_sale(
 
     sale.status = "confirmed"
     sale.confirmed_at = datetime.now(UTC)
+    # Une vente sans date saisie est vendue quand elle est confirmée (ADR 0088) : le
+    # brouillon de la veille ne range pas son chiffre d'affaires sur la veille, ni sur
+    # un mois clos. `sold_at = created_at` : personne n'a touché à la date.
+    if sale.sold_at == sale.created_at:
+        sale.sold_at = sale.confirmed_at
     _flush(session, sale, details={"sale_id": str(sale.id)})
 
     # 7. Volet financier : ce qui est encaissé, puis ce qui reste dû.
@@ -1147,7 +1152,7 @@ def create_return(
         )
     returned_items = [items[item_id] for item_id in items if item_id in requested]
     summaries = products_service.get_summaries(
-        session, ctx, [item.product_id for item in returned_items]
+        session, ctx, [item.product_id for item in returned_items], include_deleted=True
     )
 
     # 4. En-tête. `total_refund`, `refunded_total` et `refund_status` ne sont pas
@@ -1270,8 +1275,13 @@ def refund_return(
     """
     # 1. Retour verrouillé, reste dû calculé sous ce verrou. Sans lui, deux
     #    remboursements concurrents liraient le même `refunded_total` et
-    #    concluraient tous deux qu'il reste de quoi payer.
+    #    concluraient tous deux qu'il reste de quoi payer. La dette de la vente se
+    #    verrouille **avant** : c'est l'ordre de l'annulation d'un paiement, dont le
+    #    trigger `refund_rollup` atteint le retour après la dette (ADR 0088).
     repository = SaleReturnRepository(session, ctx)
+    unlocked = repository.get(return_id)
+    if unlocked is not None:
+        finance_service.lock_sale_debt(session, ctx, unlocked.sale_id)
     sale_return = repository.get_for_update(return_id)
     if sale_return is None:
         raise NotFoundError("Retour introuvable.")

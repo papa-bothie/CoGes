@@ -192,10 +192,15 @@ def raw_client_ip(forwarded_for: str | None, client: object | None) -> str | Non
     compteur de limitation de débit. On garde l'entrée **la plus à droite**, celle
     qu'écrit notre propre proxy (ADR 0083) : les précédentes viennent du client, qui
     peut envoyer son propre `X-Forwarded-For` pour se faire passer pour un autre.
+    Entrée vide ou qui n'est pas une adresse (« 1.2.3.4, ») : le pair TCP, sans quoi
+    une virgule finale suffisait à sauter la limite par IP (ADR 0088).
     """
+    peer = getattr(client, "host", None)
     if forwarded_for and get_settings().trust_proxy_headers:
-        return forwarded_for.rsplit(",", 1)[-1].strip()
-    return getattr(client, "host", None)
+        last_hop = forwarded_for.rsplit(",", 1)[-1].strip()
+        if parse_ip(last_hop) is not None:
+            return last_hop
+    return peer
 
 
 def parse_ip(value: str | None) -> str | None:

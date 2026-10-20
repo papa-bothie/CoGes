@@ -15,6 +15,8 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.engine import Engine
+from sqlalchemy.sql import text
 
 from tests.conftest import (
     DemoCompany,
@@ -140,17 +142,37 @@ def test_the_last_active_manager_cannot_be_removed(
 
 
 def test_the_last_manager_cannot_be_deactivated_by_another_user(
-    api_client: TestClient, company: DemoCompany
+    api_client: TestClient, company: DemoCompany, owner_engine: Engine
 ) -> None:
-    """Un compte doté de `users:update` sans être gérant ne peut pas désarmer le dernier."""
+    """Un compte doté de `users:update` sans être gérant ne peut pas désarmer le dernier.
+
+    Le rôle est posé en base : l'API refuse désormais `users:*` sur un rôle sur mesure
+    (ADR 0088), mais la garde du dernier gérant doit tenir même si un tel rôle existe.
+    """
     token = login_token(api_client, company)
     name = f"rh-{uuid4().hex[:6]}"
-    created = api_client.post(
-        "/api/v1/roles",
-        headers=auth_headers(token),
-        json={"name": name, "permissions": ["users:read", "users:update", "users:delete"]},
-    )
-    assert created.status_code == 201, created.text
+    with owner_engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.company_id', :c, true)"), {"c": str(company.company_id)}
+        )
+        role_id = connection.execute(
+            text(
+                "INSERT INTO roles (company_id, name, is_system) "
+                "VALUES (:company_id, :name, false) RETURNING id"
+            ),
+            {"company_id": company.company_id, "name": name},
+        ).scalar_one()
+        connection.execute(
+            text(
+                "INSERT INTO role_permissions (company_id, role_id, permission_id) "
+                "SELECT :company_id, :role_id, id FROM permissions WHERE code = ANY(:codes)"
+            ),
+            {
+                "company_id": company.company_id,
+                "role_id": role_id,
+                "codes": ["users:read", "users:update", "users:delete"],
+            },
+        )
     hr = create_user_with_role(
         api_client, token, company, role=name, email=f"{name}@{company.slug}.example.com"
     )

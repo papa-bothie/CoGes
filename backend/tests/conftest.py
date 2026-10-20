@@ -52,8 +52,12 @@ def _no_task_broker(monkeypatch: MonkeyPatch) -> None:
     Les tests qui veulent voir l'enfilement installent leur propre substitut.
     """
     from app.core import queue
+    from app.modules.importexport import service as importexport_service
 
     monkeypatch.setattr(queue, "enqueue", lambda *args, **kwargs: True)
+    # Sans worker, chaque export demandé reste en attente : le plafond par entreprise
+    # (ADR 0088) bloquerait les suites qui en demandent plusieurs. Son test le remet.
+    monkeypatch.setattr(importexport_service, "MAX_PENDING_EXPORTS", 10_000)
 
 
 @pytest.fixture

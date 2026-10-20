@@ -29,6 +29,8 @@ from sqlalchemy.orm import InstrumentedAttribute
 #: similarité : la recherche est alors ignorée plutôt que de renvoyer la table.
 MIN_SEARCH_LENGTH = 2
 
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+
 #: `LIKE` interprète `%`, `_` et `\` : ils sont neutralisés avant l'interpolation.
 _LIKE_ESCAPE = "\\"
 
@@ -37,7 +39,9 @@ def normalise_term(raw: str | None) -> str | None:
     """Terme exploitable, ou `None` si la recherche doit être ignorée."""
     if raw is None:
         return None
-    term = raw.strip()
+    # Caractères de contrôle et NUL retirés : PostgreSQL refuse NUL dans un texte, et
+    # `?search=%00` donnait une 500 (ADR 0088).
+    term = _CONTROL.sub("", raw).strip()
     return term if len(term) >= MIN_SEARCH_LENGTH else None
 
 

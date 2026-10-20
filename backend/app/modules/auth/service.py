@@ -117,6 +117,30 @@ def _issue_session(
     return auth_session, raw_token
 
 
+def reopen_session(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    user_agent: str | None = None,
+    ip_address: str | None = None,
+) -> str:
+    """Ouvre une famille neuve pour la personne du contexte et rend son jeton en clair.
+
+    Après un changement de mot de passe par la personne elle-même, toutes ses sessions
+    viennent de tomber (`users_revoke_sessions`, ADR 0088) : celle du navigateur qui a
+    fait le geste repart sur un jeton neuf, les autres — un jeton volé — restent mortes.
+    """
+    _, raw_token = _issue_session(
+        ctx,
+        AuthSessionRepository(session, ctx),
+        user_id=ctx.user_id,
+        family_id=uuid4(),
+        user_agent=user_agent,
+        ip_address=ip_address,
+    )
+    return raw_token
+
+
 def login(
     payload: LoginRequest, *, user_agent: str | None = None, ip_address: str | None = None
 ) -> IssuedTokens:
@@ -128,30 +152,37 @@ def login(
     """
     raw = payload.login_identifier
     key = raw.lower() if "@" in raw else normalise_phone(raw)
-    # Le compteur suit ce qui a été tapé, ramené à la même forme que la recherche.
-    throttle_id = key or raw.strip().lower()
-    rate_limit.check_account(payload.company_slug, throttle_id)
 
     identity = None
     if key:
         with auth_lookup_transaction() as lookup_session:
             identity = lookup_identity(lookup_session, slug=payload.company_slug, email=key)
 
+    # Le compteur suit le compte quand l'identifiant en désigne un — e-mail et téléphone
+    # partagent alors le même —, sinon ce qui a été tapé (ADR 0088). L'essai est réservé
+    # avant Argon2 : pendant l'attente, aucun hachage n'est offert à l'attaquant.
+    attempt = rate_limit.begin_attempt(
+        payload.company_slug,
+        user_id=identity.user_id if identity else None,
+        typed=key or raw.strip().lower(),
+    )
+
     password_hash = identity.password_hash if identity else _DECOY_HASH
     password_matches = verify_password(payload.password, password_hash)
 
     if identity is None or not password_matches or not identity.is_active:
-        failure = rate_limit.record_account_failure(payload.company_slug, throttle_id)
+        failure = rate_limit.record_failure(attempt)
         if identity is not None and failure.failures >= get_settings().login_throttle_alert_after:
             _alert_repeated_failures(identity, failure.failures)
         raise AuthenticationRequiredError(_INVALID_CREDENTIALS)
 
     if _temporary_password_expired(identity):
         # Ni échec ni succès pour le freinage : le mot de passe tapé était le bon.
+        rate_limit.cancel_attempt(attempt)
         _audit_expired_temporary_password(identity, ip_address)
         raise TemporaryPasswordExpiredError()
 
-    rate_limit.reset_account(payload.company_slug, throttle_id)
+    rate_limit.reset_account(attempt)
 
     ctx = TenantContext(user_id=identity.user_id, company_id=identity.company_id)
     with tenant_transaction(ctx) as session:

@@ -147,17 +147,35 @@ def scan_python() -> bool:
         requirements = Path(tmp) / "requirements.txt"
         exported = subprocess.run(  # noqa: S603, S607
             [
-                "uv", "export", "--directory", str(ROOT / "backend"), "--frozen", "--no-dev",
-                "--group", "ml", "--no-hashes", "--no-emit-project", "--quiet",
-                "--output-file", str(requirements),
+                "uv",
+                "export",
+                "--directory",
+                str(ROOT / "backend"),
+                "--frozen",
+                "--no-dev",
+                "--group",
+                "ml",
+                "--no-hashes",
+                "--no-emit-project",
+                "--quiet",
+                "--output-file",
+                str(requirements),
             ],
             check=False,
         )
         if exported.returncode != 0:
             return False
         command = [
-            "uvx", "--from", f"pip-audit=={PIP_AUDIT_VERSION}", "pip-audit",
-            "-r", str(requirements), "--no-deps", "--disable-pip", "--progress-spinner", "off",
+            "uvx",
+            "--from",
+            f"pip-audit=={PIP_AUDIT_VERSION}",
+            "pip-audit",
+            "-r",
+            str(requirements),
+            "--no-deps",
+            "--disable-pip",
+            "--progress-spinner",
+            "off",
         ]
         for vuln_id in sorted(excused):
             command += ["--ignore-vuln", vuln_id]

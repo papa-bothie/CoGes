@@ -88,6 +88,15 @@ env_value() {
   sed -n "s/^$1=//p" "$ENV_FILE" | tail -n 1
 }
 
+# La pile démarrée est celle de la ligne de commande, jamais celle d'un fichier copié :
+# une préproduction prise du modèle de production prendrait ses alias réseau sur
+# `coges_edge` (ADR 0088). Exportée, elle prime sur le fichier de secrets dans compose.
+declared_stack=$(env_value COGES_STACK)
+if [[ -n "$declared_stack" && "$declared_stack" != "$STACK" ]]; then
+  die "COGES_STACK vaut « $declared_stack » dans $ENV_FILE pour la pile « $STACK »"
+fi
+export COGES_STACK="$STACK"
+
 DOMAIN=$(env_value COGES_DOMAIN)
 [[ -n "$DOMAIN" ]] || die "COGES_DOMAIN vide dans $ENV_FILE"
 [[ "$STACK" == preprod ]] && DOMAIN="preprod.$DOMAIN"
@@ -155,10 +164,14 @@ curl_through_caddy() {
 }
 
 verify() {
-  local deadline=$((SECONDS + COGES_DEPLOY_WAIT))
+  # Les réponses sont gardées dans une variable avant d'être lues : `curl … | grep -q`
+  # sous `pipefail` échoue dès que grep s'arrête au premier mot trouvé et que curl
+  # reçoit SIGPIPE — une version saine passait pour cassée (ADR 0088).
+  local deadline=$((SECONDS + COGES_DEPLOY_WAIT)) ready login
   while ((SECONDS < deadline)); do
-    if curl_through_caddy /api/v1/health/ready 2>/dev/null | grep -q '"status":"ok"' \
-      && curl_through_caddy /login 2>/dev/null | grep -q "Connexion"; then
+    ready=$(curl_through_caddy /api/v1/health/ready 2>/dev/null || true)
+    login=$(curl_through_caddy /login 2>/dev/null || true)
+    if [[ "$ready" == *'"status":"ok"'* && "$login" == *Connexion* ]]; then
       return 0
     fi
     sleep 5
@@ -174,12 +187,29 @@ docker_network() {
 }
 
 start() {
+  # Chaque étape rend son échec : appelée dans un `if`, la fonction ne s'arrête plus
+  # d'elle-même (`set -e` y est suspendu), et un `up -d` raté doit déclencher le retour.
   local version=$1
-  fetch_bundle "$version"
-  check_env "$version"
+  fetch_bundle "$version" || return 1
+  check_env "$version" || return 1
   # Une version est immuable : une image déjà présente n'est pas retéléchargée.
-  compose "$version" pull --quiet --policy missing
-  compose "$version" up -d --remove-orphans
+  compose "$version" pull --quiet --policy missing || return 1
+  compose "$version" up -d --remove-orphans || return 1
+}
+
+prune_images() {
+  # Le disque du VPS ne garde que les versions qui peuvent encore servir : celle qui
+  # tourne et la précédente, de chaque pile (ADR 0088). Une image encore utilisée par
+  # un conteneur refuse de partir : ce n'est pas une erreur.
+  local keep=() file image
+  for file in "$STATE_DIR"/*.version "$STATE_DIR"/*.previous; do
+    [[ -f "$file" ]] && keep+=("$(cat "$file")")
+  done
+  while read -r image; do
+    [[ "$image" == "$REGISTRY"/*:* ]] || continue
+    [[ " ${keep[*]} " == *" ${image##*:} "* ]] && continue
+    docker image rm "$image" >/dev/null 2>&1 || true
+  done < <(docker image ls --format '{{.Repository}}:{{.Tag}}' 2>/dev/null || true)
 }
 
 deploy() {
@@ -188,20 +218,19 @@ deploy() {
   log "déploiement de $version (actuelle : ${previous:-aucune})"
   registry_login
   docker_network
-  start "$version"
-  if verify; then
+  if start "$version" && verify; then
     if [[ -n "$previous" && "$previous" != "$version" ]]; then
       echo "$previous" >"$PREVIOUS_FILE"
     fi
     echo "$version" >"$CURRENT_FILE"
     log "OK : $version répond sur https://$DOMAIN"
+    prune_images
     return 0
   fi
-  log "$version ne répond pas après ${COGES_DEPLOY_WAIT} s"
+  log "$version n'a pas démarré ou ne répond pas après ${COGES_DEPLOY_WAIT} s"
   if [[ -n "$previous" && "$previous" != "$version" ]]; then
     log "retour automatique à $previous"
-    start "$previous"
-    if verify; then
+    if start "$previous" && verify; then
       log "retour à $previous : OK"
     else
       log "retour à $previous : la version précédente ne répond pas non plus"

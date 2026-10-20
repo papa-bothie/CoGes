@@ -146,6 +146,9 @@ def create_user(
     L'e-mail est unique **par entreprise** : le même e-mail peut exister chez un
     autre tenant, ce sont deux comptes distincts (§ 2.2).
     """
+    # Avant toute écriture : un rôle refusé ne laisse pas un compte sans rôle derrière lui.
+    for role_id in payload.role_ids:
+        rbac_service.assert_delegable(session, ctx, role_id)
     repository = UserRepository(session, ctx)
     if payload.email is not None and repository.get_by_email(str(payload.email)) is not None:
         raise ValidationFailedError(
@@ -365,8 +368,10 @@ def assign_role(
     *,
     ip_address: str | None = None,
 ) -> list[UUID]:
-    """Attribue un rôle à un compte vivant du tenant (404 sinon)."""
+    """Attribue un rôle à un compte vivant du tenant (404 sinon), jamais plus puissant
+    que l'appelant (403, ADR 0088)."""
     get_user(session, ctx, user_id)
+    rbac_service.assert_delegable(session, ctx, role_id)
     return rbac_service.assign_role(session, ctx, user_id, role_id, ip_address=ip_address)
 
 

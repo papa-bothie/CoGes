@@ -113,6 +113,24 @@ class BusinessRuleError(CogesError):
     default_message = "Cette opération est impossible dans l'état actuel des données."
 
 
+class ConcurrentUpdateError(CogesError):
+    """Interblocage (40P01) ou échec de sérialisation (40001) : rien n'a été écrit.
+
+    La transaction a été annulée en entier par PostgreSQL ; recommencer le même geste
+    est sans danger, et les écritures financières portent leur clé d'idempotence.
+    """
+
+    code = "concurrent_update"
+    status_code = 409
+    default_message = (
+        "Quelqu'un modifiait la même chose au même moment. Rien n'a été enregistré : réessayez."
+    )
+
+
+#: SQLSTATE qui disent « recommencez », jamais « c'est cassé » (ADR 0088).
+RETRYABLE_SQLSTATES = frozenset({"40P01", "40001"})
+
+
 class TenantContextError(CogesError):
     """Le contexte tenant est absent, incohérent ou posé hors transaction.
 

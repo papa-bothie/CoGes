@@ -144,7 +144,8 @@ export interface paths {
      * @description Le titulaire remplace son mot de passe ; l'obligation de le changer tombe.
      *
      *     Ouvert à un compte qui doit changer son mot de passe provisoire (ADR 0074) :
-     *     c'est la seule écriture qu'il puisse faire.
+     *     c'est la seule écriture qu'il puisse faire. Toutes ses autres sessions tombent ;
+     *     ce navigateur reçoit un jeton de rafraîchissement neuf (ADR 0088).
      */
     post: operations["change_password_api_v1_auth_password_post"];
     delete?: never;
@@ -1987,6 +1988,9 @@ export interface paths {
     /**
      * Request Sales Export
      * @description Demande l'export des ventes d'une période ; le fichier est produit par le worker.
+     *
+     *     `Idempotency-Key` exigée (ADR 0088) : une demande rejouée rend le même export, sans
+     *     en enfiler un second. Au plus trois exports en préparation par entreprise.
      */
     post: operations["request_sales_export_api_v1_exports_sales_post"];
     delete?: never;

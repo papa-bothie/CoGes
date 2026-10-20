@@ -230,8 +230,16 @@ def _category_rows(session: Session, ctx: TenantContext) -> list[list[Any]]:
         return depth[category_id]
 
     ordered = sorted(categories, key=lambda category: (level(category.id), category.name))
+    # Le parent par son chemin complet : deux « Lait » sous deux rayons restent
+    # distincts à la réimportation (ADR 0088).
+    paths = categories_service.paths_by_id(session, ctx)
     return [
-        [category.name, names.get(category.parent_id, "") if category.parent_id else ""]
+        [
+            category.name,
+            paths.get(category.parent_id, names.get(category.parent_id, ""))
+            if category.parent_id
+            else "",
+        ]
         for category in ordered
     ]
 
@@ -242,9 +250,7 @@ def _product_rows(session: Session, ctx: TenantContext) -> list[list[Any]]:
             lambda page: products_service.list_products(session, ctx, page=page, page_size=_PAGE)
         )
     )
-    category_names = categories_service.get_names(
-        session, ctx, [product.category_id for product, _ in pairs if product.category_id]
-    )
+    category_names = categories_service.paths_by_id(session, ctx)
     return [
         [
             product.sku,
@@ -344,11 +350,27 @@ SALES_HEADERS = (
 _SALE_STATUS_LABELS = {"confirmed": "confirmée", "cancelled": "annulée", "draft": "brouillon"}
 
 
+#: Exports de ventes en attente par entreprise (ADR 0088) : chacun construit tout son
+#: fichier en mémoire dans le worker.
+MAX_PENDING_EXPORTS = 3
+
+
+class TooManyPendingExportsError(BusinessRuleError):
+    code = "too_many_pending_exports"
+    default_message = (
+        "Des exports sont déjà en préparation : attendez qu'ils soient prêts avant d'en "
+        "demander un autre."
+    )
+
+
 def request_sales_export(
     session: Session, ctx: TenantContext, payload: SalesExportCreate
 ) -> ExportFile:
     """Enregistre la demande ; le fichier est produit par le worker (`build_sales_export`)."""
-    export = ExportFileRepository(session, ctx).add(
+    repository = ExportFileRepository(session, ctx)
+    if repository.pending_count(kind="sales") >= MAX_PENDING_EXPORTS:
+        raise TooManyPendingExportsError(details={"max_pending": MAX_PENDING_EXPORTS})
+    export = repository.add(
         ExportFile(
             company_id=ctx.company_id,
             kind="sales",

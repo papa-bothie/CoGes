@@ -19,7 +19,7 @@ from uuid import UUID
 import sentry_sdk
 
 from app.core.config import get_settings
-from app.core.logging import request_id_var
+from app.core.logging import request_id_var, scrub_text
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +46,17 @@ def scrub_event(event: dict[str, Any], hint: dict[str, Any] | None = None) -> di
     user = event.get("user")
     if isinstance(user, dict):
         event["user"] = {key: value for key, value in user.items() if key == "id"}
+    # Messages d'exception : le détail SQL cite des valeurs (ADR 0088).
+    if isinstance(event.get("message"), str):
+        event["message"] = scrub_text(event["message"])
+    logentry = event.get("logentry")
+    if isinstance(logentry, dict) and isinstance(logentry.get("message"), str):
+        logentry["message"] = scrub_text(logentry["message"])
+    exception = event.get("exception")
+    if isinstance(exception, dict):
+        for value in exception.get("values") or []:
+            if isinstance(value, dict) and isinstance(value.get("value"), str):
+                value["value"] = scrub_text(value["value"])
     request_id = request_id_var.get()
     if request_id:
         event.setdefault("tags", {})["request_id"] = request_id

@@ -64,6 +64,22 @@ class ExpenseCategoryInUseError(BusinessRuleError):
 # ------------------------------------------------------------------- catégories
 
 
+class ExpensePaidError(BusinessRuleError):
+    """Une dépense réglée ne change plus de montant et ne se supprime pas (ADR 0088)."""
+
+    code = "expense_paid"
+    default_message = (
+        "Cette dépense est déjà payée : annulez d'abord le paiement, puis corrigez-la."
+    )
+
+
+def _assert_unpaid(session: Session, ctx: TenantContext, expense: Expense) -> None:
+    """Le décaissement reste en caisse : sa dépense doit rester celle qu'il a payée."""
+    paid = finance_service.paid_by_expenses(session, ctx, [expense.id]).get(expense.id)
+    if paid:
+        raise ExpensePaidError(details={"expense_id": str(expense.id), "amount_paid": str(paid)})
+
+
 def list_categories(
     session: Session, ctx: TenantContext, *, page: int, page_size: int
 ) -> tuple[Sequence[ExpenseCategory], int]:
@@ -329,6 +345,8 @@ def update_expense(
         if changes["supplier_id"] is not None:
             suppliers_service.assert_exists(session, ctx, changes["supplier_id"])
         expense.supplier_id = changes["supplier_id"]
+    if changes.get("amount") is not None and changes["amount"] != expense.amount:
+        _assert_unpaid(session, ctx, expense)
     for field in ("label", "amount", "spent_at"):
         if changes.get(field) is not None:
             setattr(expense, field, changes[field])
@@ -361,6 +379,7 @@ def delete_expense(
     numéro reste consommé — la suite des pièces émises ne se réécrit pas.
     """
     expense = get_expense(session, ctx, expense_id)
+    _assert_unpaid(session, ctx, expense)
     before = _audited(expense)
     expense.deleted_at = datetime.now(UTC)
     session.flush()

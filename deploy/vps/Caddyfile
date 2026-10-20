@@ -44,6 +44,9 @@
 	log {
 		output stdout
 		format filter {
+			# Ni la chaîne de requête : les recherches y portent des noms et des
+			# téléphones de clients (ADR 0088).
+			request>uri regexp "\?.*$" ""
 			request>headers>Cookie delete
 			request>headers>Authorization delete
 			request>headers>Idempotency-Key delete

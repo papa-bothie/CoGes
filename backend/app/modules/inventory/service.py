@@ -606,8 +606,13 @@ def receive_delivery(
         ),
         ip_address=ip_address,
     )
-    lines: list[DeliveryLineRead] = []
-    for line in payload.lines:
+    # Le stock se verrouille par `product_id` croissant, comme à la confirmation d'une
+    # vente (§ 5) : dans l'ordre de saisie, une livraison et une vente simultanées sur
+    # les mêmes articles pouvaient s'interbloquer (ADR 0088). La réponse garde l'ordre
+    # de saisie.
+    written: dict[int, DeliveryLineRead] = {}
+    ordered = sorted(enumerate(payload.lines), key=lambda pair: str(pair[1].product_id))
+    for position, line in ordered:
         movement = record_movement(
             session,
             ctx,
@@ -621,14 +626,13 @@ def receive_delivery(
             reference=(DELIVERY_REF_TYPE, debt.id),
             ip_address=ip_address,
         )
-        lines.append(
-            DeliveryLineRead(
-                product_id=line.product_id,
-                movement_id=movement.id,
-                qty=line.qty,
-                unit_cost=line.unit_cost,
-            )
+        written[position] = DeliveryLineRead(
+            product_id=line.product_id,
+            movement_id=movement.id,
+            qty=line.qty,
+            unit_cost=line.unit_cost,
         )
+    lines = [written[position] for position in sorted(written)]
     payment = None
     if paid > 0:
         payment = finance_service.record_payment(
@@ -814,12 +818,16 @@ def record_customer_return_in(
 def sale_out_movements(
     session: Session, ctx: TenantContext, sale_item_ids: Sequence[UUID]
 ) -> list[InventoryMovement]:
-    """Sorties de stock d'une vente, dans l'ordre où elles ont été écrites.
+    """Sorties de stock d'une vente, par `product_id` croissant.
 
     Façade de lecture pour l'annulation : Sales connaît ses lignes, pas le journal.
+    L'ordre est celui des verrous de la confirmation (§ 5) : par date d'écriture, il
+    suivait l'identifiant aléatoire du mouvement, et une annulation pouvait
+    s'interbloquer avec une vente sur les mêmes articles (ADR 0088).
     """
     repository = InventoryMovementRepository(session, ctx)
-    return list(repository.for_references(SALE_ITEM_REF, sale_item_ids))
+    movements = repository.for_references(SALE_ITEM_REF, sale_item_ids)
+    return sorted(movements, key=lambda movement: (str(movement.product_id), str(movement.id)))
 
 
 def reverse_sale_out(

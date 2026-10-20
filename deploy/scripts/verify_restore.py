@@ -10,9 +10,14 @@ Contrôles (sortie lisible, code 0 si tout est vert, 1 sinon) :
 2. lignes des tables clés, par entreprise (identifiant court, jamais de nom) ;
 3. RLS active et FORCE sur chaque table qui porte `company_id` ;
 4. partition d'audit du mois courant présente, séquences présentes ;
-5. cohérence : stock projeté = somme des mouvements, aucun stock négatif, dettes
+5. cohérence : stock projeté = somme des mouvements, dans les deux sens (une projection
+   sans mouvement comme des mouvements sans projection), aucun stock négatif, dettes
    cohérentes (0 ≤ payé ≤ principal, « payée » ⇔ solde nul), aucun paiement plus lettré
-   que son montant.
+   que son montant ;
+6. manifeste (ADR 0088) : chaque table clé a au moins autant de lignes qu'au moment de la
+   sauvegarde. `backup.sh` compte **avant** le dump, et ces tables ne perdent jamais de
+   ligne (suppression logique) : une restauration tronquée se voit, une écriture pendant
+   le dump n'est pas un écart.
 
 La base doit être lue sans être filtrée par la RLS : connexion en superutilisateur, en
 propriétaire de la base restaurée avec BYPASSRLS, ou en `coges_backup`.
@@ -22,6 +27,7 @@ Bibliothèque standard seulement (appelle `psql`).
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -41,6 +47,20 @@ KEY_TABLES = (
 )
 REVISION = re.compile(r'^revision: str = "([^"]+)"', re.M)
 DOWN = re.compile(r'^down_revision: str \| None = (?:"([^"]+)"|None)', re.M)
+
+
+def manifest_query() -> str:
+    """Le comptage des tables clés, que `backup.sh` joue avant le dump."""
+    return " UNION ALL ".join(f"SELECT '{table}', count(*) FROM {table}" for table in KEY_TABLES)
+
+
+def manifest_gaps(expected: dict[str, int], actual: dict[str, int]) -> list[str]:
+    """Tables qui ont moins de lignes que dans le manifeste de la sauvegarde."""
+    return [
+        f"{table} : {actual.get(table, 0)} restaurées, {count} au moment de la sauvegarde"
+        for table, count in sorted(expected.items())
+        if actual.get(table, 0) < count
+    ]
 
 
 def head_revision(versions: Path = VERSIONS) -> str:
@@ -93,7 +113,13 @@ class Report:
             self.failures += 1
 
 
-def verify(db: Database, *, expected_revision: str, today: datetime) -> int:
+def verify(
+    db: Database,
+    *,
+    expected_revision: str,
+    today: datetime,
+    manifest: dict[str, int] | None = None,
+) -> int:
     report = Report()
 
     print("1. Migrations")
@@ -142,10 +168,10 @@ def verify(db: Database, *, expected_revision: str, today: datetime) -> int:
     stock_gap = db.value(
         """
         SELECT count(*) FROM product_stock s
-        LEFT JOIN (SELECT company_id, product_id, sum(qty_delta) AS total
+        FULL JOIN (SELECT company_id, product_id, sum(qty_delta) AS total
                    FROM inventory_movements GROUP BY company_id, product_id) m
           ON m.company_id = s.company_id AND m.product_id = s.product_id
-        WHERE s.qty_on_hand <> coalesce(m.total, 0)
+        WHERE coalesce(s.qty_on_hand, 0) <> coalesce(m.total, 0)
         """
     )
     report.check("stock = somme des mouvements", stock_gap == "0", f"{stock_gap} écart(s)")
@@ -175,6 +201,14 @@ def verify(db: Database, *, expected_revision: str, today: datetime) -> int:
         f"{over_allocated}",
     )
 
+    print("6. Manifeste de la sauvegarde")
+    if manifest is None:
+        report.check("manifeste", True, "absent : sauvegarde antérieure à l'ADR 0088")
+    else:
+        actual = {table: int(count) for table, count in db.rows(manifest_query())}
+        gaps = manifest_gaps(manifest, actual)
+        report.check("autant de lignes qu'à la sauvegarde", not gaps, "; ".join(gaps))
+
     if report.failures:
         print(f"Restauration : {report.failures} contrôle(s) en échec")
         return 1
@@ -184,15 +218,28 @@ def verify(db: Database, *, expected_revision: str, today: datetime) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    parser.add_argument("dsn", help="base restaurée (jamais la production)")
+    parser.add_argument("dsn", nargs="?", help="base restaurée (jamais la production)")
     parser.add_argument("--expected-revision", default=None)
+    parser.add_argument("--manifest", type=Path, default=None, help="manifeste de la sauvegarde")
+    parser.add_argument(
+        "--print-manifest-query", action="store_true", help="la requête de comptage, pour backup.sh"
+    )
     args = parser.parse_args(argv)
+    if args.print_manifest_query:
+        print(manifest_query())
+        return 0
+    if not args.dsn:
+        parser.error("la base restaurée est requise")
+    manifest = None
+    if args.manifest is not None:
+        manifest = {k: int(v) for k, v in json.loads(args.manifest.read_text())["tables"].items()}
     db = Database(args.dsn)
     try:
         return verify(
             db,
             expected_revision=args.expected_revision or head_revision(),
             today=datetime.now(UTC),
+            manifest=manifest,
         )
     except RuntimeError as error:
         print(f"ÉCHEC : {error}", file=sys.stderr)

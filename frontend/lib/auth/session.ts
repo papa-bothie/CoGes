@@ -61,11 +61,26 @@ async function requestRefresh(): Promise<RefreshOutcome> {
   return response.status === 401 ? "unauthenticated" : "unavailable";
 }
 
-async function withCrossTabLock<T>(task: () => Promise<T>): Promise<T> {
-  if (typeof navigator !== "undefined" && navigator.locks) {
-    return (await navigator.locks.request(LOCK_NAME, task)) as T;
+/** Attente maximale du verrou des onglets : un onglet figé ne bloque pas les autres. */
+export const LOCK_WAIT_MS = 10_000;
+
+async function withCrossTabLock(task: () => Promise<RefreshOutcome>): Promise<RefreshOutcome> {
+  if (typeof navigator === "undefined" || !navigator.locks) return task();
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), LOCK_WAIT_MS);
+  try {
+    return (await navigator.locks.request(
+      LOCK_NAME,
+      { signal: abort.signal },
+      task,
+    )) as RefreshOutcome;
+  } catch (error) {
+    // Verrou jamais obtenu (ADR 0088) : on n'enverra pas une rotation concurrente.
+    if (error instanceof DOMException && error.name === "AbortError") return "unavailable";
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  return task();
 }
 
 let inFlight: Promise<RefreshOutcome> | null = null;
@@ -119,6 +134,9 @@ function announceLogout(): void {
 
 /** Déconnexion volontaire : révoque la famille de sessions côté serveur. */
 export async function logout(): Promise<void> {
+  // Un rafraîchissement en cours poserait un jeton neuf **après** l'oubli local, et la
+  // personne resterait connectée dans cet onglet (ADR 0088) : on l'attend d'abord.
+  if (inFlight) await inFlight.catch(() => undefined);
   try {
     await fetch("/api/v1/auth/logout", { method: "POST", credentials: "same-origin" });
   } catch {

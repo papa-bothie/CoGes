@@ -62,6 +62,11 @@ export function createAuthFetch(deps: AuthFetchDeps) {
     const response = await send(request, token);
     if (response.status !== 401) return response;
 
+    // Une autre requête a déjà fait tourner le jeton pendant que celle-ci était en route :
+    // on rejoue avec le jeton neuf, sans seconde rotation (ADR 0088).
+    const current = deps.token.get();
+    if (current && current !== token) return send(retry, current);
+
     // Jeton refusé (clé tournée, session révoquée…) : un seul nouvel essai.
     const outcome = await deps.refresh();
     if (outcome === "ok") return send(retry, deps.token.get());

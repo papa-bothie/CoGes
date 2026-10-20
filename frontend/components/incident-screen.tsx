@@ -20,11 +20,10 @@ const t = labels.incident;
 export function IncidentScreen({ error, onRetry }: { error: unknown; onRetry: () => void }) {
   const title = useRef<HTMLHeadingElement>(null);
   useEffect(() => title.current?.focus(), []);
-  const reference = incidentReference(
-    isApiError(error)
-      ? error.requestId
-      : (error as { digest?: string } | null)?.digest?.replace(/\D/g, "").padEnd(8, "0"),
-  );
+  // La référence ne vient que de l'identifiant de requête de l'API ; un digest de Next
+  // s'affiche tel quel, jamais transformé en fausse référence (« 0000 0000 », ADR 0088).
+  const reference = isApiError(error) ? incidentReference(error.requestId) : null;
+  const digest = isApiError(error) ? null : (error as { digest?: string } | null)?.digest;
 
   return (
     <main className="grid min-h-dvh place-items-center bg-background p-6">
@@ -40,10 +39,18 @@ export function IncidentScreen({ error, onRetry }: { error: unknown; onRetry: ()
           {t.title}
         </h1>
         <p className="text-lg text-muted-foreground">{t.reassure}</p>
-        {reference && (
+        {(reference || digest) && (
           <p className="rounded-carte border border-border bg-card px-4 py-2">
             <span className="block text-sm text-muted-foreground">{t.reference}</span>
-            <span className="font-mono text-lg font-bold tracking-widest">{reference}</span>
+            <span
+              className={
+                reference
+                  ? "font-mono text-lg font-bold tracking-widest"
+                  : "font-mono text-sm break-all"
+              }
+            >
+              {reference ?? digest}
+            </span>
           </p>
         )}
         <div className="flex flex-wrap justify-center gap-3">

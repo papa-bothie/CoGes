@@ -162,3 +162,149 @@ def test_caddy_serves_the_maintenance_page_on_gateway_errors() -> None:
     assert "rewrite * /maintenance.html" in caddyfile
     assert "./maintenance.html:/srv/maintenance/maintenance.html:ro" in compose
     assert "deploy/vps/maintenance.html" in bundle
+
+
+# ------------------------------------------------- deploy.sh de bout en bout (P2.19, ADR 0088)
+#
+# Faux `docker` et faux `curl` : `up -d` note la version lancée (ou échoue sur demande),
+# `curl` répond selon la version qui tourne. Aucune vraie pile n'est démarrée.
+
+_DOCKER = """#!/usr/bin/env bash
+echo "docker $* COGES_STACK=${COGES_STACK:-} TAG=${COGES_IMAGE_TAG:-}" >>"$FAKE_LOG"
+case "$1" in
+  compose)
+    if [[ " $* " == *" up "* ]]; then
+      [[ "${COGES_IMAGE_TAG}" == "${FAKE_FAIL_UP:-}" ]] && exit 1
+      echo "${COGES_IMAGE_TAG}" >"$FAKE_RUNNING"
+    fi ;;
+  image)
+    if [[ "$2" == ls ]]; then printf '%s\\n' $FAKE_IMAGES; fi ;;
+esac
+exit 0
+"""
+
+_CURL = """#!/usr/bin/env bash
+running=$(cat "$FAKE_RUNNING" 2>/dev/null || true)
+[[ " ${FAKE_BROKEN:-} " == *" $running "* ]] && exit 22
+for arg in "$@"; do url=$arg; done
+if [[ "$url" == */health/ready ]]; then echo '{"status":"ok"}'; exit 0; fi
+# Une vraie page : « Connexion » tôt, puis beaucoup de HTML. `grep -q` s'arrête au
+# premier mot trouvé, et curl reçoit SIGPIPE en écrivant la suite.
+echo "<title>Connexion</title>"
+head -c 3000000 /dev/zero | tr '\\0' 'x'
+"""
+
+_VPS_ENV = """COGES_STACK={stack}
+COGES_DOMAIN=app.exemple.sn
+COGES_DATABASE_URL_APP=postgresql+psycopg://coges_app:x@ep-1.eu-central-1.aws.neon.tech/coges?sslmode=require
+COGES_DATABASE_URL_RELAY=postgresql+psycopg://coges_relay:x@ep-1.eu-central-1.aws.neon.tech/coges?sslmode=require
+COGES_DATABASE_URL_ANALYTICS=postgresql+psycopg://coges_analytics:x@ep-1.eu-central-1.aws.neon.tech/coges?sslmode=require
+COGES_REDIS_PASSWORD=ci-redis-password-00000000000000000000
+COGES_JWT_SECRET=ci-jwt-secret-0000000000000000000000
+"""
+
+
+def _stage(
+    tmp_path: Path, *, stack: str, env_stack: str, versions: tuple[str, ...]
+) -> dict[str, str]:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    for name, body in (("docker", _DOCKER), ("curl", _CURL)):
+        (bin_dir / name).write_text(body, encoding="utf-8")
+        (bin_dir / name).chmod(0o755)
+    etc = tmp_path / "etc"
+    etc.mkdir()
+    env_name = "coges.env" if stack == "production" else "preprod.env"
+    (etc / env_name).write_text(_VPS_ENV.format(stack=env_stack), encoding="utf-8")
+    for version in versions:
+        release = tmp_path / "opt" / "releases" / version
+        release.mkdir(parents=True)
+        (release / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+        shutil.copy(VPS.parent / "scripts" / "check_runtime_env.py", release)
+    return {
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "COGES_ROOT": str(tmp_path / "opt"),
+        "COGES_ETC": str(etc),
+        "COGES_LOG_DIR": str(tmp_path / "log"),
+        "COGES_DEPLOY_WAIT": "1",
+        "FAKE_LOG": str(tmp_path / "docker.log"),
+        "FAKE_RUNNING": str(tmp_path / "running"),
+    }
+
+
+def _run(env: dict[str, str], *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["bash", str(DEPLOY), *args],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+
+
+def _state(tmp_path: Path, stack: str, version: str, previous: str | None = None) -> None:
+    state = tmp_path / "opt" / "state"
+    state.mkdir(parents=True, exist_ok=True)
+    (state / f"{stack}.version").write_text(f"{version}\n", encoding="utf-8")
+    if previous:
+        (state / f"{stack}.previous").write_text(f"{previous}\n", encoding="utf-8")
+
+
+def test_a_healthy_deploy_is_not_failed_by_a_long_login_page(tmp_path: Path) -> None:
+    env = _stage(tmp_path, stack="production", env_stack="production", versions=("v1.0.0",))
+    result = _run(env, "production", "v1.0.0")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_failing_up_rolls_back_to_the_previous_version(tmp_path: Path) -> None:
+    env = _stage(
+        tmp_path, stack="production", env_stack="production", versions=("v1.0.0", "v1.1.0")
+    )
+    _state(tmp_path, "production", "v1.0.0")
+    env["FAKE_FAIL_UP"] = "v1.1.0"
+
+    result = _run(env, "production", "v1.1.0")
+
+    assert result.returncode == 1
+    log = (tmp_path / "docker.log").read_text(encoding="utf-8")
+    assert "up -d" in log and "TAG=v1.0.0" in log.split("TAG=v1.1.0")[-1], (
+        "aucun retour à v1.0.0 après l'échec de up -d"
+    )
+    assert (tmp_path / "running").read_text().strip() == "v1.0.0"
+
+
+def test_a_preprod_env_file_copied_from_production_is_refused(tmp_path: Path) -> None:
+    env = _stage(tmp_path, stack="preprod", env_stack="production", versions=("v1.0.0",))
+    result = _run(env, "preprod", "v1.0.0")
+    assert result.returncode == 1
+    assert "COGES_STACK" in result.stdout + result.stderr
+    assert not (tmp_path / "running").exists(), "la préproduction a démarré sous les alias de prod"
+
+
+def test_compose_always_receives_the_stack_being_started(tmp_path: Path) -> None:
+    env = _stage(tmp_path, stack="preprod", env_stack="preprod", versions=("v1.0.0",))
+    result = _run(env, "preprod", "v1.0.0")
+    assert result.returncode == 0, result.stdout + result.stderr
+    ups = [line for line in (tmp_path / "docker.log").read_text().splitlines() if " up " in line]
+    assert ups and all("COGES_STACK=preprod" in line for line in ups)
+
+
+def test_old_images_are_removed_but_current_and_previous_kept(tmp_path: Path) -> None:
+    env = _stage(tmp_path, stack="production", env_stack="production", versions=("v1.2.0",))
+    _state(tmp_path, "production", "v1.1.0", previous="v1.0.0")
+    registry = "ghcr.io/papa-bothie/coges"
+    env["FAKE_IMAGES"] = " ".join(
+        f"{registry}/{package}:{version}"
+        for package in ("api", "front")
+        for version in ("v0.9.0", "v1.0.0", "v1.1.0", "v1.2.0")
+    )
+
+    result = _run(env, "production", "v1.2.0")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    removed = [
+        line for line in (tmp_path / "docker.log").read_text().splitlines() if "image rm" in line
+    ]
+    assert any(":v0.9.0" in line for line in removed) and any(":v1.0.0" in line for line in removed)
+    assert not any(":v1.1.0" in line or ":v1.2.0" in line for line in removed), removed

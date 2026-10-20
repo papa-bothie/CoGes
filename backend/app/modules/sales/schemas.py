@@ -18,6 +18,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
+from app.core.clock import ZonedDatetime
 from app.core.money import Amount, Quantity, Rate, UnitCost
 from app.modules.finance.schemas import (
     DebtRead,
@@ -75,7 +76,7 @@ class SaleCreate(BaseModel):
     customer_id: UUID | None = None
     #: Date métier de la vente. Par défaut `now()`. Le mouvement de stock, lui,
     #: est daté de la confirmation : c'est à ce moment que la marchandise part.
-    sold_at: datetime | None = None
+    sold_at: ZonedDatetime | None = None
 
 
 class SaleUpdate(BaseModel):
@@ -84,7 +85,7 @@ class SaleUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     customer_id: UUID | None = None
-    sold_at: datetime | None = None
+    sold_at: ZonedDatetime | None = None
 
 
 class SaleItemCreate(BaseModel):
@@ -359,7 +360,7 @@ class SaleReturnCreate(BaseModel):
     reason: ReturnReason | None = None
     #: Date métier du retour. Par défaut `now()`, bornée par `sold_at` et l'instant
     #: présent. Le mouvement de stock, lui, est daté de l'enregistrement.
-    returned_at: datetime | None = None
+    returned_at: ZonedDatetime | None = None
 
     @field_validator("lines")
     @classmethod
