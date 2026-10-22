@@ -584,14 +584,19 @@ def _order_qty(
     stock = shop.stock[product_id]
     reorder = Decimal(article.reorder)
     rate = shop.sold[product_id] / elapsed if elapsed >= 7 else Decimal(article.batch) / 30
-    if stock >= max(reorder * Decimal("1.5"), rate * 4):
-        return ZERO
+    # Les articles `rupture`/`low` doivent être corrigés CHAQUE jour du dernier mois,
+    # pas seulement quand le stock franchit le seuil générique ci-dessous : sinon la
+    # correction ne s'applique qu'une poignée de fois sur trente jours, et la variance
+    # des ventes réelles l'emporte souvent sur la cible — l'article finit soit encore
+    # au-dessus du seuil, soit déjà à zéro (hors de la fenêtre « sous le seuil »).
     if article.ending == "rupture" and days_left <= 30:
         # Le fournisseur n'a plus livré : le rayon se vide avant la fin.
         return ZERO
     if article.ending == "low" and days_left <= 30:
         # Juste de quoi tenir, et finir sous le seuil.
         return max(ZERO, rate * days_left + reorder / 2 - stock).quantize(Decimal("1"))
+    if stock >= max(reorder * Decimal("1.5"), rate * 4):
+        return ZERO
     return max(rate * 21, reorder * 2).quantize(Decimal("1"))
 
 
