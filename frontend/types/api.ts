@@ -2095,8 +2095,9 @@ export interface paths {
      * @description Bilan des workers, de beat, du relais et des tâches de nuit (ADR 0077).
      *
      *     Protégé par `COGES_OPS_TOKEN` (`Authorization: Bearer …`), pas par un compte :
-     *     c'est l'exploitant qui interroge. 200 si tout va bien, 503 sinon, avec le même
-     *     corps. Aucun nom ni identifiant d'entreprise n'y figure.
+     *     c'est l'exploitant qui interroge, depuis un terminal ou une surveillance externe.
+     *     L'équipe passe par `/platform/system/workers` (ADR 0090) : même lecture, même
+     *     réponse. Aucun nom ni identifiant d'entreprise n'y figure.
      */
     get: operations["workers_health_api_v1_system_workers_get"];
     put?: never;
@@ -2259,6 +2260,75 @@ export interface paths {
      * @description Suspendre ou réactiver (profil `administrator`). Audit critique, gérant prévenu.
      */
     patch: operations["set_company_status_api_v1_platform_companies__company_id__status_patch"];
+    trace?: never;
+  };
+  "/api/v1/platform/system/workers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Platform Workers Health
+     * @description Le même bilan que `/system/workers`, pour un compte de l'équipe (ADR 0090).
+     *
+     *     Sous `/platform` : servi seulement sur le sous-domaine de l'administration, filtré
+     *     par adresse IP. Lu sous `coges_app_platform`, par les mêmes fonctions d'agrégat.
+     */
+    get: operations["platform_workers_health_api_v1_platform_system_workers_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/system/job-runs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Job Runs
+     * @description Exécutions des tâches planifiées sur 90 jours, la plus récente d'abord.
+     *
+     *     Une exécution restée `running` au-delà du délai d'une tâche est rendue `failed`.
+     *     Une sous-tâche d'entreprise est signalée (`per_company`), jamais nommée.
+     */
+    get: operations["job_runs_api_v1_platform_system_job_runs_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/system/outbox": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Outbox
+     * @description Retard du relais et événements au rebut, toutes entreprises confondues.
+     *
+     *     Pour chaque événement au rebut : identifiant, type, date, tentatives — de quoi le
+     *     rejouer à la main (`docs/runbooks/workers.md`). Jamais son contenu.
+     */
+    get: operations["outbox_api_v1_platform_system_outbox_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
 }
@@ -2998,6 +3068,34 @@ export interface components {
        * @default false
        */
       cached: boolean;
+    };
+    /**
+     * DeadLetter
+     * @description Un événement au rebut : de quoi le rejouer à la main, rien de son contenu.
+     */
+    DeadLetter: {
+      /** Id */
+      id: number;
+      /** Event Type */
+      event_type: string;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at: string;
+      /** Attempts */
+      attempts: number;
+    };
+    /** DeadLetterPage */
+    DeadLetterPage: {
+      /** Items */
+      items: components["schemas"]["DeadLetter"][];
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Total */
+      total: number;
     };
     /**
      * DebtCreate
@@ -3757,6 +3855,42 @@ export interface components {
       /** Companies Failed */
       companies_failed: number;
     };
+    /**
+     * JobRun
+     * @description Une exécution de tâche planifiée. `per_company` dit si c'est la sous-tâche d'une
+     *     entreprise, **jamais** laquelle. `error` : nom de classe et SQLSTATE, 200 caractères
+     *     au plus (ADR 0077), jamais le message.
+     */
+    JobRun: {
+      /** Id */
+      id: number;
+      /** Job */
+      job: string;
+      /** Status */
+      status: string;
+      /**
+       * Started At
+       * Format: date-time
+       */
+      started_at: string;
+      /** Finished At */
+      finished_at: string | null;
+      /** Error */
+      error: string | null;
+      /** Per Company */
+      per_company: boolean;
+    };
+    /** JobRunPage */
+    JobRunPage: {
+      /** Items */
+      items: components["schemas"]["JobRun"][];
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Total */
+      total: number;
+    };
     LineDiscount: components["schemas"]["Amount-Input"];
     /**
      * LoginRequest
@@ -4504,6 +4638,14 @@ export interface components {
        * @enum {string}
        */
       role: "administrator" | "support";
+    };
+    /**
+     * PlatformOutbox
+     * @description Retard du relais (le même calcul que le bilan) et liste du rebut.
+     */
+    PlatformOutbox: {
+      lag: components["schemas"]["OutboxLag"];
+      dead_letters: components["schemas"]["DeadLetterPage"];
     };
     /**
      * PlatformTokenResponse
@@ -10089,6 +10231,101 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["CompanyDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  platform_workers_health_api_v1_platform_system_workers_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkersHealth"];
+        };
+      };
+      /** @description Au moins un problème détecté. */
+      503: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkersHealth"];
+        };
+      };
+    };
+  };
+  job_runs_api_v1_platform_system_job_runs_get: {
+    parameters: {
+      query?: {
+        job?: string | null;
+        status?: ("ok" | "failed" | "running") | null;
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["JobRunPage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  outbox_api_v1_platform_system_outbox_get: {
+    parameters: {
+      query?: {
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformOutbox"];
         };
       };
       /** @description Validation Error */

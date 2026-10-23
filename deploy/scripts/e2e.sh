@@ -6,6 +6,7 @@
 #   deploy/scripts/e2e.sh api     # API sur :8100, branchée sur coges_e2e, débit non limité
 #   deploy/scripts/e2e.sh front   # front sur :3100, branché sur l'API e2e (build séparé)
 #   deploy/scripts/e2e.sh admin   # administration (frontend-admin) sur :3200, même API e2e
+#   deploy/scripts/e2e.sh system healthy|missing-heartbeat   # état de la zone B (ADR 0090)
 #   deploy/scripts/e2e.sh maquette        # ajoute l'entreprise `maquette` (seed de la maquette v2)
 #   deploy/scripts/e2e.sh maquette-api    # API sur :8101, heure figée au 6 octobre 2026 10 h 45
 #   deploy/scripts/e2e.sh maquette-front  # front sur :3101, branché sur l'API de la maquette
@@ -160,7 +161,10 @@ SQL
   admin)
     run_front .next-e2e "$E2E_API_PORT" "$E2E_ADMIN_PORT" frontend-admin
     ;;
+  system)
+    uv run --directory backend python -m tests.e2e.system_state "${2:-}"
+    ;;
   *)
-    die "usage : $0 reset|api|front|admin|maquette|maquette-api|maquette-front"
+    die "usage : $0 reset|api|front|admin|system|maquette|maquette-api|maquette-front"
     ;;
 esac
