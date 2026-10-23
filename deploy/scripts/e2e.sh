@@ -76,7 +76,7 @@ run_front() {
   cd "$app"
   COGES_NEXT_DIST_DIR=$dist COGES_API_URL="http://localhost:$api_port" \
     ./node_modules/.bin/next dev --port "$port" &
-  local next_pid=$!
+  next_pid=$!  # global : le piège EXIT se déclenche après le retour de la fonction
   trap 'pkill -TERM -P "$next_pid" 2>/dev/null; kill -TERM "$next_pid" 2>/dev/null' TERM INT EXIT
   wait "$next_pid"
 }
