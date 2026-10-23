@@ -2,7 +2,7 @@
 
 Une dépendance `yield` de portée `request` (défaut de FastAPI) se ferme après l'envoi
 de la réponse : son COMMIT arriverait trop tard, et un COMMIT refusé laisserait au
-client un 2xx. Les deux dépendances qui ouvrent `tenant_transaction` doivent donc être
+client un 2xx. Les dépendances qui ouvrent `tenant_transaction` doivent donc être
 déclarées en portée `function`, sur **chaque** route.
 """
 
@@ -14,10 +14,11 @@ from typing import Any
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 
-from app.core.deps import get_platform_session, get_tenant_session
+from app.core.deps import get_platform_admin_session, get_platform_session, get_tenant_session
 from app.main import app
 
-_TRANSACTIONAL = {get_tenant_session, get_platform_session}
+#: La troisième est celle de l'administration de la plateforme (ADR 0089).
+_TRANSACTIONAL = {get_tenant_session, get_platform_session, get_platform_admin_session}
 
 
 def _walk(dependant: Dependant) -> Iterator[Dependant]:

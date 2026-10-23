@@ -63,6 +63,8 @@ export const labels = {
     temporaryExpired: "Ce mot de passe provisoire a expiré. Demandez-en un nouveau au gérant.",
     sessionExpired: "Votre session a expiré. Reconnectez-vous.",
     loggedOut: "Vous êtes déconnecté.",
+    suspended:
+      "L'accès de votre entreprise à CoGes est suspendu. Vos données sont conservées : contactez l'équipe CoGes pour le rétablir.",
     firstPassword: {
       title: "Choisissez votre mot de passe",
       intro:

@@ -2,6 +2,9 @@
 # HTTP redirigé vers HTTPS, un seul domaine vu par le navigateur (« même origine ») :
 #   /api/v1/*  → API FastAPI (un saut de moins que la réécriture de Next)
 #   le reste   → front Next.js
+# L'administration de la plateforme (ADR 0089) a son sous-domaine, admin.<domaine>,
+# filtré par adresse IP (COGES_ADMIN_ALLOWED_IPS) : /api/v1/platform/* n'est servi que
+# là, jamais sur le domaine commerçant.
 # La préproduction (sous-domaine preprod.) passe par le même Caddy ; arrêtée, elle
 # répond 502.
 #
@@ -55,18 +58,7 @@
 	}
 }
 
-(pile) {
-	import securite
-	# Corps de requête bornés aussi à l'entrée (l'API garde ses propres limites, ADR 0042).
-	request_body {
-		max_size 25MB
-	}
-	handle /api/v1/* {
-		reverse_proxy {args[0]}-api:8000
-	}
-	handle {
-		reverse_proxy {args[0]}-front:3000
-	}
+(maintenance) {
 	# Site ou API arrêté : page de maintenance autonome, statut d'origine gardé (ADR 0085).
 	handle_errors 502 503 504 {
 		import entetes
@@ -76,10 +68,57 @@
 	}
 }
 
+(pile) {
+	import securite
+	# Corps de requête bornés aussi à l'entrée (l'API garde ses propres limites, ADR 0042).
+	request_body {
+		max_size 25MB
+	}
+	# L'administration ne répond que sur son sous-domaine filtré.
+	handle /api/v1/platform/* {
+		respond 404
+	}
+	handle /api/v1/* {
+		reverse_proxy {args[0]}-api:8000
+	}
+	handle {
+		reverse_proxy {args[0]}-front:3000
+	}
+	import maintenance
+}
+
 {$COGES_DOMAIN} {
 	import pile production
 }
 
 preprod.{$COGES_DOMAIN} {
 	import pile preprod
+}
+
+# Administration de la plateforme (ADR 0089), pile de production seulement. Deux
+# barrières : l'adresse IP ici (403 pour toute autre), puis le compte de l'équipe dans
+# l'API. Ajouter une adresse : docs/runbooks/vps.md.
+admin.{$COGES_DOMAIN} {
+	import securite
+	header X-Robots-Tag "noindex, nofollow"
+	request_body {
+		max_size 1MB
+	}
+	@admin_allowed remote_ip {$COGES_ADMIN_ALLOWED_IPS}
+	handle @admin_allowed {
+		handle /api/v1/platform/* {
+			reverse_proxy production-api:8000
+		}
+		# Les routes commerçantes ne passent pas par ici.
+		handle /api/v1/* {
+			respond 404
+		}
+		handle {
+			reverse_proxy production-admin:3000
+		}
+	}
+	handle {
+		respond "Accès refusé." 403
+	}
+	import maintenance
 }

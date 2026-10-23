@@ -53,6 +53,7 @@ changement de ce fichier : `docker compose down -v && make up`.
 | `coges_auth` | **non** | propriétaire d'`auth_lookup` | BYPASSRLS |
 | `coges_bus` | **non** | propriétaire des fonctions du relais | BYPASSRLS |
 | `coges_ops` | **non** | propriétaire des fonctions de surveillance (ADR 0077) | BYPASSRLS ; n'atteint que `job_runs` |
+| `coges_app_platform` | oui | administration de la plateforme, `/api/v1/platform/*` (ADR 0089) | NOBYPASSRLS ; SELECT colonne par colonne sur les métadonnées d'entreprise, UPDATE de `companies.status` ; **aucune** table commerciale |
 
 ### `coges_owner` et son risque résiduel
 
@@ -226,6 +227,48 @@ worker **refuse de démarrer en production** sans `noeviction` (lu par `INFO mem
 avertit seulement en local et en préproduction. Redis Cloud : *Database* → *Configuration*
 → *Data eviction policy* → `noeviction`.
 
+## Administration de la plateforme (ADR 0089)
+
+| Élément | Valeur |
+|---|---|
+| Application | `frontend-admin/` (Next.js à part), image `ghcr.io/…/admin`, service `admin` du compose (192 Mo) |
+| Adresse | `admin.<COGES_DOMAIN>` (pile de production seulement) : enregistrement DNS A/AAAA vers le VPS, comme le domaine principal |
+| Filtre | `COGES_ADMIN_ALLOWED_IPS` (IP ou CIDR séparées par des espaces) : bloc `@admin_allowed remote_ip` du Caddyfile, 403 sinon ; ajout d'une adresse : `docs/runbooks/vps.md` |
+| API | `/api/v1/platform/*`, servi **seulement** sur `admin.` ; 404 sur le domaine commerçant |
+| Base | rôle `coges_app_platform`, DSN `COGES_DATABASE_URL_PLATFORM` (API) |
+| E-mails | `COGES_SMTP_HOST`, `_PORT`, `_USERNAME`, `_PASSWORD`, `_FROM` (worker) ; `COGES_PLATFORM_ALERT_EMAIL` reçoit les échecs de connexion répétés ; sans hôte, aucun envoi |
+
+**Deux accès, deux usages.** `COGES_OPS_TOKEN` reste la voie **machine à machine**
+(`make ops-status`, sonde, futur script) : un jeton unique, sans personne derrière, qui
+n'ouvre que `GET /system/workers`. Les comptes `platform_users` sont la voie **humaine**,
+pour l'interface : nominatifs, profil `administrator` ou `support`, journal
+`platform_audit_logs`. On ne remplace pas l'un par l'autre.
+
+### Rôle `coges_app_platform` (révision 0026)
+
+Rôle de cluster, **avant** la migration 0026 sur Neon (préprod, puis prod), en
+`neondb_owner` :
+
+```bash
+psql "$NEONDB_OWNER_DSN" -v platform_password="$(openssl rand -hex 24)" \
+     -f deploy/sql/create_platform_role.sql
+```
+
+Puis `COGES_DATABASE_URL_PLATFORM=postgresql+psycopg://coges_app_platform:<mot de passe>@<hôte du pooler>/<base>?sslmode=require`
+dans `/etc/coges/coges.env` (et `preprod.env`). En local, sans recréer le volume :
+
+```bash
+docker compose exec -T postgres psql -U postgres \
+  -c "CREATE ROLE coges_app_platform LOGIN NOBYPASSRLS PASSWORD 'change-me-platform'"
+for db in coges coges_test coges_e2e; do
+  docker compose exec -T postgres psql -U postgres -d $db -c "GRANT USAGE ON SCHEMA public TO coges_app_platform"
+done
+```
+
+et les lignes `COGES_PLATFORM_PASSWORD`, `COGES_DATABASE_URL_PLATFORM`,
+`COGES_TEST_DATABASE_URL_PLATFORM` de `.env.example` dans `.env`. Premier compte :
+`make create-platform-user EMAIL=… NAME="…" ROLE=administrator`.
+
 ## Connexion : freinage et mode dégradé (ADR 0078)
 
 Le freinage par compte (`rl:acct:{sha256(slug|identifiant)}`) et le plafond de connexion
@@ -291,7 +334,7 @@ des valeurs aléatoires hachées en base (`auth_sessions`), indépendantes de la
 Tout est décrit dans `docs/runbooks/deploiement.md`. En bref (ADR 0083) :
 
 1. la **CI** tourne sur chaque push et chaque PR (lint, tests, T1–T40, fuites, analyses de
-   sécurité, et le job `vps` : shellcheck, Caddyfile, compose, quatre images sans push) ;
+   sécurité, et le job `vps` : shellcheck, Caddyfile, compose, cinq images sans push) ;
 2. le workflow **« Déployer »** part d'un tag `vX.Y.Z` (préprod) ou à la main (préprod ou
    production) : CI, images poussées sur ghcr.io, `alembic upgrade head` sous
    `coges_owner` depuis le job, puis `deploy.sh` sur le VPS par une clé SSH bridée, test de
@@ -307,15 +350,16 @@ supprime à la version suivante) : un retour arrière ne touche jamais la base.
 
 | Où | Nom | Contenu |
 |---|---|---|
-| VPS, `/etc/coges/coges.env` (root:deploy, 0640) | modèle `deploy/vps/coges.env.example` | `COGES_DOMAIN`, `COGES_ACME_EMAIL`, DSN Neon d'exécution (`sslmode=require`), `COGES_REDIS_PASSWORD`, `COGES_JWT_SECRET`, `COGES_OPS_TOKEN`, `COGES_SENTRY_DSN`, `COGES_JOB_PING_URLS` |
+| VPS, `/etc/coges/coges.env` (root:deploy, 0640) | modèle `deploy/vps/coges.env.example` | `COGES_DOMAIN`, `COGES_ACME_EMAIL`, DSN Neon d'exécution (`sslmode=require`, dont `COGES_DATABASE_URL_PLATFORM`), `COGES_REDIS_PASSWORD`, `COGES_JWT_SECRET`, `COGES_OPS_TOKEN`, `COGES_SENTRY_DSN`, `COGES_JOB_PING_URLS`, `COGES_ADMIN_ALLOWED_IPS`, `COGES_PLATFORM_ALERT_EMAIL`, `COGES_SMTP_*` |
 | VPS, `/etc/coges/preprod.env` | même modèle | valeurs de la préprod (branche Neon de préprod) |
 | VPS, `/etc/coges/ghcr-user`, `ghcr-token` | jeton GitHub **`read:packages` seulement** | lecture des images |
 | GitHub, environnements `preprod` / `production` | secrets `NEON_OWNER_DSN`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`, `SMOKE_SLUG`, `SMOKE_EMAIL`, `SMOKE_PASSWORD` | voir `docs/runbooks/deploiement.md` |
 | GitHub, variables d'environnement | `DEPLOY_HOST`, `DEPLOY_PORT`, `COGES_PUBLIC_URL` | adresse SSH du VPS, `https://<domaine>` |
 
 `check_runtime_env.py --require-vps` refuse un fichier de secrets qui contient un DSN
-propriétaire, un DSN sans `sslmode=require`, un Redis externe, un domaine avec schéma ou
-des secrets de moins de 32 caractères ; `deploy.sh` le lance avant chaque démarrage.
+propriétaire, un DSN sans `sslmode=require`, un Redis externe, un domaine avec schéma,
+des secrets de moins de 32 caractères ou, en production, une liste `COGES_ADMIN_ALLOWED_IPS`
+vide, illisible ou ouverte à tous ; `deploy.sh` le lance avant chaque démarrage.
 
 ### Registre d'images (ADR 0083, 0087)
 

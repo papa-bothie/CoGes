@@ -33,8 +33,9 @@ function setup(options: { token: string | null; refreshTo?: RefreshOutcome; newT
     return options.refreshTo ?? "ok";
   });
   const onExpired = vi.fn();
-  const authFetch = createAuthFetch({ fetch, refresh, onExpired, token });
-  return { authFetch, fetch, refresh, onExpired, seen, responses };
+  const onSuspended = vi.fn();
+  const authFetch = createAuthFetch({ fetch, refresh, onExpired, onSuspended, token });
+  return { authFetch, fetch, refresh, onExpired, onSuspended, seen, responses };
 }
 
 const url = "http://localhost/api/v1/sales";
@@ -86,5 +87,59 @@ describe("authFetch", () => {
     );
     expect(response.status).toBe(401);
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("entreprise suspendue en cours de session : prévient, sans rafraîchir", async () => {
+    const onSuspended = vi.fn();
+    const refresh = vi.fn(async (): Promise<RefreshOutcome> => "ok");
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ error: { code: "company_suspended", message: "…", details: {} } }),
+          { status: 403 },
+        ),
+    );
+    const authFetch = createAuthFetch({
+      fetch,
+      refresh,
+      onExpired: vi.fn(),
+      onSuspended,
+      token: tokenHolder("valide"),
+    });
+    const response = await authFetch(new Request(url));
+    expect(response.status).toBe(403);
+    expect(onSuspended).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("un autre 403 (droit manquant) ne déconnecte personne", async () => {
+    const onSuspended = vi.fn();
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ error: { code: "permission_denied", message: "…", details: {} } }),
+          { status: 403 },
+        ),
+    );
+    const authFetch = createAuthFetch({
+      fetch,
+      refresh: vi.fn(async (): Promise<RefreshOutcome> => "ok"),
+      onExpired: vi.fn(),
+      onSuspended,
+      token: tokenHolder("valide"),
+    });
+    expect((await authFetch(new Request(url))).status).toBe(403);
+    expect(onSuspended).not.toHaveBeenCalled();
+  });
+
+  it("refresh refusé pour suspension : prévient la page de connexion", async () => {
+    const { authFetch, onSuspended, onExpired, fetch } = setup({
+      token: null,
+      refreshTo: "suspended",
+    });
+    expect((await authFetch(new Request(url))).status).toBe(401);
+    expect(onSuspended).toHaveBeenCalledTimes(1);
+    expect(onExpired).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

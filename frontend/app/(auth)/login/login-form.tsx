@@ -9,7 +9,7 @@ import { z } from "zod";
 import { fieldClasses } from "@/components/kit/rubrique";
 import { isApiError, errorMessage } from "@/lib/api/errors";
 import { safeNext } from "@/lib/auth/safe-next";
-import { login } from "@/lib/auth/session";
+import { COMPANY_SUSPENDED, login } from "@/lib/auth/session";
 import { labels } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +44,8 @@ function rememberedSlug(): string {
 function failure(error: unknown): string {
   // Provisoire expiré (ADR 0078) : ne s'apprend qu'avec le bon mot de passe.
   if (isApiError(error) && error.code === "temporary_password_expired") return t.temporaryExpired;
+  // Entreprise suspendue (ADR 0089) : le bon mot de passe, mais l'accès est coupé.
+  if (isApiError(error) && error.code === COMPANY_SUSPENDED) return t.suspended;
   if (isApiError(error) && error.status === 401) return t.invalid;
   // Freinage par compte : le serveur dit combien de minutes attendre.
   if (isApiError(error) && error.status === 429 && error.details.scope === "account") {
@@ -97,7 +99,12 @@ export function LoginForm() {
     window.location.assign(safeNext(params.get("next"), window.location.origin));
   };
 
-  const notice = reason === "expired" ? t.sessionExpired : reason === "logout" ? t.loggedOut : null;
+  const notices: Record<string, string> = {
+    expired: t.sessionExpired,
+    logout: t.loggedOut,
+    suspended: t.suspended,
+  };
+  const notice = reason ? (notices[reason] ?? null) : null;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">

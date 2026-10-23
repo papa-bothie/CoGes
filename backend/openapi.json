@@ -6796,6 +6796,276 @@
           }
         }
       }
+    },
+    "/api/v1/platform/auth/login": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Login",
+        "description": "Connexion de l'équipe CoGes : e-mail et mot de passe, aucune entreprise.",
+        "operationId": "login_api_v1_platform_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlatformLoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformTokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/auth/refresh": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Refresh",
+        "description": "Rotation du refresh token de l'administration.",
+        "operationId": "refresh_api_v1_platform_auth_refresh_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformTokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/auth/logout": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Logout",
+        "operationId": "logout_api_v1_platform_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/v1/platform/auth/me": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Me",
+        "operationId": "me_api_v1_platform_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformMe"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/companies": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "List Companies",
+        "description": "Entreprises clientes : nom, slug, statut, comptes, dernière activité. Aucun montant.",
+        "operationId": "list_companies_api_v1_platform_companies_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/companies/{company_id}": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Get Company",
+        "operationId": "get_company_api_v1_platform_companies__company_id__get",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/companies/{company_id}/status": {
+      "patch": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Set Company Status",
+        "description": "Suspendre ou réactiver (profil `administrator`). Audit critique, gérant prévenu.",
+        "operationId": "set_company_status_api_v1_platform_companies__company_id__status_patch",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyStatusUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -7609,6 +7879,105 @@
         "title": "CategoryUpdate",
         "description": "Modification partielle.\n\n`parent_id: null` **explicitement transmis** remonte la catégorie à la racine ;\nchamp absent = inchangé. C'est `exclude_unset` qui distingue les deux cas."
       },
+      "CompanyDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "trial",
+              "active",
+              "suspended"
+            ],
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "user_count": {
+            "type": "integer",
+            "title": "User Count"
+          },
+          "last_activity_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity At"
+          },
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/CompanyUser"
+            },
+            "type": "array",
+            "title": "Users"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "status",
+          "created_at",
+          "user_count",
+          "last_activity_at",
+          "users"
+        ],
+        "title": "CompanyDetail"
+      },
+      "CompanyPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CompanySummary"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "CompanyPage"
+      },
       "CompanyRead": {
         "properties": {
           "id": {
@@ -7734,6 +8103,92 @@
         ],
         "title": "CompanyRead",
         "description": "Vue publique de l'entreprise courante."
+      },
+      "CompanyStatusUpdate": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "suspended"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "reason"
+        ],
+        "title": "CompanyStatusUpdate",
+        "description": "Suspendre ou réactiver. `trial` n'est jamais une cible ici (422)."
+      },
+      "CompanySummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "trial",
+              "active",
+              "suspended"
+            ],
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "user_count": {
+            "type": "integer",
+            "title": "User Count"
+          },
+          "last_activity_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "status",
+          "created_at",
+          "user_count",
+          "last_activity_at"
+        ],
+        "title": "CompanySummary",
+        "description": "Une ligne de la liste des entreprises."
       },
       "CompanyUpdate": {
         "properties": {
@@ -7864,6 +8319,53 @@
         "type": "object",
         "title": "CompanyUpdate",
         "description": "Paramètres modifiables. Chaque modification est auditée en transactionnel."
+      },
+      "CompanyUser": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "last_login_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "full_name",
+          "roles",
+          "is_active",
+          "last_login_at"
+        ],
+        "title": "CompanyUser",
+        "description": "Un compte de l'entreprise : qui, quels rôles, dernière connexion."
       },
       "ComponentHealth": {
         "properties": {
@@ -12631,6 +13133,89 @@
         "type": "string",
         "maxLength": 40,
         "minLength": 1
+      },
+      "PlatformLoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 3,
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "PlatformLoginRequest",
+        "description": "Connexion de l'équipe : e-mail et mot de passe, aucune entreprise."
+      },
+      "PlatformMe": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "administrator",
+              "support"
+            ],
+            "title": "Role"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "role"
+        ],
+        "title": "PlatformMe"
+      },
+      "PlatformTokenResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "access_token",
+          "expires_in"
+        ],
+        "title": "PlatformTokenResponse",
+        "description": "Le refresh token part en cookie `httpOnly`, jamais dans le corps."
       },
       "PositiveAmount": {
         "$ref": "#/components/schemas/Amount-Input",

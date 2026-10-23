@@ -199,6 +199,8 @@ COGES_DOMAIN=app.exemple.sn
 COGES_DATABASE_URL_APP=postgresql+psycopg://coges_app:x@ep-1.eu-central-1.aws.neon.tech/coges?sslmode=require
 COGES_DATABASE_URL_RELAY=postgresql+psycopg://coges_relay:x@ep-1.eu-central-1.aws.neon.tech/coges?sslmode=require
 COGES_DATABASE_URL_ANALYTICS=postgresql+psycopg://coges_analytics:x@ep-1.eu-central-1.aws.neon.tech/coges?sslmode=require
+COGES_DATABASE_URL_PLATFORM=postgresql+psycopg://coges_app_platform:x@ep-1.eu-central-1.aws.neon.tech/coges?sslmode=require
+COGES_ADMIN_ALLOWED_IPS=192.0.2.10
 COGES_REDIS_PASSWORD=ci-redis-password-00000000000000000000
 COGES_JWT_SECRET=ci-jwt-secret-0000000000000000000000
 """

@@ -20,7 +20,11 @@ const MARKER_MAX_AGE_SECONDS = 7 * 24 * 3600; // durée du refresh token
 const LOCK_NAME = "coges-auth-refresh";
 const CHANNEL_NAME = "coges-auth";
 
-export type RefreshOutcome = "ok" | "unauthenticated" | "unavailable";
+/** `suspended` : l'administration a coupé l'accès de l'entreprise (ADR 0089). */
+export type RefreshOutcome = "ok" | "unauthenticated" | "unavailable" | "suspended";
+
+/** Code d'erreur de l'API quand l'entreprise est suspendue (403). */
+export const COMPANY_SUSPENDED = "company_suspended";
 
 function secureSuffix(): string {
   return typeof location !== "undefined" && location.protocol === "https:" ? "; Secure" : "";
@@ -57,6 +61,12 @@ async function requestRefresh(): Promise<RefreshOutcome> {
   if (response.ok) {
     acceptTokens((await response.json()) as TokenResponse);
     return "ok";
+  }
+  if (
+    response.status === 403 &&
+    toApiError(403, await readJson(response)).code === COMPANY_SUSPENDED
+  ) {
+    return "suspended";
   }
   return response.status === 401 ? "unauthenticated" : "unavailable";
 }
@@ -147,7 +157,7 @@ export async function logout(): Promise<void> {
   }
 }
 
-export function loginUrl(reason?: "expired" | "logout"): string {
+export function loginUrl(reason?: "expired" | "logout" | "suspended"): string {
   const params = new URLSearchParams();
   if (reason) params.set("reason", reason);
   if (reason === "expired" && typeof location !== "undefined") {
@@ -164,6 +174,18 @@ export function expireSession(): void {
   announceLogout();
   if (typeof location !== "undefined" && !location.pathname.startsWith("/login")) {
     location.assign(loginUrl("expired"));
+  }
+}
+
+/**
+ * Entreprise suspendue en cours de session (ADR 0089) : la session est oubliée, et la
+ * page de connexion dit pourquoi — jamais une erreur technique.
+ */
+export function suspendSession(): void {
+  forgetLocally();
+  announceLogout();
+  if (typeof location !== "undefined" && !location.pathname.startsWith("/login")) {
+    location.assign(loginUrl("suspended"));
   }
 }
 

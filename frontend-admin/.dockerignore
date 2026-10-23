@@ -1,0 +1,13 @@
+# Contexte de l'image de l'administration (ADR 0089) : le code et le lockfile, rien de local.
+node_modules
+.next
+.next-e2e
+.env*
+!.env.example
+playwright-report
+test-results
+coverage
+e2e
+*.tsbuildinfo
+Dockerfile
+.dockerignore

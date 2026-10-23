@@ -59,6 +59,8 @@ COGES_DOMAIN=app.exemple.sn
 COGES_DATABASE_URL_APP=postgresql+psycopg://coges_app:x@ep-1.eu-central-1.aws.neon.tech/coges?sslmode=require
 COGES_DATABASE_URL_RELAY=postgresql+psycopg://coges_relay:x@ep-1.eu-central-1.aws.neon.tech/coges?sslmode=require
 COGES_DATABASE_URL_ANALYTICS="postgresql+psycopg://coges_analytics:x@ep-1.eu-central-1.aws.neon.tech/coges?sslmode=require"
+COGES_DATABASE_URL_PLATFORM=postgresql+psycopg://coges_app_platform:x@ep-1.eu-central-1.aws.neon.tech/coges?sslmode=require
+COGES_ADMIN_ALLOWED_IPS="196.207.1.10 2001:db8::/48"
 COGES_REDIS_PASSWORD=ci-redis-password-00000000000000000000
 COGES_JWT_SECRET=ci-jwt-secret-0000000000000000000000
 """
@@ -99,6 +101,11 @@ def test_the_example_env_file_is_refused_until_filled() -> None:
             ("coges_app:x", "coges_owner:x"),
             "coges_owner",
         ),
+        # Administration de la plateforme (ADR 0089).
+        (("coges_app_platform:x", "coges_app:x"), "coges_app_platform"),
+        (('COGES_ADMIN_ALLOWED_IPS="196.207.1.10 2001:db8::/48"', ""), "ALLOWED_IPS est vide"),
+        (("196.207.1.10 2001:db8::/48", "196.207.1.10 bureau"), "« bureau », illisible"),
+        (("196.207.1.10 2001:db8::/48", "0.0.0.0/0"), "à tous"),
     ],
 )
 def test_vps_env_file_rules(
@@ -155,3 +162,11 @@ def test_the_stack_of_the_env_file_must_match(
     assert _module().main([*_env(tmp_path, _GOOD_ENV), "--stack", "preprod"]) == 1
     assert "COGES_STACK" in capsys.readouterr().err
     assert _module().main([*_env(tmp_path, _GOOD_ENV), "--stack", "production"]) == 0
+
+
+def test_the_preprod_stack_needs_no_admin_allow_list(tmp_path: Path) -> None:
+    """Seule la production sert l'administration (ADR 0089)."""
+    text = _GOOD_ENV.replace("COGES_STACK=production", "COGES_STACK=preprod").replace(
+        'COGES_ADMIN_ALLOWED_IPS="196.207.1.10 2001:db8::/48"', ""
+    )
+    assert _module().main([*_env(tmp_path, text), "--stack", "preprod"]) == 0

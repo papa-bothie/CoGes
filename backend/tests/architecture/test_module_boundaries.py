@@ -51,3 +51,26 @@ def test_no_module_imports_another_module_repository_or_models() -> None:
                 violations.append(f"{source.relative_to(MODULES_ROOT.parents[1])} -> {imported}")
 
     assert not violations, "Imports interdits entre modules :\n" + "\n".join(violations)
+
+
+#: L'administration de la plateforme est un axe à part (ADR 0089) : elle n'importe
+#: aucun module métier, et aucun module métier ne l'importe. Ce qu'elle sait d'une
+#: entreprise, elle le lit sous son propre rôle, colonne par colonne.
+PLATFORM_MODULE = "platform"
+
+
+def test_the_platform_module_stands_apart() -> None:
+    violations: list[str] = []
+    for source in sorted(MODULES_ROOT.rglob("*.py")):
+        owner = _module_name(source)
+        tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+        for imported in _imported_names(tree):
+            parts = imported.split(".")
+            if not imported.startswith("app.modules.") or len(parts) < 3:
+                continue
+            target = parts[2]
+            if target == owner:
+                continue
+            if PLATFORM_MODULE in (owner, target):
+                violations.append(f"{source.relative_to(MODULES_ROOT.parents[1])} -> {imported}")
+    assert not violations, "Le module platform doit rester à part :\n" + "\n".join(violations)

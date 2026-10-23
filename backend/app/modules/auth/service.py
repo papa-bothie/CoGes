@@ -10,7 +10,8 @@ Quatre règles de non-divulgation :
 * le freinage par compte (ADR 0078) compte ce qui a été **tapé**, que le compte existe
   ou non, et répond pareil dans les deux cas ;
 * l'échéance d'un mot de passe provisoire ne se révèle qu'**après** le mot de passe
-  vérifié : seul qui le connaît apprend qu'il a expiré ;
+  vérifié : seul qui le connaît apprend qu'il a expiré ; de même pour la suspension
+  de l'entreprise (ADR 0089) ;
 * un mot de passe est toujours vérifié, même sans identité trouvée, pour ne pas
   créer d'oracle temporel ;
 * la connexion réussie relève de l'audit **asynchrone**, pas du canal critique.
@@ -27,7 +28,11 @@ from sqlalchemy.orm import Session
 from app.core import queue, rate_limit
 from app.core.audit import AuditAction, audit_critical
 from app.core.config import get_settings
-from app.core.errors import AuthenticationRequiredError, TemporaryPasswordExpiredError
+from app.core.errors import (
+    AuthenticationRequiredError,
+    CompanySuspendedError,
+    TemporaryPasswordExpiredError,
+)
 from app.core.phone import normalise_phone
 from app.core.security import (
     create_access_token,
@@ -182,6 +187,11 @@ def login(
         _audit_expired_temporary_password(identity, ip_address)
         raise TemporaryPasswordExpiredError()
 
+    if _company_suspended(identity):
+        # Même traitement : le bon mot de passe, mais l'accès de l'entreprise est coupé.
+        rate_limit.cancel_attempt(attempt)
+        raise CompanySuspendedError()
+
     rate_limit.reset_account(attempt)
 
     ctx = TenantContext(user_id=identity.user_id, company_id=identity.company_id)
@@ -205,6 +215,13 @@ def login(
         company_id=identity.company_id,
         user_id=identity.user_id,
     )
+
+
+def _company_suspended(identity: AuthIdentity) -> bool:
+    """Lecture de l'entreprise par sa façade, dans le contexte du compte trouvé."""
+    ctx = TenantContext(user_id=identity.user_id, company_id=identity.company_id)
+    with tenant_transaction(ctx) as session:
+        return companies_service.is_suspended(session, ctx)
 
 
 def _temporary_password_expired(identity: AuthIdentity) -> bool:
@@ -294,6 +311,7 @@ def refresh(
 
     reuse_detected = False
     expired = False
+    suspended = False
     issued: IssuedTokens | None = None
 
     with tenant_transaction(ctx) as session:
@@ -320,6 +338,10 @@ def refresh(
             reuse_detected = True
         elif current.expires_at <= now:
             expired = True
+        elif companies_service.is_suspended(session, ctx):
+            # Rien n'est tourné : la session survit à la suspension et resservira si
+            # l'entreprise est réactivée avant son expiration (ADR 0089).
+            suspended = True
         else:
             user_ctx = TenantContext(user_id=current.user_id, company_id=company_id)
             rotated, new_raw_token = _issue_session(
@@ -368,6 +390,8 @@ def refresh(
         raise AuthenticationRequiredError("Session révoquée.")
     if expired:
         raise AuthenticationRequiredError("Session expirée.")
+    if suspended:
+        raise CompanySuspendedError()
 
     assert issued is not None  # noqa: S101 - garanti par les branches ci-dessus
     return issued

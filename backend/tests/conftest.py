@@ -174,6 +174,36 @@ def relay_session_factory(
         engine.dispose()
 
 
+@pytest.fixture(scope="session")
+def platform_session_factory(migrated_database: str) -> Iterator[sessionmaker[Any]]:
+    """Sessions en `coges_app_platform` : l'administration, métadonnées seulement (ADR 0089)."""
+    platform_url = get_settings().test_database_url_platform
+    if not platform_url:
+        pytest.skip(
+            "COGES_TEST_DATABASE_URL_PLATFORM est requis pour les tests de l'administration."
+        )
+    engine: Engine = create_app_engine(platform_url, pool_size=2, max_overflow=0)
+    try:
+        yield sessionmaker(bind=engine, expire_on_commit=False, future=True)
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def platform_bound_to_test_database(
+    app_bound_to_test_database: None, platform_session_factory: sessionmaker[Any]
+) -> Iterator[None]:
+    """Fait pointer l'administration sur `coges_test`, comme l'API commerçante."""
+    patcher = MonkeyPatch()
+    patcher.setattr(
+        "app.core.deps.get_platform_app_session_factory", lambda: platform_session_factory
+    )
+    try:
+        yield
+    finally:
+        patcher.undo()
+
+
 #: Mot de passe des comptes de test. Valeur factice, sans usage hors de la suite.
 TEST_PASSWORD = "mot-de-passe-de-test-01"  # noqa: S105
 

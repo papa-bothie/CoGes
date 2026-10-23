@@ -58,6 +58,9 @@ services:
     environment:
       COGES_DOMAIN: ${COGES_DOMAIN:?}
       COGES_ACME_EMAIL: ${COGES_ACME_EMAIL:?COGES_ACME_EMAIL manquant (Let's Encrypt)}
+      # Adresses admises sur admin.<domaine> (ADR 0089), séparées par des espaces. Vide,
+      # Caddy refuserait de démarrer : check_runtime_env.py l'exige avant (production).
+      COGES_ADMIN_ALLOWED_IPS: ${COGES_ADMIN_ALLOWED_IPS:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./maintenance.html:/srv/maintenance/maintenance.html:ro
@@ -93,6 +96,18 @@ services:
       <<: *healthcheck
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 
+  # Administration de la plateforme (ADR 0089) : application Next.js à part, jamais
+  # livrée au navigateur d'un commerçant. Servie par Caddy sur admin.<domaine> seulement.
+  admin:
+    <<: *service
+    image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/admin:${COGES_IMAGE_TAG:?}
+    networks:
+      edge: { aliases: ["${COGES_STACK:?}-admin"] }
+    mem_limit: 192m
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
   api:
     <<: *service
     image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/api:${COGES_IMAGE_TAG:?}
@@ -100,6 +115,7 @@ services:
     environment:
       <<: *app-env
       COGES_DATABASE_URL_APP: ${COGES_DATABASE_URL_APP:?}
+      COGES_DATABASE_URL_PLATFORM: ${COGES_DATABASE_URL_PLATFORM:?}
       COGES_TRUST_PROXY_HEADERS: "true"
       COGES_FORWARDED_ALLOW_IPS: 172.30.0.0/24
       COGES_API_WORKERS: ${COGES_API_WORKERS:-2}
@@ -128,6 +144,13 @@ services:
       COGES_DATABASE_URL_APP: ${COGES_DATABASE_URL_APP:?}
       COGES_DATABASE_URL_ANALYTICS: ${COGES_DATABASE_URL_ANALYTICS:?}
       COGES_ML_ARTIFACTS_DIR: /var/lib/coges/ml
+      # E-mails de l'administration (ADR 0089) ; sans hôte, rien ne part.
+      COGES_PLATFORM_ALERT_EMAIL: ${COGES_PLATFORM_ALERT_EMAIL:-}
+      COGES_SMTP_HOST: ${COGES_SMTP_HOST:-}
+      COGES_SMTP_PORT: ${COGES_SMTP_PORT:-587}
+      COGES_SMTP_USERNAME: ${COGES_SMTP_USERNAME:-}
+      COGES_SMTP_PASSWORD: ${COGES_SMTP_PASSWORD:-}
+      COGES_SMTP_FROM: ${COGES_SMTP_FROM:-}
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
     volumes: [ml-artifacts:/var/lib/coges/ml]
     networks: [data, jobs]

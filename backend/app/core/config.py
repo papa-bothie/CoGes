@@ -7,7 +7,9 @@ Quatre DSN distincts, jamais interchangeables :
 * ``database_url_relay``     — rôle ``coges_relay``, aucun privilège de table : il n'appelle que
   trois fonctions ``SECURITY DEFINER`` (ADR 0032) ;
 * ``database_url_analytics`` — rôle ``coges_analytics``, seul autorisé à ``DELETE``, et seulement
-  sur des projections reconstruisibles.
+  sur des projections reconstruisibles ;
+* ``database_url_platform``  — rôle ``coges_app_platform``, administration de la plateforme :
+  métadonnées des entreprises colonne par colonne, aucune table commerciale (ADR 0089).
 
 Aucun secret n'est journalisé : les valeurs sensibles sont des ``SecretStr``.
 """
@@ -55,11 +57,15 @@ class Settings(BaseSettings):
     # DSN des workers : absents d'un déploiement API-seule, requis dans l'image worker.
     database_url_relay: str | None = None
     database_url_analytics: str | None = None
+    # DSN de l'administration (`/api/v1/platform/*`, ADR 0089). Absent : ces routes
+    # échouent à l'usage, le reste de l'API n'en sait rien.
+    database_url_platform: str | None = None
     # Bases de test, alimentées par la suite pytest.
     test_database_url_owner: str | None = None
     test_database_url_app: str | None = None
     test_database_url_relay: str | None = None
     test_database_url_analytics: str | None = None
+    test_database_url_platform: str | None = None
 
     redis_url: str = "redis://localhost:6379/0"
 
@@ -136,6 +142,23 @@ class Settings(BaseSettings):
     login_throttle_alert_after: int = Field(default=10, ge=1)
     # Plafond du compteur en mémoire quand Redis manque (ADR 0078, mode dégradé).
     login_throttle_memory_keys: int = Field(default=10_000, ge=100)
+
+    # --- Administration de la plateforme (ADR 0089) ---
+    # Adresse de l'équipe prévenue des échecs de connexion répétés sur un compte
+    # plateforme (il n'y a pas de « gérant » à ce niveau).
+    platform_alert_email: str | None = None
+
+    # --- Envoi d'e-mails (ADR 0089) ---
+    # Sans hôte, aucun envoi : le message est journalisé (sans destinataire) et sauté.
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    # Vide : l'adresse par défaut de `app/core/mailer.py`.
+    smtp_from: str | None = None
+    # STARTTLS sur le port de soumission ; à couper seulement pour un relais local.
+    smtp_starttls: bool = True
+    smtp_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
 
     # Durée de vie d'un mot de passe provisoire (ADR 0078), en heures.
     temp_password_ttl_hours: int = Field(default=48, ge=1)
@@ -264,6 +287,19 @@ class Settings(BaseSettings):
                 "reconstruire les agrégats."
             )
         return self.database_url_analytics
+
+    def require_platform_url(self) -> str:
+        """DSN de l'administration, ou une erreur explicite : jamais de repli sur `coges_app`.
+
+        Se rabattre sur le rôle applicatif ne montrerait aucune entreprise (la RLS) ; ce
+        serait surtout ouvrir à l'administration un rôle qui lit les ventes.
+        """
+        if not self.database_url_platform:
+            raise RuntimeError(
+                "COGES_DATABASE_URL_PLATFORM est absent : ce processus ne peut pas servir "
+                "l'administration de la plateforme."
+            )
+        return self.database_url_platform
 
 
 @lru_cache

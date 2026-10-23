@@ -191,3 +191,16 @@ def get_analytics_session_factory() -> sessionmaker[Any]:
     """
     engine = create_app_engine(get_settings().require_analytics_url())
     return sessionmaker(bind=engine, expire_on_commit=False, future=True)
+
+
+@lru_cache
+def get_platform_app_session_factory() -> sessionmaker[Any]:
+    """Sessions de l'administration, en `coges_app_platform` (ADR 0089).
+
+    Ce rôle ne lit que des métadonnées (entreprises, comptes, date de dernière
+    activité) et n'a aucun droit sur une table commerciale : une erreur de code dans
+    `modules/platform/` ne peut pas lire une vente, la base la refuserait. Petit pool :
+    quelques personnes de l'équipe, jamais les commerçants.
+    """
+    engine = create_app_engine(get_settings().require_platform_url(), pool_size=2, max_overflow=2)
+    return sessionmaker(bind=engine, expire_on_commit=False, future=True)

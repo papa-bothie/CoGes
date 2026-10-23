@@ -98,7 +98,13 @@ describe("(e) session", () => {
           status: request.headers.get("Authorization") === "Bearer neuf" ? 200 : 401,
         }),
     );
-    const authFetch = createAuthFetch({ fetch, refresh, onExpired: vi.fn(), token });
+    const authFetch = createAuthFetch({
+      fetch,
+      refresh,
+      onExpired: vi.fn(),
+      onSuspended: vi.fn(),
+      token,
+    });
 
     // La première requête rafraîchit ; la seconde, partie avec l'ancien jeton, revient
     // en 401 après coup : le jeton a déjà changé, inutile de le faire tourner encore.
@@ -113,6 +119,7 @@ describe("(e) session", () => {
       },
       refresh,
       onExpired: vi.fn(),
+      onSuspended: vi.fn(),
       token: { fresh: () => "ancien", get: () => current },
     });
     const response = await late(new Request("http://localhost/api/v1/sales"));

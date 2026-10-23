@@ -182,3 +182,19 @@ class PasswordChangeRequiredError(CogesError):
     code = "password_change_required"
     status_code = 409
     default_message = "Choisissez d'abord votre propre mot de passe."
+
+
+class CompanySuspendedError(CogesError):
+    """L'entreprise est suspendue par l'administration de la plateforme (ADR 0089).
+
+    Ni « identifiants invalides » ni erreur technique : la personne a le bon mot de
+    passe, c'est l'accès de l'entreprise qui est coupé, et elle doit savoir à qui
+    s'adresser. Révélé seulement **après** le mot de passe vérifié.
+    """
+
+    code = "company_suspended"
+    status_code = 403
+    default_message = (
+        "L'accès de votre entreprise à CoGes est suspendu. "
+        "Contactez l'équipe CoGes pour le rétablir."
+    )

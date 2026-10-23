@@ -199,25 +199,33 @@ def failing_node_advisories(report: dict[str, object], excused: set[str]) -> lis
     return failing
 
 
+#: Les deux projets Node : le front commerçant et l'administration (ADR 0089).
+NODE_PROJECTS = ("frontend", "frontend-admin")
+
+
 def scan_node() -> bool:
-    _say("dépendances du front : pnpm audit --prod (haute ou critique)")
     excused = load_exceptions("pnpm-audit")
     pnpm = shutil.which("pnpm") or "pnpm"
-    result = subprocess.run(  # noqa: S603
-        [pnpm, "--dir", str(ROOT / "frontend"), "audit", "--prod", "--json"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    try:
-        report = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        _say(f"rapport pnpm illisible :\n{result.stdout}\n{result.stderr}")
-        return False
-    failing = failing_node_advisories(report, excused)
-    for line in failing:
-        _say(line)
-    return not failing
+    clean = True
+    for project in NODE_PROJECTS:
+        _say(f"dépendances de {project} : pnpm audit --prod (haute ou critique)")
+        result = subprocess.run(  # noqa: S603
+            [pnpm, "--dir", str(ROOT / project), "audit", "--prod", "--json"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        try:
+            report = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            _say(f"rapport pnpm illisible :\n{result.stdout}\n{result.stderr}")
+            clean = False
+            continue
+        failing = failing_node_advisories(report, excused)
+        for line in failing:
+            _say(line)
+        clean = clean and not failing
+    return clean
 
 
 def main(argv: list[str]) -> int:

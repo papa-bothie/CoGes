@@ -55,6 +55,10 @@ PUBLIC_PATHS = frozenset(
         "/api/v1/auth/login",
         "/api/v1/auth/refresh",
         "/api/v1/auth/logout",
+        # Connexion de l'administration (ADR 0089) : sans jeton par nature.
+        "/api/v1/platform/auth/login",
+        "/api/v1/platform/auth/refresh",
+        "/api/v1/platform/auth/logout",
     }
 )
 
@@ -70,6 +74,11 @@ NON_RESOURCE_PATHS = frozenset(
         "/api/v1/exports/referentials/{kind}",
     }
 )
+
+
+#: Administration de la plateforme (ADR 0089) : aucun jeton d'entreprise n'y entre, et
+#: c'est précisément ce que prouve `test_platform_token_separation.py` — route par route.
+PLATFORM_PREFIX = "/api/v1/platform/"
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +210,7 @@ def _parameterised_paths() -> list[str]:
         and "{" in path
         and path not in PUBLIC_PATHS
         and path not in NON_RESOURCE_PATHS
+        and not path.startswith(PLATFORM_PREFIX)
     )
 
 

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import secrets
 from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from ipaddress import ip_address
 from typing import Annotated
@@ -33,14 +34,21 @@ from sqlalchemy.sql import text
 
 from app.core import rate_limit
 from app.core.config import get_settings
+from app.core.database import get_platform_app_session_factory
 from app.core.errors import (
     AuthenticationRequiredError,
+    CompanySuspendedError,
     NotFoundError,
     PasswordChangeRequiredError,
     PermissionDeniedError,
 )
 from app.core.observability import tag_tenant
-from app.core.security import AccessClaims, decode_access_token
+from app.core.security import (
+    AccessClaims,
+    PlatformClaims,
+    decode_access_token,
+    decode_platform_token,
+)
 from app.core.tenancy import TenantContext, tenant_transaction
 
 _LOAD_IDENTITY = text(
@@ -48,6 +56,7 @@ _LOAD_IDENTITY = text(
     SELECT u.company_id AS company_id,
            u.is_active  AS is_active,
            u.must_change_password AS must_change_password,
+           c.status::text AS company_status,
            COALESCE(
              array_agg(p.code) FILTER (WHERE p.code IS NOT NULL),
              ARRAY[]::text[]
@@ -61,7 +70,7 @@ _LOAD_IDENTITY = text(
     LEFT JOIN permissions       p ON p.id = rp.permission_id
     WHERE u.id = :user_id
       AND u.deleted_at IS NULL
-    GROUP BY u.company_id, u.is_active, u.must_change_password
+    GROUP BY u.company_id, u.is_active, u.must_change_password, c.status
     """
 )
 
@@ -100,6 +109,13 @@ def get_tenant_session(
             raise AuthenticationRequiredError("Session invalide.")
         if not row.is_active:
             raise AuthenticationRequiredError("Ce compte est désactivé.")
+        # Relu à **chaque** requête (ADR 0089) : un jeton émis avant la suspension cesse
+        # de servir à la requête suivante, sans attendre son expiration.
+        if row.company_status == "suspended":
+            raise CompanySuspendedError()
+        # TODO(lot 24, abonnements) : une entreprise en essai (`trial`) dont la date de
+        # fin est dépassée sera refusée ici, avec son propre code. La table des essais
+        # n'existe pas encore : aucune logique n'est simulée en attendant.
         if row.must_change_password and request.url.path not in PASSWORD_CHANGE_PATHS:
             raise PasswordChangeRequiredError()
 
@@ -171,6 +187,92 @@ def get_platform_session() -> Iterator[Session]:  # à prendre en portée `funct
     """
     with tenant_transaction(TenantContext.bootstrap(UUID(int=0))) as session:
         yield session
+
+
+# ------------------------------------------------- administration (ADR 0089)
+#
+# Une famille de jetons à part (audience `coges-platform`), une session à part
+# (`coges_app_platform`, jamais `coges_app`), aucune entreprise dans le contexte. Rien
+# ici ne pose `app.company_id` autrement que par `tenant_transaction` sur l'entreprise
+# nulle : la RLS tenant ne laisse rien voir, seules les politiques qui nomment le rôle
+# de l'administration — et ses GRANT colonne par colonne — ouvrent quelque chose.
+
+_LOAD_PLATFORM_USER = text(
+    "SELECT role::text AS role, is_active FROM platform_users WHERE id = :platform_user_id"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class PlatformAdmin:
+    """Compte de l'administration, relu en base à chaque requête."""
+
+    platform_user_id: UUID
+    role: str
+
+
+@dataclass(frozen=True, slots=True)
+class PlatformSession:
+    """Transaction en `coges_app_platform`, avec le compte qui agit."""
+
+    session: Session
+    admin: PlatformAdmin
+
+
+def get_platform_claims(request: Request) -> PlatformClaims:
+    """Jeton de l'administration ; un jeton commerçant y est refusé (audience)."""
+    header = request.headers.get("authorization")
+    if not header or not header.lower().startswith("bearer "):
+        raise AuthenticationRequiredError("Jeton d'accès absent.")
+    return decode_platform_token(header.split(" ", 1)[1].strip())
+
+
+@contextmanager
+def platform_transaction() -> Iterator[Session]:
+    """Transaction en `coges_app_platform`, contexte d'entreprise nul.
+
+    Sert aussi hors requête authentifiée : connexion de l'administration et CLI.
+    """
+    with tenant_transaction(
+        TenantContext.bootstrap(UUID(int=0)),
+        session_factory=get_platform_app_session_factory(),
+    ) as session:
+        yield session
+
+
+def get_platform_admin_session(
+    claims: Annotated[PlatformClaims, Depends(get_platform_claims)],
+) -> Iterator[PlatformSession]:
+    """Ouvre la transaction de l'administration et relit le compte qui agit."""
+    with platform_transaction() as session:
+        row = session.execute(
+            _LOAD_PLATFORM_USER, {"platform_user_id": claims.platform_user_id}
+        ).one_or_none()
+        if row is None or not row.is_active:
+            raise AuthenticationRequiredError("Session invalide.")
+        yield PlatformSession(
+            session=session,
+            admin=PlatformAdmin(platform_user_id=claims.platform_user_id, role=row.role),
+        )
+
+
+#: Portée `function`, comme `CurrentTenant` (ADR 0079) : COMMIT avant la réponse.
+CurrentPlatformAdmin = Annotated[
+    PlatformSession, Depends(get_platform_admin_session, scope="function")
+]
+
+
+def require_platform_role(*roles: str) -> Callable[[PlatformSession], PlatformSession]:
+    """Exige un profil de l'administration, côté serveur (`administrator`, `support`)."""
+
+    def dependency(platform: CurrentPlatformAdmin) -> PlatformSession:
+        if platform.admin.role not in roles:
+            raise PermissionDeniedError(
+                "Votre profil ne permet pas cette action.",
+                details={"required_platform_role": list(roles)},
+            )
+        return platform
+
+    return dependency
 
 
 def client_ip(request: Request) -> str | None:

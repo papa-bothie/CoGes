@@ -28,6 +28,9 @@ from app.core.errors import CogesError, PayloadTooLargeError
 API_PREFIX = "/api/v1"
 IMPORTS_PREFIX = f"{API_PREFIX}/imports"
 LOGIN_PATH = f"{API_PREFIX}/auth/login"
+#: Les deux connexions, commerçante et administration (ADR 0089), partagent le plafond
+#: bas par adresse IP.
+LOGIN_PATHS = frozenset({LOGIN_PATH, f"{API_PREFIX}/platform/auth/login"})
 DOCS_PATHS = (f"{API_PREFIX}/docs", f"{API_PREFIX}/openapi.json")
 
 
@@ -124,7 +127,7 @@ class IpRateLimitMiddleware:
             _Peer(client[0]) if client else None,
         )
         if ip:
-            is_login = scope["path"] == LOGIN_PATH and scope["method"] == "POST"
+            is_login = scope["path"] in LOGIN_PATHS and scope["method"] == "POST"
             try:
                 # Redis est appelé en synchrone : hors de la boucle d'événements.
                 await to_thread.run_sync(_hit_ip, ip, is_login)

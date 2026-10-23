@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import ipaddress
 import urllib.parse
 from collections.abc import Iterable
 from pathlib import Path
@@ -43,6 +44,8 @@ RUNTIME_DSNS: dict[str, str] = {
     "COGES_DATABASE_URL_APP": "coges_app",
     "COGES_DATABASE_URL_RELAY": "coges_relay",
     "COGES_DATABASE_URL_ANALYTICS": "coges_analytics",
+    # Administration de la plateforme (ADR 0089) : métadonnées seulement.
+    "COGES_DATABASE_URL_PLATFORM": "coges_app_platform",
 }
 #: Rôles qu'un environnement d'exécution peut désigner, quelle que soit la variable.
 RUNTIME_ROLES = frozenset(RUNTIME_DSNS.values())
@@ -153,6 +156,22 @@ def vps_violations(
         found.append(f"{source} : COGES_DOMAIN est un nom d'hôte nu (HTTPS imposé par Caddy)")
     elif not HOSTNAME.match(domain):
         found.append(f"{source} : COGES_DOMAIN invalide ou vide")
+
+    # Le sous-domaine de l'administration n'est ouvert qu'à ces adresses (ADR 0089) :
+    # vide, Caddy refuserait tout le monde ; une entrée illisible, Caddy refuserait de
+    # démarrer. `0.0.0.0/0` ouvrirait l'administration au monde entier.
+    # Seule la production sert l'administration : la préprod n'en a pas besoin.
+    allowed = values.get("COGES_ADMIN_ALLOWED_IPS", "").split()
+    if not allowed and (declared or stack) != "preprod":
+        found.append(f"{source} : COGES_ADMIN_ALLOWED_IPS est vide")
+    for entry in allowed:
+        try:
+            network = ipaddress.ip_network(entry, strict=False)
+        except ValueError:
+            found.append(f"{source} : COGES_ADMIN_ALLOWED_IPS contient « {entry} », illisible")
+            continue
+        if network.prefixlen == 0:
+            found.append(f"{source} : COGES_ADMIN_ALLOWED_IPS ouvre l'administration à tous")
 
     for key in ("COGES_JWT_SECRET", "COGES_REDIS_PASSWORD"):
         if len(values.get(key, "")) < MIN_SECRET_LENGTH:

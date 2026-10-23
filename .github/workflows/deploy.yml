@@ -113,7 +113,7 @@ jobs:
             docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' 2>/dev/null \
               | python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])' 2>/dev/null || true
           }
-          for package in front api worker bundle; do
+          for package in front admin api worker bundle; do
             decision=$(python3 "$RUNNER_TEMP/registry_cleanup.py" decide --version "$VERSION" \
               --version-digest "$(digest "$REGISTRY/$package:$VERSION")" \
               --sha-digest "$(digest "$REGISTRY/$package:$SHA")")
@@ -132,6 +132,16 @@ jobs:
           tags: ${{ env.REGISTRY }}/front:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/front:${{ steps.version.outputs.sha }}
           cache-from: type=gha,scope=front
           cache-to: type=gha,mode=max,scope=front
+      # Administration de la plateforme (ADR 0089) : image à part, jamais dans le front.
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        if: steps.decide.outputs.admin == 'build'
+        with:
+          context: frontend-admin
+          push: true
+          provenance: false
+          tags: ${{ env.REGISTRY }}/admin:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/admin:${{ steps.version.outputs.sha }}
+          cache-from: type=gha,scope=admin
+          cache-to: type=gha,mode=max,scope=admin
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         if: steps.decide.outputs.api == 'build'
         with:
@@ -263,7 +273,7 @@ jobs:
             docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' 2>/dev/null \
               | python3 -c 'import json,sys; print(json.load(sys.stdin)["digest"])' 2>/dev/null || true
           }
-          for package in front api worker bundle; do
+          for package in front admin api worker bundle; do
             image="$REGISTRY/$package"
             current=$(digest "$image:production")
             if [ -n "$current" ] && [ "$current" != "$(digest "$image:$VERSION")" ]; then
@@ -291,7 +301,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        package: [front, api, worker, bundle]
+        package: [front, admin, api, worker, bundle]
     steps:
       - uses: actions/checkout@v5
       # Quota gratuit de 500 Mo (ADR 0087) : jamais `production` ni

@@ -15,6 +15,7 @@ CoGes est un **logiciel de gestion pour PME ouest-africaines** (pas un ERP), cen
 - **Backend** : monolithe modulaire **FastAPI + SQLAlchemy 2 + Alembic + PostgreSQL 16**.
 - **Asynchrone** : outbox transactionnelle `business_events` → relais → **Redis** → **Celery** (Docker).
 - **Frontend** : **Next.js (App Router) + TypeScript**, qui n'appelle **que** l'API REST `/api/v1`.
+  L'administration de la plateforme est une application à part, `frontend-admin/` (ADR 0089).
 - **Déploiement** : tout sur un **VPS** Infomaniak en Docker (Caddy, front, API, Redis, worker, beat, relais) ; PostgreSQL chez **Neon** (ADR 0083, remplace l'ADR 0040).
 - **Multi-tenant** : isolation par `company_id` avec **3 barrières** (FK composites, repository, RLS FORCE).
 - **Langue** : interface en **français**, code et schéma en **anglais**, devise par défaut **XOF (FCFA)**.
@@ -67,6 +68,10 @@ Si le code contredit l'architecture, c'est le code qui a tort, sauf si une déci
 - Un module **n'importe jamais** le repository ni les modèles d'un autre : il passe par la
   **façade service** de l'autre module. Dépendances **vers le bas uniquement** (Plateforme →
   Référentiel → Opérations → Finance → Restitution). Un test d'architecture le vérifie.
+- **Hors des cinq bandes** : `modules/platform/` (administration de la plateforme, ADR 0089)
+  n'importe aucun module métier et n'est importé par aucun ; il ne parle qu'au rôle
+  `coges_app_platform` (métadonnées colonne par colonne, **aucune** table commerciale), sous
+  `/api/v1/platform/*`, avec son propre jeton (audience `coges-platform`).
 - Routers : HTTP uniquement (pas de SQL). Services : invariants et transaction (pas de HTTP).
   Repositories : requêtes filtrées par tenant (pas de règle métier).
 
@@ -178,6 +183,8 @@ make front-install           # pnpm (corepack) + dépendances + Chromium pour Pl
 make front-dev               # Next sur :3000, /api/v1 réécrit vers COGES_API_URL (défaut http://localhost:8000)
 make front-api               # régénère frontend/types/api.ts après `make openapi`
 make front-check             # types à jour, lint, typecheck, Vitest, build (ce que joue la CI)
+make admin-check / admin-e2e # administration (frontend-admin/, :3200) : mêmes contrôles, parcours sur coges_e2e
+make create-platform-user EMAIL=… NAME="…" ROLE=administrator|support   # compte de l'équipe (jamais de route publique)
 make front-e2e               # e2e-reset puis Playwright sur coges_e2e (API :8100 et front :3100 lancés seuls), axe AA bloquant
 make e2e-reset / e2e-api / e2e-front   # base e2e recréée (migrations + seed) / API e2e sans limite de débit / front e2e
 CAPTURES_STAGE=apres make front-e2e   # + captures clair/sombre de la phase 14 (docs/design/captures/phase-14/<étape>/)
@@ -198,7 +205,8 @@ coges/
 │   ├── prompts/               ← prompts de phase 00 → 20
 │   └── runbooks/              ← guides d'intervention (vps, déploiement, workers, sauvegarde)
 ├── backend/                   ← FastAPI, modules, workers, migrations, tests (dont tests/perf)
-├── frontend/                  ← Next.js App Router
+├── frontend/                  ← Next.js App Router (commerçants)
+├── frontend-admin/            ← administration de la plateforme (ADR 0089), sur admin.<domaine>
 └── deploy/                    ← vps/ (compose, Caddyfile, bootstrap, deploy.sh), scripts, README-infra
 ```
 
@@ -230,7 +238,8 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | Sauvegarde chiffrée et page d'erreur | `19-sauvegarde-et-page-erreur.md` | 18 | chaîne de sauvegarde en CI, refus de restauration, 500 stable, e2e coupure et rejeu | ✅ PR n° 26 : ADR 0084 et 0085, révision 0023 (`create_backup_role.sql` sur Neon avant), chaîne de sauvegarde prouvée en CI, Lighthouse 100 |
 | Lot C Intégrité et isolation prouvées | `20-integrite-lot-c.md` | 16 | C1 à C5, registres découverts, invariants | ✅ PR n° 27 : ADR 0086, 1263 tests backend, 51 écritures critiques, registres découverts ; entreprise supprimée ⇒ sessions fermées (`core/deps.py`) |
 | Correctifs de la revue, partie 1 | `21-correctifs-de-la-revue.md` | 20 | chaque constat reproduit (test rouge) puis corrigé | ✅ PR n° 29 : ADR 0087, révision 0024, 8/8 reproduits et corrigés |
-| Correctifs de la revue, partie 2 | `21-correctifs-de-la-revue.md` | partie 1 fusionnée | idem, tableau reproduit / non reproduit / reporté | 🟨 branche `fix/review-findings-2` : ADR 0088, révision 0025, 25 points (2 non reproduits, 2 reportés), 1441 tests backend, 254 Vitest, 69 e2e ; PR à ouvrir |
+| Correctifs de la revue, partie 2 | `21-correctifs-de-la-revue.md` | partie 1 fusionnée | idem, tableau reproduit / non reproduit / reporté | ✅ PR n° 30 : ADR 0088, révision 0025, 25 points (2 non reproduits, 2 reportés) |
+| Lot admin 1 : rôle plateforme, statut, métadonnées | `22-admin-role-plateforme.md` | 21 | jetons séparés dans les deux sens, GRANT du rôle énumérés, suspension à la requête suivante, A et B visibles sans donnée commerciale, e2e admin | 🟨 PR n° 32 (en attente de CI) : ADR 0089, révision 0026, `frontend-admin/` (Next 16.4.2), 1734 tests backend, 259 + 8 Vitest, 69 + 4 e2e ; `create_platform_role.sql` sur Neon avant 0026 |
 
 ## 9. Journal des décisions
 
@@ -324,6 +333,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0086 | 2026-10-17 | **Lot C, intégrité et isolation prouvées** : échec au COMMIT réel (triggers différés sur toutes les tables d'entreprise) sur 51 écritures critiques, lectures sans paramètre croisées A/B (JSON et exports), clés Redis inventoriées, tâches de beat par entreprise, concurrence par HTTP, invariants réutilisables ; registres découverts qui font échouer la CI ; **une entreprise supprimée ferme ses sessions** (`core/deps.py`) | `docs/decisions/0086-integrite-et-isolation-prouvees.md` |
 | 0087 | 2026-10-18 | **Correctifs de la revue, partie 1** (révision 0024, 8 constats reproduits puis corrigés) : panne de Redis ⇒ tentative rendue (`outbox_release`), rebut signalé par `/system/workers` ; registre : `production`/`production-previous` jamais supprimées, `vX.Y.Z` construite depuis son étiquette, réutilisée ou refusée ; `sale_id` retiré de `POST /payments` ; brouillon verrouillé avant d'écrire ses lignes ; secret JWT `change-me` refusé hors local/CI ; e-mail et téléphone uniques sur les comptes vivants seulement ; tableau de bord : cache commun, alertes et chiffres d'argent par personne ; annuler une entrée rend le CMP, refusé (`CG022`) si elle a été suivie | `docs/decisions/0087-correctifs-de-la-revue-partie-1.md` |
 | 0088 | 2026-10-18 | **Correctifs de la revue, partie 2** (révision 0025, 25 points, tableau reproduit / non reproduit / reporté) : sessions révoquées en base quand l'accès change ; délégation de droits bornée ; freinage de connexion à mémoire de 45 min, réservé avant Argon2, par compte ; ordre des verrous unifié et 409 `concurrent_update` ; dates à fuseau, vente datée à la confirmation ; dépense payée figée ; gardes du Référentiel (`CG003`–`CG005`) ; sous-total arrondi par ligne ; Celery plafonné ; sauvegarde à manifeste ; déploiement et CI durcis ; imports bornés ; exports plafonnés et idempotents | `docs/decisions/0088-correctifs-de-la-revue-partie-2.md` |
+| 0089 | 2026-10-20 | **Administration de la plateforme, lot 1** (révision 0026) : rôle `coges_app_platform` (NOBYPASSRLS, GRANT colonne par colonne, politiques qui ne nomment que lui, aucune table commerciale), `platform_users` à colonne `role` (`administrator`/`support`), jetons à audience distincte dans les deux sens, `companies.status` (`company_suspended` en 403 à la connexion après mot de passe, au refresh et à chaque requête ; garde `CG006`), `platform_audit_logs`, e-mail SMTP après COMMIT, application séparée `frontend-admin/` sur `admin.<domaine>` filtré par IP ; module `platform/` hors des cinq bandes | `docs/decisions/0089-administration-de-la-plateforme-lot-1.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043) ; reste **P7**

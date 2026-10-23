@@ -54,7 +54,12 @@ PERIOD = {"from": (TODAY - timedelta(days=30)).isoformat(), "to": TODAY.isoforma
 TENANT = "tenant"
 PUBLIC = "public"
 OPS = "ops"
+#: Administration de la plateforme (ADR 0089) : jeton à part, prouvé par
+#: `test_platform_token_separation.py` et `test_platform_sees_companies.py`.
+PLATFORM = "platform"
 READ_ROUTES: dict[str, tuple[str, dict[str, str]]] = {
+    "/api/v1/platform/auth/me": (PLATFORM, {}),
+    "/api/v1/platform/companies": (PLATFORM, {}),
     "/api/v1/health": (PUBLIC, {}),
     "/api/v1/health/ready": (PUBLIC, {}),
     # Jeton d'exploitation, pas un compte : aucune donnée d'entreprise (ADR 0077).
@@ -560,6 +565,7 @@ def test_an_expired_token_is_refused_without_data(
             "sub": a.ids["manager"],
             "company_id": a.ids["company"],
             "typ": "access",
+            "aud": "coges-tenant",
             "jti": str(uuid4()),
             "iat": now - 3600,
             "exp": now - 60,

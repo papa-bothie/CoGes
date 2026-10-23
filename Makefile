@@ -10,12 +10,13 @@ endif
 
 UV := uv run --directory backend
 PNPM := pnpm --dir frontend
+ADMIN_PNPM := pnpm --dir frontend-admin
 
 # Port de l'API locale ; le front réécrit /api/v1 vers cette origine (ADR 0047).
 API_PORT ?= 8000
 COGES_API_URL ?= http://localhost:$(API_PORT)
 
-.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format security-scan shellcheck invariants dev api worker relay ops-status seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front
+.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format security-scan shellcheck invariants dev api worker relay ops-status seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front admin-install admin-dev admin-api admin-check admin-e2e e2e-admin create-platform-user
 
 help: ## Liste les cibles disponibles
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -132,3 +133,30 @@ e2e-api: ## API des parcours e2e sur :8100, base coges_e2e, limites de débit d�
 
 e2e-front: ## Front des parcours e2e sur :3100, branché sur l'API e2e (build .next-e2e)
 	deploy/scripts/e2e.sh front
+
+# --- Administration de la plateforme (frontend-admin/, ADR 0089) -----------------------
+admin-install: ## Installe les dépendances de l'administration et Chromium
+	$(ADMIN_PNPM) install --frozen-lockfile
+	$(ADMIN_PNPM) exec playwright install chromium
+
+admin-dev: ## Lance l'administration sur http://localhost:3200, branchée sur l'API locale
+	COGES_API_URL=$(COGES_API_URL) $(ADMIN_PNPM) dev
+
+admin-api: ## Régénère frontend-admin/types/api.ts depuis backend/openapi.json
+	$(ADMIN_PNPM) gen:api
+
+admin-check: ## Administration : types à jour, lint, typecheck, Vitest, build
+	$(ADMIN_PNPM) check:api
+	$(ADMIN_PNPM) lint
+	$(ADMIN_PNPM) typecheck
+	$(ADMIN_PNPM) test
+	COGES_API_URL=$(COGES_API_URL) $(ADMIN_PNPM) build
+
+admin-e2e: e2e-reset ## Parcours Playwright de l'administration (coges_e2e, API :8100, admin :3200)
+	$(ADMIN_PNPM) e2e
+
+e2e-admin: ## Administration des parcours e2e sur :3200, branchée sur l'API e2e
+	deploy/scripts/e2e.sh admin
+
+create-platform-user: ## Crée un compte de l'administration (EMAIL=… NAME=… ROLE=administrator|support)
+	$(UV) python -m app.cli create-platform-user --email "$(EMAIL)" --name "$(NAME)" --role "$(ROLE)"

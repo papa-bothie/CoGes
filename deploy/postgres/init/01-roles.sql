@@ -14,6 +14,7 @@
 \set relay_password     `echo "$COGES_RELAY_PASSWORD"`
 \set analytics_password `echo "$COGES_ANALYTICS_PASSWORD"`
 \set backup_password    `echo "${COGES_BACKUP_PASSWORD:-}"`
+\set platform_password  `echo "${COGES_PLATFORM_PASSWORD:-change-me-platform}"`
 
 -- Propriétaire du schéma et des migrations : ni superutilisateur, ni BYPASSRLS.
 CREATE ROLE coges_owner LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE
@@ -62,6 +63,13 @@ CREATE ROLE coges_backup LOGIN BYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOI
     NOREPLICATION CONNECTION LIMIT 2 PASSWORD :'backup_password';
 ALTER ROLE coges_backup SET default_transaction_read_only = on;
 
+-- Administration de la plateforme (lot admin 1, ADR 0089) : lit les métadonnées des
+-- entreprises (nom, slug, statut, comptes) et rien d'autre. Ni BYPASSRLS ni privilège
+-- sur une table commerciale : la révision 0026 lui donne des GRANT colonne par colonne,
+-- et un test d'architecture vérifie qu'elle n'en donne jamais plus.
+CREATE ROLE coges_app_platform LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE
+    PASSWORD :'platform_password';
+
 -- coges_owner doit pouvoir transférer la propriété des fonctions à leur rôle final.
 -- WITH INHERIT FALSE : aucune élévation implicite, il faut un SET ROLE explicite.
 GRANT coges_auth TO coges_owner WITH INHERIT FALSE;
@@ -80,6 +88,7 @@ GRANT USAGE ON SCHEMA public TO coges_auth;
 GRANT USAGE ON SCHEMA public TO coges_relay;
 GRANT USAGE ON SCHEMA public TO coges_analytics;
 GRANT USAGE ON SCHEMA public TO coges_bus;
+GRANT USAGE ON SCHEMA public TO coges_app_platform;
 
 \connect coges_test
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
@@ -88,6 +97,7 @@ GRANT USAGE ON SCHEMA public TO coges_auth;
 GRANT USAGE ON SCHEMA public TO coges_relay;
 GRANT USAGE ON SCHEMA public TO coges_analytics;
 GRANT USAGE ON SCHEMA public TO coges_bus;
+GRANT USAGE ON SCHEMA public TO coges_app_platform;
 
 \connect coges_e2e
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
@@ -96,3 +106,4 @@ GRANT USAGE ON SCHEMA public TO coges_auth;
 GRANT USAGE ON SCHEMA public TO coges_relay;
 GRANT USAGE ON SCHEMA public TO coges_analytics;
 GRANT USAGE ON SCHEMA public TO coges_bus;
+GRANT USAGE ON SCHEMA public TO coges_app_platform;

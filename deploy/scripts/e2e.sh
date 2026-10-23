@@ -5,6 +5,7 @@
 #   deploy/scripts/e2e.sh reset   # recrée coges_e2e : migrations, démo (`demo`) et entreprise `e2e` vide
 #   deploy/scripts/e2e.sh api     # API sur :8100, branchée sur coges_e2e, débit non limité
 #   deploy/scripts/e2e.sh front   # front sur :3100, branché sur l'API e2e (build séparé)
+#   deploy/scripts/e2e.sh admin   # administration (frontend-admin) sur :3200, même API e2e
 #   deploy/scripts/e2e.sh maquette        # ajoute l'entreprise `maquette` (seed de la maquette v2)
 #   deploy/scripts/e2e.sh maquette-api    # API sur :8101, heure figée au 6 octobre 2026 10 h 45
 #   deploy/scripts/e2e.sh maquette-front  # front sur :3101, branché sur l'API de la maquette
@@ -31,6 +32,10 @@ fi
 E2E_DB=coges_e2e
 E2E_API_PORT="${E2E_API_PORT:-8100}"
 E2E_FRONT_PORT="${E2E_FRONT_PORT:-3100}"
+E2E_ADMIN_PORT="${E2E_ADMIN_PORT:-3200}"
+# Compte de l'administration des parcours (ADR 0089), sans valeur hors de coges_e2e.
+E2E_ADMIN_EMAIL=admin@e2e.example.com
+E2E_ADMIN_PASSWORD=admin-coges-e2e-2026
 MAQUETTE_API_PORT="${MAQUETTE_API_PORT:-8101}"
 MAQUETTE_FRONT_PORT="${MAQUETTE_FRONT_PORT:-3101}"
 # Le moment des captures de la maquette v2 (ADR 0065), repris de app/seed_maquette.py.
@@ -46,7 +51,7 @@ die() {
 # substitution `$(…)` ne quitterait que le sous-shell.
 LOCAL_PG='^postgresql(\+psycopg)?://[^@]+@(localhost|127\.0\.0\.1)(:[0-9]+)?/[A-Za-z0-9_]+$'
 for var in COGES_DATABASE_URL_OWNER COGES_DATABASE_URL_APP COGES_DATABASE_URL_RELAY \
-  COGES_DATABASE_URL_ANALYTICS; do
+  COGES_DATABASE_URL_ANALYTICS COGES_DATABASE_URL_PLATFORM; do
   url=${!var:-}
   [ -n "$url" ] || die "$var manquant (copier .env.example vers .env)"
   [[ "$url" =~ $LOCAL_PG ]] ||
@@ -67,11 +72,11 @@ export COGES_REDIS_URL="$redis/1"
 # fermeture sans fin à la fin de la suite. Ici, le script attend `next` et, au signal de
 # Playwright, termine `next` et ses processus enfants.
 run_front() {
-  local dist=$1 api_port=$2 port=$3
-  cd frontend
+  local dist=$1 api_port=$2 port=$3 app=${4:-frontend}
+  cd "$app"
   COGES_NEXT_DIST_DIR=$dist COGES_API_URL="http://localhost:$api_port" \
     ./node_modules/.bin/next dev --port "$port" &
-  local next_pid=$!
+  next_pid=$!  # global : le piège EXIT se déclenche après le retour de la fonction
   trap 'pkill -TERM -P "$next_pid" 2>/dev/null; kill -TERM "$next_pid" 2>/dev/null' TERM INT EXIT
   wait "$next_pid"
 }
@@ -89,6 +94,7 @@ GRANT USAGE ON SCHEMA public TO coges_auth;
 GRANT USAGE ON SCHEMA public TO coges_relay;
 GRANT USAGE ON SCHEMA public TO coges_analytics;
 GRANT USAGE ON SCHEMA public TO coges_bus;
+GRANT USAGE ON SCHEMA public TO coges_app_platform;
 SQL
     uv run --directory backend alembic upgrade head
     seeded=$(uv run --directory backend python -m app.seed)
@@ -105,6 +111,14 @@ SQL
     uv run --directory backend python -m app.cli create-company --name "Parcours e2e" \
       --slug e2e --manager-email gerant@e2e.example.com --manager-name "Gérant des parcours" \
       --password demo-coges-2026
+    # Administration (ADR 0089) : un compte de l'équipe, et une entreprise que ses parcours
+    # suspendent puis réactivent sans toucher aux autres.
+    uv run --directory backend python -m app.cli create-platform-user \
+      --email "$E2E_ADMIN_EMAIL" --name "Équipe des parcours" --role administrator \
+      --password "$E2E_ADMIN_PASSWORD"
+    uv run --directory backend python -m app.cli create-company --name "Parcours administration" \
+      --slug admin-e2e --manager-email gerant@admin-e2e.example.com \
+      --manager-name "Gérant suspendu" --password demo-coges-2026
     # L'épicerie de la maquette v2, à part : la démo et `e2e` ne changent pas (ADR 0065).
     uv run --directory backend python -m app.seed_maquette --intelligence
     ;;
@@ -143,7 +157,10 @@ SQL
     # tourner à côté sans conflit.
     run_front .next-e2e "$E2E_API_PORT" "$E2E_FRONT_PORT"
     ;;
+  admin)
+    run_front .next-e2e "$E2E_API_PORT" "$E2E_ADMIN_PORT" frontend-admin
+    ;;
   *)
-    die "usage : $0 reset|api|front|maquette|maquette-api|maquette-front"
+    die "usage : $0 reset|api|front|admin|maquette|maquette-api|maquette-front"
     ;;
 esac
