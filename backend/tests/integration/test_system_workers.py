@@ -12,7 +12,6 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
 
-import jwt
 import pytest
 import redis
 from fastapi.testclient import TestClient
@@ -21,7 +20,6 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core import heartbeat
-from app.core.config import get_settings
 from app.core.tenancy import TenantContext, tenant_transaction
 from app.main import app
 from app.modules.platform import service as platform_service
@@ -268,9 +266,12 @@ def test_unconfigured_token_hides_the_route(
 
 # ------------------------------------------------ deux portes, une lecture (ADR 0090)
 #
-# Le jeton d'exploitation (terminal, surveillance externe) et un compte de l'équipe
-# (administration web) ouvrent la même route, et lisent par le même service. La preuve :
-# à état égal et à horloge figée, les deux réponses sont identiques à l'octet près.
+# Le jeton d'exploitation (terminal, surveillance externe) ouvre `/system/workers` ; un
+# compte de l'équipe ouvre `/platform/system/workers`, servi seulement derrière le filtre
+# IP de l'administration. Même fonction de route, même service : à état égal et à
+# horloge figée, les deux réponses sont identiques à l'octet près.
+
+PLATFORM_URL = "/api/v1/platform/system/workers"
 
 
 @pytest.fixture
@@ -288,7 +289,7 @@ def platform_token(platform_bound_to_test_database: None, healthy: TestClient) -
 
 def _both_doors(client: TestClient, platform_token: str) -> tuple[Any, Any]:
     by_ops = client.get(URL, headers=AUTH)
-    by_platform = client.get(URL, headers={"Authorization": f"Bearer {platform_token}"})
+    by_platform = client.get(PLATFORM_URL, headers={"Authorization": f"Bearer {platform_token}"})
     return by_ops, by_platform
 
 
@@ -315,7 +316,7 @@ def test_every_platform_profile_reads_the_health(
     healthy: TestClient, platform_bound_to_test_database: None, role: str
 ) -> None:
     token = platform_login(healthy, create_platform_account(role))
-    response = healthy.get(URL, headers={"Authorization": f"Bearer {token}"})
+    response = healthy.get(PLATFORM_URL, headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
 
 
@@ -324,7 +325,7 @@ def test_the_platform_door_does_not_need_the_ops_token(
 ) -> None:
     """Sans `COGES_OPS_TOKEN`, la porte du terminal n'existe pas ; celle de l'équipe, si."""
     _use_settings(monkeypatch, ops_token=None, ops_outbox_max_lag_seconds=GENEROUS_LAG)
-    response = healthy.get(URL, headers={"Authorization": f"Bearer {platform_token}"})
+    response = healthy.get(PLATFORM_URL, headers={"Authorization": f"Bearer {platform_token}"})
     assert response.status_code == 200
 
 
@@ -334,19 +335,14 @@ def test_a_deactivated_platform_account_is_401(
     account = create_platform_account("support")
     token = platform_login(healthy, account)
     assert platform_service.deactivate_platform_user(email=account.email)
-    response = healthy.get(URL, headers={"Authorization": f"Bearer {token}"})
+    response = healthy.get(PLATFORM_URL, headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
 
 
-def test_an_expired_platform_token_is_401_even_without_ops_token(
-    healthy: TestClient, platform_token: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Un jeton de l'équipe périmé doit dire 401 (le front le rafraîchit), pas 404."""
-    expired = jwt.encode(
-        {**jwt.decode(platform_token, options={"verify_signature": False}), "exp": 1},
-        get_settings().jwt_secret.get_secret_value(),
-        algorithm="HS256",
-    )
-    _use_settings(monkeypatch, ops_token=None)
-    response = healthy.get(URL, headers={"Authorization": f"Bearer {expired}"})
-    assert response.status_code == 401
+def test_each_door_takes_only_its_own_token(healthy: TestClient, platform_token: str) -> None:
+    """Un jeton de l'équipe n'ouvre pas la porte du terminal (servie sur le domaine
+    commerçant, sans filtre IP), et le jeton d'exploitation n'ouvre pas celle de l'équipe."""
+    team = {"Authorization": f"Bearer {platform_token}"}
+    assert healthy.get(URL, headers=team).status_code == 401
+    assert healthy.get(PLATFORM_URL, headers=AUTH).status_code == 401
+    assert healthy.get(PLATFORM_URL).status_code == 401

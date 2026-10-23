@@ -46,7 +46,6 @@ from app.core.observability import tag_tenant
 from app.core.security import (
     AccessClaims,
     PlatformClaims,
-    announces_platform_audience,
     decode_access_token,
     decode_platform_token,
 )
@@ -240,8 +239,10 @@ def platform_transaction() -> Iterator[Session]:
         yield session
 
 
-@contextmanager
-def _platform_admin_transaction(claims: PlatformClaims) -> Iterator[PlatformSession]:
+def get_platform_admin_session(
+    claims: Annotated[PlatformClaims, Depends(get_platform_claims)],
+) -> Iterator[PlatformSession]:
+    """Ouvre la transaction de l'administration et relit le compte qui agit."""
     with platform_transaction() as session:
         row = session.execute(
             _LOAD_PLATFORM_USER, {"platform_user_id": claims.platform_user_id}
@@ -254,40 +255,10 @@ def _platform_admin_transaction(claims: PlatformClaims) -> Iterator[PlatformSess
         )
 
 
-def get_platform_admin_session(
-    claims: Annotated[PlatformClaims, Depends(get_platform_claims)],
-) -> Iterator[PlatformSession]:
-    """Ouvre la transaction de l'administration et relit le compte qui agit."""
-    with _platform_admin_transaction(claims) as platform:
-        yield platform
-
-
 #: Portée `function`, comme `CurrentTenant` (ADR 0079) : COMMIT avant la réponse.
 CurrentPlatformAdmin = Annotated[
     PlatformSession, Depends(get_platform_admin_session, scope="function")
 ]
-
-
-def get_monitoring_session(request: Request) -> Iterator[Session]:  # portée `function`
-    """`/system/workers` : deux portes, une seule lecture (ADR 0090).
-
-    * un jeton de l'équipe (n'importe quel profil, compte relu actif) ⇒ transaction
-      `coges_app_platform` ;
-    * sinon le jeton d'exploitation, inchangé (404 s'il n'est pas configuré) ⇒
-      transaction `coges_app` sur l'entreprise nulle.
-
-    Les deux sessions n'exécutent que les mêmes fonctions d'agrégat ; le service ne
-    sait pas par quelle porte on est entré. Un jeton commerçant ne passe ni l'une ni
-    l'autre (401).
-    """
-    scheme, _, presented = (request.headers.get("authorization") or "").partition(" ")
-    presented = presented.strip()
-    if scheme.lower() == "bearer" and announces_platform_audience(presented):
-        with _platform_admin_transaction(decode_platform_token(presented)) as platform:
-            yield platform.session
-        return
-    require_ops_token(request)
-    yield from get_platform_session()
 
 
 def require_platform_role(*roles: str) -> Callable[[PlatformSession], PlatformSession]:

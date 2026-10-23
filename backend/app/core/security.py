@@ -172,24 +172,6 @@ def decode_platform_token(token: str) -> PlatformClaims:
         raise AuthenticationRequiredError("Jeton d'accès malformé.") from exc
 
 
-def announces_platform_audience(token: str) -> bool:
-    """Le jeton **se dit** destiné à l'administration — sans rien prouver.
-
-    Lecture non vérifiée, qui ne sert qu'à choisir la porte d'une route à deux entrées
-    (`/system/workers`, ADR 0090) : la porte choisie vérifie ensuite le jeton en entier.
-    Un jeton de l'équipe périmé reçoit ainsi 401 (et se rafraîchit), pas le 404 d'un
-    jeton d'exploitation non configuré.
-    """
-    try:
-        claims = jwt.decode(token, options={"verify_signature": False})
-    except jwt.PyJWTError:
-        return False
-    audience = claims.get("aud")
-    return audience == PLATFORM_AUDIENCE or (
-        isinstance(audience, list) and PLATFORM_AUDIENCE in audience
-    )
-
-
 def generate_refresh_token() -> tuple[str, str]:
     """Crée un refresh token opaque. Renvoie (valeur en clair, empreinte à stocker)."""
     raw_token = secrets.token_urlsafe(REFRESH_TOKEN_BYTES)

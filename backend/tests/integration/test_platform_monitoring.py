@@ -26,6 +26,7 @@ from tests.integration.platform_harness import create_platform_account, platform
 from tests.integration.relay_harness import bury_dead_letters
 from tests.tenancy.harness import Tenant
 
+WORKERS = "/api/v1/platform/system/workers"
 JOB_RUNS = "/api/v1/platform/system/job-runs"
 OUTBOX = "/api/v1/platform/system/outbox"
 
@@ -188,14 +189,15 @@ def test_outbox_without_dead_letters_is_an_empty_page(
 # ----------------------------------------------------------------- portes
 
 
-@pytest.mark.parametrize("url", [JOB_RUNS, OUTBOX])
+@pytest.mark.parametrize("url", [WORKERS, JOB_RUNS, OUTBOX])
 def test_both_platform_profiles_read(client: TestClient, url: str) -> None:
     for role in ("administrator", "support"):
         token = platform_login(client, create_platform_account(role))
-        assert client.get(url, headers=auth_headers(token)).status_code == 200
+        # Le bilan peut être en panne (503) : il est lu, c'est ce qui compte ici.
+        assert client.get(url, headers=auth_headers(token)).status_code in (200, 503)
 
 
-@pytest.mark.parametrize("url", [JOB_RUNS, OUTBOX])
+@pytest.mark.parametrize("url", [WORKERS, JOB_RUNS, OUTBOX])
 def test_neither_a_merchant_nor_the_ops_token_opens_them(
     client: TestClient, company_alpha: DemoCompany, url: str
 ) -> None:

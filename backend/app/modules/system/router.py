@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from app.core.deps import (
     PlatformSession,
     TenantSession,
-    get_monitoring_session,
+    get_platform_session,
+    require_ops_token,
     require_permission,
     require_platform_role,
 )
@@ -56,27 +57,46 @@ def outbox_health(
     return service.outbox_health(tenant.session, tenant.ctx)
 
 
-@router.get(
-    "/workers",
-    response_model=WorkersHealth,
-    responses={503: {"model": WorkersHealth, "description": "Au moins un problème détecté."}},
-)
-def workers_health(
-    session: Annotated[Session, Depends(get_monitoring_session, scope="function")],
-    now: Annotated[datetime, Depends(get_ops_now)],
-) -> JSONResponse:
-    """Bilan des workers, de beat, du relais et des tâches de nuit (ADR 0077).
+_WORKERS_RESPONSES: dict[int | str, dict[str, object]] = {
+    503: {"model": WorkersHealth, "description": "Au moins un problème détecté."}
+}
 
-    Deux portes (ADR 0090) : `COGES_OPS_TOKEN` pour le terminal et la surveillance
-    externe, ou le jeton d'un compte de l'équipe pour l'administration web. Même
-    lecture, même réponse. 200 si tout va bien, 503 sinon, avec le même corps. Aucun
-    nom ni identifiant d'entreprise n'y figure.
-    """
+
+def _workers_response(session: Session, now: datetime) -> JSONResponse:
+    """200 si tout va bien, 503 sinon, avec le même corps — pour les deux portes."""
     health = service.workers_health(session, now=now)
     return JSONResponse(
         status_code=200 if health.healthy else 503,
         content=health.model_dump(mode="json"),
     )
+
+
+@router.get("/workers", response_model=WorkersHealth, responses=_WORKERS_RESPONSES)
+def workers_health(
+    _: Annotated[None, Depends(require_ops_token)],
+    session: Annotated[Session, Depends(get_platform_session, scope="function")],
+    now: Annotated[datetime, Depends(get_ops_now)],
+) -> JSONResponse:
+    """Bilan des workers, de beat, du relais et des tâches de nuit (ADR 0077).
+
+    Protégé par `COGES_OPS_TOKEN` (`Authorization: Bearer …`), pas par un compte :
+    c'est l'exploitant qui interroge, depuis un terminal ou une surveillance externe.
+    L'équipe passe par `/platform/system/workers` (ADR 0090) : même lecture, même
+    réponse. Aucun nom ni identifiant d'entreprise n'y figure.
+    """
+    return _workers_response(session, now)
+
+
+@platform_router.get("/workers", response_model=WorkersHealth, responses=_WORKERS_RESPONSES)
+def platform_workers_health(
+    platform: Monitoring, now: Annotated[datetime, Depends(get_ops_now)]
+) -> JSONResponse:
+    """Le même bilan que `/system/workers`, pour un compte de l'équipe (ADR 0090).
+
+    Sous `/platform` : servi seulement sur le sous-domaine de l'administration, filtré
+    par adresse IP. Lu sous `coges_app_platform`, par les mêmes fonctions d'agrégat.
+    """
+    return _workers_response(platform.session, now)
 
 
 @platform_router.get("/job-runs", response_model=JobRunPage)

@@ -6612,7 +6612,7 @@
           "system"
         ],
         "summary": "Workers Health",
-        "description": "Bilan des workers, de beat, du relais et des tâches de nuit (ADR 0077).\n\nDeux portes (ADR 0090) : `COGES_OPS_TOKEN` pour le terminal et la surveillance\nexterne, ou le jeton d'un compte de l'équipe pour l'administration web. Même\nlecture, même réponse. 200 si tout va bien, 503 sinon, avec le même corps. Aucun\nnom ni identifiant d'entreprise n'y figure.",
+        "description": "Bilan des workers, de beat, du relais et des tâches de nuit (ADR 0077).\n\nProtégé par `COGES_OPS_TOKEN` (`Authorization: Bearer …`), pas par un compte :\nc'est l'exploitant qui interroge, depuis un terminal ou une surveillance externe.\nL'équipe passe par `/platform/system/workers` (ADR 0090) : même lecture, même\nréponse. Aucun nom ni identifiant d'entreprise n'y figure.",
         "operationId": "workers_health_api_v1_system_workers_get",
         "responses": {
           "200": {
@@ -7060,6 +7060,38 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/system/workers": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Platform Workers Health",
+        "description": "Le même bilan que `/system/workers`, pour un compte de l'équipe (ADR 0090).\n\nSous `/platform` : servi seulement sur le sous-domaine de l'administration, filtré\npar adresse IP. Lu sous `coges_app_platform`, par les mêmes fonctions d'agrégat.",
+        "operationId": "platform_workers_health_api_v1_platform_system_workers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkersHealth"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Au moins un problème détecté.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkersHealth"
                 }
               }
             }
