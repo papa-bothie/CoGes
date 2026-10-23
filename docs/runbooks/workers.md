@@ -1,9 +1,27 @@
-# Guide de dépannage — workers, beat, relais (ADR 0077)
+# Guide de dépannage — workers, beat, relais (ADR 0077, 0090)
 
-Ce guide répond à une alerte : un problème de `make ops-status`, un 503 de
-`GET /api/v1/system/workers`, un check Healthchecks.io en retard, ou une erreur Sentry de
-`component` `worker`, `beat` ou `relay`. Chaque fiche dit ce que l'alerte veut dire, ce
-que vivent les gérants, comment réparer, et dans quel délai.
+Ce guide répond à une alerte : le bandeau rouge de l'administration, un problème de
+`make ops-status`, un 503 de `GET /api/v1/system/workers`, un check Healthchecks.io en
+retard, ou une erreur Sentry de `component` `worker`, `beat` ou `relay`. Chaque fiche dit
+ce que l'alerte veut dire, ce que vivent les gérants, comment réparer, et dans quel délai.
+
+## D'abord l'écran Système, ensuite le terminal
+
+Depuis l'administration (`admin.<domaine>`, compte de l'équipe, ADR 0090) :
+
+- un **bandeau rouge** en haut de chaque page dès que le bilan est en 503, avec chaque
+  motif en mots **et** son code exact, celui des fiches ci-dessous ;
+- **Système** : chaque processus (pastille, âge du dernier battement), tic du
+  planificateur, file Celery, retard de l'outbox, chaque tâche de `beat.py`, et la liste
+  des événements au rebut (identifiant, type, date, tentatives — jamais leur contenu) ;
+  rafraîchi toutes les 30 s ;
+- **Tâches** : l'historique des 90 derniers jours, filtrable par statut ; un clic sur une
+  ligne en échec montre le message court enregistré (classe d'exception et SQLSTATE).
+  Une tâche qui échoue de plus en plus souvent s'y voit avant de tomber pour de bon.
+
+L'écran **lit**, il ne répare pas : relancer, redémarrer ou rejouer se fait toujours au
+terminal, avec les commandes ci-dessous. `make ops-status` reste la référence quand
+l'administration elle-même ne répond pas.
 
 ## Avant tout
 
@@ -125,7 +143,9 @@ tant qu'ils ne sont pas rejoués. Aucune donnée métier n'est perdue : ils rest
 1. Trouver la cause : `dc logs relay | grep "Publication impossible"` (le journal donne
    `event_id` et `event_type`), ou Sentry. La corriger et redéployer d'abord : rejouer
    sans corriger renvoie l'événement au rebut dix passages plus tard.
-2. Lister le rebut, depuis le poste qui détient `NEON_OWNER_DSN` (jamais le VPS) :
+2. Lister le rebut : l'écran **Système** de l'administration donne déjà identifiant, type
+   et date (sans l'entreprise ni le contenu). Pour l'entreprise concernée, depuis le
+   poste qui détient `NEON_OWNER_DSN` (jamais le VPS) :
 
    ```sql
    BEGIN;
