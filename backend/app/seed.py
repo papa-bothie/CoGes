@@ -386,6 +386,7 @@ def fill(manager: TenantContext, *, slug: str, password: str, days: int, scale: 
     _returns(shop, rng, today)
     _write_off(shop)
     _settle_one_customer(shop, today)
+    _guarantee_low_stock_articles(shop)
     for label, count in sorted(shop.counts.items()):
         print(f"  {label:<14} {count}")
 
@@ -584,14 +585,19 @@ def _order_qty(
     stock = shop.stock[product_id]
     reorder = Decimal(article.reorder)
     rate = shop.sold[product_id] / elapsed if elapsed >= 7 else Decimal(article.batch) / 30
-    if stock >= max(reorder * Decimal("1.5"), rate * 4):
-        return ZERO
+    # Les articles `rupture`/`low` doivent être corrigés CHAQUE jour du dernier mois,
+    # pas seulement quand le stock franchit le seuil générique ci-dessous : sinon la
+    # correction ne s'applique qu'une poignée de fois sur trente jours, et la variance
+    # des ventes réelles l'emporte souvent sur la cible — l'article finit soit encore
+    # au-dessus du seuil, soit déjà à zéro (hors de la fenêtre « sous le seuil »).
     if article.ending == "rupture" and days_left <= 30:
         # Le fournisseur n'a plus livré : le rayon se vide avant la fin.
         return ZERO
     if article.ending == "low" and days_left <= 30:
         # Juste de quoi tenir, et finir sous le seuil.
         return max(ZERO, rate * days_left + reorder / 2 - stock).quantize(Decimal("1"))
+    if stock >= max(reorder * Decimal("1.5"), rate * 4):
+        return ZERO
     return max(rate * 21, reorder * 2).quantize(Decimal("1"))
 
 
@@ -933,6 +939,52 @@ def _write_off(shop: Shop) -> None:
             reason="Client injoignable depuis deux mois, créance jugée irrécouvrable",
         )
     shop.counts["write-off"] += 1
+
+
+def _guarantee_low_stock_articles(shop: Shop) -> None:
+    """Ramène dans la fenêtre attendue les articles `low` que le hasard aurait ratés.
+
+    La correction quotidienne de `_order_qty` ne fait que viser « sous le seuil, mais
+    pas vide » : sur une épicerie aussi volatile, la seule journée qu'elle ne corrige
+    jamais — la dernière — suffit parfois à faire déraper un article, resté trop
+    approvisionné ou déjà épuisé. C'est une démo scénarisée, pas une simulation qu'on
+    laisse au hasard sur un indicateur qu'elle promet de montrer (phase 15) : on relit
+    le stock réel en fin de semis et on le corrige au besoin, comme un inventaire.
+    """
+    low_ids = [
+        product_id for product_id, article in shop.articles.items() if article.ending == "low"
+    ]
+    if not low_ids:
+        return
+    corrected = 0
+    with tenant_transaction(shop.manager) as session:
+        lines, _ = inventory_service.get_stock(
+            session, shop.manager, page=1, page_size=len(low_ids), product_ids=low_ids
+        )
+        for line in lines:
+            if line.status == "low" or line.reorder_point is None:
+                continue
+            target = max(
+                Decimal("1"),
+                (line.reorder_point / 2).quantize(Decimal("1"), rounding=ROUND_DOWN),
+            )
+            delta = target - line.qty_on_hand
+            if delta == 0:
+                continue
+            inventory_service.record_movement(
+                session,
+                shop.manager,
+                MovementCreate(
+                    product_id=line.product_id,
+                    qty_delta=delta,
+                    reason_code="count_error",
+                    note="Inventaire de fin de semis : stock ramené sous le seuil de réapprovisionnement",
+                ),
+                idempotency_key=uuid4(),
+            )
+            corrected += 1
+    if corrected:
+        shop.counts["ajustements stock bas"] += corrected
 
 
 def _at(shop: Shop, day: date, moment: time) -> datetime:
