@@ -239,7 +239,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | Lot C Intégrité et isolation prouvées | `20-integrite-lot-c.md` | 16 | C1 à C5, registres découverts, invariants | ✅ PR n° 27 : ADR 0086, 1263 tests backend, 51 écritures critiques, registres découverts ; entreprise supprimée ⇒ sessions fermées (`core/deps.py`) |
 | Correctifs de la revue, partie 1 | `21-correctifs-de-la-revue.md` | 20 | chaque constat reproduit (test rouge) puis corrigé | ✅ PR n° 29 : ADR 0087, révision 0024, 8/8 reproduits et corrigés |
 | Correctifs de la revue, partie 2 | `21-correctifs-de-la-revue.md` | partie 1 fusionnée | idem, tableau reproduit / non reproduit / reporté | ✅ PR n° 30 : ADR 0088, révision 0025, 25 points (2 non reproduits, 2 reportés) |
-| Lot admin 1 : rôle plateforme, statut, métadonnées | `22-admin-role-plateforme.md` | 21 | jetons séparés dans les deux sens, GRANT du rôle énumérés, suspension à la requête suivante, A et B visibles sans donnée commerciale, e2e admin | 🟨 branche `feat/admin-platform-role` : ADR 0089, révision 0026, `frontend-admin/`, 1734 tests backend (1 échec hors lot : `test_seed_demo_states`), 259 + 8 Vitest, 69 + 4 e2e ; PR à ouvrir |
+| Lot admin 1 : rôle plateforme, statut, métadonnées | `22-admin-role-plateforme.md` | 21 | jetons séparés dans les deux sens, GRANT du rôle énumérés, suspension à la requête suivante, A et B visibles sans donnée commerciale, e2e admin | 🟨 PR n° 32 (en attente de CI) : ADR 0089, révision 0026, `frontend-admin/` (Next 16.4.2), 1734 tests backend, 259 + 8 Vitest, 69 + 4 e2e ; `create_platform_role.sql` sur Neon avant 0026 |
 
 ## 9. Journal des décisions
 
