@@ -12,14 +12,20 @@ from sqlalchemy.orm import Session
 
 from app.core import heartbeat
 from app.core.config import get_settings
+from app.core.errors import ValidationFailedError
 from app.core.tenancy import TenantContext
 from app.modules.system.repository import OutboxHealthRepository, PlatformHealthRepository
 from app.modules.system.schemas import (
     ComponentHealth,
+    DeadLetter,
+    DeadLetterPage,
     HostPulse,
     JobHealth,
+    JobRun,
+    JobRunPage,
     OutboxHealth,
     OutboxLag,
+    PlatformOutbox,
     QueueDepth,
     WorkersHealth,
 )
@@ -69,7 +75,6 @@ def workers_health(
     Le calcul se fait sur l'horloge réelle, jamais sur l'heure figée des lectures
     métier (`COGES_FROZEN_NOW`) : une panne n'attend pas la maquette.
     """
-    settings = get_settings()
     current = now or datetime.now(UTC)
     problems: list[str] = []
 
@@ -106,25 +111,13 @@ def workers_health(
         problems.append("beat_tick_missing")
 
     repository = PlatformHealthRepository(session)
-    lag = repository.outbox_lag()
-    oldest = cast(datetime | None, lag["oldest_pending_at"])
-    lag_seconds = max(0.0, (current - oldest).total_seconds()) if oldest else 0.0
-    outbox_ok = lag_seconds <= settings.ops_outbox_max_lag_seconds
-    if not outbox_ok:
+    outbox = _outbox_lag(repository, current)
+    if not outbox.healthy:
         problems.append("outbox_lagging")
     # Le rebut ne repart jamais seul : il attend qu'on le rejoue à la main
     # (docs/runbooks/workers.md). Le taire, c'est perdre l'effet de l'événement.
-    dead_lettered = cast(int, lag["dead_lettered"])
-    if dead_lettered:
-        problems.append(f"outbox_dead_lettered:{dead_lettered}")
-    outbox = OutboxLag(
-        healthy=outbox_ok,
-        pending=cast(int, lag["pending"]),
-        dead_lettered=dead_lettered,
-        oldest_pending_at=oldest,
-        lag_seconds=round(lag_seconds, 1),
-        max_lag_seconds=settings.ops_outbox_max_lag_seconds,
-    )
+    if outbox.dead_lettered:
+        problems.append(f"outbox_dead_lettered:{outbox.dead_lettered}")
 
     runs = {
         cast(str, row["job"]): row
@@ -142,6 +135,72 @@ def workers_health(
         outbox=outbox,
         queue=QueueDepth(name=CELERY_QUEUE, length=queue_length),
         jobs=jobs,
+    )
+
+
+def _outbox_lag(repository: PlatformHealthRepository, now: datetime) -> OutboxLag:
+    """Retard du relais, toutes entreprises confondues : un seul calcul, pour le bilan
+    et pour l'écran de l'administration."""
+    max_lag = get_settings().ops_outbox_max_lag_seconds
+    lag = repository.outbox_lag()
+    oldest = cast(datetime | None, lag["oldest_pending_at"])
+    lag_seconds = max(0.0, (now - oldest).total_seconds()) if oldest else 0.0
+    return OutboxLag(
+        healthy=lag_seconds <= max_lag,
+        pending=cast(int, lag["pending"]),
+        dead_lettered=cast(int, lag["dead_lettered"]),
+        oldest_pending_at=oldest,
+        lag_seconds=round(lag_seconds, 1),
+        max_lag_seconds=max_lag,
+    )
+
+
+# ------------------------------------------- administration de la plateforme (ADR 0090)
+
+#: Tâches dont l'historique se filtre : celles de beat et leurs sous-tâches par
+#: entreprise. `system.beat_tick` n'y est pas : il vit dans Redis seulement.
+KNOWN_JOBS: frozenset[str] = frozenset(JOB_FRESHNESS) | frozenset(
+    freshness.per_company for freshness in JOB_FRESHNESS.values() if freshness.per_company
+)
+
+
+def job_runs_page(
+    session: Session, *, job: str | None, status: str | None, page: int, page_size: int
+) -> JobRunPage:
+    """Historique des tâches sur 90 jours, le plus récent d'abord."""
+    if job is not None and job not in KNOWN_JOBS:
+        raise ValidationFailedError(
+            "Tâche inconnue.", details={"job": job, "known": sorted(KNOWN_JOBS)}
+        )
+    items, total = PlatformHealthRepository(session).job_runs_history(
+        job=job,
+        status=status,
+        stale_seconds=TASK_TIME_LIMIT_SECONDS,
+        limit=page_size,
+        offset=(page - 1) * page_size,
+    )
+    return JobRunPage(
+        items=[JobRun.model_validate(item) for item in items],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
+
+
+def platform_outbox(
+    session: Session, *, page: int, page_size: int, now: datetime | None = None
+) -> PlatformOutbox:
+    """Retard du relais et rebut à rejouer, sans contenu d'événement."""
+    repository = PlatformHealthRepository(session)
+    items, total = repository.dead_letters(limit=page_size, offset=(page - 1) * page_size)
+    return PlatformOutbox(
+        lag=_outbox_lag(repository, now or datetime.now(UTC)),
+        dead_letters=DeadLetterPage(
+            items=[DeadLetter.model_validate(item) for item in items],
+            page=page,
+            page_size=page_size,
+            total=total,
+        ),
     )
 
 

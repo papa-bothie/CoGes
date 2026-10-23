@@ -6612,7 +6612,7 @@
           "system"
         ],
         "summary": "Workers Health",
-        "description": "Bilan des workers, de beat, du relais et des tâches de nuit (ADR 0077).\n\nProtégé par `COGES_OPS_TOKEN` (`Authorization: Bearer …`), pas par un compte :\nc'est l'exploitant qui interroge. 200 si tout va bien, 503 sinon, avec le même\ncorps. Aucun nom ni identifiant d'entreprise n'y figure.",
+        "description": "Bilan des workers, de beat, du relais et des tâches de nuit (ADR 0077).\n\nDeux portes (ADR 0090) : `COGES_OPS_TOKEN` pour le terminal et la surveillance\nexterne, ou le jeton d'un compte de l'équipe pour l'administration web. Même\nlecture, même réponse. 200 si tout va bien, 503 sinon, avec le même corps. Aucun\nnom ni identifiant d'entreprise n'y figure.",
         "operationId": "workers_health_api_v1_system_workers_get",
         "responses": {
           "200": {
@@ -7050,6 +7050,158 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CompanyDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/system/job-runs": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Job Runs",
+        "description": "Exécutions des tâches planifiées sur 90 jours, la plus récente d'abord.\n\nUne exécution restée `running` au-delà du délai d'une tâche est rendue `failed`.\nUne sous-tâche d'entreprise est signalée (`per_company`), jamais nommée.",
+        "operationId": "job_runs_api_v1_platform_system_job_runs_get",
+        "parameters": [
+          {
+            "name": "job",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "ok",
+                    "failed",
+                    "running"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRunPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/system/outbox": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Outbox",
+        "description": "Retard du relais et événements au rebut, toutes entreprises confondues.\n\nPour chaque événement au rebut : identifiant, type, date, tentatives — de quoi le\nrejouer à la main (`docs/runbooks/workers.md`). Jamais son contenu.",
+        "operationId": "outbox_api_v1_platform_system_outbox_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformOutbox"
                 }
               }
             }
@@ -9089,6 +9241,69 @@
         ],
         "title": "Dashboard",
         "description": "L'écran d'accueil, en une réponse.\n\nLes mesures **hors taxe** portent le nom que leur donne le § 4.10 ; la marge est\n« estimée » parce qu'elle ignore amortissements et provisions — c'est la question\ndu gérant, pas celle de son expert-comptable (décision 09)."
+      },
+      "DeadLetter": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "event_type",
+          "occurred_at",
+          "attempts"
+        ],
+        "title": "DeadLetter",
+        "description": "Un événement au rebut : de quoi le rejouer à la main, rien de son contenu."
+      },
+      "DeadLetterPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DeadLetter"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "DeadLetterPage"
       },
       "DebtCreate": {
         "properties": {
@@ -11131,6 +11346,99 @@
         ],
         "title": "JobHealth",
         "description": "Dernière exécution d'une tâche planifiée, et ce qu'il faut en penser.\n\n`companies_failed` compte les entreprises dont la **dernière** exécution de la\nsous-tâche a échoué. Jamais de nom ni d'identifiant d'entreprise."
+      },
+      "JobRun": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "job": {
+            "type": "string",
+            "title": "Job"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "per_company": {
+            "type": "boolean",
+            "title": "Per Company"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "job",
+          "status",
+          "started_at",
+          "finished_at",
+          "error",
+          "per_company"
+        ],
+        "title": "JobRun",
+        "description": "Une exécution de tâche planifiée. `per_company` dit si c'est la sous-tâche d'une\nentreprise, **jamais** laquelle. `error` : nom de classe et SQLSTATE, 200 caractères\nau plus (ADR 0077), jamais le message."
+      },
+      "JobRunPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/JobRun"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "JobRunPage"
       },
       "LineDiscount": {
         "$ref": "#/components/schemas/Amount-Input",
@@ -13191,6 +13499,24 @@
           "role"
         ],
         "title": "PlatformMe"
+      },
+      "PlatformOutbox": {
+        "properties": {
+          "lag": {
+            "$ref": "#/components/schemas/OutboxLag"
+          },
+          "dead_letters": {
+            "$ref": "#/components/schemas/DeadLetterPage"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "lag",
+          "dead_letters"
+        ],
+        "title": "PlatformOutbox",
+        "description": "Retard du relais (le même calcul que le bilan) et liste du rebut."
       },
       "PlatformTokenResponse": {
         "properties": {

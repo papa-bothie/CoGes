@@ -37,17 +37,25 @@ def add_run(
     status: str = "ok",
     company_id: Any = None,
     hours_ago: float = 1.0,
+    error: str | None = None,
 ) -> None:
     as_ops(
         owner_engine,
         """
-        INSERT INTO job_runs (job, company_id, status, started_at, finished_at)
+        INSERT INTO job_runs (job, company_id, status, started_at, finished_at, error)
         VALUES (:job, :company_id, CAST(:status AS job_run_status),
                 now() - make_interval(secs => :seconds),
                 CASE WHEN :status = 'running' THEN NULL
-                     ELSE now() - make_interval(secs => :seconds) END)
+                     ELSE now() - make_interval(secs => :seconds) END,
+                :error)
         """,
-        {"job": job, "company_id": company_id, "status": status, "seconds": hours_ago * 3600},
+        {
+            "job": job,
+            "company_id": company_id,
+            "status": status,
+            "seconds": hours_ago * 3600,
+            "error": error,
+        },
     )
 
 

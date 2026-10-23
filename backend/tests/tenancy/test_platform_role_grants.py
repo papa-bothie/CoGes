@@ -82,6 +82,15 @@ COMMERCIAL_TABLES = (
     "business_events",
 )
 
+#: Seules fonctions `SECURITY DEFINER` qu'il exécute (ADR 0090) : des compteurs, des
+#: dates, des types d'événement. Jamais `auth_lookup`, jamais les écritures de l'outbox.
+MONITORING_FUNCTIONS = {
+    "outbox_lag",
+    "job_runs_latest",
+    "job_runs_history",
+    "outbox_dead_letters",
+}
+
 #: Privilèges qui existent au niveau de la colonne ; DELETE, TRUNCATE et TRIGGER ne
 #: s'accordent qu'à la table entière (vérifiés à part : jamais, nulle part).
 _PRIVILEGES = ("SELECT", "INSERT", "UPDATE", "REFERENCES")
@@ -211,8 +220,9 @@ def test_the_platform_role_has_no_escape_hatch(app_engine: Engine) -> None:
     assert not (role.rolsuper or role.rolbypassrls or role.rolcreatedb or role.rolcreaterole)
     assert not role.rolreplication
     assert memberships == 0, "le rôle hérite d'un autre rôle"
-    # Une fonction SECURITY DEFINER franchirait la RLS pour lui (auth_lookup, outbox…).
-    assert definer_functions == []
+    # Une fonction SECURITY DEFINER franchit la RLS pour lui : seules les quatre lectures
+    # de surveillance lui sont ouvertes, qui ne rendent ni entreprise ni contenu (ADR 0090).
+    assert set(definer_functions) == MONITORING_FUNCTIONS
     assert sequences == []
 
 

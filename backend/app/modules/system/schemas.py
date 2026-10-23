@@ -111,3 +111,62 @@ class WorkersHealth(BaseModel):
     outbox: OutboxLag | None
     queue: QueueDepth
     jobs: list[JobHealth]
+
+
+# ------------------------------------------- administration de la plateforme (ADR 0090)
+
+
+class JobRun(BaseModel):
+    """Une exécution de tâche planifiée. `per_company` dit si c'est la sous-tâche d'une
+    entreprise, **jamais** laquelle. `error` : nom de classe et SQLSTATE, 200 caractères
+    au plus (ADR 0077), jamais le message."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    job: str
+    #: `ok`, `failed` ou `running` ; un `running` plus vieux que le délai d'une tâche
+    #: est rendu `failed`, comme dans le bilan.
+    status: str
+    started_at: datetime
+    finished_at: datetime | None
+    error: str | None
+    per_company: bool
+
+
+class JobRunPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[JobRun]
+    page: int
+    page_size: int
+    total: int
+
+
+class DeadLetter(BaseModel):
+    """Un événement au rebut : de quoi le rejouer à la main, rien de son contenu."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    event_type: str
+    occurred_at: datetime
+    attempts: int
+
+
+class DeadLetterPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[DeadLetter]
+    page: int
+    page_size: int
+    total: int
+
+
+class PlatformOutbox(BaseModel):
+    """Retard du relais (le même calcul que le bilan) et liste du rebut."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lag: OutboxLag
+    dead_letters: DeadLetterPage
