@@ -2354,6 +2354,67 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/platform/stats/overview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stats Overview
+     * @description Entreprises par statut et par offre (essais à part), comptes actifs.
+     */
+    get: operations["stats_overview_api_v1_platform_stats_overview_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/stats/revenue": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stats Revenue
+     * @description Somme des paiements **déclarés reçus** sur la période (heure de Dakar, bornes
+     *     comprises) ; `custom` : `start` et `end`, 366 jours au plus, jamais après aujourd'hui.
+     */
+    get: operations["stats_revenue_api_v1_platform_stats_revenue_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/stats/signups": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stats Signups
+     * @description Nouvelles entreprises par mois (12) ou par semaine (52), périodes vides à 0.
+     */
+    get: operations["stats_signups_api_v1_platform_stats_signups_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/platform/companies/{company_id}/support-sessions": {
     parameters: {
       query?: never;
@@ -2892,6 +2953,20 @@ export interface components {
        * Format: date-time
        */
       updated_at: string;
+    };
+    /**
+     * CompanyStatusCounts
+     * @description Entreprises non supprimées, par statut d'accès ; `total` en est la somme.
+     */
+    CompanyStatusCounts: {
+      /** Trial */
+      trial: number;
+      /** Active */
+      active: number;
+      /** Suspended */
+      suspended: number;
+      /** Total */
+      total: number;
     };
     /**
      * CompanyStatusUpdate
@@ -4780,6 +4855,25 @@ export interface components {
     };
     Phone: string;
     /**
+     * PlanBreakdown
+     * @description Une offre et ses entreprises, d'après l'**abonnement** : les essais (tous sur
+     *     Premium) à part des payantes (`active` et `past_due`), pour ne pas gonfler l'offre.
+     */
+    PlanBreakdown: {
+      /** Code */
+      code: string;
+      /** Name */
+      name: string;
+      /** Trial */
+      trial: number;
+      /** Paying */
+      paying: number;
+      /** Suspended */
+      suspended: number;
+      /** Total */
+      total: number;
+    };
+    /**
      * PlanRead
      * @description Une offre. `max_users` à `None` : pas de plafond (palier « sur devis »).
      */
@@ -5347,6 +5441,38 @@ export interface components {
       day: string;
       net_revenue: components["schemas"]["Amount-Output"];
     };
+    /**
+     * RevenueRead
+     * @description Somme des paiements **déclarés reçus** sur la période, jamais un revenu théorique
+     *     tiré des offres en cours. Jours de `start` à `end` compris, heure de Dakar.
+     */
+    RevenueRead: {
+      /**
+       * Period
+       * @enum {string}
+       */
+      period: "current_month" | "previous_month" | "custom";
+      /**
+       * Start
+       * Format: date
+       */
+      start: string;
+      /**
+       * End
+       * Format: date
+       */
+      end: string;
+      /** Timezone */
+      timezone: string;
+      total_fcfa: components["schemas"]["Amount-Output"];
+      /** Payment Count */
+      payment_count: number;
+      /**
+       * Computed At
+       * Format: date-time
+       */
+      computed_at: string;
+    };
     /** RoleAbilities */
     RoleAbilities: {
       /**
@@ -5803,7 +5929,60 @@ export interface components {
     };
     "SellingPrice-Input": components["schemas"]["Amount-Input"];
     "SellingPrice-Output": components["schemas"]["Amount-Output"];
+    /** SignupBucket */
+    SignupBucket: {
+      /**
+       * Start
+       * Format: date
+       */
+      start: string;
+      /**
+       * End
+       * Format: date
+       */
+      end: string;
+      /** Count */
+      count: number;
+    };
+    /**
+     * SignupsRead
+     * @description Nouvelles entreprises (non supprimées) sur 12 mois ou 52 semaines ; la dernière
+     *     période est celle en cours, les périodes vides valent 0.
+     */
+    SignupsRead: {
+      /**
+       * Granularity
+       * @enum {string}
+       */
+      granularity: "month" | "week";
+      /** Timezone */
+      timezone: string;
+      /**
+       * Computed At
+       * Format: date-time
+       */
+      computed_at: string;
+      /** Buckets */
+      buckets: components["schemas"]["SignupBucket"][];
+      /** Total */
+      total: number;
+    };
     Sku: string;
+    /** StatsOverview */
+    StatsOverview: {
+      /**
+       * Computed At
+       * Format: date-time
+       */
+      computed_at: string;
+      companies: components["schemas"]["CompanyStatusCounts"];
+      /** Active Users */
+      active_users: number;
+      /** Plans */
+      plans: components["schemas"]["PlanBreakdown"][];
+      /** Without Subscription */
+      without_subscription: number;
+    };
     /**
      * StockLine
      * @description Stock valorisé d'un article, joint à sa fiche produit.
@@ -10750,6 +10929,90 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SubscriptionDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  stats_overview_api_v1_platform_stats_overview_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StatsOverview"];
+        };
+      };
+    };
+  };
+  stats_revenue_api_v1_platform_stats_revenue_get: {
+    parameters: {
+      query?: {
+        period?: "current_month" | "previous_month" | "custom";
+        start?: string | null;
+        end?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RevenueRead"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  stats_signups_api_v1_platform_stats_signups_get: {
+    parameters: {
+      query?: {
+        granularity?: "month" | "week";
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SignupsRead"];
         };
       };
       /** @description Validation Error */

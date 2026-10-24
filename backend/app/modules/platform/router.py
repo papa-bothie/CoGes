@@ -8,6 +8,7 @@ sous-domaine de l'administration, filtré par adresse IP.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -39,6 +40,11 @@ from app.modules.platform.schemas import (
     PlatformLoginRequest,
     PlatformMe,
     PlatformTokenResponse,
+    RevenueRead,
+    SignupsRead,
+    StatsGranularity,
+    StatsOverview,
+    StatsPeriod,
     SubscriptionDetail,
     SubscriptionPaymentCreate,
     SubscriptionUpdate,
@@ -207,6 +213,35 @@ def record_payment(
         response.status_code = status.HTTP_200_OK
         response.headers[REPLAY_HEADER] = "true"
     return detail
+
+
+# ---------------------------------------------------------- statistiques (ADR 0093)
+
+
+@router.get("/stats/overview", response_model=StatsOverview)
+def stats_overview(platform: CurrentPlatformAdmin) -> StatsOverview:
+    """Entreprises par statut et par offre (essais à part), comptes actifs."""
+    return service.stats_overview(platform.session)
+
+
+@router.get("/stats/revenue", response_model=RevenueRead)
+def stats_revenue(
+    platform: CurrentPlatformAdmin,
+    period: StatsPeriod = "current_month",
+    start: date | None = None,
+    end: date | None = None,
+) -> RevenueRead:
+    """Somme des paiements **déclarés reçus** sur la période (heure de Dakar, bornes
+    comprises) ; `custom` : `start` et `end`, 366 jours au plus, jamais après aujourd'hui."""
+    return service.stats_revenue(platform.session, period, start, end)
+
+
+@router.get("/stats/signups", response_model=SignupsRead)
+def stats_signups(
+    platform: CurrentPlatformAdmin, granularity: StatsGranularity = "month"
+) -> SignupsRead:
+    """Nouvelles entreprises par mois (12) ou par semaine (52), périodes vides à 0."""
+    return service.stats_signups(platform.session, granularity)
 
 
 # ------------------------------------------------- accès support encadré (ADR 0092)
