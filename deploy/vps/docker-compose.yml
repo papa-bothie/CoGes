@@ -101,6 +101,9 @@ services:
   admin:
     <<: *service
     image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/admin:${COGES_IMAGE_TAG:?}
+    environment:
+      # « Voir l'entreprise » de l'accès support (ADR 0092) : lu à l'exécution.
+      COGES_MERCHANT_URL: https://${COGES_DOMAIN:?}
     networks:
       edge: { aliases: ["${COGES_STACK:?}-admin"] }
     mem_limit: 192m
