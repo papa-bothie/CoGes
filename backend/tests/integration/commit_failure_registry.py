@@ -354,6 +354,15 @@ REGISTRY: dict[tuple[str, str], Critical | Exempt] = {
         "COMMIT refusé prouvé par test_platform_admin::test_a_refused_commit_keeps_the_status "
         "(statut inchangé, aucun e-mail)"
     ),
+    # Abonnements (ADR 0091) : même harnais que le statut, sur l'offre et sur le paiement.
+    ("PATCH", "/api/v1/platform/companies/{company_id}/subscription"): Exempt(
+        "COMMIT refusé prouvé par test_subscriptions_api::test_a_refused_commit_records_nothing "
+        "(offre et statut inchangés, aucun e-mail)"
+    ),
+    ("POST", "/api/v1/platform/companies/{company_id}/payments"): Exempt(
+        "COMMIT refusé prouvé par test_subscriptions_api::test_a_refused_commit_records_nothing "
+        "(aucun paiement, période inchangée)"
+    ),
     ("POST", "/api/v1/auth/password"): Exempt(
         "mot de passe de la personne connectée : sa propre session, couverte par "
         "test_temporary_password_expiry ; aucun argent, aucun stock"

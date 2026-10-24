@@ -19,6 +19,7 @@ consommateurs idempotents) est prouvé par T40 (`test_t40_outbox_relay.py`) et
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -36,6 +37,7 @@ from app.workers.tasks import (
     ml_infer,
     ml_train,
     notifications,
+    platform,
     reconcile,
 )
 from tests.conftest import (
@@ -58,6 +60,11 @@ FAN_OUT: dict[str, Callable[[str], Any]] = {
     beat.ML_TRAIN: ml_train.train,
     beat.ML_INFER: ml_infer.infer,
     beat.SWEEP_EXPORTS: exports.sweep,
+    # Fin des essais (ADR 0091) : la tâche de nuit décide sous le rôle de la plateforme,
+    # puis prévient chaque entreprise dans son propre contexte.
+    beat.SUBSCRIPTIONS_DAILY: lambda company: platform.trial_notice(
+        company, 7, (datetime.now(UTC) + timedelta(days=7)).isoformat()
+    ),
 }
 #: Tâches de plate-forme : aucune donnée d'une entreprise lue ou écrite en son nom.
 PLATFORM: dict[str, str] = {

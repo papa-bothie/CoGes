@@ -60,6 +60,8 @@ PLATFORM = "platform"
 READ_ROUTES: dict[str, tuple[str, dict[str, str]]] = {
     "/api/v1/platform/auth/me": (PLATFORM, {}),
     "/api/v1/platform/companies": (PLATFORM, {}),
+    # Catalogue des offres (ADR 0091), le même pour tous ; aucune donnée d'entreprise.
+    "/api/v1/platform/plans": (PLATFORM, {}),
     # Surveillance (ADR 0090) : ni entreprise ni contenu, `test_platform_monitoring.py`.
     "/api/v1/platform/system/workers": (PLATFORM, {}),
     "/api/v1/platform/system/job-runs": (PLATFORM, {}),

@@ -7067,6 +7067,198 @@
         }
       }
     },
+    "/api/v1/platform/plans": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "List Plans",
+        "description": "Les offres, vendables ou non (palier « sur devis »). Quelques lignes : pas de page.",
+        "operationId": "list_plans_api_v1_platform_plans_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PlanRead"
+                  },
+                  "type": "array",
+                  "title": "Response List Plans Api V1 Platform Plans Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/companies/{company_id}/subscription": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Get Subscription",
+        "description": "Offre, statut, dates, comptes actifs et 50 derniers paiements déclarés.",
+        "operationId": "get_subscription_api_v1_platform_companies__company_id__subscription_get",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Change Subscription",
+        "description": "Changer d'offre ou de statut (profil `administrator`). Audit critique.\n\nUne offre trop petite pour les comptes actifs : 409 `plan_downgrade_too_many_users`,\navec le nombre de comptes à désactiver d'abord.",
+        "operationId": "change_subscription_api_v1_platform_companies__company_id__subscription_patch",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubscriptionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/companies/{company_id}/payments": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Record Payment",
+        "description": "Paiement reçu hors CoGes (profil `administrator`), `Idempotency-Key` obligatoire.\n\nL'abonnement devient actif et avance d'un mois ; une entreprise suspendue retrouve\nl'accès. La même clé rejouée rend l'abonnement en 200, sans second paiement.",
+        "operationId": "record_payment_api_v1_platform_companies__company_id__payments_post",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubscriptionPaymentCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform/system/workers": {
       "get": {
         "tags": [
@@ -12509,7 +12701,8 @@
           "sale_cancelled",
           "forecast_alert",
           "insight_critical",
-          "login_failures"
+          "login_failures",
+          "trial_ending"
         ],
         "title": "NotificationType",
         "description": "Liste **fermée**, identique au `CHECK` de `notifications.type` (§ 8.8).\n\nLes deux dernières valeurs appartiennent à CoGes Intelligence (phase 09) ; elles\nfigurent ici parce que le `CHECK` les porte déjà, et qu'une énumération qui\ndiverge de la base est un 500 qui attend son heure."
@@ -13473,6 +13666,68 @@
         "type": "string",
         "maxLength": 40,
         "minLength": 1
+      },
+      "PlanRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "price_fcfa": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Amount-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_users": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Users"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Features"
+          },
+          "is_orderable": {
+            "type": "boolean",
+            "title": "Is Orderable"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "price_fcfa",
+          "max_users",
+          "features",
+          "is_orderable"
+        ],
+        "title": "PlanRead",
+        "description": "Une offre. `max_users` à `None` : pas de plafond (palier « sur devis »)."
       },
       "PlatformLoginRequest": {
         "properties": {
@@ -16411,6 +16666,230 @@
             "const": "offset"
           }
         ]
+      },
+      "SubscriptionDetail": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanRead"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "trial",
+              "active",
+              "past_due",
+              "suspended"
+            ],
+            "title": "Status"
+          },
+          "trial_ends_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trial Ends At"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "current_period_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period End"
+          },
+          "active_users": {
+            "type": "integer",
+            "title": "Active Users"
+          },
+          "payments": {
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionPaymentRead"
+            },
+            "type": "array",
+            "title": "Payments"
+          },
+          "payments_total": {
+            "type": "integer",
+            "title": "Payments Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "company_id",
+          "plan",
+          "status",
+          "trial_ends_at",
+          "started_at",
+          "current_period_end",
+          "active_users",
+          "payments",
+          "payments_total"
+        ],
+        "title": "SubscriptionDetail",
+        "description": "L'abonnement d'une entreprise, ses comptes actifs et ses derniers paiements."
+      },
+      "SubscriptionPaymentCreate": {
+        "properties": {
+          "amount_fcfa": {
+            "$ref": "#/components/schemas/Amount-Input"
+          },
+          "paid_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Paid At"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "wave",
+              "orange_money",
+              "cash",
+              "bank_transfer"
+            ],
+            "title": "Method"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "amount_fcfa",
+          "paid_at",
+          "method"
+        ],
+        "title": "SubscriptionPaymentCreate",
+        "description": "Paiement reçu hors CoGes, déclaré par l'équipe. Montant en chaîne, jamais en float."
+      },
+      "SubscriptionPaymentRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "amount_fcfa": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "paid_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Paid At"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "wave",
+              "orange_money",
+              "cash",
+              "bank_transfer"
+            ],
+            "title": "Method"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "amount_fcfa",
+          "paid_at",
+          "method",
+          "note",
+          "recorded_at"
+        ],
+        "title": "SubscriptionPaymentRead"
+      },
+      "SubscriptionUpdate": {
+        "properties": {
+          "plan_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Code"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "past_due",
+                  "suspended"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "SubscriptionUpdate",
+        "description": "Changer d'offre, de statut, ou les deux ; la raison va au journal."
       },
       "SupplierCode": {
         "type": "string",

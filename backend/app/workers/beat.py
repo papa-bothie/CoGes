@@ -33,6 +33,9 @@ SWEEP_EXPORTS = "exports.sweep_all"
 #: Surveillance (ADR 0077).
 BEAT_TICK = "system.beat_tick"
 PURGE_JOB_RUNS = "system.purge_job_runs"
+#: Abonnements (ADR 0091) : fin des essais, et sa sous-tâche par entreprise.
+SUBSCRIPTIONS_DAILY = "platform.subscriptions_daily"
+TRIAL_NOTICE = "platform.trial_notice"
 
 #: Délai dur d'une tâche (`task_time_limit`). Une trace restée `running` au-delà est
 #: celle d'un worker tué : la lecture la compte comme un échec.
@@ -113,6 +116,12 @@ BEAT_SCHEDULE: dict[str, dict[str, Any]] = {
         "task": PURGE_JOB_RUNS,
         "schedule": crontab(hour="1", minute="15"),
     },
+    # 06 h 30 — fin des essais (ADR 0091) : avertir à J-7, J-3, J-1, suspendre à
+    # l'échéance. Après la nuit, avant l'ouverture des boutiques.
+    "subscriptions-daily": {
+        "task": SUBSCRIPTIONS_DAILY,
+        "schedule": crontab(hour="6", minute="30"),
+    },
     # Toutes les 5 min — « beat est vivant et un worker consomme ». Écrit dans Redis et
     # pingue, sans toucher la base, qui peut ainsi s'endormir en préproduction.
     "beat-tick": {
@@ -151,4 +160,5 @@ JOB_FRESHNESS: dict[str, Freshness] = {
     ML_INFER: Freshness(DAILY, "ml_infer.infer"),
     SCAN_DUE_DEBTS: Freshness(DAILY, "notifications.scan_due_debts"),
     CHECK_REVENUE: Freshness(WEEKLY, "reconcile.check_revenue"),
+    SUBSCRIPTIONS_DAILY: Freshness(DAILY, TRIAL_NOTICE),
 }

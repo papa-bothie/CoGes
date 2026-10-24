@@ -26,6 +26,8 @@ class NotificationType(StrEnum):
     INSIGHT_CRITICAL = "insight_critical"
     #: Échecs de connexion répétés sur un compte réel (ADR 0078, révision 0022).
     LOGIN_FAILURES = "login_failures"
+    #: Fin d'essai proche, à J-7, J-3 et J-1 (ADR 0091, révision 0028).
+    TRIAL_ENDING = "trial_ending"
 
 
 class NotificationSeverity(StrEnum):

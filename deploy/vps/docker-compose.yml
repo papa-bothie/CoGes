@@ -143,6 +143,8 @@ services:
       <<: *app-env
       COGES_DATABASE_URL_APP: ${COGES_DATABASE_URL_APP:?}
       COGES_DATABASE_URL_ANALYTICS: ${COGES_DATABASE_URL_ANALYTICS:?}
+      # Fin des essais (ADR 0091) : la tâche de nuit suspend sous coges_app_platform.
+      COGES_DATABASE_URL_PLATFORM: ${COGES_DATABASE_URL_PLATFORM:?}
       COGES_ML_ARTIFACTS_DIR: /var/lib/coges/ml
       # E-mails de l'administration (ADR 0089) ; sans hôte, rien ne part.
       COGES_PLATFORM_ALERT_EMAIL: ${COGES_PLATFORM_ALERT_EMAIL:-}

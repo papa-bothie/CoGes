@@ -46,6 +46,8 @@ RECIPIENT_PERMISSION: dict[NotificationType, str] = {
     NotificationType.INSIGHT_CRITICAL: "insights:read",
     # Qui peut donner un nouveau mot de passe ou couper l'accès (ADR 0078).
     NotificationType.LOGIN_FAILURES: "users:update",
+    # Qui gère les personnes gère aussi l'abonnement : le gérant (ADR 0091).
+    NotificationType.TRIAL_ENDING: "users:update",
 }
 
 

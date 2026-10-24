@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import contextmanager
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -30,6 +29,7 @@ from tests.integration.platform_harness import (
     PLATFORM_PASSWORD,
     PlatformAccount,
     create_platform_account,
+    failing_platform_commit,
     platform_login,
 )
 
@@ -180,7 +180,8 @@ def test_the_list_shows_metadata_and_nothing_else(
     assert set(body) == {"items", "page", "page_size", "total"}
     [item] = [row for row in body["items"] if row["slug"] == company_alpha.slug]
     assert set(item) == SUMMARY_KEYS
-    assert item["status"] == "active"
+    # Toute entreprise naît en essai (ADR 0091).
+    assert item["status"] == "trial"
     assert item["user_count"] >= 1
 
 
@@ -278,7 +279,7 @@ def test_suspension_cuts_access_at_the_next_request_then_reactivation_restores_i
             {"id": shop.company_id},
         ).all()
     assert [(row.actor_id, row.action) for row in audit] == [(administrator.id, "update")]
-    assert audit[0].diff["before"] == {"status": "active"}
+    assert audit[0].diff["before"] == {"status": "trial"}
     assert audit[0].diff["after"] == {"status": "suspended"}
     assert audit[0].diff["reason"] == "Impayé depuis deux mois"
     assert enqueued == [
@@ -313,35 +314,6 @@ def test_a_merchant_cannot_change_the_status_of_its_own_company(
         )
 
 
-@contextmanager
-def _failing_platform_commit(owner_engine: Engine) -> Iterator[None]:
-    """Fait échouer au COMMIT toute écriture du journal de la plateforme."""
-    with owner_engine.begin() as connection:
-        connection.execute(
-            text(
-                """
-                CREATE FUNCTION test_platform_fail_at_commit() RETURNS trigger
-                LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'COMMIT refusé (test)'; END $$
-                """
-            )
-        )
-        connection.execute(
-            text(
-                "CREATE CONSTRAINT TRIGGER test_platform_fail_at_commit "
-                "AFTER INSERT ON platform_audit_logs DEFERRABLE INITIALLY DEFERRED "
-                "FOR EACH ROW EXECUTE FUNCTION test_platform_fail_at_commit()"
-            )
-        )
-    try:
-        yield
-    finally:
-        with owner_engine.begin() as connection:
-            connection.execute(
-                text("DROP TRIGGER test_platform_fail_at_commit ON platform_audit_logs")
-            )
-            connection.execute(text("DROP FUNCTION test_platform_fail_at_commit()"))
-
-
 def test_a_refused_commit_keeps_the_status(
     administrator: PlatformAccount,
     shop: DemoCompany,
@@ -351,13 +323,13 @@ def test_a_refused_commit_keeps_the_status(
 ) -> None:
     with TestClient(app, base_url=TEST_BASE_URL, raise_server_exceptions=False) as raw:
         token = platform_login(raw, administrator)
-        with _failing_platform_commit(owner_engine):
+        with failing_platform_commit(owner_engine):
             failed = _suspend(raw, token, shop.company_id)
         assert failed.status_code >= 500
         detail = raw.get(
             f"/api/v1/platform/companies/{shop.company_id}", headers=auth_headers(token)
         )
-    assert detail.json()["status"] == "active"
+    assert detail.json()["status"] == "trial"
     assert enqueued == []
 
 
