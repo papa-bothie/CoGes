@@ -15,3 +15,6 @@ export type JobRunPage = Schemas["JobRunPage"];
 export type PlatformOutbox = Schemas["PlatformOutbox"];
 export type PlanRead = Schemas["PlanRead"];
 export type SubscriptionDetail = Schemas["SubscriptionDetail"];
+export type SupportSessionRead = Schemas["SupportSessionRead"];
+export type SupportSessionList = Schemas["SupportSessionList"];
+export type SupportAccessToken = Schemas["SupportAccessToken"];

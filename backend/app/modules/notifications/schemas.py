@@ -28,6 +28,8 @@ class NotificationType(StrEnum):
     LOGIN_FAILURES = "login_failures"
     #: Fin d'essai proche, à J-7, J-3 et J-1 (ADR 0091, révision 0028).
     TRIAL_ENDING = "trial_ending"
+    #: Accès support ouvert par l’équipe CoGes (ADR 0092, révision 0029).
+    SUPPORT_ACCESS = "support_access"
 
 
 class NotificationSeverity(StrEnum):

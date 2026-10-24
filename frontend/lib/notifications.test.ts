@@ -41,6 +41,11 @@ describe("alertes (écran 23)", () => {
       tone: "argent",
       action: "Voir le message",
     });
+    expect(notificationHref(alert("support_access", { session_id: ID }))).toBe("/settings/history");
+    expect(alertLook(alert("support_access", { session_id: ID }))).toEqual({
+      tone: "stock",
+      action: "Voir l’historique",
+    });
     // Une alerte d'avant le lot 3e, sans la personne : la liste des dettes échues.
     expect(notificationHref(alert("debt_due", { party_type: "customer" }))).toBe(
       "/finance/debts?overdue=1",

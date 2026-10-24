@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from app.core import mailer
 from app.core.config import get_settings
@@ -30,13 +31,14 @@ from app.modules.notifications.schemas import NotificationType
 from app.modules.platform import service as platform_service
 from app.modules.rbac import service as rbac_service
 from app.modules.users import service as users_service
-from app.workers.beat import SUBSCRIPTIONS_DAILY, TRIAL_NOTICE
+from app.workers.beat import SUBSCRIPTIONS_DAILY, SUPPORT_SESSIONS_CLOSE, TRIAL_NOTICE
 from app.workers.celery_app import celery_app
 from app.workers.jobs import tracked_job
 
 #: Noms repris tels quels par `app.modules.platform.service`.
 STATUS_CHANGED = "platform.company_status_changed"
 LOGIN_FAILURES = "platform.login_failures"
+SUPPORT_NOTICE = "platform.support_notice"
 
 MANAGER_ROLE = "gerant"
 
@@ -222,3 +224,69 @@ def trial_summary(self: Any, notices: list[dict[str, Any]]) -> bool:
         )
     except Exception as exc:
         raise self.retry(exc=exc) from exc
+
+
+# ------------------------------------------------- accès support encadré (ADR 0092)
+
+_SUPPORT_BODY = (
+    "Bonjour,\n\n"
+    "L'équipe CoGes vient d'ouvrir un accès à {name}, en lecture seule, jusqu'au {until}.\n\n"
+    "Pourquoi : {justification}\n\n"
+    "Pendant cet accès, l'équipe peut consulter vos ventes, votre stock et votre argent, "
+    "sans rien modifier. Un bandeau le signale à tous les utilisateurs de votre "
+    "entreprise, et votre journal d'activité garde la trace de l'ouverture et de la "
+    "fermeture.\n\n"
+    "Si vous n'avez rien demandé, répondez à ce message : nous vous expliquerons.\n\n"
+    "L'équipe CoGes"
+)
+
+
+@celery_app.task(name=SUPPORT_NOTICE, bind=True, max_retries=5, default_retry_delay=60)
+def support_notice(self: Any, company_id: str, session_id: str, expires_at: str) -> bool:
+    """Prévient l'entreprise d'un accès support (bris de glace) : cloche des personnes qui
+    gèrent les comptes, et e-mail immédiat au(x) gérant(s). Rejouée, elle ne double rien :
+    l'e-mail ne part qu'une fois la cloche posée pour la première fois."""
+    ctx = TenantContext.bootstrap(UUID(company_id))
+    with tenant_transaction(ctx) as session:
+        tz = ZoneInfo(companies_service.get_timezone(session, ctx))
+        until = datetime.fromisoformat(expires_at).astimezone(tz)
+        first_time = (
+            notifications_service.notify(
+                session,
+                ctx,
+                notification_type=NotificationType.SUPPORT_ACCESS,
+                title="L'équipe CoGes consulte votre boutique",
+                body=(
+                    f"Accès en lecture seule jusqu'à {until:%H:%M}. "
+                    "Le motif est dans votre journal d'activité."
+                ),
+                entity_id=f"support:{session_id}",
+                data={"session_id": session_id, "expires_at": expires_at},
+                dedupe_hours=24,
+            )
+            > 0
+        )
+    if not first_time:
+        return False
+    try:
+        justification = platform_service.support_justification(UUID(session_id)) or "—"
+        name, emails = manager_emails(UUID(company_id))
+        return mailer.send_email(
+            to=emails,
+            subject="L'équipe CoGes consulte votre boutique",
+            body=_SUPPORT_BODY.format(
+                name=name,
+                until=f"{dmy(until.date())} à {until:%H:%M}",
+                justification=justification,
+            ),
+        )
+    except Exception as exc:
+        raise self.retry(exc=exc) from exc
+
+
+@celery_app.task(name=SUPPORT_SESSIONS_CLOSE)
+@tracked_job(SUPPORT_SESSIONS_CLOSE)
+def support_sessions_close(now: str | None = None) -> int:
+    """Ferme à leur échéance les accès support restés ouverts (sous `coges_app_platform`)."""
+    moment = datetime.fromisoformat(now) if now else None
+    return platform_service.close_expired_support_sessions(moment)

@@ -21,6 +21,8 @@ from app.modules.companies.schemas import (
     RECEIPT_FORMAT,
     SHOP_FIELDS,
     CompanyUpdate,
+    SupportAccessRead,
+    SupportAccessWindow,
 )
 
 #: Modifier ces champs change l'interprétation de toutes les données suivantes :
@@ -154,3 +156,13 @@ def update_current_company(
             ip_address=ip_address,
         )
     return company
+
+
+def support_access(session: Session, ctx: TenantContext) -> SupportAccessRead:
+    """L'accès support en cours dans l'entreprise, pour le bandeau de tous (ADR 0092)."""
+    window = CompanyRepository(session, ctx).open_support_session()
+    if window is None:
+        return SupportAccessRead(session=None)
+    return SupportAccessRead(
+        session=SupportAccessWindow(started_at=window[0], expires_at=window[1])
+    )

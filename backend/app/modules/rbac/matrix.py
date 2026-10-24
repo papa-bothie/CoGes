@@ -24,6 +24,8 @@ from __future__ import annotations
 
 from typing import Final
 
+from app.core import support_access
+
 MANAGER: Final = "gerant"
 SALESPERSON: Final = "vendeur"
 ACCOUNTANT: Final = "comptable"
@@ -94,6 +96,13 @@ ACCOUNTANT_PERMISSIONS: Final[frozenset[str]] = frozenset(
         "notifications:update",
     }
 )
+
+#: Quatrième rôle, celui de l'accès support encadré (ADR 0092). Défini dans le noyau,
+#: qui le pose sur le contexte d'un jeton de support (`core/deps.py`, et le noyau ne
+#: dépend d'aucun module), et repris ici pour que la matrice reste le registre complet.
+#: Il n'existe **pas** en base : aucune entreprise ne le voit, personne ne le reçoit.
+SUPPORT_READONLY: Final = support_access.ROLE
+SUPPORT_READONLY_PERMISSIONS: Final[frozenset[str]] = support_access.PERMISSIONS
 
 #: `None` signifie « toutes les permissions du catalogue ».
 SYSTEM_ROLES: Final[dict[str, frozenset[str] | None]] = {

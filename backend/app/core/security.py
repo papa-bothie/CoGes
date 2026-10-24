@@ -66,6 +66,13 @@ class AccessClaims:
     user_id: UUID
     company_id: UUID
     token_id: UUID
+    #: Rempli pour un jeton de support seulement (ADR 0092) : `user_id` est alors nul.
+    support_session_id: UUID | None = None
+
+
+#: Revendication d'un jeton de support (ADR 0092), avec `sid` : la session relue à chaque
+#: requête. Même audience et même type qu'un jeton commerçant : même chemin, même RLS.
+SUPPORT_CLAIM: Final = "via_support_session"
 
 
 def create_access_token(user_id: UUID, company_id: UUID) -> tuple[str, int]:
@@ -84,6 +91,29 @@ def create_access_token(user_id: UUID, company_id: UUID) -> tuple[str, int]:
     }
     token = jwt.encode(payload, settings.jwt_secret.get_secret_value(), algorithm=ALGORITHM)
     return token, ttl
+
+
+def create_support_access_token(
+    session_id: UUID, company_id: UUID, expires_at: datetime
+) -> tuple[str, int]:
+    """Jeton de support : aucun utilisateur, la session `sid`, et l'expiration **de la
+    session** (pas celle d'un jeton d'accès ordinaire). Fermée avant l'heure, la session
+    fait refuser le jeton à la requête suivante : `deps.py` la relit à chaque fois."""
+    settings = get_settings()
+    now = datetime.now(UTC)
+    payload: dict[str, Any] = {
+        "sub": str(UUID(int=0)),
+        "company_id": str(company_id),
+        SUPPORT_CLAIM: True,
+        "sid": str(session_id),
+        "typ": ACCESS_TOKEN_TYPE,
+        "aud": TENANT_AUDIENCE,
+        "jti": str(uuid4()),
+        "iat": int(now.timestamp()),
+        "exp": int(expires_at.timestamp()),
+    }
+    token = jwt.encode(payload, settings.jwt_secret.get_secret_value(), algorithm=ALGORITHM)
+    return token, max(0, int((expires_at - now).total_seconds()))
 
 
 def decode_access_token(token: str) -> AccessClaims:
@@ -109,10 +139,12 @@ def decode_access_token(token: str) -> AccessClaims:
         raise AuthenticationRequiredError("Type de jeton inattendu.")
 
     try:
+        support_session_id = UUID(payload["sid"]) if payload.get(SUPPORT_CLAIM) is True else None
         return AccessClaims(
             user_id=UUID(payload["sub"]),
             company_id=UUID(payload["company_id"]),
             token_id=UUID(payload["jti"]),
+            support_session_id=support_session_id,
         )
     except (KeyError, ValueError) as exc:
         raise AuthenticationRequiredError("Jeton d'accès malformé.") from exc

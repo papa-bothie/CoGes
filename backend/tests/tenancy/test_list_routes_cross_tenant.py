@@ -44,6 +44,8 @@ from tests.conftest import (
     role_id,
     write_headers,
 )
+from tests.integration.platform_harness import create_platform_account
+from tests.integration.support_harness import open_support_session
 
 pytestmark = pytest.mark.tenancy
 
@@ -86,6 +88,8 @@ READ_ROUTES: dict[str, tuple[str, dict[str, str]]] = {
     "/api/v1/auth/me": (TENANT, {}),
     "/api/v1/categories": (TENANT, {}),
     "/api/v1/companies/me": (TENANT, {}),
+    # Le bandeau d'accès support (ADR 0092) : début et fin, de sa seule entreprise.
+    "/api/v1/companies/me/support-access": (TENANT, {}),
     "/api/v1/customers": (TENANT, {}),
     "/api/v1/dashboard": (TENANT, {}),
     "/api/v1/debts": (TENANT, {}),
@@ -307,6 +311,32 @@ def test_a_read_shows_nothing_of_the_other_company(
     a, b = shops
     response = client.get(path, headers=auth_headers(a.token), params=READ_ROUTES[path][1])
     assert response.status_code == 200, f"{path} : {response.status_code} {response.text}"
+    assert _leaks(response.json(), _b_markers(b)) == []
+
+
+@pytest.fixture(scope="module")
+def support_of_a(
+    shops: tuple[Shop, Shop],
+    platform_bound_to_test_database: None,
+    platform_session_factory: sessionmaker[Any],
+) -> str:
+    """Jeton d'accès support sur A (ADR 0092) : même périmètre que tout jeton tenant."""
+    account = create_platform_account("support")
+    _, token = open_support_session(
+        platform_session_factory, shops[0].company.company_id, account.id
+    )
+    return token
+
+
+@pytest.mark.parametrize("path", TENANT_READS)
+def test_a_support_read_shows_nothing_of_the_other_company(
+    path: str, client: TestClient, shops: tuple[Shop, Shop], support_of_a: str
+) -> None:
+    """Le jeton de support lit A comme un utilisateur de A — en transaction `READ ONLY`,
+    sans jamais tomber en 500 — et rien de B. Hors de ses permissions : 403."""
+    _, b = shops
+    response = client.get(path, headers=auth_headers(support_of_a), params=READ_ROUTES[path][1])
+    assert response.status_code in (200, 403), f"{path} : {response.status_code} {response.text}"
     assert _leaks(response.json(), _b_markers(b)) == []
 
 

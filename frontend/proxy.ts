@@ -20,6 +20,11 @@ export function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Accès support (ADR 0092) : l'entrée lit le jeton du fragment, la fin le dit.
+  if (pathname === "/support" || pathname === "/support/termine") {
+    return NextResponse.next();
+  }
+
   if (!hasSession && !onLogin) {
     const url = new URL("/login", request.url);
     // Même contrôle qu'au retour de la connexion : on ne propage jamais un `next` douteux.

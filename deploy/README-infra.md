@@ -426,6 +426,15 @@ docker compose exec -T postgres psql -U postgres -c "CREATE ROLE coges_billing N
 #   GRANT USAGE ON SCHEMA public TO coges_billing;
 ```
 
+### Accès support encadré (révision 0029, ADR 0092)
+
+Aucun rôle nouveau, aucun prérequis Neon : la révision 0029 crée `support_sessions`, dont
+`coges_app` lit cinq colonnes (sa seule entreprise) et que `coges_app_platform` ouvre et
+ferme. Le conteneur `admin` reçoit `COGES_MERCHANT_URL=https://<COGES_DOMAIN>` par le
+compose (« Voir l'entreprise ») ; rien à ajouter dans `/etc/coges/coges.env`. Le beat
+ferme chaque nuit (01 h 30 UTC) les sessions échues restées ouvertes
+(`platform.support_sessions_close`). Procédure : `docs/runbooks/acces-support.md`.
+
 ## Sauvegarde externe chiffrée (ADR 0084)
 
 Guide complet : `docs/runbooks/sauvegarde.md`. Chaque nuit à 02 h 15 UTC, GitHub Actions

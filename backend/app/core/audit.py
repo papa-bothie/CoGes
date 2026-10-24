@@ -28,7 +28,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 
-from app.core.tenancy import TenantContext
+from app.core.tenancy import NIL_USER_ID, TenantContext
 
 
 class AuditAction(StrEnum):
@@ -76,7 +76,8 @@ def audit_critical(
         _INSERT_AUDIT,
         {
             "company_id": ctx.company_id,
-            "actor_user_id": ctx.user_id,
+            # Aucun utilisateur (amorçage, équipe CoGes) : auteur NULL, jamais l'UUID nul.
+            "actor_user_id": None if ctx.user_id == NIL_USER_ID else ctx.user_id,
             "action": action.value,
             "entity_table": entity_table,
             "entity_id": entity_id,

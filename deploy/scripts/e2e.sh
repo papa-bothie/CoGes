@@ -121,6 +121,10 @@ SQL
     uv run --directory backend python -m app.cli create-company --name "Parcours administration" \
       --slug admin-e2e --manager-email gerant@admin-e2e.example.com \
       --manager-name "Gérant suspendu" --password demo-coges-2026
+    # Accès support (ADR 0092) : une entreprise que l'équipe consulte en lecture seule.
+    uv run --directory backend python -m app.cli create-company --name "Parcours support" \
+      --slug support-e2e --manager-email gerant@support-e2e.example.com \
+      --manager-name "Gérant consulté" --password demo-coges-2026
     # L'épicerie de la maquette v2, à part : la démo et `e2e` ne changent pas (ADR 0065).
     uv run --directory backend python -m app.seed_maquette --intelligence
     ;;
@@ -160,6 +164,8 @@ SQL
     run_front .next-e2e "$E2E_API_PORT" "$E2E_FRONT_PORT"
     ;;
   admin)
+    # « Voir l'entreprise » (accès support, ADR 0092) ouvre le front des parcours.
+    export COGES_MERCHANT_URL="http://localhost:$E2E_FRONT_PORT"
     run_front .next-e2e "$E2E_API_PORT" "$E2E_ADMIN_PORT" frontend-admin
     ;;
   system)

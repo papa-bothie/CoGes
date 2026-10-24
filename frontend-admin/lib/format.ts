@@ -37,6 +37,16 @@ export function formatAge(seconds: number | null | undefined): string {
   return `${Math.floor(seconds / 86400)} j`;
 }
 
+/** Temps restant avant une échéance : « reste 1 h 52 », « reste 8 min », « terminé ». */
+export function formatRemaining(until: string, now: number = Date.now()): string {
+  const minutes = Math.ceil((Date.parse(until) - now) / 60_000);
+  if (minutes <= 0) return "terminé";
+  if (minutes < 60) return `reste ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return `reste ${hours} h${rest ? ` ${String(rest).padStart(2, "0")}` : ""}`;
+}
+
 const FCFA = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 
 /** Montant en francs CFA : « 14 900 FCFA », espaces fines insécables, sans décimales. */

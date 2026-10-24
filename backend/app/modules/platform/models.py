@@ -170,3 +170,32 @@ class SubscriptionPayment(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
+
+
+class SupportSession(Base):
+    """Accès support encadré à une entreprise (révision 0029, ADR 0092).
+
+    Le fait qu'un accès a eu lieu — par qui, pourquoi, quand —, rien de commercial.
+    `coges_app` en lit cinq colonnes, pour sa seule entreprise (le bandeau, la relecture
+    à chaque requête) ; seule l'administration ouvre et ferme.
+    """
+
+    __tablename__ = "support_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    platform_user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    justification: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Consentement du gérant (plus tard) ; NULL pour un bris de glace.
+    granted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_by: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )

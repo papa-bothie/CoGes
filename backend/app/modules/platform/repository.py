@@ -25,6 +25,7 @@ from app.modules.platform.models import (
     PlatformUser,
     Subscription,
     SubscriptionPayment,
+    SupportSession,
 )
 
 _LIKE_ESCAPE = "\\"
@@ -307,3 +308,56 @@ class SubscriptionRepository:
                 .order_by(Subscription.trial_ends_at, Subscription.id)
             )
         )
+
+
+class SupportSessionRepository:
+    """Sessions d'accès support (ADR 0092), sous `coges_app_platform`.
+
+    Aucun verrou sur `companies` : l'ouverture écrit aussi le journal de l'entreprise, sur
+    une autre connexion, avant que celle-ci ne valide. Deux ouvertures simultanées pour
+    la même entreprise se départagent par l'index unique `support_sessions_one_open`.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def add(self, support_session: SupportSession) -> SupportSession:
+        self.session.add(support_session)
+        self.session.flush()
+        return support_session
+
+    def lock(self, session_id: UUID) -> SupportSession | None:
+        return self.session.scalars(
+            select(SupportSession).where(SupportSession.id == session_id).with_for_update()
+        ).one_or_none()
+
+    def open_for(self, company_id: UUID) -> SupportSession | None:
+        """La session non fermée de l'entreprise (échue ou non) : au plus une."""
+        return self.session.scalars(
+            select(SupportSession).where(
+                SupportSession.company_id == company_id, SupportSession.ended_at.is_(None)
+            )
+        ).one_or_none()
+
+    def recent(self, company_id: UUID, *, limit: int) -> list[tuple[SupportSession, str]]:
+        """Les dernières sessions de l'entreprise, avec le nom de qui les a ouvertes."""
+        rows = self.session.execute(
+            select(SupportSession, PlatformUser.display_name)
+            .join(PlatformUser, PlatformUser.id == SupportSession.platform_user_id)
+            .where(SupportSession.company_id == company_id)
+            .order_by(SupportSession.started_at.desc(), SupportSession.id)
+            .limit(limit)
+        ).all()
+        return [(row[0], str(row[1])) for row in rows]
+
+    def close_expired(self, now: datetime, *, company_id: UUID | None = None) -> list[UUID]:
+        """Ferme à leur échéance les sessions échues restées ouvertes ; rend leurs ids."""
+        statement = (
+            update(SupportSession)
+            .where(SupportSession.ended_at.is_(None), SupportSession.expires_at <= now)
+            .values(ended_at=SupportSession.expires_at)
+            .returning(SupportSession.id)
+        )
+        if company_id is not None:
+            statement = statement.where(SupportSession.company_id == company_id)
+        return list(self.session.scalars(statement))

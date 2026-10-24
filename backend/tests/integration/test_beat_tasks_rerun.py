@@ -69,6 +69,7 @@ def test_every_scheduled_task_is_covered_here() -> None:
         "system.purge_job_runs",
         "system.beat_tick",
         "platform.subscriptions_daily",
+        "platform.support_sessions_close",
     }
     assert {entry["task"] for entry in BEAT_SCHEDULE.values()} == covered
 
@@ -123,6 +124,13 @@ def test_subscriptions_daily_rerun(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(platform.trial_notice, "delay", lambda *args: None)
     monkeypatch.setattr(platform.trial_summary, "delay", lambda *args: None)
     _, second = _twice(platform.subscriptions_daily)
+    assert second == 0
+
+
+@pytest.mark.usefixtures("platform_bound_to_test_database")
+def test_support_sessions_close_rerun() -> None:
+    """Accès support échus (ADR 0092) : la seconde passe n'en trouve plus à fermer."""
+    _, second = _twice(platform.support_sessions_close)
     assert second == 0
 
 

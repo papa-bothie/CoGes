@@ -178,6 +178,28 @@ export interface paths {
     patch: operations["update_current_company_api_v1_companies_me_patch"];
     trace?: never;
   };
+  "/api/v1/companies/me/support-access": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read Support Access
+     * @description Accès support en cours (ADR 0092) : début et fin, jamais qui.
+     *
+     *     Sans permission : **tout** utilisateur de l'entreprise doit voir le bandeau.
+     */
+    get: operations["read_support_access_api_v1_companies_me_support_access_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/users": {
     parameters: {
       query?: never;
@@ -2332,6 +2354,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/platform/companies/{company_id}/support-sessions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Support Sessions
+     * @description La session en cours (au plus une) et les 20 dernières, avec qui et pourquoi.
+     */
+    get: operations["list_support_sessions_api_v1_platform_companies__company_id__support_sessions_get"];
+    put?: never;
+    /**
+     * Open Support Session
+     * @description Bris de glace (administrateur et support) : justification obligatoire, 2 h par
+     *     défaut, 4 h au plus. Écrit dans le journal de l'administration **et** dans celui de
+     *     l'entreprise ; le gérant est prévenu par e-mail et dans la cloche. Le jeton rendu
+     *     lit l'entreprise comme un utilisateur, en lecture seule.
+     */
+    post: operations["open_support_session_api_v1_platform_companies__company_id__support_sessions_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/support-sessions/{session_id}/token": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Issue Support Token
+     * @description Redonne le jeton d'une session ouverte, à qui l'a ouverte seulement. Audité.
+     */
+    post: operations["issue_support_token_api_v1_platform_support_sessions__session_id__token_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/support-sessions/{session_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /**
+     * Close Support Session
+     * @description Ferme l'accès avant l'heure ; le jeton cesse de servir à la requête suivante.
+     *     Écrit dans les deux journaux.
+     */
+    delete: operations["close_support_session_api_v1_platform_support_sessions__session_id__delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/platform/system/workers": {
     parameters: {
       query?: never;
@@ -4022,6 +4112,11 @@ export interface components {
       /** Permissions */
       permissions: string[];
       company: components["schemas"]["MeCompany"];
+      /**
+       * Via Support
+       * @default false
+       */
+      via_support: boolean;
     };
     /**
      * MeRole
@@ -4348,7 +4443,8 @@ export interface components {
       | "forecast_alert"
       | "insight_critical"
       | "login_failures"
-      | "trial_ending";
+      | "trial_ending"
+      | "support_access";
     /**
      * NotificationUpdate
      * @description Marquer comme lue, ou revenir en non lu.
@@ -5997,6 +6093,104 @@ export interface components {
       address?: components["schemas"]["Address"] | null;
       payment_terms_days?: components["schemas"]["PaymentTermsDays"] | null;
     };
+    /**
+     * SupportAccessRead
+     * @description Le bandeau « Accès support actif » (ADR 0092) : `session` vide s'il n'y en a pas.
+     */
+    SupportAccessRead: {
+      session: components["schemas"]["SupportAccessWindow"] | null;
+    };
+    /**
+     * SupportAccessToken
+     * @description Le jeton de support : il ne vaut que pour cette session, en lecture seule.
+     */
+    SupportAccessToken: {
+      session: components["schemas"]["SupportSessionRead"];
+      /** Access Token */
+      access_token: string;
+      /**
+       * Token Type
+       * @default bearer
+       * @constant
+       */
+      token_type: "bearer";
+      /** Expires In */
+      expires_in: number;
+    };
+    /**
+     * SupportAccessWindow
+     * @description Un accès support en cours : depuis quand, jusqu'à quand. Jamais qui.
+     */
+    SupportAccessWindow: {
+      /**
+       * Started At
+       * Format: date-time
+       */
+      started_at: string;
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+    };
+    /**
+     * SupportSessionCreate
+     * @description Bris de glace : le « pourquoi » est obligatoire, la durée bornée.
+     */
+    SupportSessionCreate: {
+      /** Justification */
+      justification: string;
+      /**
+       * Duration Minutes
+       * @default 120
+       */
+      duration_minutes: number;
+    };
+    /**
+     * SupportSessionList
+     * @description La session en cours (au plus une) et les dernières, ouverte comprise.
+     */
+    SupportSessionList: {
+      active: components["schemas"]["SupportSessionRead"] | null;
+      /** Recent */
+      recent: components["schemas"]["SupportSessionRead"][];
+    };
+    /**
+     * SupportSessionRead
+     * @description Une session vue par l'équipe : qui l'a ouverte, pourquoi, quand.
+     */
+    SupportSessionRead: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Company Id
+       * Format: uuid
+       */
+      company_id: string;
+      /** Opened By */
+      opened_by: string;
+      /** Opened By Me */
+      opened_by_me: boolean;
+      /** Justification */
+      justification: string | null;
+      /**
+       * Started At
+       * Format: date-time
+       */
+      started_at: string;
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      /** Ended At */
+      ended_at: string | null;
+      /** Is Open */
+      is_open: boolean;
+    };
     "TaxRate-Input": components["schemas"]["Rate-Input"];
     "TaxRate-Output": components["schemas"]["Rate-Output"];
     /**
@@ -6513,6 +6707,26 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  read_support_access_api_v1_companies_me_support_access_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupportAccessRead"];
         };
       };
     };
@@ -10537,6 +10751,132 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["SubscriptionDetail"];
         };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_support_sessions_api_v1_platform_companies__company_id__support_sessions_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        company_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupportSessionList"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  open_support_session_api_v1_platform_companies__company_id__support_sessions_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        company_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SupportSessionCreate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupportAccessToken"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  issue_support_token_api_v1_platform_support_sessions__session_id__token_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SupportAccessToken"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  close_support_session_api_v1_platform_support_sessions__session_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {

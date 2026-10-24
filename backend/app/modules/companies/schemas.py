@@ -143,3 +143,20 @@ class CompanyUpdate(BaseModel):
                 self.settings[DEFAULT_REORDER_POINT]
             )
         return self
+
+
+class SupportAccessWindow(BaseModel):
+    """Un accès support en cours : depuis quand, jusqu'à quand. Jamais qui."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    started_at: datetime
+    expires_at: datetime
+
+
+class SupportAccessRead(BaseModel):
+    """Le bandeau « Accès support actif » (ADR 0092) : `session` vide s'il n'y en a pas."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    session: SupportAccessWindow | None

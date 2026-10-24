@@ -7,12 +7,19 @@ import { useMe } from "@/components/admin-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { StatusDialog, type StatusTarget } from "@/components/status-dialog";
 import { SubscriptionCard } from "@/components/subscription-card";
+import { SupportAccessCard } from "@/components/support-access-card";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import type { CompanyDetail } from "@/lib/api/schema";
 import { ROLE_LABELS, formatDate, formatDateTime } from "@/lib/format";
 
-export function CompanyDetailView({ companyId }: { companyId: string }) {
+export function CompanyDetailView({
+  companyId,
+  merchantUrl,
+}: {
+  companyId: string;
+  merchantUrl: string;
+}) {
   const me = useMe();
   const [company, setCompany] = useState<CompanyDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +105,12 @@ export function CompanyDetailView({ companyId }: { companyId: string }) {
         companyId={companyId}
         canChange={canChange}
         onAccessChanged={() => setVersion((n) => n + 1)}
+      />
+
+      <SupportAccessCard
+        companyId={companyId}
+        suspended={company.status === "suspended"}
+        merchantUrl={merchantUrl}
       />
 
       <section aria-labelledby="titre-comptes" className="space-y-2">

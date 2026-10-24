@@ -25,7 +25,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
-from app.core import queue, rate_limit
+from app.core import queue, rate_limit, support_access
 from app.core.audit import AuditAction, audit_critical
 from app.core.config import get_settings
 from app.core.errors import (
@@ -422,8 +422,40 @@ def current_identity(session: Session, ctx: TenantContext) -> MeResponse:
     Les permissions sont celles du contexte, relues en base par la dépendance de
     session : exactement celles que les routes vérifieront.
     """
-    user = users_service.get_user(session, ctx, ctx.user_id)
     company = companies_service.get_current_company(session, ctx)
+    me_company = MeCompany(
+        id=company.id,
+        name=company.name,
+        slug=company.slug,
+        currency=company.currency,
+        timezone=company.timezone,
+        tax_enabled=companies_service.is_tax_enabled(session, ctx),
+        receipt_format=companies_service.receipt_format(session, ctx),
+    )
+    if ctx.is_support:
+        # Accès support (ADR 0092) : personne de l'entreprise, un rôle qui n'existe
+        # qu'en code. L'équipe CoGes, jamais le nom de la personne.
+        return MeResponse(
+            user=MeUser(
+                id=ctx.user_id,
+                email=None,
+                phone=None,
+                full_name=support_access.DISPLAY_NAME,
+                must_change_password=False,
+            ),
+            roles=[
+                MeRole(
+                    id=ctx.user_id,
+                    name=support_access.ROLE,
+                    description=support_access.ROLE_LABEL,
+                    is_system=True,
+                )
+            ],
+            permissions=sorted(ctx.permissions),
+            company=me_company,
+            via_support=True,
+        )
+    user = users_service.get_user(session, ctx, ctx.user_id)
     return MeResponse(
         user=MeUser(
             id=user.id,
@@ -442,13 +474,5 @@ def current_identity(session: Session, ctx: TenantContext) -> MeResponse:
             for role in rbac_service.roles_for_user(session, ctx, ctx.user_id)
         ],
         permissions=sorted(ctx.permissions),
-        company=MeCompany(
-            id=company.id,
-            name=company.name,
-            slug=company.slug,
-            currency=company.currency,
-            timezone=company.timezone,
-            tax_enabled=companies_service.is_tax_enabled(session, ctx),
-            receipt_format=companies_service.receipt_format(session, ctx),
-        ),
+        company=me_company,
     )

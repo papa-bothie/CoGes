@@ -10,6 +10,7 @@ import {
   LineChart,
   PackageX,
   Receipt,
+  ShieldCheck,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
@@ -34,6 +35,7 @@ const ICONS: Record<AppNotification["type"], { icon: LucideIcon; tone: string }>
   insight_critical: { icon: Sparkles, tone: "bg-destructive/10 text-danger-ink" },
   login_failures: { icon: KeyRound, tone: "bg-warning/10 text-warning-ink" },
   trial_ending: { icon: CalendarClock, tone: "bg-warning/10 text-warning-ink" },
+  support_access: { icon: ShieldCheck, tone: "bg-warning/10 text-warning-ink" },
 };
 
 /** Marque lu / non lu ; le compteur de la cloche et le tableau de bord suivent. */

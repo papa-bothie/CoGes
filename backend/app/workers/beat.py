@@ -36,6 +36,8 @@ PURGE_JOB_RUNS = "system.purge_job_runs"
 #: Abonnements (ADR 0091) : fin des essais, et sa sous-tâche par entreprise.
 SUBSCRIPTIONS_DAILY = "platform.subscriptions_daily"
 TRIAL_NOTICE = "platform.trial_notice"
+#: Accès support (ADR 0092) : ferme à leur échéance les sessions restées ouvertes.
+SUPPORT_SESSIONS_CLOSE = "platform.support_sessions_close"
 
 #: Délai dur d'une tâche (`task_time_limit`). Une trace restée `running` au-delà est
 #: celle d'un worker tué : la lecture la compte comme un échec.
@@ -122,6 +124,12 @@ BEAT_SCHEDULE: dict[str, dict[str, Any]] = {
         "task": SUBSCRIPTIONS_DAILY,
         "schedule": crontab(hour="6", minute="30"),
     },
+    # 01 h 30 — accès support échus fermés (ADR 0092). Le jeton ne servait déjà plus :
+    # la liste des sessions ouvertes redevient exacte.
+    "support-sessions-close": {
+        "task": SUPPORT_SESSIONS_CLOSE,
+        "schedule": crontab(hour="1", minute="30"),
+    },
     # Toutes les 5 min — « beat est vivant et un worker consomme ». Écrit dans Redis et
     # pingue, sans toucher la base, qui peut ainsi s'endormir en préproduction.
     "beat-tick": {
@@ -161,4 +169,5 @@ JOB_FRESHNESS: dict[str, Freshness] = {
     SCAN_DUE_DEBTS: Freshness(DAILY, "notifications.scan_due_debts"),
     CHECK_REVENUE: Freshness(WEEKLY, "reconcile.check_revenue"),
     SUBSCRIPTIONS_DAILY: Freshness(DAILY, TRIAL_NOTICE),
+    SUPPORT_SESSIONS_CLOSE: Freshness(DAILY),
 }

@@ -14,6 +14,7 @@ import {
   suspendSession,
   type RefreshOutcome,
 } from "@/lib/auth/session";
+import { SUPPORT_SESSION_ENDED } from "@/lib/auth/support";
 import { tokenStore } from "@/lib/auth/token-store";
 import type { paths } from "@/types/api";
 
@@ -62,6 +63,16 @@ export function createAuthFetch(deps: AuthFetchDeps) {
     }
   };
 
+  /** Accès support fermé ou échu (ADR 0092) : rien à rafraîchir, c'est terminé. */
+  const isSupportEnd = async (response: Response): Promise<boolean> => {
+    try {
+      const body = (await response.clone().json()) as { error?: { code?: string } };
+      return body.error?.code === SUPPORT_SESSION_ENDED;
+    } catch {
+      return false;
+    }
+  };
+
   return async function authFetch(request: Request): Promise<Response> {
     if (isSessionEndpoint(request.url)) return deps.fetch(request);
 
@@ -88,6 +99,10 @@ export function createAuthFetch(deps: AuthFetchDeps) {
       return response;
     }
     if (response.status !== 401) return response;
+    if (await isSupportEnd(response)) {
+      deps.onExpired();
+      return response;
+    }
 
     // Une autre requête a déjà fait tourner le jeton pendant que celle-ci était en route :
     // on rejoue avec le jeton neuf, sans seconde rotation (ADR 0088).

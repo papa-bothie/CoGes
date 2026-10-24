@@ -13,6 +13,7 @@ import { networkError, toApiError } from "@/lib/api/errors";
 import type { LoginRequest, TokenResponse } from "@/lib/api/schema";
 
 import { DEFAULT_NEXT, safeNext } from "./safe-next";
+import { endSupportSession, isSupportMode, restoreSupportToken } from "./support";
 import { tokenStore } from "./token-store";
 
 export const SESSION_MARKER = "coges_session";
@@ -97,6 +98,8 @@ let inFlight: Promise<RefreshOutcome> | null = null;
 
 /** Rafraîchit le jeton d'accès. Les appels concurrents partagent la même requête. */
 export function refreshSession(): Promise<RefreshOutcome> {
+  // Accès support (ADR 0092) : aucun cookie à faire tourner, le jeton de l'onglet suffit.
+  if (isSupportMode()) return Promise.resolve(restoreSupportToken() ? "ok" : "unauthenticated");
   inFlight ??= withCrossTabLock(requestRefresh).finally(() => {
     inFlight = null;
   });
@@ -144,6 +147,8 @@ function announceLogout(): void {
 
 /** Déconnexion volontaire : révoque la famille de sessions côté serveur. */
 export async function logout(): Promise<void> {
+  // Accès support : surtout pas `/auth/logout`, qui révoquerait une vraie session.
+  if (isSupportMode()) return endSupportSession();
   // Un rafraîchissement en cours poserait un jeton neuf **après** l'oubli local, et la
   // personne resterait connectée dans cet onglet (ADR 0088) : on l'attend d'abord.
   if (inFlight) await inFlight.catch(() => undefined);
@@ -170,6 +175,7 @@ export function loginUrl(reason?: "expired" | "logout" | "suspended"): string {
 
 /** Session perdue (refresh refusé) : on oublie tout et on retourne à la connexion. */
 export function expireSession(): void {
+  if (isSupportMode()) return endSupportSession();
   forgetLocally();
   announceLogout();
   if (typeof location !== "undefined" && !location.pathname.startsWith("/login")) {
@@ -182,6 +188,7 @@ export function expireSession(): void {
  * page de connexion dit pourquoi — jamais une erreur technique.
  */
 export function suspendSession(): void {
+  if (isSupportMode()) return endSupportSession();
   forgetLocally();
   announceLogout();
   if (typeof location !== "undefined" && !location.pathname.startsWith("/login")) {
@@ -194,7 +201,8 @@ export function onLogoutElsewhere(handler: () => void): () => void {
   const target = channel();
   if (!target) return () => undefined;
   const listener = (event: MessageEvent<{ type?: string }>) => {
-    if (event.data?.type === "logout") {
+    // Un onglet d'accès support ne suit pas la déconnexion d'une vraie session.
+    if (event.data?.type === "logout" && !isSupportMode()) {
       forgetLocally();
       handler();
     }

@@ -55,6 +55,9 @@ export function notificationHref(notification: Pick<AppNotification, "type" | "d
     case "login_failures":
       // Échecs de connexion répétés (ADR 0078) : là où l'on redonne un mot de passe.
       return "/settings/people";
+    case "support_access":
+      // Accès support (ADR 0092) : le motif est dans l'historique de la boutique.
+      return "/settings/history";
     default:
       return "/notifications";
   }
@@ -89,6 +92,8 @@ export function alertLook(notification: Pick<AppNotification, "type" | "data">):
     case "trial_ending":
       // Fin d'essai proche (ADR 0091) : un message de l'équipe, pas d'écran à ouvrir.
       return { tone: "argent", action: t.trial };
+    case "support_access":
+      return { tone: "stock", action: t.history };
     default:
       return { tone: "conseils", action: t.advice };
   }

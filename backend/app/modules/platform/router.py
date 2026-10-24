@@ -42,6 +42,9 @@ from app.modules.platform.schemas import (
     SubscriptionDetail,
     SubscriptionPaymentCreate,
     SubscriptionUpdate,
+    SupportAccessToken,
+    SupportSessionCreate,
+    SupportSessionList,
 )
 
 router = APIRouter(prefix="/platform", tags=["platform-admin"])
@@ -204,3 +207,53 @@ def record_payment(
         response.status_code = status.HTTP_200_OK
         response.headers[REPLAY_HEADER] = "true"
     return detail
+
+
+# ------------------------------------------------- accès support encadré (ADR 0092)
+
+
+@router.get("/companies/{company_id}/support-sessions", response_model=SupportSessionList)
+def list_support_sessions(company_id: UUID, platform: CurrentPlatformAdmin) -> SupportSessionList:
+    """La session en cours (au plus une) et les 20 dernières, avec qui et pourquoi."""
+    return service.list_support_sessions(platform.session, platform.admin, company_id)
+
+
+@router.post(
+    "/companies/{company_id}/support-sessions",
+    response_model=SupportAccessToken,
+    status_code=status.HTTP_201_CREATED,
+)
+def open_support_session(
+    company_id: UUID,
+    payload: SupportSessionCreate,
+    request: Request,
+    platform: CurrentPlatformAdmin,
+) -> SupportAccessToken:
+    """Bris de glace (administrateur et support) : justification obligatoire, 2 h par
+    défaut, 4 h au plus. Écrit dans le journal de l'administration **et** dans celui de
+    l'entreprise ; le gérant est prévenu par e-mail et dans la cloche. Le jeton rendu
+    lit l'entreprise comme un utilisateur, en lecture seule."""
+    return service.open_support_session(
+        platform.session, platform.admin, company_id, payload, ip_address=client_ip(request)
+    )
+
+
+@router.post("/support-sessions/{session_id}/token", response_model=SupportAccessToken)
+def issue_support_token(
+    session_id: UUID, request: Request, platform: CurrentPlatformAdmin
+) -> SupportAccessToken:
+    """Redonne le jeton d'une session ouverte, à qui l'a ouverte seulement. Audité."""
+    return service.issue_support_token(
+        platform.session, platform.admin, session_id, ip_address=client_ip(request)
+    )
+
+
+@router.delete("/support-sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def close_support_session(
+    session_id: UUID, request: Request, platform: CurrentPlatformAdmin
+) -> None:
+    """Ferme l'accès avant l'heure ; le jeton cesse de servir à la requête suivante.
+    Écrit dans les deux journaux."""
+    service.close_support_session(
+        platform.session, platform.admin, session_id, ip_address=client_ip(request)
+    )
