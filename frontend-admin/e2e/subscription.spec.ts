@@ -9,7 +9,8 @@ async function openShop(page: Page): Promise<void> {
   await page.getByLabel("E-mail").fill(ADMIN.email);
   await page.getByLabel("Mot de passe").fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
-  await expect(page.getByRole("heading", { name: "Entreprises" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
+  await page.goto("/companies");
   await page.getByLabel("Nom ou code").fill("admin-e2e");
   await page.getByRole("button", { name: "Chercher" }).click();
   await page.getByRole("link", { name: "Parcours administration" }).click();

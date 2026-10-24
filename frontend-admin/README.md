@@ -11,7 +11,22 @@ make admin-dev          # http://localhost:3200, API sur COGES_API_URL (défaut 
 make admin-api          # régénère types/api.ts depuis backend/openapi.json
 make admin-check        # types, lint, typecheck, Vitest, build
 make admin-e2e          # coges_e2e recréée, API :8100, administration :3200, axe AA
+make admin-lighthouse   # accessibilité Lighthouse de la connexion et du tableau de bord (≥ 95)
+ADMIN_CAPTURES=apres pnpm --dir frontend-admin exec playwright test e2e/captures.spec.ts
+                        # captures clair, sombre et 360 px dans docs/design/captures/admin/
 ```
+
+**Interface (ADR 0094).** Thème CoGes : jetons `--coges-*` copiés de `frontend/app/globals.css`
+(mêmes noms), Figtree hébergée, clair ou sombre selon le système. Repère « Administration » :
+bandeau en **encre ardoise** en haut de chaque écran, titre d'onglet « Administration · … »,
+favicon ardoise. Aucune couleur en dur hors de `app/globals.css` (`lib/no-hardcoded-colors.test.ts`).
+Menu latéral dès 1024 px (Accès, Plateforme), tiroir en dessous ; recherche globale au « / »
+(entreprises, comptes commerçants, équipe). Icônes `lucide-react` (version figée, comme
+`frontend/`). Une seule fenêtre de confirmation pour les actions sensibles
+(`components/confirm-dialog.tsx`). Écrans : tableau de bord et « À traiter », entreprises,
+utilisateurs commerçants (lecture seule, état dans l'adresse), équipe (inviter, profil,
+suspendre), journal en phrases, page d'invitation (`/invitation/<jeton>`, hors coque).
+Procédures : `docs/runbooks/administration.md`.
 
 Comptes : `make create-platform-user EMAIL=… NAME="…" ROLE=administrator|support`. Écrans :
 connexion, liste des entreprises, fiche (comptes, suspendre ou réactiver avec confirmation

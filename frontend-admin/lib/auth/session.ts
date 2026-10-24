@@ -90,6 +90,24 @@ export async function login(email: string, password: string): Promise<void> {
   acceptTokens(body as TokenResponse);
 }
 
+/** Le collègue invité choisit son mot de passe ; la session s'ouvre comme une connexion. */
+export async function acceptInvitation(token: string, password: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch("/api/v1/platform/auth/accept-invitation", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password }),
+    });
+  } catch {
+    throw networkError();
+  }
+  const body = await readJson(response);
+  if (!response.ok) throw toApiError(response.status, body);
+  acceptTokens(body as TokenResponse);
+}
+
 function forgetLocally(): void {
   tokenStore.clear();
   clearSessionMarker();
