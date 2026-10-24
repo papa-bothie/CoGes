@@ -3,7 +3,7 @@
 - **Date** : 2026-10-24
 - **Phase** : lot admin 6 (`docs/prompts/27-admin-interface-et-acces.md`, intitulé « lot admin
   4 » dans le prompt ; ce numéro est déjà pris par l'accès support, ADR 0092)
-- **Statut** : acceptée — partie A (API) ; la partie B (interface) complétera cet ADR
+- **Statut** : acceptée — partie A (API, PR n° 37) et partie B (interface) ; **amende l'ADR 0089** (habillage « volontairement distinct » remplacé par le thème CoGes et un repère)
 - **Décideur** : propriétaire (décisions du prompt et AskUserQuestion)
 
 ## Contexte
@@ -99,6 +99,80 @@ réponse, 400 `invitation_invalid`. Le lien mène à `COGES_ADMIN_URL/invitation
 peut partir. `make create-platform-user` reste la voie du premier administrateur et du
 secours.
 
+## Décision — partie B (interface)
+
+**Thème (amende l'ADR 0089).** L'administration prend le thème CoGes : les jetons de la
+maquette v2 (`--coges-*`) **copiés sous les mêmes noms** depuis `frontend/app/globals.css`
+(pas d'import : les deux applications se déploient séparément), Figtree hébergée
+(`next/font/local`, licence OFL), clair ou sombre selon le système. Les composants lisent des
+rôles (`fond`, `surface`, `encre`, `accent`, `danger`…) qui pointent vers ces jetons. Aucune
+couleur en dur hors de `app/globals.css` : `lib/no-hardcoded-colors.test.ts`, repris du front.
+Texte courant à 15 px au moins, cibles de 44 px, la couleur réservée aux statuts et à
+l'action principale.
+
+**Repère « Administration ».** Bandeau fin et permanent en haut de chaque écran, téléphone
+compris : « CoGes · ADMINISTRATION » et le profil connecté, en **encre ardoise** —
+`--coges-admin: #1e2320` (l'encre de la maquette), texte `#fbf8f3` ; en sombre `#36423b`, texte
+`#eef1ec`, pour rester distinct du fond vert-noir. Aucune rubrique ni aucun statut n'emploie
+cette couleur. Titre d'onglet « Administration · … », favicon ardoise (`app/icon.svg`).
+
+**Coque.** Menu latéral dès 1024 px, groupes « Accès » (Tableau de bord, Entreprises,
+Utilisateurs, Équipe, Journal — ce dernier caché au support) et « Plateforme » (Statistiques,
+Système, Tâches) ; pastille rouge sur Système quand le bilan est en panne (décrite par
+`aria-describedby`, le nom du lien reste « Système »), le bandeau rouge existant reste. En
+dessous : « Menu » ouvre un tiroir (`<dialog>` modal : focus piégé, Échap, focus rendu au
+bouton, fermé à la navigation). Page courante par `aria-current`. Recherche globale au « / »
+(entreprises, comptes commerçants, équipe ; 300 ms, liste au clavier, Entrée ouvre).
+Icônes `lucide-react` 1.48.0, la version du front, importées une à une.
+
+**Écrans.** Tableau de bord (accueil) : « À traiter » d'abord (système en panne, invitations
+qui échoient sous 24 h, essais qui finissent sous 7 jours, entreprises suspendues ; vide = un
+message rassurant), puis les tuiles Équipe et Commerçants, chacune datée et menant à la liste
+filtrée. Utilisateurs : lecture seule rappelée, état dans l'adresse, saisie différée, tri par
+en-tête (`aria-sort`), date relative avec la date exacte, cartes sous 768 px. Équipe :
+inviter, changer le profil, suspendre ou réactiver, renvoyer ou annuler une invitation, lien
+« Historique », panneau « Ce que peut chaque profil » (`GET /roles`) ; le support voit la liste
+sans aucun bouton, sa propre ligne n'en a pas non plus et dit pourquoi. Journal : une phrase
+par geste (« Aïssatou D. a passé Moussa B. de Support à Administrateur »), filtres qui, quoi,
+période, entreprise et cible. Invitation : hors coque, règle du mot de passe affichée avant
+toute erreur, message unique pour tout lien invalide, arrivée au tableau de bord. Entreprises
+et fiche : même contenu, puces de statut, cartes, suspension isolée dans « Accès de
+l'entreprise » et lien « Historique ». Statistiques, Système, Tâches : nouvel habillage
+seulement.
+
+**Confirmation unique** (`components/confirm-dialog.tsx`, remplace `StatusDialog`) : titre qui
+nomme la cible, conséquence en mots simples, raison obligatoire pour suspendre, bouton à
+l'étiquette explicite (« Suspendre Moussa B. »), « Annuler » préfocalisé pour une action
+destructrice, Échap, focus rendu, bouton désactivé pendant l'appel. Après l'action :
+confirmation avec « Voir dans le journal », ou l'erreur lisible dans la fenêtre. Réactiver et
+inviter : confirmation légère, sans raison ; renvoyer une invitation : aucune. La réactivation
+d'une entreprise envoie la raison fixe « Réactivée depuis la fiche », l'API (lot 1) en
+exigeant une.
+
+**Tâches de l'administrateur, avant et après** (une action = un clic ou une touche ; la
+saisie ne compte pas ; chaque ligne « après » est un parcours e2e qui échoue au-delà du
+maximum, `e2e/journeys.spec.ts`) :
+
+| Tâche (D1) | Avant | Après | Maximum du prompt |
+|---|---|---|---|
+| 1. Retrouver une entreprise, depuis n'importe quelle page | 4 + saisie | **2** (« / », Entrée) | 2 |
+| 1. Retrouver un compte de l'équipe ou d'un commerçant | impossible | **2** (« / », Entrée) | 2 |
+| 2. Suspendre ou réactiver une entreprise (depuis sa fiche) | 2 + raison (6 depuis ailleurs) | **2** + raison (4 depuis ailleurs, par la recherche) | 3 + confirmation |
+| 2. Suspendre un collègue | impossible (CLI) | **3** + raison (Équipe, Suspendre, confirmer) | 3 + confirmation |
+| 3. Inviter un collègue | impossible (CLI) | **2** et 3 champs (Inviter, Envoyer) | 4 champs, 1 bouton |
+| 4. Changer le profil d'un collègue | impossible (SQL) | **3** (Équipe, Changer le profil, confirmer) | 3 + confirmation |
+| 5. Qui a fait quoi sur un compte ou une entreprise | impossible (SQL) | **1** (Historique) | 2 |
+| 6. Ce qui demande une action | partiel (bandeau système) | **0** : « À traiter » dès l'ouverture | sans naviguer |
+
+**Preuves.** Vitest (filtres et adresse, tri, état vide, cartes, fenêtre de confirmation,
+support sans action, recherche, phrases du journal, garde-fou des couleurs) ; e2e : un
+parcours par tâche, l'invitation complète (sans SMTP en e2e, le lien montré une fois est
+l'envoi capturé ; acceptation, arrivée, lien réutilisé refusé), axe AA sans violation en clair
+**et** en sombre sur chaque écran, 360 px sans défilement horizontal, tiroir au clavier,
+invitation et suspension au clavier seul ; Lighthouse accessibilité 100 sur la connexion et
+le tableau de bord (`make admin-lighthouse`, `docs/design/captures/admin/apres/lighthouse.md`).
+Captures avant / après (clair, sombre, 360 px) : `docs/design/captures/admin/`.
+
 ## Conséquences
 
 - Tests : `test_platform_team.py` (cycle de l'invitation, jeton jamais en clair, usage
@@ -107,5 +181,7 @@ secours.
   (comptes commerçants, journal sans secret, profils, registre, « À traiter »), liste
   blanche des droits du rôle et T37 étendus, routes classées dans les registres de la CI.
 - Le profil support voit l'équipe mais n'y écrit rien, et ne lit pas le journal.
+- Procédures : `docs/runbooks/administration.md` (inviter, retirer un accès, retrouver qui a
+  fait quoi, perte du dernier administrateur).
 - Hors lot : modifier un compte de commerçant, permissions cochables, suppression
   définitive, invitations de commerçants, double authentification.

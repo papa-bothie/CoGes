@@ -88,3 +88,42 @@ export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   cash: "Espèces",
   bank_transfer: "Virement",
 };
+
+export const PLATFORM_ROLE_LABELS: Record<string, string> = {
+  administrator: "Administrateur",
+  support: "Support",
+};
+
+export const MERCHANT_STATUS_LABELS: Record<string, string> = {
+  active: "Actif",
+  deactivated: "Désactivé",
+  company_suspended: "Entreprise suspendue",
+};
+
+/**
+ * Ancienneté en mots : « à l'instant », « il y a 5 min », « il y a 3 h », « hier »,
+ * « il y a 4 jours », « il y a 2 mois ». La date exacte reste en infobulle.
+ */
+export function formatRelative(value: string | null | undefined, now: number = Date.now()): string {
+  if (!value) return "Jamais";
+  const seconds = Math.max(0, (now - Date.parse(value)) / 1000);
+  if (seconds < 60) return "à l'instant";
+  if (seconds < 3600) return `il y a ${Math.floor(seconds / 60)} min`;
+  if (seconds < 86_400) return `il y a ${Math.floor(seconds / 3600)} h`;
+  const days = Math.floor(seconds / 86_400);
+  if (days === 1) return "hier";
+  if (days < 31) return `il y a ${days} jours`;
+  const months = Math.floor(days / 30.5);
+  if (months < 12) return `il y a ${months} mois`;
+  const years = Math.floor(days / 365);
+  return `il y a ${years} an${years > 1 ? "s" : ""}`;
+}
+
+/** « Aïssatou Diop » → « Aïssatou D. » ; un nom d'un seul mot reste entier. */
+export function shortName(name: string | null | undefined): string {
+  if (!name) return "Quelqu'un";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return parts[0] ?? name;
+  const last = parts[parts.length - 1] ?? "";
+  return `${parts.slice(0, -1).join(" ")} ${last.charAt(0).toUpperCase()}.`;
+}

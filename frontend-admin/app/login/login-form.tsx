@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useId, useState, type FormEvent } from "react";
 
 import { errorMessage, isApiError } from "@/lib/api/errors";
+import { BUTTON, FIELD, LABEL } from "@/components/ui";
 import { login } from "@/lib/auth/session";
 
 export const MESSAGES = {
@@ -48,7 +49,7 @@ export function LoginForm() {
       return;
     }
     // `proxy.ts` voit désormais l'indicateur de session posé par `login`.
-    router.replace("/companies");
+    router.replace("/");
   }
 
   return (
@@ -64,7 +65,7 @@ export function LoginForm() {
         </p>
       )}
       <div className="space-y-1">
-        <label htmlFor={emailId} className="block font-semibold">
+        <label htmlFor={emailId} className={LABEL}>
           E-mail
         </label>
         <input
@@ -73,11 +74,11 @@ export function LoginForm() {
           autoComplete="username"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          className="w-full rounded border border-trait bg-surface px-3 py-2"
+          className={FIELD}
         />
       </div>
       <div className="space-y-1">
-        <label htmlFor={passwordId} className="block font-semibold">
+        <label htmlFor={passwordId} className={LABEL}>
           Mot de passe
         </label>
         <input
@@ -86,14 +87,10 @@ export function LoginForm() {
           autoComplete="current-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="w-full rounded border border-trait bg-surface px-3 py-2"
+          className={FIELD}
         />
       </div>
-      <button
-        type="submit"
-        disabled={busy}
-        className="w-full rounded bg-accent px-4 py-2.5 font-semibold text-accent-encre disabled:opacity-60"
-      >
+      <button type="submit" disabled={busy} className={`${BUTTON.primary} w-full`}>
         {busy ? "Connexion…" : "Se connecter"}
       </button>
     </form>

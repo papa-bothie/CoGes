@@ -16,7 +16,7 @@ ADMIN_PNPM := pnpm --dir frontend-admin
 API_PORT ?= 8000
 COGES_API_URL ?= http://localhost:$(API_PORT)
 
-.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format security-scan shellcheck invariants dev api worker relay ops-status seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front admin-install admin-dev admin-api admin-check admin-e2e e2e-admin create-platform-user
+.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format security-scan shellcheck invariants dev api worker relay ops-status seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front admin-install admin-dev admin-api admin-check admin-e2e admin-lighthouse e2e-admin create-platform-user
 
 help: ## Liste les cibles disponibles
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -154,6 +154,9 @@ admin-check: ## Administration : types à jour, lint, typecheck, Vitest, build
 
 admin-e2e: e2e-reset ## Parcours Playwright de l'administration (coges_e2e, API :8100, admin :3200)
 	$(ADMIN_PNPM) e2e
+
+admin-lighthouse: ## Accessibilité Lighthouse de l'administration (connexion, tableau de bord ; ≥ 95)
+	$(ADMIN_PNPM) exec node scripts/lighthouse.mjs
 
 e2e-admin: ## Administration des parcours e2e sur :3200, branchée sur l'API e2e
 	deploy/scripts/e2e.sh admin

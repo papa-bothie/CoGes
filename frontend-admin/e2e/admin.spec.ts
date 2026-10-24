@@ -15,7 +15,8 @@ async function signIn(page: Page): Promise<void> {
   await page.getByLabel("E-mail").fill(ADMIN.email);
   await page.getByLabel("Mot de passe").fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
-  await expect(page.getByRole("heading", { name: "Entreprises" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
+  await page.goto("/companies");
 }
 
 async function axe(page: Page): Promise<void> {
@@ -74,8 +75,10 @@ test("suspendre demande confirmation, coupe la connexion commerçante, puis réa
   await page.getByRole("link", { name: "Parcours administration" }).click();
 
   await page.getByRole("button", { name: "Suspendre l'entreprise" }).click();
-  const dialog = page.getByRole("dialog", { name: "Suspendre l'entreprise ?" });
+  const dialog = page.getByRole("dialog", { name: "Suspendre Parcours administration ?" });
   await expect(dialog).toBeVisible();
+  // Action destructrice : « Annuler » a le focus.
+  await expect(dialog.getByRole("button", { name: "Annuler" })).toBeFocused();
   await axe(page);
   // Annuler : rien ne change.
   await dialog.getByRole("button", { name: "Annuler" }).click();
@@ -83,8 +86,11 @@ test("suspendre demande confirmation, coupe la connexion commerçante, puis réa
 
   await page.getByRole("button", { name: "Suspendre l'entreprise" }).click();
   await dialog.getByLabel("Raison").fill("Parcours e2e : suspension");
-  await dialog.getByRole("button", { name: "Suspendre" }).click();
-  await expect(page.getByRole("status")).toHaveText("Entreprise suspendue.");
+  await dialog.getByRole("button", { name: "Suspendre Parcours administration" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "suspendue" })).toContainText(
+    "Parcours administration est suspendue.",
+  );
+  await expect(page.getByRole("link", { name: "Voir dans le journal" })).toBeVisible();
   await expect(page.getByText("Suspendue", { exact: true })).toBeVisible();
 
   const refused = await request.post(`${API}/auth/login`, {
@@ -93,11 +99,13 @@ test("suspendre demande confirmation, coupe la connexion commerçante, puis réa
   expect(refused.status()).toBe(403);
   expect((await refused.json()).error.code).toBe("company_suspended");
 
+  // Réactiver : confirmation légère, sans raison (D5).
   await page.getByRole("button", { name: "Réactiver l'entreprise" }).click();
-  const reactivate = page.getByRole("dialog", { name: "Réactiver l'entreprise ?" });
-  await reactivate.getByLabel("Raison").fill("Parcours e2e : paiement reçu");
-  await reactivate.getByRole("button", { name: "Réactiver" }).click();
-  await expect(page.getByRole("status")).toHaveText("Entreprise réactivée.");
+  const reactivate = page.getByRole("dialog", { name: "Réactiver Parcours administration ?" });
+  await reactivate.getByRole("button", { name: "Réactiver Parcours administration" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "réactivée" })).toContainText(
+    "Parcours administration est réactivée.",
+  );
 
   const allowed = await request.post(`${API}/auth/login`, {
     data: { company_slug: SHOP.slug, email: SHOP.email, password: SHOP.password },

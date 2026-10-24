@@ -88,7 +88,8 @@ export function SystemAlert({ state }: { state: HealthState }) {
           <ul className="space-y-0.5">
             {state.health.problems.map((code) => (
               <li key={code}>
-                {describeProblem(code)} <code className="text-sm opacity-90">({code})</code>
+                {describeProblem(code)}{" "}
+                <code className="text-sm break-all opacity-90">({code})</code>
               </li>
             ))}
           </ul>

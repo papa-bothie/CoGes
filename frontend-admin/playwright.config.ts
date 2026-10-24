@@ -12,6 +12,8 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
   workers: 1,
+  // Le serveur de développement compile chaque page à sa première visite.
+  timeout: 90_000,
   retries: 0,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {

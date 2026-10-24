@@ -15,6 +15,7 @@ const SESSION_ENDPOINTS = [
   "/api/v1/platform/auth/login",
   "/api/v1/platform/auth/refresh",
   "/api/v1/platform/auth/logout",
+  "/api/v1/platform/auth/accept-invitation",
 ];
 
 export type AuthFetchDeps = {

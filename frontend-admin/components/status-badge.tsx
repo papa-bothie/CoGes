@@ -1,15 +1,16 @@
+import { Pill } from "@/components/ui";
 import { STATUS_LABELS } from "@/lib/format";
 
-const TONES: Record<string, string> = {
-  active: "bg-succes-teinte text-succes",
-  suspended: "bg-danger-teinte text-danger",
-  trial: "bg-attention-teinte text-attention",
-};
+const TONES = {
+  active: "succes",
+  suspended: "danger",
+  trial: "attention",
+} as const;
 
 export function StatusBadge({ status }: { status: string }) {
   return (
-    <span className={`rounded px-2 py-0.5 text-sm font-semibold ${TONES[status] ?? ""}`}>
+    <Pill tone={TONES[status as keyof typeof TONES] ?? "neutre"}>
       {STATUS_LABELS[status] ?? status}
-    </span>
+    </Pill>
   );
 }

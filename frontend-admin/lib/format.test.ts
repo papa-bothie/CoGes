@@ -28,3 +28,23 @@ describe("formats d'affichage", () => {
     expect(formatFcfa(null)).toBe("Sur devis");
   });
 });
+
+describe("dates relatives et noms courts", () => {
+  const now = Date.parse("2026-10-24T12:00:00Z");
+  it("dit l'ancienneté en mots", async () => {
+    const { formatRelative } = await import("./format");
+    expect(formatRelative(null, now)).toBe("Jamais");
+    expect(formatRelative("2026-10-24T11:59:30Z", now)).toBe("à l'instant");
+    expect(formatRelative("2026-10-24T11:15:00Z", now)).toBe("il y a 45 min");
+    expect(formatRelative("2026-10-24T09:00:00Z", now)).toBe("il y a 3 h");
+    expect(formatRelative("2026-10-23T09:00:00Z", now)).toBe("hier");
+    expect(formatRelative("2026-10-21T09:00:00Z", now)).toBe("il y a 3 jours");
+    expect(formatRelative("2026-07-01T09:00:00Z", now)).toBe("il y a 3 mois");
+  });
+  it("abrège le nom de famille", async () => {
+    const { shortName } = await import("./format");
+    expect(shortName("Aïssatou Diop")).toBe("Aïssatou D.");
+    expect(shortName("Mame Diarra Bousso Ndiaye")).toBe("Mame Diarra Bousso N.");
+    expect(shortName("Moussa")).toBe("Moussa");
+  });
+});

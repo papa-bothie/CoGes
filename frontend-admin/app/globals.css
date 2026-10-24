@@ -1,68 +1,179 @@
 @import "tailwindcss";
 
 /*
- * Habillage neutre de l'administration (ADR 0089) : volontairement distinct de l'app
- * commerçante (ni son logo, ni ses couleurs de rubrique). Jetons sur :root, redéfinis
- * en sombre.
+ * Thème de l'administration (ADR 0094, amende l'ADR 0089) : les jetons de la maquette v2
+ * repris **sous les mêmes noms** que `frontend/app/globals.css` (`--coges-*`), copiés et non
+ * importés (les deux applications se déploient séparément), puis les rôles des composants
+ * (`fond`, `surface`, `encre`…) qui pointent vers eux. Toute couleur vient d'ici : un test
+ * refuse les couleurs en dur ailleurs (`lib/no-hardcoded-colors.test.ts`).
+ *
+ * Repère « Administration » : l'encre ardoise (`--coges-admin`), réservée au bandeau du
+ * haut et au favicon, qu'aucune rubrique ni aucun statut n'utilise. Sombre selon le
+ * réglage du système, valeurs dérivées comme l'app commerçante.
  */
 :root {
-  --fond: #f6f7f9;
-  --surface: #ffffff;
-  --encre: #1c2430;
-  --encre-douce: #556070;
-  --trait: #d9dee5;
-  --accent: #2f4b7c;
-  --accent-encre: #ffffff;
-  --danger: #a3261b;
-  --danger-teinte: #fbe9e7;
-  --succes: #1d6b3a;
-  --succes-teinte: #e5f4ea;
-  --attention: #7a5200;
-  --attention-teinte: #fdf3dc;
+  --coges-vert-marque: #024a2c;
+  --coges-vert-action: #117a3c;
+  --coges-vert-eclat: #1a9a4c;
+
+  --coges-papier: #fbf8f3;
+  --coges-carte: #ffffff;
+  --coges-bordure: #ece6dc;
+  --coges-bordure-champ: #d6cdbf;
+  --coges-filet: #f0ebe2;
+  --coges-voile: #f3eee5;
+  --coges-voile-2: #f6f2eb;
+  --coges-encre: #1e2320;
+  --coges-encre-2: #3c4440;
+  --coges-sourdine: #5b625e;
+  --coges-sur-action: #ffffff;
+
+  --coges-ventes: #117a3c;
+  --coges-ventes-teinte: #e6f4ec;
+  --coges-ventes-encre: #024a2c;
+  --coges-stock: #c2410c;
+  --coges-stock-teinte: #fff0e3;
+  --coges-stock-encre: #9a3412;
+  --coges-argent: #1f5bd8;
+  --coges-argent-teinte: #eaf1fd;
+  --coges-argent-encre: #1747ae;
+  --coges-clients: #6d3fc8;
+  --coges-clients-teinte: #f2ecfc;
+  --coges-clients-encre: #5530a3;
+  --coges-depenses: #a51d24;
+  --coges-depenses-teinte: #fdecec;
+  --coges-depenses-encre: #a51d24;
+  --coges-conseils: #0e7490;
+  --coges-conseils-teinte: #e3f3f6;
+  --coges-conseils-encre: #0b5566;
+  --coges-ombre: #000000;
+
+  /* Repère « Administration » : encre ardoise, texte papier. */
+  --coges-admin: #1e2320;
+  --coges-admin-encre: #fbf8f3;
+  --coges-admin-trait: #3c4440;
+
+  /* Rôles des composants */
+  --fond: var(--coges-papier);
+  --surface: var(--coges-carte);
+  --voile: var(--coges-voile);
+  --encre: var(--coges-encre);
+  --encre-douce: var(--coges-sourdine);
+  --trait: var(--coges-bordure);
+  --champ: var(--coges-bordure-champ);
+  --accent: var(--coges-vert-action);
+  --accent-encre: var(--coges-sur-action);
+  --accent-teinte: var(--coges-ventes-teinte);
+  --danger: var(--coges-depenses-encre);
+  --danger-teinte: var(--coges-depenses-teinte);
+  --succes: var(--coges-ventes-encre);
+  --succes-teinte: var(--coges-ventes-teinte);
+  --attention: var(--coges-stock-encre);
+  --attention-teinte: var(--coges-stock-teinte);
+  --info: var(--coges-argent-encre);
+  --info-teinte: var(--coges-argent-teinte);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --fond: #11161d;
-    --surface: #19202a;
-    --encre: #e7ebf0;
-    --encre-douce: #a3adba;
-    --trait: #2c3542;
-    --accent: #8fb0e8;
-    --accent-encre: #0e1520;
-    --danger: #ff9b8f;
-    --danger-teinte: #3a1c19;
-    --succes: #8fd8a7;
-    --succes-teinte: #16301f;
-    --attention: #f1c86a;
-    --attention-teinte: #33290f;
+    --coges-vert-marque: #8fdcae;
+    --coges-vert-action: #34b36a;
+    --coges-vert-eclat: #3fc078;
+
+    --coges-papier: #111612;
+    --coges-carte: #19201b;
+    --coges-bordure: #29322c;
+    --coges-bordure-champ: #4a554e;
+    --coges-filet: #222a24;
+    --coges-voile: #232b25;
+    --coges-voile-2: #1e2620;
+    --coges-encre: #eef1ec;
+    --coges-encre-2: #cdd3cd;
+    --coges-sourdine: #a3aca5;
+    --coges-sur-action: #08140c;
+
+    --coges-ventes: #34b36a;
+    --coges-ventes-teinte: #15301f;
+    --coges-ventes-encre: #8fdcae;
+    --coges-stock: #f07a3a;
+    --coges-stock-teinte: #3a2316;
+    --coges-stock-encre: #fdba8c;
+    --coges-argent: #6b97f0;
+    --coges-argent-teinte: #182744;
+    --coges-argent-encre: #adc6fa;
+    --coges-clients: #a283ec;
+    --coges-clients-teinte: #271e40;
+    --coges-clients-encre: #d0bdf8;
+    --coges-depenses: #e85d63;
+    --coges-depenses-teinte: #3b1a1d;
+    --coges-depenses-encre: #f6a9ad;
+    --coges-conseils: #34aecb;
+    --coges-conseils-teinte: #12303a;
+    --coges-conseils-encre: #96d9e9;
+
+    /* Ardoise éclaircie : le bandeau reste distinct du fond vert-noir. */
+    --coges-admin: #36423b;
+    --coges-admin-encre: #eef1ec;
+    --coges-admin-trait: #4a554e;
   }
 }
 
 @theme inline {
   --color-fond: var(--fond);
   --color-surface: var(--surface);
+  --color-voile: var(--voile);
   --color-encre: var(--encre);
   --color-encre-douce: var(--encre-douce);
   --color-trait: var(--trait);
+  --color-champ: var(--champ);
   --color-accent: var(--accent);
   --color-accent-encre: var(--accent-encre);
+  --color-accent-teinte: var(--accent-teinte);
   --color-danger: var(--danger);
   --color-danger-teinte: var(--danger-teinte);
   --color-succes: var(--succes);
   --color-succes-teinte: var(--succes-teinte);
   --color-attention: var(--attention);
   --color-attention-teinte: var(--attention-teinte);
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --color-info: var(--info);
+  --color-info-teinte: var(--info-teinte);
+  --color-admin: var(--coges-admin);
+  --color-admin-encre: var(--coges-admin-encre);
+  --color-admin-trait: var(--coges-admin-trait);
+  --color-ombre: var(--coges-ombre);
+  --font-sans: var(--font-figtree), system-ui, sans-serif;
+  /* Texte courant à 15 px au moins (prompt 27, D3) : `text-sm` passe de 14 à 15 px. */
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.375rem;
 }
 
 body {
   background: var(--fond);
   color: var(--encre);
   font-family: var(--font-sans);
+  font-size: 1rem;
+  font-feature-settings: "tnum";
 }
 
 :focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Cibles tactiles de 44 px sur un écran tactile (ADR 0059). */
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  select,
+  input:not([type="checkbox"], [type="radio"]),
+  a.cible {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }

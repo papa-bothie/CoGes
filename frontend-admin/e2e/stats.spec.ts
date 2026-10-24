@@ -41,7 +41,8 @@ test("statistiques : compteurs datés, revenu déclaré, nouvelles entreprises",
   await page.getByLabel("E-mail").fill(ADMIN.email);
   await page.getByLabel("Mot de passe").fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
-  await expect(page.getByRole("heading", { name: "Entreprises" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
+  await page.goto("/companies");
   await page.getByRole("link", { name: "Statistiques" }).click();
   await expect(page.getByRole("heading", { name: "Statistiques" })).toBeVisible();
   await expect(page.getByText(/^Comptés le \d\d\/\d\d\/\d{4} à \d\d:\d\d/)).toBeVisible();
