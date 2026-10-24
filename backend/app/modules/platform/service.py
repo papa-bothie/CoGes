@@ -15,7 +15,10 @@ jamais `coges_app`.
 
 from __future__ import annotations
 
+import hashlib
+import secrets
 from calendar import monthrange
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from math import ceil
@@ -26,15 +29,18 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import clock, queue, rate_limit
+from app.core import clock, mailer, queue, rate_limit
 from app.core.audit import AuditAction, audit_critical
 from app.core.config import get_settings
 from app.core.deps import PlatformAdmin, platform_transaction
 from app.core.errors import (
     AuthenticationRequiredError,
     BusinessRuleError,
+    CogesError,
+    ConcurrentUpdateError,
     NotFoundError,
     ValidationFailedError,
+    constraint_name,
 )
 from app.core.idempotency import IdempotencyKeyReusedError
 from app.core.search import normalise_term
@@ -48,34 +54,50 @@ from app.core.security import (
     verify_password,
 )
 from app.core.tenancy import TenantContext, on_commit, tenant_transaction
+from app.modules.platform import capabilities
 from app.modules.platform.models import (
     Plan,
     PlatformAuditLog,
     PlatformAuthSession,
+    PlatformInvitation,
     PlatformUser,
     Subscription,
     SubscriptionPayment,
     SupportSession,
 )
 from app.modules.platform.repository import (
+    AttentionRepository,
+    AuditReader,
     CompanyDirectory,
     CompanyRow,
+    MerchantUserDirectory,
     PlatformAuditRepository,
     PlatformSessionRepository,
     PlatformUserRepository,
     StatsRepository,
     SubscriptionRepository,
     SupportSessionRepository,
+    TeamRepository,
 )
 from app.modules.platform.schemas import (
+    AttentionRead,
+    AuditEntry,
+    AuditPage,
+    Capability,
     CompanyDetail,
     CompanyPage,
     CompanyStatusCounts,
     CompanySummary,
     CompanyUser,
+    ExpiringInvitation,
+    InvitationCreate,
+    InvitationIssued,
+    MerchantUser,
+    MerchantUserPage,
     PlanBreakdown,
     PlanRead,
     PlatformMe,
+    ProfileRead,
     RevenueRead,
     SignupBucket,
     SignupsRead,
@@ -90,6 +112,13 @@ from app.modules.platform.schemas import (
     SupportSessionCreate,
     SupportSessionList,
     SupportSessionRead,
+    SuspendedCompany,
+    TeamInvitation,
+    TeamList,
+    TeamMember,
+    TeamMemberUpdate,
+    TeamSummary,
+    TrialEnding,
 )
 
 _DECOY_HASH = hash_password("leurre-de-l-administration-sans-usage")
@@ -328,10 +357,15 @@ def _summary(row: CompanyRow) -> dict[str, Any]:
 
 
 def list_companies(
-    session: Session, *, search: str | None, page: int, page_size: int
+    session: Session,
+    *,
+    search: str | None,
+    page: int,
+    page_size: int,
+    status: str | None = None,
 ) -> CompanyPage:
     rows, total = CompanyDirectory(session).search(
-        search=normalise_term(search), page=page, page_size=page_size
+        search=normalise_term(search), page=page, page_size=page_size, status=status
     )
     return CompanyPage(
         items=[CompanySummary(**_summary(row)) for row in rows],
@@ -1190,4 +1224,601 @@ def stats_signups(session: Session, granularity: StatsGranularity) -> SignupsRea
         computed_at=now,
         buckets=buckets,
         total=sum(bucket.count for bucket in buckets),
+    )
+
+
+# ------------------------------------------------------- équipe et accès (ADR 0094)
+
+#: Envoi d'une invitation par le worker (`app/workers/tasks/platform.py`).
+SEND_INVITATION_TASK = "platform.send_invitation"
+INVITATION_TTL = timedelta(hours=72)
+#: « Qui expire bientôt » : le tableau de bord et le bilan de l'équipe.
+INVITATION_SOON = timedelta(hours=24)
+TRIAL_SOON = timedelta(days=7)
+#: Clés du `diff` qu'on montre dans le journal ; tout le reste est retiré, jamais un secret.
+AUDIT_FIELDS = frozenset(
+    {
+        "after",
+        "amount_fcfa",
+        "before",
+        "current_period_end",
+        "display_name",
+        "duration_minutes",
+        "email",
+        "ended_at",
+        "expires_at",
+        "is_active",
+        "issue",
+        "justification",
+        "method",
+        "paid_at",
+        "plan",
+        "reason",
+        "revoked_sessions",
+        "role",
+        "started_at",
+        "status",
+        "subscription",
+        "trial_ends_at",
+    }
+)
+
+
+class InvitationInvalidError(CogesError):
+    """Même réponse pour un jeton inconnu, échu, révoqué, remplacé ou déjà utilisé."""
+
+    code = "invitation_invalid"
+    status_code = 400
+    default_message = (
+        "Ce lien d'invitation n'est plus valable. Demandez à un administrateur de vous en "
+        "envoyer un nouveau."
+    )
+
+
+class PlatformUserExistsError(BusinessRuleError):
+    code = "platform_user_exists"
+    default_message = "Cette adresse a déjà un compte dans l'équipe."
+
+
+class InvitationPendingError(BusinessRuleError):
+    code = "invitation_pending"
+    default_message = (
+        "Une invitation attend déjà cette adresse : renvoyez-la ou annulez-la d'abord."
+    )
+
+
+class InvitationNotPendingError(BusinessRuleError):
+    code = "invitation_not_pending"
+    default_message = "Cette invitation a déjà été acceptée ou annulée."
+
+
+class CannotModifySelfError(BusinessRuleError):
+    code = "cannot_modify_self"
+    default_message = (
+        "Vous ne pouvez ni changer votre propre profil ni suspendre votre compte : "
+        "demandez-le à un autre administrateur."
+    )
+
+
+class LastAdministratorError(BusinessRuleError):
+    code = "last_administrator"
+    default_message = (
+        "Il doit toujours rester un administrateur actif. Nommez-en un autre avant de "
+        "retirer celui-ci."
+    )
+
+
+def _new_invitation_token() -> tuple[str, str]:
+    raw = secrets.token_urlsafe(32)
+    return raw, hashlib.sha256(raw.encode()).hexdigest()
+
+
+def invitation_url(raw_token: str) -> str:
+    return f"{get_settings().admin_url.rstrip('/')}/invitation/{raw_token}"
+
+
+def _member(user: PlatformUser, admin: PlatformAdmin) -> TeamMember:
+    return TeamMember(
+        id=user.id,
+        email=user.email,
+        display_name=user.display_name,
+        role=cast(Any, user.role),
+        is_active=user.is_active,
+        last_login_at=user.last_login_at,
+        created_at=user.created_at,
+        is_me=user.id == admin.platform_user_id,
+    )
+
+
+def _invitation_read(invitation: PlatformInvitation, inviter: str) -> TeamInvitation:
+    return TeamInvitation(
+        id=invitation.id,
+        email=invitation.email,
+        display_name=invitation.display_name,
+        role=cast(Any, invitation.role),
+        created_at=invitation.created_at,
+        expires_at=invitation.expires_at,
+        invited_by_name=inviter,
+    )
+
+
+def list_team(session: Session, admin: PlatformAdmin) -> TeamList:
+    repository = TeamRepository(session)
+    return TeamList(
+        members=[_member(user, admin) for user in repository.members()],
+        invitations=[
+            _invitation_read(invitation, inviter)
+            for invitation, inviter in repository.pending(datetime.now(UTC))
+        ],
+    )
+
+
+def team_summary(session: Session) -> TeamSummary:
+    now = datetime.now(UTC)
+    members, active, pending, expiring = TeamRepository(session).counts(now, now + INVITATION_SOON)
+    return TeamSummary(
+        computed_at=now,
+        members=members,
+        active=active,
+        suspended=members - active,
+        pending_invitations=pending,
+        expiring_invitations=expiring,
+    )
+
+
+def _deliver(session: Session, invitation: PlatformInvitation) -> str | None:
+    """Fait partir le lien : par le worker après COMMIT (le jeton naît là-bas), ou, sans
+    SMTP, en tirant le jeton ici pour le rendre **une fois**. Rend le lien à montrer."""
+    if mailer.is_configured():
+        invitation_id, issue = str(invitation.id), invitation.issue
+
+        def _send() -> None:
+            queue.enqueue(
+                SEND_INVITATION_TASK, countdown=0, invitation_id=invitation_id, issue=issue
+            )
+
+        on_commit(session, _send)
+        return None
+    raw, token_hash = _new_invitation_token()
+    invitation.token_hash = token_hash
+    return invitation_url(raw)
+
+
+def invite(
+    session: Session,
+    admin: PlatformAdmin,
+    payload: InvitationCreate,
+    *,
+    idempotency_key: str,
+    ip_address: str | None,
+) -> tuple[InvitationIssued, bool]:
+    """Invite un collègue. La même clé rejouée rend la même invitation, sans second envoi
+    ni second lien."""
+    repository = TeamRepository(session)
+    existing = repository.invitation_by_key(idempotency_key)
+    if existing is not None:
+        same = (existing.email, existing.display_name, existing.role) == (
+            payload.email,
+            payload.display_name,
+            payload.role,
+        )
+        if not same:
+            raise IdempotencyKeyReusedError()
+        found = repository.invitation(existing.id)
+        assert found is not None
+        return (
+            InvitationIssued(
+                invitation=_invitation_read(*found),
+                email_sent=mailer.is_configured(),
+                invitation_url=None,
+            ),
+            True,
+        )
+    if PlatformUserRepository(session).get_by_email(payload.email) is not None:
+        raise PlatformUserExistsError()
+
+    now = datetime.now(UTC)
+    repository.revoke_lapsed(payload.email, now)
+    invitation = PlatformInvitation(
+        email=payload.email,
+        display_name=payload.display_name,
+        role=payload.role,
+        idempotency_key=idempotency_key,
+        invited_by=admin.platform_user_id,
+        created_at=now,
+        expires_at=now + INVITATION_TTL,
+    )
+    try:
+        with session.begin_nested():
+            repository.add_invitation(invitation)
+    except IntegrityError as exc:
+        if constraint_name(exc) == "platform_invitations_one_pending":
+            raise InvitationPendingError() from exc
+        raise ConcurrentUpdateError() from exc
+    url = _deliver(session, invitation)
+    _audit(
+        session,
+        actor_id=admin.platform_user_id,
+        action="insert",
+        entity_table="platform_invitations",
+        entity_id=invitation.id,
+        diff={
+            "after": {
+                "email": invitation.email,
+                "display_name": invitation.display_name,
+                "role": invitation.role,
+                "expires_at": invitation.expires_at.isoformat(),
+            }
+        },
+        ip_address=ip_address,
+    )
+    found = repository.invitation(invitation.id)
+    assert found is not None
+    return (
+        InvitationIssued(
+            invitation=_invitation_read(*found), email_sent=url is None, invitation_url=url
+        ),
+        False,
+    )
+
+
+def _locked_pending(repository: TeamRepository, invitation_id: UUID) -> PlatformInvitation:
+    invitation = repository.lock_invitation(invitation_id)
+    if invitation is None:
+        raise NotFoundError("Invitation introuvable.")
+    if invitation.accepted_at is not None or invitation.revoked_at is not None:
+        raise InvitationNotPendingError()
+    return invitation
+
+
+def resend_invitation(
+    session: Session, admin: PlatformAdmin, invitation_id: UUID, *, ip_address: str | None
+) -> InvitationIssued:
+    """Nouveau lien, 72 h de plus ; l'ancien meurt (empreinte effacée, émission suivante)."""
+    repository = TeamRepository(session)
+    invitation = _locked_pending(repository, invitation_id)
+    invitation.issue += 1
+    invitation.token_hash = None
+    invitation.expires_at = datetime.now(UTC) + INVITATION_TTL
+    session.flush()
+    url = _deliver(session, invitation)
+    _audit(
+        session,
+        actor_id=admin.platform_user_id,
+        action="update",
+        entity_table="platform_invitations",
+        entity_id=invitation.id,
+        diff={
+            "after": {"issue": invitation.issue, "expires_at": invitation.expires_at.isoformat()}
+        },
+        ip_address=ip_address,
+    )
+    found = repository.invitation(invitation.id)
+    assert found is not None
+    return InvitationIssued(
+        invitation=_invitation_read(*found), email_sent=url is None, invitation_url=url
+    )
+
+
+def revoke_invitation(
+    session: Session, admin: PlatformAdmin, invitation_id: UUID, *, ip_address: str | None
+) -> None:
+    invitation = _locked_pending(TeamRepository(session), invitation_id)
+    invitation.revoked_at = datetime.now(UTC)
+    _audit(
+        session,
+        actor_id=admin.platform_user_id,
+        action="cancel",
+        entity_table="platform_invitations",
+        entity_id=invitation.id,
+        diff={"before": {"status": "pending"}, "after": {"status": "revoked"}},
+        ip_address=ip_address,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class InvitationMail:
+    email: str
+    display_name: str
+    role: str
+    inviter: str
+    expires_at: datetime
+    url: str
+
+
+def issue_invitation_token(invitation_id: UUID, issue: int) -> InvitationMail | None:
+    """Pour le worker : tire le jeton, en écrit l'empreinte, rend de quoi écrire l'e-mail.
+
+    `None` si l'invitation n'attend plus ce lien : acceptée, annulée, échue, ou renvoyée
+    depuis (une autre émission). Le jeton en clair ne quitte que cette fonction.
+    """
+    with platform_transaction() as session:
+        repository = TeamRepository(session)
+        invitation = repository.lock_invitation(invitation_id)
+        now = datetime.now(UTC)
+        if (
+            invitation is None
+            or invitation.issue != issue
+            or invitation.accepted_at is not None
+            or invitation.revoked_at is not None
+            or invitation.expires_at <= now
+        ):
+            return None
+        raw, token_hash = _new_invitation_token()
+        invitation.token_hash = token_hash
+        found = repository.invitation(invitation.id)
+        assert found is not None
+        return InvitationMail(
+            email=invitation.email,
+            display_name=invitation.display_name,
+            role=invitation.role,
+            inviter=found[1],
+            expires_at=invitation.expires_at,
+            url=invitation_url(raw),
+        )
+
+
+def accept_invitation(
+    raw_token: str, password: str, *, user_agent: str | None, ip_address: str | None
+) -> IssuedPlatformTokens:
+    """Crée le compte, consomme le jeton (usage unique) et ouvre une session."""
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    with platform_transaction() as session:
+        repository = TeamRepository(session)
+        invitation = repository.lock_invitation_by_hash(token_hash)
+        now = datetime.now(UTC)
+        if (
+            invitation is None
+            or invitation.accepted_at is not None
+            or invitation.revoked_at is not None
+            or invitation.expires_at <= now
+            or PlatformUserRepository(session).get_by_email(invitation.email) is not None
+        ):
+            raise InvitationInvalidError()
+        user = PlatformUserRepository(session).add(
+            PlatformUser(
+                email=invitation.email,
+                password_hash=hash_password(password),
+                display_name=invitation.display_name,
+                role=invitation.role,
+                last_login_at=now,
+            )
+        )
+        invitation.accepted_at = now
+        invitation.accepted_user_id = user.id
+        _, refresh_token = _issue_session(
+            session,
+            platform_user_id=user.id,
+            family_id=uuid4(),
+            user_agent=user_agent,
+            ip_address=ip_address,
+        )
+        _audit(
+            session,
+            actor_id=user.id,
+            action="insert",
+            entity_table="platform_users",
+            entity_id=user.id,
+            diff={"after": {"role": user.role, "email": user.email}},
+            ip_address=ip_address,
+        )
+        access_token, expires_in = create_platform_access_token(user.id, user.role)
+    return IssuedPlatformTokens(
+        access_token=access_token, expires_in=expires_in, refresh_token=refresh_token
+    )
+
+
+def _check_administrators_remain(administrators: list[UUID], excluding: UUID) -> None:
+    if not [user_id for user_id in administrators if user_id != excluding]:
+        raise LastAdministratorError()
+
+
+def assert_administrators_remain(*, excluding: UUID) -> None:
+    """Refuse si retirer `excluding` ne laisse aucun administrateur actif."""
+    with platform_transaction() as session:
+        _check_administrators_remain(
+            TeamRepository(session).lock_active_administrators(), excluding
+        )
+
+
+def update_member(
+    session: Session,
+    admin: PlatformAdmin,
+    user_id: UUID,
+    payload: TeamMemberUpdate,
+    *,
+    ip_address: str | None,
+) -> TeamMember:
+    """Profil ou statut d'un collègue. Jamais le sien ; toujours un administrateur actif.
+
+    Les administrateurs actifs sont verrouillés **avant** le compte visé : deux
+    administrateurs qui se retirent l'un l'autre en même temps se sérialisent, et le
+    second voit qu'il ne resterait personne.
+    """
+    if user_id == admin.platform_user_id:
+        raise CannotModifySelfError()
+    repository = TeamRepository(session)
+    administrators = repository.lock_active_administrators()
+    member = repository.lock_member(user_id)
+    if member is None:
+        raise NotFoundError("Compte introuvable.")
+
+    role = payload.role if payload.role is not None else member.role
+    is_active = payload.is_active if payload.is_active is not None else member.is_active
+    was_administrator = member.role == "administrator" and member.is_active
+    if was_administrator and (role != "administrator" or not is_active):
+        _check_administrators_remain(administrators, member.id)
+
+    before: dict[str, Any] = {}
+    after: dict[str, Any] = {}
+    if role != member.role:
+        before["role"], after["role"] = member.role, role
+        member.role = role
+    if is_active != member.is_active:
+        before["is_active"], after["is_active"] = member.is_active, is_active
+        member.is_active = is_active
+    if after:
+        session.flush()  # le trigger de 0026 révoque les sessions d'un compte suspendu
+        diff: dict[str, Any] = {"before": before, "after": after}
+        if payload.reason and payload.reason.strip():
+            diff["reason"] = payload.reason.strip()
+        _audit(
+            session,
+            actor_id=admin.platform_user_id,
+            action="update",
+            entity_table="platform_users",
+            entity_id=member.id,
+            diff=diff,
+            ip_address=ip_address,
+        )
+    return _member(member, admin)
+
+
+def list_merchant_users(
+    session: Session,
+    *,
+    search: str | None,
+    role: str | None,
+    status: str | None,
+    company_id: UUID | None,
+    sort: str,
+    page: int,
+    page_size: int,
+) -> MerchantUserPage:
+    rows, total = MerchantUserDirectory(session).search(
+        search=normalise_term(search),
+        role=role,
+        status=status,
+        company_id=company_id,
+        sort=sort,
+        page=page,
+        page_size=page_size,
+    )
+    return MerchantUserPage(
+        items=[
+            MerchantUser(
+                id=row.id,
+                full_name=row.full_name,
+                email=row.email,
+                company_id=row.company_id,
+                company_name=row.company_name,
+                roles=row.roles,
+                status=(
+                    "company_suspended"
+                    if row.company_status == "suspended"
+                    else ("active" if row.is_active else "deactivated")
+                ),
+                last_login_at=row.last_login_at,
+            )
+            for row in rows
+        ],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
+
+
+def clean_diff(value: Any) -> Any:
+    """Liste blanche récursive : seules les clés connues survivent, avec des valeurs simples."""
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, item in value.items():
+            if key not in AUDIT_FIELDS:
+                continue
+            kept = clean_diff(item)
+            if kept is not _DROP:
+                cleaned[key] = kept
+        return cleaned
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    return _DROP
+
+
+_DROP = object()
+
+
+def list_audit(
+    session: Session,
+    *,
+    actor_id: UUID | None,
+    action: str | None,
+    company_id: UUID | None,
+    entity_id: UUID | None,
+    start: date | None,
+    end: date | None,
+    page: int,
+    page_size: int,
+) -> AuditPage:
+    if start is not None and end is not None and start > end:
+        raise PeriodInvertedError(details={"start": start.isoformat(), "end": end.isoformat()})
+    zone = ZoneInfo(STATS_TIMEZONE)
+    rows, total = AuditReader(session).search(
+        actor_id=actor_id,
+        action=action,
+        company_id=company_id,
+        entity_id=entity_id,
+        start=datetime.combine(start, time.min, tzinfo=zone) if start else None,
+        stop=datetime.combine(end + timedelta(days=1), time.min, tzinfo=zone) if end else None,
+        page=page,
+        page_size=page_size,
+    )
+    return AuditPage(
+        items=[
+            AuditEntry(
+                id=row.id,
+                occurred_at=row.occurred_at,
+                actor_id=row.actor_id,
+                actor_name=row.actor_name,
+                action=cast(Any, row.action),
+                entity_table=row.entity_table,
+                entity_id=row.entity_id,
+                entity_name=row.entity_name,
+                target_company_id=row.target_company_id,
+                target_company_name=row.target_company_name,
+                diff=clean_diff(row.diff) if isinstance(row.diff, dict) else {},
+            )
+            for row in rows
+        ],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
+
+
+def profiles(routes: Iterable[Any]) -> list[ProfileRead]:
+    found = capabilities.capabilities(routes)
+    return [
+        ProfileRead(
+            role=cast(Any, role),
+            label=capabilities.PROFILE_TEXT[role][0],
+            description=capabilities.PROFILE_TEXT[role][1],
+            capabilities=[Capability(key=key, label=label) for key, label in found[role]],
+        )
+        for role in capabilities.PROFILES
+    ]
+
+
+def attention(session: Session) -> AttentionRead:
+    now = datetime.now(UTC)
+    repository = AttentionRepository(session)
+    suspended, suspended_total = repository.suspended()
+    return AttentionRead(
+        computed_at=now,
+        trials_ending=[
+            TrialEnding(company_id=row.id, name=row.name, trial_ends_at=row.trial_ends_at)
+            for row in repository.trials_ending(clock.now() + TRIAL_SOON)
+        ],
+        suspended_companies=[
+            SuspendedCompany(company_id=row.id, name=row.name) for row in suspended
+        ],
+        suspended_total=suspended_total,
+        expiring_invitations=[
+            ExpiringInvitation(
+                id=invitation.id,
+                email=invitation.email,
+                display_name=invitation.display_name,
+                expires_at=invitation.expires_at,
+            )
+            for invitation in TeamRepository(session).expiring(now, now + INVITATION_SOON)
+        ],
     )

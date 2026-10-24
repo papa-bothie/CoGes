@@ -126,6 +126,10 @@ services:
       COGES_CORS_ORIGINS: https://${COGES_DOMAIN:?}
       COGES_RATE_LIMIT_IP_PER_MINUTE: ${COGES_RATE_LIMIT_IP_PER_MINUTE:-300}
       COGES_RATE_LIMIT_LOGIN_PER_MINUTE: ${COGES_RATE_LIMIT_LOGIN_PER_MINUTE:-10}
+      # Invitations de l'équipe (ADR 0094) : l'API ne fait que savoir si un e-mail peut
+      # partir (sinon elle montre le lien une fois) ; c'est le worker qui envoie.
+      COGES_SMTP_HOST: ${COGES_SMTP_HOST:-}
+      COGES_ADMIN_URL: https://admin.${COGES_DOMAIN:?}
     networks:
       edge: { aliases: ["${COGES_STACK:?}-api"] }
       data: {}
@@ -156,6 +160,8 @@ services:
       COGES_SMTP_USERNAME: ${COGES_SMTP_USERNAME:-}
       COGES_SMTP_PASSWORD: ${COGES_SMTP_PASSWORD:-}
       COGES_SMTP_FROM: ${COGES_SMTP_FROM:-}
+      # Liens d'invitation de l'équipe (ADR 0094).
+      COGES_ADMIN_URL: https://admin.${COGES_DOMAIN:?}
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
     volumes: [ml-artifacts:/var/lib/coges/ml]
     networks: [data, jobs]

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -332,3 +332,226 @@ class SupportAccessToken(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
     expires_in: int
+
+
+# ------------------------------------------------------- équipe et accès (ADR 0094)
+
+#: Politique de mot de passe de l'équipe, la même que la CLI (`create_platform_user`).
+PLATFORM_PASSWORD_MIN = 12
+_EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+
+
+class TeamMember(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    email: str
+    display_name: str
+    role: PlatformRole
+    is_active: bool
+    last_login_at: datetime | None
+    created_at: datetime
+    #: Le compte qui regarde : l'écran ne lui propose ni suspension ni changement de profil.
+    is_me: bool
+
+
+class TeamInvitation(BaseModel):
+    """Une invitation en attente : ni acceptée, ni révoquée, ni échue."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    email: str
+    display_name: str
+    role: PlatformRole
+    created_at: datetime
+    expires_at: datetime
+    invited_by_name: str
+
+
+class TeamList(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    members: list[TeamMember]
+    invitations: list[TeamInvitation]
+
+
+class TeamSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    computed_at: datetime
+    members: int
+    active: int
+    suspended: int
+    pending_invitations: int
+    #: En attente et échues dans les 24 h.
+    expiring_invitations: int
+
+
+class InvitationCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(min_length=3, max_length=254, pattern=_EMAIL_PATTERN)
+    display_name: str = Field(min_length=1, max_length=120)
+    role: PlatformRole
+
+    @field_validator("email")
+    @classmethod
+    def _lower(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @field_validator("display_name")
+    @classmethod
+    def _named(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Le nom ne peut pas être vide.")
+        return value.strip()
+
+
+class InvitationIssued(BaseModel):
+    """`invitation_url` n'est rendu qu'une fois, quand aucun e-mail ne peut partir."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    invitation: TeamInvitation
+    email_sent: bool
+    invitation_url: str | None
+
+
+class InvitationAccept(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=20, max_length=200)
+    password: str = Field(min_length=PLATFORM_PASSWORD_MIN, max_length=128)
+
+
+class TeamMemberUpdate(BaseModel):
+    """Changer le profil, suspendre ou réactiver. Une suspension exige sa raison."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: PlatformRole | None = None
+    is_active: bool | None = None
+    reason: str | None = Field(default=None, min_length=3, max_length=500)
+
+    @model_validator(mode="after")
+    def _coherent(self) -> TeamMemberUpdate:
+        if self.role is None and self.is_active is None:
+            raise ValueError("Donnez un profil ou un statut.")
+        if self.is_active is False and not (self.reason and self.reason.strip()):
+            raise ValueError("Une suspension demande sa raison.")
+        return self
+
+
+MerchantUserStatus = Literal["active", "deactivated", "company_suspended"]
+MerchantUserSort = Literal["name", "-name", "last_login", "-last_login"]
+
+
+class MerchantUser(BaseModel):
+    """Un compte commerçant, en lecture seule : colonnes accordées par 0026 seulement."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    full_name: str
+    email: str | None
+    company_id: UUID
+    company_name: str
+    roles: list[str]
+    status: MerchantUserStatus
+    last_login_at: datetime | None
+
+
+class MerchantUserPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[MerchantUser]
+    page: int
+    page_size: int
+    total: int
+
+
+AuditAction = Literal["login", "update", "insert", "cancel"]
+
+
+class AuditEntry(BaseModel):
+    """Une ligne du journal de la plateforme ; `diff` passe par une liste blanche."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    occurred_at: datetime
+    actor_id: UUID | None
+    actor_name: str | None
+    action: AuditAction
+    entity_table: str
+    entity_id: UUID | None
+    #: Le compte ou l'invité visé, quand la ligne parle de l'équipe.
+    entity_name: str | None
+    target_company_id: UUID | None
+    target_company_name: str | None
+    diff: dict[str, Any]
+
+
+class AuditPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[AuditEntry]
+    page: int
+    page_size: int
+    total: int
+
+
+class Capability(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str
+    label: str
+
+
+class ProfileRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: PlatformRole
+    label: str
+    description: str
+    capabilities: list[Capability]
+
+
+class TrialEnding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    company_id: UUID
+    name: str
+    trial_ends_at: datetime
+
+
+class SuspendedCompany(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    company_id: UUID
+    name: str
+
+
+class ExpiringInvitation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    email: str
+    display_name: str
+    expires_at: datetime
+
+
+class AttentionRead(BaseModel):
+    """Ce qui demande une action, dès l'ouverture du tableau de bord."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    computed_at: datetime
+    #: Essais qui finissent dans les 7 jours.
+    trials_ending: list[TrialEnding]
+    #: Les 20 plus récentes ; `suspended_total` les compte toutes.
+    suspended_companies: list[SuspendedCompany]
+    suspended_total: int
+    #: Invitations en attente qui échoient dans les 24 h.
+    expiring_invitations: list[ExpiringInvitation]

@@ -199,3 +199,34 @@ class SupportSession(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
+
+
+class PlatformInvitation(Base):
+    """Invitation d'un collègue dans l'équipe (révision 0030, ADR 0094).
+
+    Le jeton du lien n'est jamais stocké : `token_hash` est son empreinte SHA-256, vide tant
+    que le worker ne l'a pas tirée. `issue` avance à chaque renvoi : un envoi plus ancien
+    encore en file ne peut plus poser son empreinte.
+    """
+
+    __tablename__ = "platform_invitations"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    email: Mapped[str] = mapped_column(Text)
+    display_name: Mapped[str] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(
+        ENUM("administrator", "support", name="platform_role", create_type=False)
+    )
+    token_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    issue: Mapped[int] = mapped_column(Integer, server_default=text("1"))
+    idempotency_key: Mapped[str] = mapped_column(Text)
+    invited_by: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    accepted_user_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -320,6 +320,9 @@ def require_platform_role(*roles: str) -> Callable[[PlatformSession], PlatformSe
             )
         return platform
 
+    # Lu par `GET /platform/roles` (ADR 0094) : les capacités d'un profil se déduisent
+    # des dépendances de chaque route, jamais d'une liste écrite à côté.
+    dependency.platform_roles = roles  # type: ignore[attr-defined]
     return dependency
 
 

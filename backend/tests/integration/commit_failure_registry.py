@@ -378,6 +378,27 @@ REGISTRY: dict[tuple[str, str], Critical | Exempt] = {
         "COMMIT refusé prouvé par test_support_access::test_a_refused_close_keeps_the_session "
         "(session ouverte, jeton toujours refusé ou accepté selon la base)"
     ),
+    # Équipe (ADR 0094) : COMMIT refusé prouvé dans test_platform_team (rien ne change,
+    # aucun e-mail ne part, le lien d'invitation reste valable).
+    ("POST", "/api/v1/platform/team/invitations"): Exempt(
+        "COMMIT refusé prouvé par test_platform_team::test_a_refused_commit_sends_nothing"
+    ),
+    ("POST", "/api/v1/platform/team/invitations/{invitation_id}/resend"): Exempt(
+        "COMMIT refusé prouvé par "
+        "test_platform_team::test_a_refused_commit_changes_no_invitation_nor_member"
+    ),
+    ("DELETE", "/api/v1/platform/team/invitations/{invitation_id}"): Exempt(
+        "COMMIT refusé prouvé par "
+        "test_platform_team::test_a_refused_commit_changes_no_invitation_nor_member"
+    ),
+    ("PATCH", "/api/v1/platform/team/{user_id}"): Exempt(
+        "COMMIT refusé prouvé par "
+        "test_platform_team::test_a_refused_commit_changes_no_invitation_nor_member"
+    ),
+    ("POST", "/api/v1/platform/auth/accept-invitation"): Exempt(
+        "COMMIT refusé prouvé par "
+        "test_platform_team::test_a_refused_commit_changes_no_invitation_nor_member"
+    ),
     ("POST", "/api/v1/auth/password"): Exempt(
         "mot de passe de la personne connectée : sa propre session, couverte par "
         "test_temporary_password_expiry ; aucun argent, aucun stock"

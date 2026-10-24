@@ -147,6 +147,9 @@ class Settings(BaseSettings):
     # Adresse de l'équipe prévenue des échecs de connexion répétés sur un compte
     # plateforme (il n'y a pas de « gérant » à ce niveau).
     platform_alert_email: str | None = None
+    # Adresse publique de l'administration (ADR 0094) : les liens d'invitation y mènent.
+    # Sur le VPS, `https://admin.<COGES_DOMAIN>`, posée par le compose.
+    admin_url: str = "http://localhost:3200"
 
     # --- Envoi d'e-mails (ADR 0089) ---
     # Sans hôte, aucun envoi : le message est journalisé (sans destinataire) et sauté.

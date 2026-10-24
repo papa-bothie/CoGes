@@ -69,6 +69,14 @@ READ_ROUTES: dict[str, tuple[str, dict[str, str]]] = {
     "/api/v1/platform/stats/overview": (PLATFORM, {}),
     "/api/v1/platform/stats/revenue": (PLATFORM, {}),
     "/api/v1/platform/stats/signups": (PLATFORM, {}),
+    # Équipe et accès (ADR 0094) : comptes de l'équipe, comptes commerçants en lecture
+    # seule, journal, profils ; `test_platform_team.py`, `test_platform_directory.py`.
+    "/api/v1/platform/team": (PLATFORM, {}),
+    "/api/v1/platform/team/summary": (PLATFORM, {}),
+    "/api/v1/platform/users": (PLATFORM, {}),
+    "/api/v1/platform/audit": (PLATFORM, {}),
+    "/api/v1/platform/roles": (PLATFORM, {}),
+    "/api/v1/platform/attention": (PLATFORM, {}),
     # Surveillance (ADR 0090) : ni entreprise ni contenu, `test_platform_monitoring.py`.
     "/api/v1/platform/system/workers": (PLATFORM, {}),
     "/api/v1/platform/system/job-runs": (PLATFORM, {}),

@@ -30,7 +30,14 @@ IMPORTS_PREFIX = f"{API_PREFIX}/imports"
 LOGIN_PATH = f"{API_PREFIX}/auth/login"
 #: Les deux connexions, commerçante et administration (ADR 0089), partagent le plafond
 #: bas par adresse IP.
-LOGIN_PATHS = frozenset({LOGIN_PATH, f"{API_PREFIX}/platform/auth/login"})
+# Le choix du mot de passe d'un invité est freiné comme une connexion (ADR 0094).
+LOGIN_PATHS = frozenset(
+    {
+        LOGIN_PATH,
+        f"{API_PREFIX}/platform/auth/login",
+        f"{API_PREFIX}/platform/auth/accept-invitation",
+    }
+)
 DOCS_PATHS = (f"{API_PREFIX}/docs", f"{API_PREFIX}/openapi.json")
 
 

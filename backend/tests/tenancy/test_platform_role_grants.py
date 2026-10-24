@@ -9,13 +9,17 @@ blanche ci-dessous. Une table ajoutée plus tard sans y penser n'a aucun droit p
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import text
+
+from app.modules.platform.repository import AuditReader, MerchantUserDirectory
 
 pytestmark = pytest.mark.tenancy
 
@@ -46,8 +50,32 @@ _SUPPORT_COLUMNS = (
     "created_at",
 )
 
+#: Invitations de l'équipe (ADR 0094) : écrites une fois, puis seul leur cycle de vie
+#: change (empreinte du jeton, émission, échéance, acceptation, révocation).
+_INVITATION_FIXED = (
+    "id",
+    "email",
+    "display_name",
+    "role",
+    "idempotency_key",
+    "invited_by",
+    "created_at",
+)
+_INVITATION_LIFECYCLE = (
+    "token_hash",
+    "issue",
+    "expires_at",
+    "accepted_at",
+    "accepted_user_id",
+    "revoked_at",
+)
+
 #: Tables d'entreprise : quelques colonnes de métadonnées, rien d'autre.
 COLUMN_GRANTS: dict[str, dict[str, set[str]]] = {
+    "platform_invitations": {
+        **{column: {"SELECT", "INSERT"} for column in _INVITATION_FIXED},
+        **{column: {"SELECT", "INSERT", "UPDATE"} for column in _INVITATION_LIFECYCLE},
+    },
     "support_sessions": {
         **{column: {"SELECT", "INSERT"} for column in _SUPPORT_COLUMNS},
         "ended_at": {"SELECT", "INSERT", "UPDATE"},
@@ -269,6 +297,39 @@ def test_the_database_itself_refuses_commercial_reads(
     try:
         with pytest.raises(ProgrammingError, match="permission denied"):
             session.execute(text(statement))
+    finally:
+        session.rollback()
+        session.close()
+
+
+@pytest.mark.parametrize("sort", ["name", "-name", "last_login", "-last_login"])
+def test_merchant_users_and_journal_run_under_the_real_role(
+    platform_session_factory: Any, sort: str
+) -> None:
+    """Lot admin 6 (ADR 0094) : chaque branche des requêtes, sous `coges_app_platform`.
+    Une colonne non accordée (téléphone, hachage) ferait échouer en `permission denied`."""
+    session = platform_session_factory()
+    try:
+        for status in (None, "active", "deactivated", "company_suspended"):
+            MerchantUserDirectory(session).search(
+                search="%a_",
+                role="gerant",
+                status=status,
+                company_id=uuid4(),
+                sort=sort,
+                page=1,
+                page_size=20,
+            )
+        AuditReader(session).search(
+            actor_id=uuid4(),
+            action="update",
+            company_id=uuid4(),
+            entity_id=uuid4(),
+            start=datetime(2026, 1, 1, tzinfo=UTC),
+            stop=datetime(2026, 12, 31, tzinfo=UTC),
+            page=1,
+            page_size=50,
+        )
     finally:
         session.rollback()
         session.close()

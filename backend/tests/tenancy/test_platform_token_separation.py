@@ -39,6 +39,8 @@ OPEN_PATHS = frozenset(
         "/api/v1/platform/auth/login",
         "/api/v1/platform/auth/refresh",
         "/api/v1/platform/auth/logout",
+        # Le collègue invité n'a pas encore de compte (ADR 0094) : le jeton du lien suffit.
+        "/api/v1/platform/auth/accept-invitation",
     }
 )
 #: Protégée par `COGES_OPS_TOKEN` : 404 sans jeton configuré, 401 sinon (ADR 0077).
