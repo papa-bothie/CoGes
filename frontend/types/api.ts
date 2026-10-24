@@ -2262,6 +2262,76 @@ export interface paths {
     patch: operations["set_company_status_api_v1_platform_companies__company_id__status_patch"];
     trace?: never;
   };
+  "/api/v1/platform/plans": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Plans
+     * @description Les offres, vendables ou non (palier « sur devis »). Quelques lignes : pas de page.
+     */
+    get: operations["list_plans_api_v1_platform_plans_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/companies/{company_id}/subscription": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Subscription
+     * @description Offre, statut, dates, comptes actifs et 50 derniers paiements déclarés.
+     */
+    get: operations["get_subscription_api_v1_platform_companies__company_id__subscription_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Change Subscription
+     * @description Changer d'offre ou de statut (profil `administrator`). Audit critique.
+     *
+     *     Une offre trop petite pour les comptes actifs : 409 `plan_downgrade_too_many_users`,
+     *     avec le nombre de comptes à désactiver d'abord.
+     */
+    patch: operations["change_subscription_api_v1_platform_companies__company_id__subscription_patch"];
+    trace?: never;
+  };
+  "/api/v1/platform/companies/{company_id}/payments": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Record Payment
+     * @description Paiement reçu hors CoGes (profil `administrator`), `Idempotency-Key` obligatoire.
+     *
+     *     L'abonnement devient actif et avance d'un mois ; une entreprise suspendue retrouve
+     *     l'accès. La même clé rejouée rend l'abonnement en 200, sans second paiement.
+     */
+    post: operations["record_payment_api_v1_platform_companies__company_id__payments_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/platform/system/workers": {
     parameters: {
       query?: never;
@@ -4277,7 +4347,8 @@ export interface components {
       | "sale_cancelled"
       | "forecast_alert"
       | "insight_critical"
-      | "login_failures";
+      | "login_failures"
+      | "trial_ending";
     /**
      * NotificationUpdate
      * @description Marquer comme lue, ou revenir en non lu.
@@ -4612,6 +4683,28 @@ export interface components {
       last_seen_at: string | null;
     };
     Phone: string;
+    /**
+     * PlanRead
+     * @description Une offre. `max_users` à `None` : pas de plafond (palier « sur devis »).
+     */
+    PlanRead: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Code */
+      code: string;
+      /** Name */
+      name: string;
+      price_fcfa: components["schemas"]["Amount-Output"] | null;
+      /** Max Users */
+      max_users: number | null;
+      /** Features */
+      features: string[];
+      /** Is Orderable */
+      is_orderable: boolean;
+    };
     /**
      * PlatformLoginRequest
      * @description Connexion de l'équipe : e-mail et mot de passe, aucune entreprise.
@@ -5686,6 +5779,95 @@ export interface components {
       out_count: number;
     };
     StoredPaymentMethod: components["schemas"]["PaymentMethod"] | "offset";
+    /**
+     * SubscriptionDetail
+     * @description L'abonnement d'une entreprise, ses comptes actifs et ses derniers paiements.
+     */
+    SubscriptionDetail: {
+      /**
+       * Company Id
+       * Format: uuid
+       */
+      company_id: string;
+      plan: components["schemas"]["PlanRead"];
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "trial" | "active" | "past_due" | "suspended";
+      /** Trial Ends At */
+      trial_ends_at: string | null;
+      /**
+       * Started At
+       * Format: date-time
+       */
+      started_at: string;
+      /** Current Period End */
+      current_period_end: string | null;
+      /** Active Users */
+      active_users: number;
+      /** Payments */
+      payments: components["schemas"]["SubscriptionPaymentRead"][];
+      /** Payments Total */
+      payments_total: number;
+    };
+    /**
+     * SubscriptionPaymentCreate
+     * @description Paiement reçu hors CoGes, déclaré par l'équipe. Montant en chaîne, jamais en float.
+     */
+    SubscriptionPaymentCreate: {
+      amount_fcfa: components["schemas"]["Amount-Input"];
+      /**
+       * Paid At
+       * Format: date-time
+       */
+      paid_at: string;
+      /**
+       * Method
+       * @enum {string}
+       */
+      method: "wave" | "orange_money" | "cash" | "bank_transfer";
+      /** Note */
+      note?: string | null;
+    };
+    /** SubscriptionPaymentRead */
+    SubscriptionPaymentRead: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      amount_fcfa: components["schemas"]["Amount-Output"];
+      /**
+       * Paid At
+       * Format: date-time
+       */
+      paid_at: string;
+      /**
+       * Method
+       * @enum {string}
+       */
+      method: "wave" | "orange_money" | "cash" | "bank_transfer";
+      /** Note */
+      note: string | null;
+      /**
+       * Recorded At
+       * Format: date-time
+       */
+      recorded_at: string;
+    };
+    /**
+     * SubscriptionUpdate
+     * @description Changer d'offre, de statut, ou les deux ; la raison va au journal.
+     */
+    SubscriptionUpdate: {
+      /** Plan Code */
+      plan_code?: string | null;
+      /** Status */
+      status?: ("active" | "past_due" | "suspended") | null;
+      /** Reason */
+      reason: string;
+    };
     SupplierCode: string;
     /**
      * SupplierCreate
@@ -10231,6 +10413,129 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["CompanyDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_plans_api_v1_platform_plans_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlanRead"][];
+        };
+      };
+    };
+  };
+  get_subscription_api_v1_platform_companies__company_id__subscription_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        company_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SubscriptionDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  change_subscription_api_v1_platform_companies__company_id__subscription_patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        company_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SubscriptionUpdate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SubscriptionDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  record_payment_api_v1_platform_companies__company_id__payments_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        "Idempotency-Key"?: string | null;
+      };
+      path: {
+        company_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SubscriptionPaymentCreate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SubscriptionDetail"];
         };
       };
       /** @description Validation Error */

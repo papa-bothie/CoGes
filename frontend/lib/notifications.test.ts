@@ -36,6 +36,11 @@ describe("alertes (écran 23)", () => {
       tone: "stock",
       action: "Voir les personnes",
     });
+    expect(notificationHref(alert("trial_ending", { days: 7 }))).toBe("/notifications");
+    expect(alertLook(alert("trial_ending", { days: 7 }))).toEqual({
+      tone: "argent",
+      action: "Voir le message",
+    });
     // Une alerte d'avant le lot 3e, sans la personne : la liste des dettes échues.
     expect(notificationHref(alert("debt_due", { party_type: "customer" }))).toBe(
       "/finance/debts?overdue=1",

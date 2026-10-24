@@ -47,14 +47,20 @@ test("liste et détail : métadonnées seulement", async ({ page }) => {
   await page.getByLabel("Nom ou code").fill("admin-e2e");
   await page.getByRole("button", { name: "Chercher" }).click();
   const row = page.getByRole("row", { name: /Parcours administration/ });
-  await expect(row).toContainText("Active");
+  // Toute entreprise naît en essai (ADR 0091).
+  await expect(row).toContainText("Essai");
   await row.getByRole("link", { name: "Parcours administration" }).click();
 
   await expect(page.getByRole("heading", { name: "Parcours administration" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Gérant suspendu" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Gérant", exact: true })).toBeVisible();
-  // Aucun montant, aucune vente : pas un « FCFA » sur la page.
-  await expect(page.getByText(/FCFA/)).toHaveCount(0);
+  // Aucun montant de l'entreprise, aucune vente : les seuls « FCFA » de la page sont ceux
+  // de son abonnement à CoGes (ADR 0091).
+  const subscription = page.getByRole("region", { name: "Abonnement" });
+  await expect(subscription).toBeVisible();
+  const everywhere = await page.getByText(/FCFA/).count();
+  expect(everywhere).toBe(await subscription.getByText(/FCFA/).count());
+  await expect(page.getByRole("region", { name: "Comptes" }).getByText(/FCFA/)).toHaveCount(0);
   await axe(page);
 });
 
@@ -73,7 +79,7 @@ test("suspendre demande confirmation, coupe la connexion commerçante, puis réa
   await axe(page);
   // Annuler : rien ne change.
   await dialog.getByRole("button", { name: "Annuler" }).click();
-  await expect(page.getByText("Active", { exact: true })).toBeVisible();
+  await expect(page.getByText("Essai", { exact: true }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Suspendre l'entreprise" }).click();
   await dialog.getByLabel("Raison").fill("Parcours e2e : suspension");

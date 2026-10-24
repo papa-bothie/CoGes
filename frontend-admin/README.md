@@ -15,6 +15,7 @@ make admin-e2e          # coges_e2e recréée, API :8100, administration :3200, 
 
 Comptes : `make create-platform-user EMAIL=… NAME="…" ROLE=administrator|support`. Écrans :
 connexion, liste des entreprises, fiche (comptes, suspendre ou réactiver avec confirmation
-et raison) ; **Système** et **Tâches** (ADR 0090 : bilan des workers rafraîchi toutes les
+et raison, **abonnement** : offre, essai, paiements déclarés, changer d'offre, ADR 0091) ; **Système** et **Tâches** (ADR 0090 : bilan des workers rafraîchi toutes les
 30 s, rebut de l'outbox, historique des tâches), avec un bandeau rouge sur toute page dès
-que le bilan est en panne. Aucun montant, aucune donnée commerciale.
+que le bilan est en panne. Aucune donnée commerciale de l'entreprise : les seuls montants
+sont ceux de son abonnement à CoGes.
