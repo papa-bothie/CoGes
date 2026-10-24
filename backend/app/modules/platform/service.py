@@ -17,15 +17,16 @@ from __future__ import annotations
 
 from calendar import monthrange
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from math import ceil
 from typing import Any, cast
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import queue, rate_limit
+from app.core import clock, queue, rate_limit
 from app.core.audit import AuditAction, audit_critical
 from app.core.config import get_settings
 from app.core.deps import PlatformAdmin, platform_transaction
@@ -62,16 +63,25 @@ from app.modules.platform.repository import (
     PlatformAuditRepository,
     PlatformSessionRepository,
     PlatformUserRepository,
+    StatsRepository,
     SubscriptionRepository,
     SupportSessionRepository,
 )
 from app.modules.platform.schemas import (
     CompanyDetail,
     CompanyPage,
+    CompanyStatusCounts,
     CompanySummary,
     CompanyUser,
+    PlanBreakdown,
     PlanRead,
     PlatformMe,
+    RevenueRead,
+    SignupBucket,
+    SignupsRead,
+    StatsGranularity,
+    StatsOverview,
+    StatsPeriod,
     SubscriptionDetail,
     SubscriptionPaymentCreate,
     SubscriptionPaymentRead,
@@ -1052,3 +1062,132 @@ def support_justification(session_id: UUID) -> str | None:
     with platform_transaction() as session:
         row = session.get(SupportSession, session_id)
         return None if row is None else row.justification
+
+
+# ---------------------------------------------------------- statistiques (ADR 0093)
+
+#: L'horloge des statistiques : Dakar, à l'heure de Greenwich toute l'année.
+STATS_TIMEZONE = "Africa/Dakar"
+#: Plus longue période personnalisée du revenu, bornes comprises.
+STATS_MAX_DAYS = 366
+SIGNUP_MONTHS = 12
+SIGNUP_WEEKS = 52
+
+
+class PeriodDatesRequiredError(ValidationFailedError):
+    code = "period_dates_required"
+    default_message = "Une période personnalisée demande une date de début et une date de fin."
+
+
+class PeriodInvertedError(ValidationFailedError):
+    code = "period_inverted"
+    default_message = "La date de début doit précéder la date de fin."
+
+
+class PeriodTooLongError(ValidationFailedError):
+    code = "period_too_long"
+    default_message = f"La période ne peut pas dépasser {STATS_MAX_DAYS} jours."
+
+
+class PeriodInFutureError(ValidationFailedError):
+    code = "period_in_future"
+    default_message = "La période ne peut pas finir après aujourd'hui."
+
+
+def stats_overview(session: Session) -> StatsOverview:
+    row = StatsRepository(session).overview()
+    return StatsOverview(
+        computed_at=clock.now(),
+        companies=CompanyStatusCounts(
+            trial=row.trial, active=row.active, suspended=row.suspended, total=row.total
+        ),
+        active_users=row.active_users,
+        plans=[
+            PlanBreakdown(
+                code=plan["code"],
+                name=plan["name"],
+                trial=plan["trial"],
+                paying=plan["paying"],
+                suspended=plan["suspended"],
+                total=plan["total"],
+            )
+            for plan in row.plans
+        ],
+        without_subscription=row.without_subscription,
+    )
+
+
+def _shift_month(day: date, months: int) -> date:
+    """Le premier du mois, `months` mois plus tôt (négatif) ou plus tard."""
+    index = day.year * 12 + day.month - 1 + months
+    return date(index // 12, index % 12 + 1, 1)
+
+
+def _period_days(
+    period: StatsPeriod, start: date | None, end: date | None, today: date
+) -> tuple[date, date]:
+    if period == "current_month":
+        return today.replace(day=1), today
+    if period == "previous_month":
+        first = _shift_month(today, -1)
+        return first, today.replace(day=1) - timedelta(days=1)
+    if start is None or end is None:
+        raise PeriodDatesRequiredError()
+    if start > end:
+        raise PeriodInvertedError(details={"start": start.isoformat(), "end": end.isoformat()})
+    if end > today:
+        raise PeriodInFutureError(details={"end": end.isoformat(), "today": today.isoformat()})
+    if (end - start).days + 1 > STATS_MAX_DAYS:
+        raise PeriodTooLongError(details={"max_days": STATS_MAX_DAYS})
+    return start, end
+
+
+def stats_revenue(
+    session: Session, period: StatsPeriod, start: date | None, end: date | None
+) -> RevenueRead:
+    """L'argent déclaré reçu, pas ce que les offres en cours « devraient » rapporter."""
+    now = clock.now()
+    zone = ZoneInfo(STATS_TIMEZONE)
+    first, last = _period_days(period, start, end, now.astimezone(zone).date())
+    total, count = StatsRepository(session).revenue(
+        datetime.combine(first, time.min, tzinfo=zone),
+        datetime.combine(last + timedelta(days=1), time.min, tzinfo=zone),
+    )
+    return RevenueRead(
+        period=period,
+        start=first,
+        end=last,
+        timezone=STATS_TIMEZONE,
+        total_fcfa=total,
+        payment_count=count,
+        computed_at=now,
+    )
+
+
+def stats_signups(session: Session, granularity: StatsGranularity) -> SignupsRead:
+    now = clock.now()
+    zone = ZoneInfo(STATS_TIMEZONE)
+    today = now.astimezone(zone).date()
+    if granularity == "month":
+        starts = [_shift_month(today, back) for back in range(1 - SIGNUP_MONTHS, 1)]
+        ends = [_shift_month(day, 1) - timedelta(days=1) for day in starts]
+    else:
+        monday = today - timedelta(days=today.weekday())
+        starts = [monday - timedelta(weeks=back) for back in range(SIGNUP_WEEKS - 1, -1, -1)]
+        ends = [day + timedelta(days=6) for day in starts]
+    counts = StatsRepository(session).signups(
+        unit=granularity,
+        zone=STATS_TIMEZONE,
+        since=datetime.combine(starts[0], time.min, tzinfo=zone),
+    )
+    buckets = [
+        SignupBucket(start=first, end=last, count=counts.get(first, 0))
+        for first, last in zip(starts, ends, strict=True)
+    ]
+    return SignupsRead(
+        granularity=granularity,
+        timezone=STATS_TIMEZONE,
+        computed_at=now,
+        buckets=buckets,
+        total=sum(bucket.count for bucket in buckets),
+    )

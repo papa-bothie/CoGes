@@ -10,7 +10,8 @@ de la Plateforme, sous un rôle qui ne voit rien d'autre.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -361,3 +362,88 @@ class SupportSessionRepository:
         if company_id is not None:
             statement = statement.where(SupportSession.company_id == company_id)
         return list(self.session.scalars(statement))
+
+
+# ---------------------------------------------------------- statistiques (ADR 0093)
+
+# Une seule requête : un seul instantané, donc des chiffres qui se recoupent même si une
+# entreprise naît ou change de statut pendant la lecture (statuts = total = offres).
+_OVERVIEW = text(
+    """
+    WITH live AS (
+        SELECT c.id, c.status::text AS status FROM companies c WHERE c.deleted_at IS NULL
+    ), subs AS (
+        SELECT l.id, s.plan_id, s.status::text AS status
+        FROM live l LEFT JOIN subscriptions s ON s.company_id = l.id
+    )
+    SELECT
+        (SELECT count(*) FILTER (WHERE status = 'trial') FROM live) AS trial,
+        (SELECT count(*) FILTER (WHERE status = 'active') FROM live) AS active,
+        (SELECT count(*) FILTER (WHERE status = 'suspended') FROM live) AS suspended,
+        (SELECT count(*) FROM live) AS total,
+        (SELECT count(*) FROM users u JOIN live l ON l.id = u.company_id
+          WHERE u.is_active AND u.deleted_at IS NULL) AS active_users,
+        (SELECT count(*) FROM subs WHERE plan_id IS NULL) AS without_subscription,
+        (SELECT coalesce(json_agg(row_to_json(p) ORDER BY p.price_fcfa NULLS LAST, p.code), '[]')
+           FROM (SELECT pl.code, pl.name, pl.price_fcfa,
+                        count(su.id) FILTER (WHERE su.status = 'trial') AS trial,
+                        count(su.id) FILTER (WHERE su.status IN ('active', 'past_due')) AS paying,
+                        count(su.id) FILTER (WHERE su.status = 'suspended') AS suspended,
+                        count(su.id) AS total
+                 FROM plans pl LEFT JOIN subs su ON su.plan_id = pl.id
+                 GROUP BY pl.id) p) AS plans
+    """
+)
+_REVENUE = text(
+    "SELECT coalesce(sum(amount_fcfa), 0) AS total, count(*) AS payments "
+    "FROM subscription_payments WHERE paid_at >= :start AND paid_at < :stop"
+)
+_SIGNUPS = text(
+    """
+    SELECT date_trunc(:unit, c.created_at AT TIME ZONE :zone)::date AS bucket, count(*) AS n
+    FROM companies c
+    WHERE c.deleted_at IS NULL AND c.created_at >= :since
+    GROUP BY 1
+    """
+)
+
+
+@dataclass(frozen=True, slots=True)
+class OverviewRow:
+    trial: int
+    active: int
+    suspended: int
+    total: int
+    active_users: int
+    without_subscription: int
+    plans: list[dict[str, Any]]
+
+
+class StatsRepository:
+    """Comptes de toute la plateforme, sous `coges_app_platform` : des colonnes déjà
+    accordées (révisions 0026 et 0028), aucun droit de plus."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def overview(self) -> OverviewRow:
+        row = self.session.execute(_OVERVIEW).one()
+        return OverviewRow(
+            trial=int(row.trial),
+            active=int(row.active),
+            suspended=int(row.suspended),
+            total=int(row.total),
+            active_users=int(row.active_users),
+            without_subscription=int(row.without_subscription),
+            plans=list(row.plans),
+        )
+
+    def revenue(self, start: datetime, stop: datetime) -> tuple[Decimal, int]:
+        """Paiements déclarés de `start` (compris) à `stop` (exclu)."""
+        row = self.session.execute(_REVENUE, {"start": start, "stop": stop}).one()
+        return Decimal(row.total), int(row.payments)
+
+    def signups(self, *, unit: str, zone: str, since: datetime) -> dict[date, int]:
+        """Créations par mois ou par semaine (lundi), dans le fuseau donné."""
+        rows = self.session.execute(_SIGNUPS, {"unit": unit, "zone": zone, "since": since})
+        return {row.bucket: int(row.n) for row in rows}

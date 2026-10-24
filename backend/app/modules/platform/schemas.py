@@ -8,7 +8,7 @@ dates, nombre de comptes. Aucune donnée commerciale de l'entreprise, même agr�
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
@@ -190,6 +190,85 @@ class SubscriptionPaymentCreate(BaseModel):
         if value > datetime.now(UTC) + timedelta(minutes=5):
             raise ValueError("Un paiement ne peut pas être daté dans le futur.")
         return value
+
+
+# ---------------------------------------------------------- statistiques (ADR 0093)
+
+StatsPeriod = Literal["current_month", "previous_month", "custom"]
+StatsGranularity = Literal["month", "week"]
+
+
+class CompanyStatusCounts(BaseModel):
+    """Entreprises non supprimées, par statut d'accès ; `total` en est la somme."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    trial: int
+    active: int
+    suspended: int
+    total: int
+
+
+class PlanBreakdown(BaseModel):
+    """Une offre et ses entreprises, d'après l'**abonnement** : les essais (tous sur
+    Premium) à part des payantes (`active` et `past_due`), pour ne pas gonfler l'offre."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    name: str
+    trial: int
+    paying: int
+    suspended: int
+    total: int
+
+
+class StatsOverview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    computed_at: datetime
+    companies: CompanyStatusCounts
+    #: Comptes commerçants actifs et non supprimés, toutes entreprises vivantes confondues.
+    active_users: int
+    plans: list[PlanBreakdown]
+    #: Entreprises sans abonnement (aucune attendue : l'essai naît avec l'entreprise).
+    without_subscription: int
+
+
+class RevenueRead(BaseModel):
+    """Somme des paiements **déclarés reçus** sur la période, jamais un revenu théorique
+    tiré des offres en cours. Jours de `start` à `end` compris, heure de Dakar."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    period: StatsPeriod
+    start: date
+    end: date
+    timezone: str
+    total_fcfa: Amount
+    payment_count: int
+    computed_at: datetime
+
+
+class SignupBucket(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start: date
+    end: date
+    count: int
+
+
+class SignupsRead(BaseModel):
+    """Nouvelles entreprises (non supprimées) sur 12 mois ou 52 semaines ; la dernière
+    période est celle en cours, les périodes vides valent 0."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    granularity: StatsGranularity
+    timezone: str
+    computed_at: datetime
+    buckets: list[SignupBucket]
+    total: int
 
 
 # ------------------------------------------------- accès support encadré (ADR 0092)
