@@ -14,11 +14,18 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 
-from app.modules.platform.models import PlatformAuditLog, PlatformAuthSession, PlatformUser
+from app.modules.platform.models import (
+    Plan,
+    PlatformAuditLog,
+    PlatformAuthSession,
+    PlatformUser,
+    Subscription,
+    SubscriptionPayment,
+)
 
 _LIKE_ESCAPE = "\\"
 
@@ -216,3 +223,87 @@ class PlatformAuditRepository:
     def add(self, entry: PlatformAuditLog) -> None:
         self.session.add(entry)
         self.session.flush()
+
+
+# ------------------------------------------------------------ abonnements (ADR 0091)
+
+_ACTIVE_USERS = text(
+    "SELECT count(*) FROM users u WHERE u.company_id = :id AND u.is_active AND u.deleted_at IS NULL"
+)
+
+
+class SubscriptionRepository:
+    """Offres, abonnements et paiements déclarés, sous `coges_app_platform`.
+
+    Ordre des verrous, partout : l'entreprise (`CompanyDirectory.lock_status`), puis son
+    abonnement. La tâche de nuit et un geste de l'équipe ne se croisent pas.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def plans(self) -> list[Plan]:
+        return list(
+            self.session.scalars(
+                select(Plan).order_by(Plan.price_fcfa.asc().nulls_last(), Plan.code)
+            )
+        )
+
+    def plan(self, plan_id: UUID) -> Plan:
+        return self.session.get_one(Plan, plan_id)
+
+    def plan_by_code(self, code: str) -> Plan | None:
+        return self.session.scalars(select(Plan).where(Plan.code == code)).one_or_none()
+
+    def get(self, company_id: UUID) -> Subscription | None:
+        return self.session.scalars(
+            select(Subscription).where(Subscription.company_id == company_id)
+        ).one_or_none()
+
+    def lock(self, company_id: UUID) -> Subscription | None:
+        return self.session.scalars(
+            select(Subscription).where(Subscription.company_id == company_id).with_for_update()
+        ).one_or_none()
+
+    def active_users(self, company_id: UUID) -> int:
+        return int(self.session.execute(_ACTIVE_USERS, {"id": company_id}).scalar_one())
+
+    def payments(
+        self, subscription_id: UUID, *, limit: int
+    ) -> tuple[list[SubscriptionPayment], int]:
+        where = SubscriptionPayment.subscription_id == subscription_id
+        total = int(
+            self.session.scalar(select(func.count()).select_from(SubscriptionPayment).where(where))
+            or 0
+        )
+        rows = self.session.scalars(
+            select(SubscriptionPayment)
+            .where(where)
+            .order_by(SubscriptionPayment.paid_at.desc(), SubscriptionPayment.id)
+            .limit(limit)
+        )
+        return list(rows), total
+
+    def payment_by_key(self, key: str) -> SubscriptionPayment | None:
+        return self.session.scalars(
+            select(SubscriptionPayment).where(SubscriptionPayment.idempotency_key == key)
+        ).one_or_none()
+
+    def add_payment(self, payment: SubscriptionPayment) -> SubscriptionPayment:
+        self.session.add(payment)
+        self.session.flush()
+        return payment
+
+    def trials_ending_before(self, moment: datetime) -> list[UUID]:
+        """Entreprises dont l'essai finit avant `moment`, les plus proches d'abord.
+
+        Sans verrou : la tâche de nuit verrouille ensuite chaque entreprise **puis** son
+        abonnement, dans l'ordre de tous les autres gestes, et revérifie.
+        """
+        return list(
+            self.session.scalars(
+                select(Subscription.company_id)
+                .where(Subscription.status == "trial", Subscription.trial_ends_at <= moment)
+                .order_by(Subscription.trial_ends_at, Subscription.id)
+            )
+        )

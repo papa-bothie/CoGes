@@ -208,16 +208,50 @@ def platform_bound_to_test_database(
 TEST_PASSWORD = "mot-de-passe-de-test-01"  # noqa: S105
 
 
+def lift_user_cap(owner_engine: Engine, company_id: UUID) -> None:
+    """Passe une entreprise partagée par toute la suite au palier sans plafond (ADR 0091).
+
+    Ces entreprises ne sont pas des clientes : une centaine de tests y créent chacun leur
+    compte, et le plafond de l'essai Premium (10) les bloquerait entre eux. Le plafond a
+    ses propres tests, sur des entreprises neuves (`test_plan_user_limit.py`). Le palier
+    « sur devis » de l'ADR, absent du seed, est ajouté ici en propriétaire.
+    """
+    with owner_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO plans (code, name, price_fcfa, max_users, is_orderable) "
+                "VALUES ('sur_devis', 'Sur devis', NULL, NULL, false) "
+                "ON CONFLICT (code) DO NOTHING"
+            )
+        )
+        # `subscriptions` est en RLS FORCE, propriétaire compris : le contexte d'abord.
+        connection.execute(
+            text("SELECT set_config('app.company_id', :id, true)"), {"id": str(company_id)}
+        )
+        connection.execute(
+            text(
+                "UPDATE subscriptions "
+                "SET plan_id = (SELECT id FROM plans WHERE code = 'sur_devis') "
+                "WHERE company_id = :id"
+            ),
+            {"id": company_id},
+        )
+
+
 @pytest.fixture(scope="session")
 def tenant_a(session_factory: sessionmaker[Any], owner_engine: Engine) -> Tenant:
     """Entreprise A du harnais de fuite, partagée par toutes les suites."""
-    return create_tenant(session_factory, owner_engine, "entreprise-a", password=TEST_PASSWORD)
+    tenant = create_tenant(session_factory, owner_engine, "entreprise-a", password=TEST_PASSWORD)
+    lift_user_cap(owner_engine, tenant.company_id)
+    return tenant
 
 
 @pytest.fixture(scope="session")
 def tenant_b(session_factory: sessionmaker[Any], owner_engine: Engine) -> Tenant:
     """Entreprise B du harnais de fuite, partagée par toutes les suites."""
-    return create_tenant(session_factory, owner_engine, "entreprise-b", password=TEST_PASSWORD)
+    tenant = create_tenant(session_factory, owner_engine, "entreprise-b", password=TEST_PASSWORD)
+    lift_user_cap(owner_engine, tenant.company_id)
+    return tenant
 
 
 @pytest.fixture
@@ -341,15 +375,19 @@ def _create_demo_company(slug: str) -> DemoCompany:
 
 
 @pytest.fixture(scope="session")
-def company_alpha(app_bound_to_test_database: None) -> DemoCompany:
+def company_alpha(app_bound_to_test_database: None, owner_engine: Engine) -> DemoCompany:
     """Entreprise de référence des tests d'API."""
-    return _create_demo_company("societe-alpha")
+    company = _create_demo_company("societe-alpha")
+    lift_user_cap(owner_engine, company.company_id)
+    return company
 
 
 @pytest.fixture(scope="session")
-def company_beta(app_bound_to_test_database: None) -> DemoCompany:
+def company_beta(app_bound_to_test_database: None, owner_engine: Engine) -> DemoCompany:
     """Seconde entreprise : sert aux appels croisés, qui doivent donner 404."""
-    return _create_demo_company("societe-beta")
+    company = _create_demo_company("societe-beta")
+    lift_user_cap(owner_engine, company.company_id)
+    return company
 
 
 def login_token(client: TestClient, company: DemoCompany, *, password: str = TEST_PASSWORD) -> str:

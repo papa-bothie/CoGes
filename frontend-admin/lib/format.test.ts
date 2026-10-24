@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatAge, formatDate, formatDateTime, formatTime } from "./format";
+import { formatAge, formatDate, formatDateTime, formatFcfa, formatTime } from "./format";
 
 describe("formats d'affichage", () => {
   it("date en jj/mm/aaaa, heure sur 24 h", () => {
@@ -20,5 +20,11 @@ describe("formats d'affichage", () => {
     expect(formatAge(3 * 3600 + 5)).toBe("3 h");
     expect(formatAge(2 * 86400)).toBe("2 j");
     expect(formatAge(null)).toBe("—");
+  });
+
+  it("francs CFA sans décimales, espaces fines insécables", () => {
+    expect(formatFcfa("14900.00")).toBe("14\u202f900\u202fFCFA");
+    expect(formatFcfa("4900")).toBe("4\u202f900\u202fFCFA");
+    expect(formatFcfa(null)).toBe("Sur devis");
   });
 });

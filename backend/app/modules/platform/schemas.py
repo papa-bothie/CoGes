@@ -1,17 +1,21 @@
 """Schémas du module Platform.
 
 Les réponses sur les entreprises sont des **listes blanches** : nom, slug, statut,
-dates, nombre de comptes. Aucun montant, aucune donnée commerciale, même agrégée
-(lots 24 et 26). Un test vérifie les clés exactes.
+dates, nombre de comptes. Aucune donnée commerciale de l'entreprise, même agrégée
+(lot 26). Les seuls montants sont ceux de l'abonnement que l'entreprise paie à CoGes
+(ADR 0091). Un test vérifie les clés exactes.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.core.money import Amount
 
 CompanyStatus = Literal["trial", "active", "suspended"]
 PlatformRole = Literal["administrator", "support"]
@@ -92,3 +96,97 @@ class CompanyStatusUpdate(BaseModel):
 
     status: Literal["active", "suspended"]
     reason: str = Field(min_length=3, max_length=500)
+
+
+# ------------------------------------------------------------ abonnements (ADR 0091)
+
+SubscriptionStatus = Literal["trial", "active", "past_due", "suspended"]
+#: Ce que l'équipe peut poser à la main : l'essai ne naît qu'avec l'entreprise.
+SettableSubscriptionStatus = Literal["active", "past_due", "suspended"]
+PaymentMethod = Literal["wave", "orange_money", "cash", "bank_transfer"]
+
+
+class PlanRead(BaseModel):
+    """Une offre. `max_users` à `None` : pas de plafond (palier « sur devis »)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    code: str
+    name: str
+    price_fcfa: Amount | None
+    max_users: int | None
+    features: list[str]
+    is_orderable: bool
+
+
+class SubscriptionPaymentRead(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    amount_fcfa: Amount
+    paid_at: datetime
+    method: PaymentMethod
+    note: str | None
+    recorded_at: datetime
+
+
+class SubscriptionDetail(BaseModel):
+    """L'abonnement d'une entreprise, ses comptes actifs et ses derniers paiements."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    company_id: UUID
+    plan: PlanRead
+    status: SubscriptionStatus
+    trial_ends_at: datetime | None
+    started_at: datetime
+    current_period_end: datetime | None
+    active_users: int
+    #: Les 50 plus récents ; `payments_total` les compte tous.
+    payments: list[SubscriptionPaymentRead]
+    payments_total: int
+
+
+class SubscriptionUpdate(BaseModel):
+    """Changer d'offre, de statut, ou les deux ; la raison va au journal."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    plan_code: str | None = Field(default=None, min_length=1, max_length=40)
+    status: SettableSubscriptionStatus | None = None
+    reason: str = Field(min_length=3, max_length=500)
+
+    @model_validator(mode="after")
+    def _something_changes(self) -> SubscriptionUpdate:
+        if self.plan_code is None and self.status is None:
+            raise ValueError("Donnez une offre ou un statut.")
+        return self
+
+
+class SubscriptionPaymentCreate(BaseModel):
+    """Paiement reçu hors CoGes, déclaré par l'équipe. Montant en chaîne, jamais en float."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    amount_fcfa: Amount
+
+    @field_validator("amount_fcfa")
+    @classmethod
+    def _positive(cls, value: Decimal) -> Decimal:
+        if value <= 0 or value >= Decimal("1e12"):
+            raise ValueError("Le montant doit être positif.")
+        return value
+
+    paid_at: datetime
+    method: PaymentMethod
+    note: str | None = Field(default=None, max_length=500)
+
+    @field_validator("paid_at")
+    @classmethod
+    def _aware_and_past(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("La date doit porter son fuseau.")
+        if value > datetime.now(UTC) + timedelta(minutes=5):
+            raise ValueError("Un paiement ne peut pas être daté dans le futur.")
+        return value

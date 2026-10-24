@@ -86,6 +86,9 @@ export function alertLook(notification: Pick<AppNotification, "type" | "data">):
       return { tone: "neutre", action: t.sale };
     case "login_failures":
       return { tone: "stock", action: t.people };
+    case "trial_ending":
+      // Fin d'essai proche (ADR 0091) : un message de l'équipe, pas d'écran à ouvrir.
+      return { tone: "argent", action: t.trial };
     default:
       return { tone: "conseils", action: t.advice };
   }

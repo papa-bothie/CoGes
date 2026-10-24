@@ -26,6 +26,11 @@ WHOLE_TABLES: dict[str, set[str]] = {
     "platform_users": {"SELECT", "INSERT", "UPDATE"},
     "platform_auth_sessions": {"SELECT", "INSERT", "UPDATE"},
     "platform_audit_logs": {"SELECT", "INSERT"},
+    # Abonnements (ADR 0091) : l'offre se lit, l'abonnement se change, un paiement
+    # s'ajoute et ne se corrige pas.
+    "plans": {"SELECT"},
+    "subscriptions": {"SELECT", "INSERT", "UPDATE"},
+    "subscription_payments": {"SELECT", "INSERT"},
 }
 
 #: Tables d'entreprise : quelques colonnes de métadonnées, rien d'autre.

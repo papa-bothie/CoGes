@@ -13,3 +13,5 @@ export type ComponentHealth = Schemas["ComponentHealth"];
 export type JobRun = Schemas["JobRun"];
 export type JobRunPage = Schemas["JobRunPage"];
 export type PlatformOutbox = Schemas["PlatformOutbox"];
+export type PlanRead = Schemas["PlanRead"];
+export type SubscriptionDetail = Schemas["SubscriptionDetail"];

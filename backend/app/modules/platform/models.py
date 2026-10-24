@@ -1,16 +1,18 @@
-"""Modèles du module Platform : comptes et sessions de l'administration.
+"""Modèles du module Platform : comptes et sessions de l'administration, abonnements.
 
-Aucune de ces tables ne porte `company_id` : elles n'appartiennent à aucune
-entreprise, donc ni RLS ni `TenantBase` (révision 0026).
+Ces tables n'appartiennent à aucune entreprise, donc pas de `TenantBase` (révisions 0026
+et 0028). `subscriptions` porte un `company_id` et sa RLS (T37), mais elle parle **d'**
+une entreprise, sous le seul rôle de l'administration : `coges_app` n'y a aucun droit.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, Numeric, SmallInteger, Text
 from sqlalchemy.dialects.postgresql import ENUM, INET, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -80,5 +82,91 @@ class PlatformAuditLog(Base):
     diff: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     ip_address: Mapped[str | None] = mapped_column(INET, nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+
+
+class Plan(Base):
+    """Une offre : code interne stable, nom commercial modifiable (ADR 0091)."""
+
+    __tablename__ = "plans"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    code: Mapped[str] = mapped_column(Text)
+    name: Mapped[str] = mapped_column(Text)
+    price_fcfa: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    #: `None` : aucun plafond (futur palier « sur devis »).
+    max_users: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    features: Mapped[list[str]] = mapped_column(JSONB)
+    is_orderable: Mapped[bool] = mapped_column(Boolean)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+
+
+class Subscription(Base):
+    """L'état courant de l'abonnement d'une entreprise : une ligne par entreprise."""
+
+    __tablename__ = "subscriptions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    company_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    plan_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    status: Mapped[str] = mapped_column(
+        ENUM(
+            "trial",
+            "active",
+            "past_due",
+            "suspended",
+            name="subscription_status",
+            create_type=False,
+        )
+    )
+    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+    current_period_end: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    trial_warned_days: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+
+
+class SubscriptionPayment(Base):
+    """Paiement déclaré par l'équipe : append-only, clé d'idempotence en colonne."""
+
+    __tablename__ = "subscription_payments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    subscription_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    amount_fcfa: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    paid_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    method: Mapped[str] = mapped_column(
+        ENUM(
+            "cash",
+            "mobile_money",
+            "bank_transfer",
+            "card",
+            "cheque",
+            "offset",
+            "wave",
+            "orange_money",
+            name="pay_method",
+            create_type=False,
+        )
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recorded_by: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    idempotency_key: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )

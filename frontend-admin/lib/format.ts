@@ -37,6 +37,14 @@ export function formatAge(seconds: number | null | undefined): string {
   return `${Math.floor(seconds / 86400)} j`;
 }
 
+const FCFA = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+
+/** Montant en francs CFA : « 14 900 FCFA », espaces fines insécables, sans décimales. */
+export function formatFcfa(value: string | null | undefined): string {
+  if (value === null || value === undefined) return "Sur devis";
+  return `${FCFA.format(Number(value)).replace(/\s/g, "\u202f")}\u202fFCFA`;
+}
+
 export function formatDate(value: string | null | undefined): string {
   return value ? DATE.format(new Date(value)) : "—";
 }
@@ -55,4 +63,18 @@ export const ROLE_LABELS: Record<string, string> = {
   gerant: "Gérant",
   vendeur: "Vendeur",
   comptable: "Comptable",
+};
+
+export const SUBSCRIPTION_LABELS: Record<string, string> = {
+  trial: "Essai",
+  active: "Actif",
+  past_due: "En retard",
+  suspended: "Suspendu",
+};
+
+export const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  wave: "Wave",
+  orange_money: "Orange Money",
+  cash: "Espèces",
+  bank_transfer: "Virement",
 };

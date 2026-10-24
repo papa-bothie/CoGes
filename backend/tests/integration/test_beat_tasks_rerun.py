@@ -29,6 +29,7 @@ from app.workers.tasks import (
     ml_infer,
     ml_train,
     notifications,
+    platform,
     reconcile,
     system,
 )
@@ -67,6 +68,7 @@ def test_every_scheduled_task_is_covered_here() -> None:
         "reconcile.check_revenue_all",
         "system.purge_job_runs",
         "system.beat_tick",
+        "platform.subscriptions_daily",
     }
     assert {entry["task"] for entry in BEAT_SCHEDULE.values()} == covered
 
@@ -112,6 +114,15 @@ def test_purge_idempotency_keys_rerun() -> None:
 
 def test_purge_job_runs_rerun() -> None:
     _, second = _twice(system.purge_job_runs)
+    assert second == 0
+
+
+@pytest.mark.usefixtures("platform_bound_to_test_database")
+def test_subscriptions_daily_rerun(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fin des essais (ADR 0091) : la seconde passe ne prévient ni ne suspend personne."""
+    monkeypatch.setattr(platform.trial_notice, "delay", lambda *args: None)
+    monkeypatch.setattr(platform.trial_summary, "delay", lambda *args: None)
+    _, second = _twice(platform.subscriptions_daily)
     assert second == 0
 
 

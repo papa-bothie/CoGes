@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useMe } from "@/components/admin-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { StatusDialog, type StatusTarget } from "@/components/status-dialog";
+import { SubscriptionCard } from "@/components/subscription-card";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import type { CompanyDetail } from "@/lib/api/schema";
@@ -18,13 +19,16 @@ export function CompanyDetailView({ companyId }: { companyId: string }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Un paiement ou un changement de statut d'abonnement peut changer l'accès : relu.
+  const [version, setVersion] = useState(0);
+
   useEffect(() => {
     unwrap(
       api.GET("/api/v1/platform/companies/{company_id}", {
         params: { path: { company_id: companyId } },
       }),
     ).then(setCompany, (caught: unknown) => setError(errorMessage(caught)));
-  }, [companyId]);
+  }, [companyId, version]);
 
   if (error) {
     return (
@@ -78,7 +82,7 @@ export function CompanyDetailView({ companyId }: { companyId: string }) {
         <dd>{formatDateTime(company.last_activity_at)}</dd>
       </dl>
 
-      {canChange && company.status !== "trial" && (
+      {canChange && (
         <button
           type="button"
           onClick={() => setDialogOpen(true)}
@@ -89,6 +93,12 @@ export function CompanyDetailView({ companyId }: { companyId: string }) {
           {target === "suspended" ? "Suspendre l'entreprise" : "Réactiver l'entreprise"}
         </button>
       )}
+
+      <SubscriptionCard
+        companyId={companyId}
+        canChange={canChange}
+        onAccessChanged={() => setVersion((n) => n + 1)}
+      />
 
       <section aria-labelledby="titre-comptes" className="space-y-2">
         <h2 id="titre-comptes" className="text-xl font-bold">

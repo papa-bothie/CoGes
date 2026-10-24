@@ -1405,6 +1405,7 @@ export const labels = {
       sale: "Voir la vente",
       advice: "Voir le conseil",
       people: "Voir les personnes",
+      trial: "Voir le message",
     },
   },
   /** Réglages, maquette v2 (écrans 24 à 24e, ADR 0075). */

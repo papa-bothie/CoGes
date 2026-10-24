@@ -31,6 +31,8 @@ const JOB_LABELS: Record<string, string> = {
   "exports.sweep_all": "Purge des exports",
   "exports.sweep": "Purge des exports",
   "system.purge_job_runs": "Purge de l'historique des tâches",
+  "platform.subscriptions_daily": "Fin des essais",
+  "platform.trial_notice": "Fin des essais",
 };
 
 export function jobLabel(job: string): string {

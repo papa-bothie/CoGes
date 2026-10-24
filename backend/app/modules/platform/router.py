@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
 
 from app.core.config import get_settings
 from app.core.deps import (
@@ -21,15 +21,27 @@ from app.core.deps import (
     require_platform_role,
 )
 from app.core.errors import AuthenticationRequiredError
+from app.core.idempotency import (
+    IDEMPOTENCY_HEADER,
+    MAX_KEY_LENGTH,
+    MIN_KEY_LENGTH,
+    REPLAY_HEADER,
+    IdempotencyKeyMalformedError,
+    IdempotencyKeyRequiredError,
+)
 from app.core.repository import MAX_PAGE_SIZE
 from app.modules.platform import service
 from app.modules.platform.schemas import (
     CompanyDetail,
     CompanyPage,
     CompanyStatusUpdate,
+    PlanRead,
     PlatformLoginRequest,
     PlatformMe,
     PlatformTokenResponse,
+    SubscriptionDetail,
+    SubscriptionPaymentCreate,
+    SubscriptionUpdate,
 )
 
 router = APIRouter(prefix="/platform", tags=["platform-admin"])
@@ -126,3 +138,69 @@ def set_company_status(
         reason=payload.reason.strip(),
         ip_address=client_ip(request),
     )
+
+
+# ------------------------------------------------------------ abonnements (ADR 0091)
+
+
+@router.get("/plans", response_model=list[PlanRead])
+def list_plans(platform: CurrentPlatformAdmin) -> list[PlanRead]:
+    """Les offres, vendables ou non (palier « sur devis »). Quelques lignes : pas de page."""
+    return service.list_plans(platform.session)
+
+
+@router.get("/companies/{company_id}/subscription", response_model=SubscriptionDetail)
+def get_subscription(company_id: UUID, platform: CurrentPlatformAdmin) -> SubscriptionDetail:
+    """Offre, statut, dates, comptes actifs et 50 derniers paiements déclarés."""
+    return service.get_subscription(platform.session, company_id)
+
+
+@router.patch("/companies/{company_id}/subscription", response_model=SubscriptionDetail)
+def change_subscription(
+    company_id: UUID, payload: SubscriptionUpdate, request: Request, platform: Administrator
+) -> SubscriptionDetail:
+    """Changer d'offre ou de statut (profil `administrator`). Audit critique.
+
+    Une offre trop petite pour les comptes actifs : 409 `plan_downgrade_too_many_users`,
+    avec le nombre de comptes à désactiver d'abord.
+    """
+    return service.change_subscription(
+        platform.session, platform.admin, company_id, payload, ip_address=client_ip(request)
+    )
+
+
+@router.post(
+    "/companies/{company_id}/payments",
+    response_model=SubscriptionDetail,
+    status_code=status.HTTP_201_CREATED,
+)
+def record_payment(
+    company_id: UUID,
+    payload: SubscriptionPaymentCreate,
+    request: Request,
+    response: Response,
+    platform: Administrator,
+    idempotency_key: Annotated[str | None, Header(alias=IDEMPOTENCY_HEADER)] = None,
+) -> SubscriptionDetail:
+    """Paiement reçu hors CoGes (profil `administrator`), `Idempotency-Key` obligatoire.
+
+    L'abonnement devient actif et avance d'un mois ; une entreprise suspendue retrouve
+    l'accès. La même clé rejouée rend l'abonnement en 200, sans second paiement.
+    """
+    if idempotency_key is None:
+        raise IdempotencyKeyRequiredError()
+    key = idempotency_key.strip()
+    if not MIN_KEY_LENGTH <= len(key) <= MAX_KEY_LENGTH:
+        raise IdempotencyKeyMalformedError()
+    detail, replayed = service.record_payment(
+        platform.session,
+        platform.admin,
+        company_id,
+        payload,
+        idempotency_key=key,
+        ip_address=client_ip(request),
+    )
+    if replayed:
+        response.status_code = status.HTTP_200_OK
+        response.headers[REPLAY_HEADER] = "true"
+    return detail

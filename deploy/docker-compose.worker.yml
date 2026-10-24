@@ -53,6 +53,8 @@ services:
       <<: *common-env
       COGES_DATABASE_URL_APP: ${COGES_DATABASE_URL_APP:?}
       COGES_DATABASE_URL_ANALYTICS: ${COGES_DATABASE_URL_ANALYTICS:?}
+      # Fin des essais (ADR 0091) : la tâche de nuit suspend sous coges_app_platform.
+      COGES_DATABASE_URL_PLATFORM: ${COGES_DATABASE_URL_PLATFORM:?}
       COGES_ML_ARTIFACTS_DIR: /var/lib/coges/ml
     volumes:
       - ml-artifacts:/var/lib/coges/ml
