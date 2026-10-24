@@ -107,6 +107,19 @@ export const labels = {
     connectionRetrying: "Connexion difficile. Nous réessayons…",
     connectionLost: "Connexion difficile.",
   },
+  /** Accès support encadré (ADR 0092) : l'équipe CoGes lit, en lecture seule. */
+  support: {
+    banner: (since: string, until: string) =>
+      `Accès support actif depuis ${since}, par l’équipe CoGes, jusqu’à ${until}`,
+    readOnly: "Vous consultez cette boutique en lecture seule.",
+    opening: "Ouverture de l’accès support…",
+    invalidTitle: "Lien d’accès support inutilisable",
+    invalidBody:
+      "Ce lien a déjà servi ou n’est pas complet. Rouvrez l’entreprise depuis l’administration.",
+    endedTitle: "L’accès support est terminé",
+    endedBody:
+      "La session a été fermée ou son heure de fin est passée. Vous pouvez fermer cet onglet.",
+  },
   table: {
     search: "Rechercher",
     empty: "Aucun élément à afficher.",
@@ -1406,6 +1419,7 @@ export const labels = {
       advice: "Voir le conseil",
       people: "Voir les personnes",
       trial: "Voir le message",
+      history: "Voir l’historique",
     },
   },
   /** Réglages, maquette v2 (écrans 24 à 24e, ADR 0075). */

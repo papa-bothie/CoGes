@@ -16,6 +16,7 @@ import { can, filterByPermission } from "@/lib/permissions";
 import { ConnectionBanner } from "./connection-banner";
 import { NotificationBell } from "./notification-bell";
 import { SettingsMenu } from "./settings-menu";
+import { SupportBanner } from "./support-banner";
 
 function barItem(item: NavItem, pathname: string): BarItem {
   return {
@@ -104,6 +105,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         tabIndex={-1}
         className="flex-1 space-y-6 px-4 pt-4 pb-28 outline-none md:px-marge-page md:pt-6 md:pb-12 print:p-0"
       >
+        <SupportBanner />
         <ConnectionBanner />
         {children}
       </main>

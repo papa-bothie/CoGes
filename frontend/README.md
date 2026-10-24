@@ -14,6 +14,10 @@ Next 16 · TypeScript strict · Tailwind 4 · shadcn/ui · TanStack Query · ope
 - Le RBAC du front ne fait que **masquer** (`lib/permissions.ts`, `<Can>`) : l'autorisation
   est vérifiée côté serveur.
 - Textes de l'interface dans `lib/labels.ts`.
+- **Accès support** (ADR 0092) : `/support#token=…` ouvre la boutique pour l'équipe CoGes,
+  en lecture seule (`lib/auth/support.ts`, jeton dans le `sessionStorage` de l'onglet,
+  jamais de `/auth/refresh` ni de `/auth/logout`) ; `/support/termine` à la fin. Le bandeau
+  « Accès support actif » (`components/shell/support-banner.tsx`) s'affiche pour tous.
 
 ## Commandes
 
