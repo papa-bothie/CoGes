@@ -240,7 +240,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | Correctifs de la revue, partie 1 | `21-correctifs-de-la-revue.md` | 20 | chaque constat reproduit (test rouge) puis corrigé | ✅ PR n° 29 : ADR 0087, révision 0024, 8/8 reproduits et corrigés |
 | Correctifs de la revue, partie 2 | `21-correctifs-de-la-revue.md` | partie 1 fusionnée | idem, tableau reproduit / non reproduit / reporté | ✅ PR n° 30 : ADR 0088, révision 0025, 25 points (2 non reproduits, 2 reportés) |
 | Lot admin 1 : rôle plateforme, statut, métadonnées | `22-admin-role-plateforme.md` | 21 | jetons séparés dans les deux sens, GRANT du rôle énumérés, suspension à la requête suivante, A et B visibles sans donnée commerciale, e2e admin | ✅ PR n° 32 : ADR 0089, révision 0026, `frontend-admin/` (Next 16.4.2), 1734 tests backend, 259 + 8 Vitest, 69 + 4 e2e ; `create_platform_role.sql` sur Neon avant 0026 |
-| Lot admin 2 : surveillance système en version web | `23-admin-surveillance-web.md` | admin 1 | deux portes à l'octet près, job-runs et outbox sans donnée commerciale, bandeau de panne sur tout écran (e2e) | 🟨 branche `feat/admin-monitoring-ui` : ADR 0090, révision 0027, 1763 tests backend, 22 Vitest et 6 e2e admin ; PR à ouvrir |
+| Lot admin 2 : surveillance système en version web | `23-admin-surveillance-web.md` | admin 1 | deux portes à l'octet près, job-runs et outbox sans donnée commerciale, bandeau de panne sur tout écran (e2e) | 🟨 PR n° 33 (en attente de CI) : ADR 0090, révision 0027, 1763 tests backend, 22 Vitest et 6 e2e admin |
 
 ## 9. Journal des décisions
 
