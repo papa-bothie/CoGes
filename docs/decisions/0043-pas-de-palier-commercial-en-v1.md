@@ -2,7 +2,7 @@
 
 - **Date** : 2026-09-26
 - **Phase** : 10 (temps B)
-- **Statut** : acceptée
+- **Statut** : remplacée par 0091 (abonnements, lot admin 3)
 - **Décideur** : utilisateur (via AskUserQuestion)
 
 ## Contexte

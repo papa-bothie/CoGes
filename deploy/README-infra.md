@@ -403,6 +403,29 @@ résoudre la nouvelle version (`gh api repos/<éditeur>/<action>/commits/<étiqu
 .sha`) et remplacer le condensat ; `tests/unit/test_workflows.py` refuse une étiquette
 seule.
 
+### Rôle `coges_billing` et abonnements (révision 0028, ADR 0091)
+
+Rôle de cluster NOLOGIN, **avant** la migration 0028 sur Neon (préprod, puis prod), en
+`neondb_owner` — aucun mot de passe, personne ne s'y connecte :
+
+```bash
+psql "$NEONDB_OWNER_DSN" -f deploy/sql/create_billing_role.sql
+```
+
+Il possède les deux règles d'abonnement posées en trigger (essai Premium de 30 jours à la
+création d'une entreprise, plafond d'utilisateurs de l'offre). Le **worker** reçoit
+désormais `COGES_DATABASE_URL_PLATFORM` (même valeur que l'API) : la tâche de nuit
+`platform.subscriptions_daily` (06 h 30 UTC) suspend les essais échus sous
+`coges_app_platform`. Aucune nouvelle variable : la durée d'essai vit dans la fonction
+`companies_start_trial()`. En local, sans recréer le volume :
+
+```bash
+docker compose exec -T postgres psql -U postgres -c "CREATE ROLE coges_billing NOLOGIN NOBYPASSRLS" \
+  -c "GRANT coges_billing TO coges_owner WITH INHERIT FALSE"
+# puis, dans chaque base (coges, coges_test, coges_e2e) :
+#   GRANT USAGE ON SCHEMA public TO coges_billing;
+```
+
 ## Sauvegarde externe chiffrée (ADR 0084)
 
 Guide complet : `docs/runbooks/sauvegarde.md`. Chaque nuit à 02 h 15 UTC, GitHub Actions

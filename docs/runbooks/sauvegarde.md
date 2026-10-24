@@ -57,7 +57,8 @@ lecture au stockage.
      voir `deploy/README-infra.md`, « Rôles PostgreSQL ») puis
      `deploy/sql/create_backup_role.sql`. L'utilisateur qui restaure doit pouvoir
      emprunter les rôles propriétaires : `GRANT coges_owner, coges_auth, coges_bus,
-     coges_ops TO neondb_owner;` sur cette cible seulement.
+     coges_ops, coges_billing TO neondb_owner;` sur cette cible seulement (et
+     `deploy/sql/create_billing_role.sql` d'abord, ADR 0091).
    - Local : `make up`, puis `CREATE DATABASE coges_secours OWNER coges_owner`.
 3. **Restaurer et vérifier** :
    ```bash
