@@ -7281,6 +7281,159 @@
         }
       }
     },
+    "/api/v1/platform/stats/overview": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Stats Overview",
+        "description": "Entreprises par statut et par offre (essais à part), comptes actifs.",
+        "operationId": "stats_overview_api_v1_platform_stats_overview_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsOverview"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/stats/revenue": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Stats Revenue",
+        "description": "Somme des paiements **déclarés reçus** sur la période (heure de Dakar, bornes\ncomprises) ; `custom` : `start` et `end`, 366 jours au plus, jamais après aujourd'hui.",
+        "operationId": "stats_revenue_api_v1_platform_stats_revenue_get",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "current_month",
+                "previous_month",
+                "custom"
+              ],
+              "type": "string",
+              "default": "current_month",
+              "title": "Period"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevenueRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/stats/signups": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Stats Signups",
+        "description": "Nouvelles entreprises par mois (12) ou par semaine (52), périodes vides à 0.",
+        "operationId": "stats_signups_api_v1_platform_stats_signups_get",
+        "parameters": [
+          {
+            "name": "granularity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "month",
+                "week"
+              ],
+              "type": "string",
+              "default": "month",
+              "title": "Granularity"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupsRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform/companies/{company_id}/support-sessions": {
       "get": {
         "tags": [
@@ -8678,6 +8831,36 @@
         ],
         "title": "CompanyRead",
         "description": "Vue publique de l'entreprise courante."
+      },
+      "CompanyStatusCounts": {
+        "properties": {
+          "trial": {
+            "type": "integer",
+            "title": "Trial"
+          },
+          "active": {
+            "type": "integer",
+            "title": "Active"
+          },
+          "suspended": {
+            "type": "integer",
+            "title": "Suspended"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "trial",
+          "active",
+          "suspended",
+          "total"
+        ],
+        "title": "CompanyStatusCounts",
+        "description": "Entreprises non supprimées, par statut d'accès ; `total` en est la somme."
       },
       "CompanyStatusUpdate": {
         "properties": {
@@ -13872,6 +14055,46 @@
         "maxLength": 40,
         "minLength": 1
       },
+      "PlanBreakdown": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "trial": {
+            "type": "integer",
+            "title": "Trial"
+          },
+          "paying": {
+            "type": "integer",
+            "title": "Paying"
+          },
+          "suspended": {
+            "type": "integer",
+            "title": "Suspended"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "trial",
+          "paying",
+          "suspended",
+          "total"
+        ],
+        "title": "PlanBreakdown",
+        "description": "Une offre et ses entreprises, d'après l'**abonnement** : les essais (tous sur\nPremium) à part des payantes (`active` et `past_due`), pour ne pas gonfler l'offre."
+      },
       "PlanRead": {
         "properties": {
           "id": {
@@ -15430,6 +15653,58 @@
         "title": "RevenuePoint",
         "description": "Un jour de chiffre d'affaires net, dans le fuseau de l'entreprise."
       },
+      "RevenueRead": {
+        "properties": {
+          "period": {
+            "type": "string",
+            "enum": [
+              "current_month",
+              "previous_month",
+              "custom"
+            ],
+            "title": "Period"
+          },
+          "start": {
+            "type": "string",
+            "format": "date",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "title": "End"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "total_fcfa": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
+          "payment_count": {
+            "type": "integer",
+            "title": "Payment Count"
+          },
+          "computed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Computed At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "period",
+          "start",
+          "end",
+          "timezone",
+          "total_fcfa",
+          "payment_count",
+          "computed_at"
+        ],
+        "title": "RevenueRead",
+        "description": "Somme des paiements **déclarés reçus** sur la période, jamais un revenu théorique\ntiré des offres en cours. Jours de `start` à `end` compris, heure de Dakar."
+      },
       "RoleAbilities": {
         "properties": {
           "role_id": {
@@ -16658,10 +16933,116 @@
         "$ref": "#/components/schemas/Amount-Output",
         "gt": "0"
       },
+      "SignupBucket": {
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "title": "End"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "count"
+        ],
+        "title": "SignupBucket"
+      },
+      "SignupsRead": {
+        "properties": {
+          "granularity": {
+            "type": "string",
+            "enum": [
+              "month",
+              "week"
+            ],
+            "title": "Granularity"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "computed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Computed At"
+          },
+          "buckets": {
+            "items": {
+              "$ref": "#/components/schemas/SignupBucket"
+            },
+            "type": "array",
+            "title": "Buckets"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "granularity",
+          "timezone",
+          "computed_at",
+          "buckets",
+          "total"
+        ],
+        "title": "SignupsRead",
+        "description": "Nouvelles entreprises (non supprimées) sur 12 mois ou 52 semaines ; la dernière\npériode est celle en cours, les périodes vides valent 0."
+      },
       "Sku": {
         "type": "string",
         "maxLength": 64,
         "minLength": 1
+      },
+      "StatsOverview": {
+        "properties": {
+          "computed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Computed At"
+          },
+          "companies": {
+            "$ref": "#/components/schemas/CompanyStatusCounts"
+          },
+          "active_users": {
+            "type": "integer",
+            "title": "Active Users"
+          },
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/PlanBreakdown"
+            },
+            "type": "array",
+            "title": "Plans"
+          },
+          "without_subscription": {
+            "type": "integer",
+            "title": "Without Subscription"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "computed_at",
+          "companies",
+          "active_users",
+          "plans",
+          "without_subscription"
+        ],
+        "title": "StatsOverview"
       },
       "StockLine": {
         "properties": {

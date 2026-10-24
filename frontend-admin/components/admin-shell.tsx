@@ -46,6 +46,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
               <Link href="/companies" className="text-encre-douce hover:text-encre">
                 Entreprises
               </Link>
+              <Link href="/stats" className="text-encre-douce hover:text-encre">
+                Statistiques
+              </Link>
               <Link href="/system" className="text-encre-douce hover:text-encre">
                 Système
               </Link>

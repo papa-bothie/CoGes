@@ -27,3 +27,9 @@ l'entreprise » ouvre l'application commerçante, en lecture seule, dans un nouv
 est lue à l'exécution dans `COGES_MERCHANT_URL` (défaut `http://localhost:3000` ; sur le
 VPS, `https://<COGES_DOMAIN>` par le compose ; en e2e, `:3100`, que `make admin-e2e` démarre
 aussi).
+
+**Statistiques** (ADR 0093) : entreprises par statut et par offre (les essais à part des
+payantes), comptes actifs, revenu **déclaré** sur le mois en cours, le mois précédent ou
+une période choisie (366 jours au plus), nouvelles entreprises sur 12 mois ou 52 semaines.
+Chaque chiffre est daté ; le revenu ne compte que les paiements enregistrés, jamais ce que
+les offres en cours « devraient » rapporter.
