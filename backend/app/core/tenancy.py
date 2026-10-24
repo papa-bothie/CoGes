@@ -52,6 +52,13 @@ class TenantContext:
     user_id: UUID
     company_id: UUID
     permissions: frozenset[str] = field(default_factory=frozenset)
+    #: Session d'accès support (ADR 0092) : `user_id` est alors nul, et les permissions
+    #: sont celles du rôle `support_readonly`.
+    support_session_id: UUID | None = None
+
+    @property
+    def is_support(self) -> bool:
+        return self.support_session_id is not None
 
     def has_permission(self, code: str) -> bool:
         """Vérification RBAC côté serveur (le front ne fait que masquer)."""

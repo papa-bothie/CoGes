@@ -261,6 +261,28 @@
         }
       }
     },
+    "/api/v1/companies/me/support-access": {
+      "get": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Read Support Access",
+        "description": "Accès support en cours (ADR 0092) : début et fin, jamais qui.\n\nSans permission : **tout** utilisateur de l'entreprise doit voir le bandeau.",
+        "operationId": "read_support_access_api_v1_companies_me_support_access_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportAccessRead"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/users": {
       "get": {
         "tags": [
@@ -7259,6 +7281,183 @@
         }
       }
     },
+    "/api/v1/platform/companies/{company_id}/support-sessions": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "List Support Sessions",
+        "description": "La session en cours (au plus une) et les 20 dernières, avec qui et pourquoi.",
+        "operationId": "list_support_sessions_api_v1_platform_companies__company_id__support_sessions_get",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportSessionList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Open Support Session",
+        "description": "Bris de glace (administrateur et support) : justification obligatoire, 2 h par\ndéfaut, 4 h au plus. Écrit dans le journal de l'administration **et** dans celui de\nl'entreprise ; le gérant est prévenu par e-mail et dans la cloche. Le jeton rendu\nlit l'entreprise comme un utilisateur, en lecture seule.",
+        "operationId": "open_support_session_api_v1_platform_companies__company_id__support_sessions_post",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupportSessionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportAccessToken"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/support-sessions/{session_id}/token": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Issue Support Token",
+        "description": "Redonne le jeton d'une session ouverte, à qui l'a ouverte seulement. Audité.",
+        "operationId": "issue_support_token_api_v1_platform_support_sessions__session_id__token_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportAccessToken"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/support-sessions/{session_id}": {
+      "delete": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Close Support Session",
+        "description": "Ferme l'accès avant l'heure ; le jeton cesse de servir à la requête suivante.\nÉcrit dans les deux journaux.",
+        "operationId": "close_support_session_api_v1_platform_support_sessions__session_id__delete",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform/system/workers": {
       "get": {
         "tags": [
@@ -11799,6 +11998,11 @@
           },
           "company": {
             "$ref": "#/components/schemas/MeCompany"
+          },
+          "via_support": {
+            "type": "boolean",
+            "title": "Via Support",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -12702,7 +12906,8 @@
           "forecast_alert",
           "insight_critical",
           "login_failures",
-          "trial_ending"
+          "trial_ending",
+          "support_access"
         ],
         "title": "NotificationType",
         "description": "Liste **fermée**, identique au `CHECK` de `notifications.type` (§ 8.8).\n\nLes deux dernières valeurs appartiennent à CoGes Intelligence (phase 09) ; elles\nfigurent ici parce que le `CHECK` les porte déjà, et qu'une énumération qui\ndiverge de la base est un 500 qui attend son heure."
@@ -17311,6 +17516,206 @@
         "type": "object",
         "title": "SupplierUpdate",
         "description": "`address` se règle ici seulement : la création reste le nom et le téléphone."
+      },
+      "SupportAccessRead": {
+        "properties": {
+          "session": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SupportAccessWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "session"
+        ],
+        "title": "SupportAccessRead",
+        "description": "Le bandeau « Accès support actif » (ADR 0092) : `session` vide s'il n'y en a pas."
+      },
+      "SupportAccessToken": {
+        "properties": {
+          "session": {
+            "$ref": "#/components/schemas/SupportSessionRead"
+          },
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "const": "bearer",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "session",
+          "access_token",
+          "expires_in"
+        ],
+        "title": "SupportAccessToken",
+        "description": "Le jeton de support : il ne vaut que pour cette session, en lecture seule."
+      },
+      "SupportAccessWindow": {
+        "properties": {
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "started_at",
+          "expires_at"
+        ],
+        "title": "SupportAccessWindow",
+        "description": "Un accès support en cours : depuis quand, jusqu'à quand. Jamais qui."
+      },
+      "SupportSessionCreate": {
+        "properties": {
+          "justification": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 10,
+            "title": "Justification"
+          },
+          "duration_minutes": {
+            "type": "integer",
+            "maximum": 240.0,
+            "minimum": 30.0,
+            "title": "Duration Minutes",
+            "default": 120
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "justification"
+        ],
+        "title": "SupportSessionCreate",
+        "description": "Bris de glace : le « pourquoi » est obligatoire, la durée bornée."
+      },
+      "SupportSessionList": {
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SupportSessionRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/SupportSessionRead"
+            },
+            "type": "array",
+            "title": "Recent"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "active",
+          "recent"
+        ],
+        "title": "SupportSessionList",
+        "description": "La session en cours (au plus une) et les dernières, ouverte comprise."
+      },
+      "SupportSessionRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "opened_by": {
+            "type": "string",
+            "title": "Opened By"
+          },
+          "opened_by_me": {
+            "type": "boolean",
+            "title": "Opened By Me"
+          },
+          "justification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Justification"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "is_open": {
+            "type": "boolean",
+            "title": "Is Open"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "company_id",
+          "opened_by",
+          "opened_by_me",
+          "justification",
+          "started_at",
+          "expires_at",
+          "ended_at",
+          "is_open"
+        ],
+        "title": "SupportSessionRead",
+        "description": "Une session vue par l'équipe : qui l'a ouverte, pourquoi, quand."
       },
       "TaxRate-Input": {
         "$ref": "#/components/schemas/Rate-Input",

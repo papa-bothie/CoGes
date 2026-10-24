@@ -72,6 +72,10 @@ PLATFORM: dict[str, str] = {
     beat.PURGE_IDEMPOTENCY: "purge les clés échues par une fonction privilégiée, sans les lire",
     beat.PURGE_JOB_RUNS: "purge le journal des tâches (plate-forme, ADR 0077)",
     beat.BEAT_TICK: "écrit l'heure du tic dans Redis, aucune donnée d'entreprise",
+    beat.SUPPORT_SESSIONS_CLOSE: (
+        "ferme les accès support échus sous le rôle de la plateforme (ADR 0092), "
+        "sans rien lire d'une entreprise"
+    ),
 }
 
 _TABLES = text(

@@ -33,8 +33,26 @@ WHOLE_TABLES: dict[str, set[str]] = {
     "subscription_payments": {"SELECT", "INSERT"},
 }
 
+#: Accès support (ADR 0092) : une session s'ouvre en entier, puis seule sa fermeture
+#: s'écrit (`ended_at`, `ended_by`). Aucune autre colonne ne se réécrit.
+_SUPPORT_COLUMNS = (
+    "id",
+    "company_id",
+    "platform_user_id",
+    "justification",
+    "granted_by_user_id",
+    "started_at",
+    "expires_at",
+    "created_at",
+)
+
 #: Tables d'entreprise : quelques colonnes de métadonnées, rien d'autre.
 COLUMN_GRANTS: dict[str, dict[str, set[str]]] = {
+    "support_sessions": {
+        **{column: {"SELECT", "INSERT"} for column in _SUPPORT_COLUMNS},
+        "ended_at": {"SELECT", "INSERT", "UPDATE"},
+        "ended_by": {"SELECT", "INSERT", "UPDATE"},
+    },
     "companies": {
         "id": {"SELECT"},
         "name": {"SELECT"},

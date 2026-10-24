@@ -104,3 +104,6 @@ class MeResponse(BaseModel):
     roles: list[MeRole]
     permissions: list[str]
     company: MeCompany
+    #: Vrai sous un jeton d'accès support (ADR 0092) : l'équipe CoGes lit, en lecture
+    #: seule ; `user` et `roles` sont alors ceux, fictifs, du support.
+    via_support: bool = False

@@ -198,3 +198,18 @@ class CompanySuspendedError(CogesError):
         "L'accès de votre entreprise à CoGes est suspendu. "
         "Contactez l'équipe CoGes pour le rétablir."
     )
+
+
+class SupportReadOnlyError(PermissionDeniedError):
+    """Une écriture tentée sous un jeton de support (ADR 0092) : refusée avant le handler,
+    quelle que soit la route. L'accès support ne lit que."""
+
+    code = "support_read_only"
+    default_message = "L'accès support est en lecture seule : aucune modification possible."
+
+
+class SupportSessionEndedError(AuthenticationRequiredError):
+    """Session de support fermée, expirée, ou d'une autre entreprise (ADR 0092)."""
+
+    code = "support_session_ended"
+    default_message = "L'accès support est terminé."

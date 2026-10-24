@@ -22,9 +22,11 @@ from math import ceil
 from typing import Any, cast
 from uuid import UUID, uuid4
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core import queue, rate_limit
+from app.core.audit import AuditAction, audit_critical
 from app.core.config import get_settings
 from app.core.deps import PlatformAdmin, platform_transaction
 from app.core.errors import (
@@ -37,13 +39,14 @@ from app.core.idempotency import IdempotencyKeyReusedError
 from app.core.search import normalise_term
 from app.core.security import (
     create_platform_access_token,
+    create_support_access_token,
     generate_refresh_token,
     hash_password,
     hash_refresh_token,
     refresh_token_expiry,
     verify_password,
 )
-from app.core.tenancy import on_commit
+from app.core.tenancy import TenantContext, on_commit, tenant_transaction
 from app.modules.platform.models import (
     Plan,
     PlatformAuditLog,
@@ -51,6 +54,7 @@ from app.modules.platform.models import (
     PlatformUser,
     Subscription,
     SubscriptionPayment,
+    SupportSession,
 )
 from app.modules.platform.repository import (
     CompanyDirectory,
@@ -59,6 +63,7 @@ from app.modules.platform.repository import (
     PlatformSessionRepository,
     PlatformUserRepository,
     SubscriptionRepository,
+    SupportSessionRepository,
 )
 from app.modules.platform.schemas import (
     CompanyDetail,
@@ -71,6 +76,10 @@ from app.modules.platform.schemas import (
     SubscriptionPaymentCreate,
     SubscriptionPaymentRead,
     SubscriptionUpdate,
+    SupportAccessToken,
+    SupportSessionCreate,
+    SupportSessionList,
+    SupportSessionRead,
 )
 
 _DECOY_HASH = hash_password("leurre-de-l-administration-sans-usage")
@@ -775,3 +784,271 @@ def run_subscription_day(now: datetime | None = None) -> list[TrialNotice]:
                 subscription.updated_at = moment
                 notices.append(TrialNotice(company_id, name, threshold, ends))
     return notices
+
+
+# ------------------------------------------------- accès support encadré (ADR 0092)
+
+SUPPORT_NOTICE_TASK = "platform.support_notice"
+#: Les sessions montrées sur la fiche entreprise.
+SUPPORT_SESSIONS_SHOWN = 20
+
+
+class SupportSessionAlreadyOpenError(BusinessRuleError):
+    code = "support_session_already_open"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Un accès support est déjà ouvert pour cette entreprise. "
+            "Reprenez-le, ou fermez-le avant d'en ouvrir un autre."
+        )
+
+
+class SupportSessionClosedError(BusinessRuleError):
+    code = "support_session_closed"
+
+    def __init__(self) -> None:
+        super().__init__("Cet accès support est déjà terminé.")
+
+
+class SupportSessionNotYoursError(BusinessRuleError):
+    code = "support_session_not_yours"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Seule la personne qui a ouvert cet accès peut s'en servir. "
+            "Fermez-le, puis ouvrez le vôtre avec votre justification."
+        )
+
+
+class SupportCompanySuspendedError(BusinessRuleError):
+    code = "support_company_suspended"
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Cette entreprise est suspendue : un accès support serait refusé comme les "
+            "autres. Réactivez-la d'abord si c'est nécessaire."
+        )
+
+
+def _support_read(
+    row: SupportSession, opened_by: str, me: UUID, now: datetime
+) -> SupportSessionRead:
+    return SupportSessionRead(
+        id=row.id,
+        company_id=row.company_id,
+        opened_by=opened_by,
+        opened_by_me=row.platform_user_id == me,
+        justification=row.justification,
+        started_at=row.started_at,
+        expires_at=row.expires_at,
+        ended_at=row.ended_at,
+        is_open=row.ended_at is None and row.expires_at > now,
+    )
+
+
+def _company_journal(
+    company_id: UUID,
+    *,
+    action: AuditAction,
+    session_id: UUID,
+    before: dict[str, Any] | None,
+    after: dict[str, Any],
+) -> None:
+    """Écrit le geste dans le journal d'activité **de l'entreprise** (ADR 0092).
+
+    Par le chemin de tout utilisateur : `coges_app`, `SET LOCAL app.company_id` sur
+    l'entreprise visée, la RLS normale. Seule exception assumée à « Platform ne parle
+    qu'à `coges_app_platform` » : l'entreprise doit lire dans son propre journal qu'un
+    accès a eu lieu. Auteur nul : « l'équipe CoGes », jamais le nom d'une personne.
+
+    Validé **avant** la transaction de l'administration : un jeton n'est rendu qu'une
+    fois les deux validées, donc aucun accès utilisable sans trace chez l'entreprise.
+    """
+    with tenant_transaction(TenantContext.bootstrap(company_id)) as tenant_session:
+        audit_critical(
+            tenant_session,
+            TenantContext.bootstrap(company_id),
+            action=action,
+            entity_table="support_sessions",
+            entity_id=session_id,
+            before=before,
+            after=after,
+        )
+
+
+def list_support_sessions(
+    session: Session, admin: PlatformAdmin, company_id: UUID
+) -> SupportSessionList:
+    if CompanyDirectory(session).get(company_id) is None:
+        raise NotFoundError("Entreprise introuvable.")
+    now = datetime.now(UTC)
+    recent = [
+        _support_read(row, name, admin.platform_user_id, now)
+        for row, name in SupportSessionRepository(session).recent(
+            company_id, limit=SUPPORT_SESSIONS_SHOWN
+        )
+    ]
+    active = next((item for item in recent if item.is_open), None)
+    return SupportSessionList(active=active, recent=recent)
+
+
+def open_support_session(
+    session: Session,
+    admin: PlatformAdmin,
+    company_id: UUID,
+    payload: SupportSessionCreate,
+    *,
+    ip_address: str | None = None,
+) -> SupportAccessToken:
+    """Bris de glace : ouvre l'accès, l'écrit dans les deux journaux, rend le jeton."""
+    company = CompanyDirectory(session).get(company_id)
+    if company is None:
+        raise NotFoundError("Entreprise introuvable.")
+    if company.status == "suspended":
+        raise SupportCompanySuspendedError()
+    repository = SupportSessionRepository(session)
+    now = datetime.now(UTC)
+    repository.close_expired(now, company_id=company_id)
+    if repository.open_for(company_id) is not None:
+        raise SupportSessionAlreadyOpenError()
+    try:
+        row = repository.add(
+            SupportSession(
+                company_id=company_id,
+                platform_user_id=admin.platform_user_id,
+                justification=payload.justification,
+                started_at=now,
+                expires_at=now + timedelta(minutes=payload.duration_minutes),
+            )
+        )
+    except IntegrityError as exc:  # une ouverture simultanée a gagné l'index unique
+        raise SupportSessionAlreadyOpenError() from exc
+
+    trace = {
+        "justification": row.justification,
+        "started_at": row.started_at.isoformat(),
+        "expires_at": row.expires_at.isoformat(),
+    }
+    _audit(
+        session,
+        actor_id=admin.platform_user_id,
+        action="insert",
+        entity_table="support_sessions",
+        entity_id=row.id,
+        target_company_id=company_id,
+        diff={"after": {**trace, "duration_minutes": payload.duration_minutes}},
+        ip_address=ip_address,
+    )
+    _company_journal(
+        company_id, action=AuditAction.INSERT, session_id=row.id, before=None, after=trace
+    )
+
+    def _notify() -> None:
+        queue.enqueue(
+            SUPPORT_NOTICE_TASK,
+            countdown=0,
+            company_id=str(company_id),
+            session_id=str(row.id),
+            expires_at=row.expires_at.isoformat(),
+        )
+
+    on_commit(session, _notify)
+    token, expires_in = create_support_access_token(row.id, company_id, row.expires_at)
+    return SupportAccessToken(
+        session=_support_read(row, admin_name(session, admin), admin.platform_user_id, now),
+        access_token=token,
+        expires_in=expires_in,
+    )
+
+
+def admin_name(session: Session, admin: PlatformAdmin) -> str:
+    user = PlatformUserRepository(session).get(admin.platform_user_id)
+    return user.display_name if user else ""
+
+
+def issue_support_token(
+    session: Session,
+    admin: PlatformAdmin,
+    session_id: UUID,
+    *,
+    ip_address: str | None = None,
+) -> SupportAccessToken:
+    """Redonne le jeton d'une session ouverte (l'administration l'a perdu en rechargeant).
+
+    À qui l'a ouverte seulement : la justification et le journal portent son nom."""
+    row = SupportSessionRepository(session).lock(session_id)
+    now = datetime.now(UTC)
+    if row is None:
+        raise NotFoundError("Accès support introuvable.")
+    if row.ended_at is not None or row.expires_at <= now:
+        raise SupportSessionClosedError()
+    if row.platform_user_id != admin.platform_user_id:
+        raise SupportSessionNotYoursError()
+    _audit(
+        session,
+        actor_id=admin.platform_user_id,
+        action="login",
+        entity_table="support_sessions",
+        entity_id=row.id,
+        target_company_id=row.company_id,
+        diff={"after": {"token_issued_at": now.isoformat()}},
+        ip_address=ip_address,
+    )
+    token, expires_in = create_support_access_token(row.id, row.company_id, row.expires_at)
+    return SupportAccessToken(
+        session=_support_read(row, admin_name(session, admin), admin.platform_user_id, now),
+        access_token=token,
+        expires_in=expires_in,
+    )
+
+
+def close_support_session(
+    session: Session,
+    admin: PlatformAdmin,
+    session_id: UUID,
+    *,
+    ip_address: str | None = None,
+) -> None:
+    """Ferme l'accès avant l'heure : le jeton cesse de servir à la requête suivante."""
+    row = SupportSessionRepository(session).lock(session_id)
+    now = datetime.now(UTC)
+    if row is None:
+        raise NotFoundError("Accès support introuvable.")
+    if row.ended_at is not None or row.expires_at <= now:
+        raise SupportSessionClosedError()
+    row.ended_at = now
+    row.ended_by = admin.platform_user_id
+    session.flush()
+    _audit(
+        session,
+        actor_id=admin.platform_user_id,
+        action="update",
+        entity_table="support_sessions",
+        entity_id=row.id,
+        target_company_id=row.company_id,
+        diff={"before": {"ended_at": None}, "after": {"ended_at": now.isoformat()}},
+        ip_address=ip_address,
+    )
+    _company_journal(
+        row.company_id,
+        action=AuditAction.UPDATE,
+        session_id=row.id,
+        before={"ended_at": None},
+        after={"ended_at": now.isoformat(), "expires_at": row.expires_at.isoformat()},
+    )
+
+
+def close_expired_support_sessions(now: datetime | None = None) -> int:
+    """Tâche de nuit : `ended_at = expires_at` pour les sessions échues restées ouvertes.
+
+    Le jeton ne servait déjà plus (relu à chaque requête) : la liste des sessions
+    ouvertes redevient exacte, rien de plus."""
+    with platform_transaction() as session:
+        return len(SupportSessionRepository(session).close_expired(now or datetime.now(UTC)))
+
+
+def support_justification(session_id: UUID) -> str | None:
+    """Le « pourquoi » d'une session, pour l'e-mail au gérant (worker)."""
+    with platform_transaction() as session:
+        row = session.get(SupportSession, session_id)
+        return None if row is None else row.justification

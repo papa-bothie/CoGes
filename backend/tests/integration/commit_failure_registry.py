@@ -363,6 +363,21 @@ REGISTRY: dict[tuple[str, str], Critical | Exempt] = {
         "COMMIT refusé prouvé par test_subscriptions_api::test_a_refused_commit_records_nothing "
         "(aucun paiement, période inchangée)"
     ),
+    # Accès support (ADR 0092) : l'ouverture et la fermeture écrivent aussi le journal de
+    # l'entreprise, validé avant celui de l'administration ; un COMMIT refusé de ce
+    # dernier ne rend aucun jeton.
+    ("POST", "/api/v1/platform/companies/{company_id}/support-sessions"): Exempt(
+        "COMMIT refusé prouvé par test_support_access::test_a_refused_commit_gives_no_token "
+        "(aucune session, aucun jeton)"
+    ),
+    ("POST", "/api/v1/platform/support-sessions/{session_id}/token"): Exempt(
+        "COMMIT refusé prouvé par test_support_access::test_a_refused_commit_gives_no_token "
+        "(aucun jeton rendu)"
+    ),
+    ("DELETE", "/api/v1/platform/support-sessions/{session_id}"): Exempt(
+        "COMMIT refusé prouvé par test_support_access::test_a_refused_close_keeps_the_session "
+        "(session ouverte, jeton toujours refusé ou accepté selon la base)"
+    ),
     ("POST", "/api/v1/auth/password"): Exempt(
         "mot de passe de la personne connectée : sa propre session, couverte par "
         "test_temporary_password_expiry ; aucun argent, aucun stock"

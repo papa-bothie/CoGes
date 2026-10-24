@@ -190,3 +190,66 @@ class SubscriptionPaymentCreate(BaseModel):
         if value > datetime.now(UTC) + timedelta(minutes=5):
             raise ValueError("Un paiement ne peut pas être daté dans le futur.")
         return value
+
+
+# ------------------------------------------------- accès support encadré (ADR 0092)
+
+#: Durées proposées, en minutes : de 30 min à 4 h (la base vérifie aussi les 4 h).
+SUPPORT_MIN_MINUTES = 30
+SUPPORT_DEFAULT_MINUTES = 120
+SUPPORT_MAX_MINUTES = 240
+
+
+class SupportSessionCreate(BaseModel):
+    """Bris de glace : le « pourquoi » est obligatoire, la durée bornée."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    justification: str = Field(min_length=10, max_length=1000)
+    duration_minutes: int = Field(
+        default=SUPPORT_DEFAULT_MINUTES, ge=SUPPORT_MIN_MINUTES, le=SUPPORT_MAX_MINUTES
+    )
+
+    @field_validator("justification")
+    @classmethod
+    def _meaningful(cls, value: str) -> str:
+        cleaned = value.strip()
+        if len(cleaned) < 10:
+            raise ValueError("Expliquez en quelques mots pourquoi l'accès est nécessaire.")
+        return cleaned
+
+
+class SupportSessionRead(BaseModel):
+    """Une session vue par l'équipe : qui l'a ouverte, pourquoi, quand."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    company_id: UUID
+    opened_by: str
+    opened_by_me: bool
+    justification: str | None
+    started_at: datetime
+    expires_at: datetime
+    ended_at: datetime | None
+    is_open: bool
+
+
+class SupportSessionList(BaseModel):
+    """La session en cours (au plus une) et les dernières, ouverte comprise."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    active: SupportSessionRead | None
+    recent: list[SupportSessionRead]
+
+
+class SupportAccessToken(BaseModel):
+    """Le jeton de support : il ne vaut que pour cette session, en lecture seule."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    session: SupportSessionRead
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    expires_in: int

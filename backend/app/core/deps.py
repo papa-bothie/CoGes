@@ -32,7 +32,7 @@ from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 
-from app.core import rate_limit
+from app.core import rate_limit, support_access
 from app.core.config import get_settings
 from app.core.database import get_platform_app_session_factory
 from app.core.errors import (
@@ -41,6 +41,8 @@ from app.core.errors import (
     NotFoundError,
     PasswordChangeRequiredError,
     PermissionDeniedError,
+    SupportReadOnlyError,
+    SupportSessionEndedError,
 )
 from app.core.observability import tag_tenant
 from app.core.security import (
@@ -49,7 +51,7 @@ from app.core.security import (
     decode_access_token,
     decode_platform_token,
 )
-from app.core.tenancy import TenantContext, tenant_transaction
+from app.core.tenancy import NIL_USER_ID, TenantContext, tenant_transaction
 
 _LOAD_IDENTITY = text(
     """
@@ -71,6 +73,19 @@ _LOAD_IDENTITY = text(
     WHERE u.id = :user_id
       AND u.deleted_at IS NULL
     GROUP BY u.company_id, u.is_active, u.must_change_password, c.status
+    """
+)
+
+#: Session de support relue à chaque requête (ADR 0092), sous la RLS de l'entreprise du
+#: jeton : une session d'une autre entreprise ne ramène rien. Fermée ou échue : rien.
+_LOAD_SUPPORT_SESSION = text(
+    """
+    SELECT c.status::text AS company_status
+    FROM support_sessions s
+    JOIN companies c ON c.id = s.company_id AND c.deleted_at IS NULL
+    WHERE s.id = :session_id
+      AND s.ended_at IS NULL
+      AND s.expires_at > clock_timestamp()
     """
 )
 
@@ -98,6 +113,9 @@ def get_tenant_session(
     request: Request, claims: Annotated[AccessClaims, Depends(get_access_claims)]
 ) -> Iterator[TenantSession]:
     """Ouvre la transaction du cas d'usage et y construit le contexte tenant."""
+    if claims.support_session_id is not None:
+        yield from _support_tenant_session(request, claims, claims.support_session_id)
+        return
     # Contexte provisoire : il ne sert qu'à autoriser la relecture de l'utilisateur.
     provisional = TenantContext(user_id=claims.user_id, company_id=claims.company_id)
 
@@ -113,9 +131,7 @@ def get_tenant_session(
         # de servir à la requête suivante, sans attendre son expiration.
         if row.company_status == "suspended":
             raise CompanySuspendedError()
-        # TODO(lot 24, abonnements) : une entreprise en essai (`trial`) dont la date de
-        # fin est dépassée sera refusée ici, avec son propre code. La table des essais
-        # n'existe pas encore : aucune logique n'est simulée en attendant.
+        # Un essai échu passe par la suspension (tâche de nuit, ADR 0091) : rien d'autre ici.
         if row.must_change_password and request.url.path not in PASSWORD_CHANGE_PATHS:
             raise PasswordChangeRequiredError()
 
@@ -133,6 +149,38 @@ def get_tenant_session(
         # Compteur par entreprise (décision 16), sur le `company_id` relu en base.
         rate_limit.hit_tenant(company_id)
         tag_tenant(company_id)
+        yield TenantSession(session=session, ctx=ctx)
+
+
+def _support_tenant_session(
+    request: Request, claims: AccessClaims, session_id: UUID
+) -> Iterator[TenantSession]:
+    """Jeton de support (ADR 0092) : même chemin qu'un utilisateur, en lecture seule.
+
+    Trois verrous indépendants : la méthode (avant toute transaction), la transaction
+    `READ ONLY` (PostgreSQL refuse lui-même toute écriture), et des permissions qui ne
+    sont que des lectures. La session est relue ici à chaque requête : fermée, échue
+    ou d'une autre entreprise, le jeton cesse de servir tout de suite.
+    """
+    if request.method not in support_access.READ_METHODS:
+        raise SupportReadOnlyError()
+    provisional = TenantContext(user_id=NIL_USER_ID, company_id=claims.company_id)
+    with tenant_transaction(provisional) as session:
+        session.execute(text("SET LOCAL transaction_read_only = on"))
+        row = session.execute(_LOAD_SUPPORT_SESSION, {"session_id": session_id}).one_or_none()
+        if row is None:
+            raise SupportSessionEndedError()
+        if row.company_status == "suspended":
+            raise CompanySuspendedError()
+        ctx = TenantContext(
+            user_id=NIL_USER_ID,
+            company_id=claims.company_id,
+            permissions=support_access.PERMISSIONS,
+            support_session_id=session_id,
+        )
+        request.state.tenant = ctx
+        rate_limit.hit_tenant(claims.company_id)
+        tag_tenant(claims.company_id)
         yield TenantSession(session=session, ctx=ctx)
 
 

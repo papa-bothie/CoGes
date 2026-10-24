@@ -48,6 +48,8 @@ RECIPIENT_PERMISSION: dict[NotificationType, str] = {
     NotificationType.LOGIN_FAILURES: "users:update",
     # Qui gère les personnes gère aussi l'abonnement : le gérant (ADR 0091).
     NotificationType.TRIAL_ENDING: "users:update",
+    # Le gérant répond de qui lit les données de la boutique (ADR 0092).
+    NotificationType.SUPPORT_ACCESS: "users:update",
 }
 
 

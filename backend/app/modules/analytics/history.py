@@ -69,6 +69,7 @@ THINGS: dict[str, str] = {
     "user_roles": "les droits d'une personne",
     "roles": "un rôle",
     "companies": "les réglages de la boutique",
+    "support_sessions": "un accès support",
 }
 
 GENERIC_VERBS: dict[str, str] = {
@@ -342,6 +343,15 @@ def _return(log: AuditLogRead, who: str) -> str:
     return f"{who} a enregistré le retour n° {number}"
 
 
+def _support(log: AuditLogRead) -> str:
+    """Accès support (ADR 0092) : l'équipe CoGes, jamais une personne ; le motif cité."""
+    if log.action == "update":
+        return "L’équipe CoGes a fermé son accès support"
+    reason = str(_side(log, "after").get("justification") or "").strip()
+    opened = "L’équipe CoGes a ouvert un accès support, en lecture seule"
+    return f"{opened}. Motif : « {reason} »" if reason else opened
+
+
 def sentence(names: _Names, log: AuditLogRead) -> str:
     """La phrase d'une ligne du journal, au passé composé, sujet en tête."""
     who = first_name(log.actor_name)
@@ -366,6 +376,7 @@ def sentence(names: _Names, log: AuditLogRead) -> str:
             f"{who} a retiré l’article {_product(names, log)}" if log.action == "delete" else None
         ),
         "companies": lambda: f"{who} a modifié les réglages de la boutique",
+        "support_sessions": lambda: _support(log),
     }
     if log.action == "export":
         return f"{who} a préparé un fichier Excel"
