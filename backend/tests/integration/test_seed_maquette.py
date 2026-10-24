@@ -32,12 +32,22 @@ FUTURE_BY_DESIGN = {
     ("export_files", "expires_at"),
     ("insights", "valid_until"),
     ("forecasts", "horizon_date"),
+    # Abonnement (ADR 0091) : l'essai finit, la période payée court, après aujourd'hui.
+    ("subscriptions", "trial_ends_at"),
+    ("subscriptions", "current_period_end"),
 }
 
 #: Journal d'exploitation à l'heure réelle (ADR 0077) : une tâche tracée appelée par le
 #: remplissage s'y inscrit au moment où elle tourne. L'heure figée ne vaut que pour les
 #: lectures métier ; une panne se date à l'horloge vraie.
-REAL_TIME_BY_DESIGN = {("job_runs", "started_at"), ("job_runs", "finished_at")}
+REAL_TIME_BY_DESIGN = {
+    ("job_runs", "started_at"),
+    ("job_runs", "finished_at"),
+    # L'abonnement est une donnée de la plateforme (ADR 0091), jamais lue par l'app
+    # commerçante ni par la maquette : il naît à l'heure réelle de la création.
+    ("subscriptions", "started_at"),
+    ("subscriptions", "updated_at"),
+}
 
 _DATE_COLUMNS = text(
     "SELECT c.table_name, c.column_name, c.data_type FROM information_schema.columns c"

@@ -96,6 +96,7 @@ GRANT USAGE ON SCHEMA public TO coges_relay;
 GRANT USAGE ON SCHEMA public TO coges_analytics;
 GRANT USAGE ON SCHEMA public TO coges_bus;
 GRANT USAGE ON SCHEMA public TO coges_app_platform;
+GRANT USAGE ON SCHEMA public TO coges_billing;
 SQL
     uv run --directory backend alembic upgrade head
     seeded=$(uv run --directory backend python -m app.seed)

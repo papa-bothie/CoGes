@@ -70,11 +70,18 @@ ALTER ROLE coges_backup SET default_transaction_read_only = on;
 CREATE ROLE coges_app_platform LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE
     PASSWORD :'platform_password';
 
+-- Abonnements (lot admin 3, ADR 0091) : propriétaire des deux règles qui vivent en base
+-- sous coges_app (essai créé avec l'entreprise, plafond d'utilisateurs). NOLOGIN et
+-- NOBYPASSRLS : il lit les comptes de l'entreprise du contexte, sous la RLS, et rien
+-- d'autre que `plans` et `subscriptions` (révision 0028).
+CREATE ROLE coges_billing NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+
 -- coges_owner doit pouvoir transférer la propriété des fonctions à leur rôle final.
 -- WITH INHERIT FALSE : aucune élévation implicite, il faut un SET ROLE explicite.
 GRANT coges_auth TO coges_owner WITH INHERIT FALSE;
 GRANT coges_bus  TO coges_owner WITH INHERIT FALSE;
 GRANT coges_ops  TO coges_owner WITH INHERIT FALSE;
+GRANT coges_billing TO coges_owner WITH INHERIT FALSE;
 
 CREATE DATABASE coges      OWNER coges_owner;
 CREATE DATABASE coges_test OWNER coges_owner;
@@ -89,6 +96,7 @@ GRANT USAGE ON SCHEMA public TO coges_relay;
 GRANT USAGE ON SCHEMA public TO coges_analytics;
 GRANT USAGE ON SCHEMA public TO coges_bus;
 GRANT USAGE ON SCHEMA public TO coges_app_platform;
+GRANT USAGE ON SCHEMA public TO coges_billing;
 
 \connect coges_test
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
@@ -98,6 +106,7 @@ GRANT USAGE ON SCHEMA public TO coges_relay;
 GRANT USAGE ON SCHEMA public TO coges_analytics;
 GRANT USAGE ON SCHEMA public TO coges_bus;
 GRANT USAGE ON SCHEMA public TO coges_app_platform;
+GRANT USAGE ON SCHEMA public TO coges_billing;
 
 \connect coges_e2e
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
@@ -107,3 +116,4 @@ GRANT USAGE ON SCHEMA public TO coges_relay;
 GRANT USAGE ON SCHEMA public TO coges_analytics;
 GRANT USAGE ON SCHEMA public TO coges_bus;
 GRANT USAGE ON SCHEMA public TO coges_app_platform;
+GRANT USAGE ON SCHEMA public TO coges_billing;

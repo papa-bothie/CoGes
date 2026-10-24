@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import AuditAction, audit_critical
@@ -20,6 +20,7 @@ from app.core.errors import (
     NotFoundError,
     ValidationFailedError,
     constraint_name,
+    sqlstate,
 )
 from app.core.passwords import readable_password
 from app.core.security import hash_password, verify_password
@@ -110,6 +111,23 @@ def temporary_password_deadline() -> datetime:
     return datetime.now(UTC) + timedelta(hours=get_settings().temp_password_ttl_hours)
 
 
+class PlanUserLimitReachedError(BusinessRuleError):
+    """L'offre de l'entreprise n'admet pas un compte actif de plus (ADR 0091).
+
+    Le plafond est tenu **en base** (`users_plan_limit`, révision 0028) : ce module ne
+    lit pas l'abonnement, il traduit le refus de PostgreSQL (`CG007`, plafond en DETAIL).
+    """
+
+    code = "plan_user_limit_reached"
+
+    def __init__(self, max_users: int) -> None:
+        super().__init__(
+            f"Ce plan autorise {max_users} utilisateurs maximum. "
+            "Passez à un palier supérieur pour en ajouter.",
+            details={"max_users": max_users},
+        )
+
+
 #: Index uniques partiels de la révision 0024 et le message de chacun.
 _IDENTIFIER_TAKEN = {
     "users_email_uq": "Un compte utilise déjà cet e-mail dans cette entreprise.",
@@ -118,15 +136,22 @@ _IDENTIFIER_TAKEN = {
 
 
 def _flush(session: Session) -> None:
-    """`flush` qui traduit une violation d'unicité d'identifiant en 422.
+    """`flush` qui traduit les refus de la base en erreurs nommées.
 
-    La vérification de `create_user` lit avant d'écrire : deux créations simultanées la
-    passent toutes les deux, et l'index tranche. La seconde reçoit alors le même 422
-    que si elle était arrivée après (ADR 0087), jamais une 500.
+    * violation d'unicité d'identifiant ⇒ 422. La vérification de `create_user` lit
+      avant d'écrire : deux créations simultanées la passent toutes les deux, et l'index
+      tranche. La seconde reçoit le même 422 que si elle était arrivée après (ADR 0087) ;
+    * plafond de l'offre (`CG007`) ⇒ 409 `plan_user_limit_reached`, à la création comme
+      à la réactivation d'un compte (ADR 0091).
     """
     try:
         session.flush()
-    except IntegrityError as exc:
+    except DBAPIError as exc:
+        if sqlstate(exc) == "CG007":
+            detail = getattr(getattr(exc.orig, "diag", None), "message_detail", None)
+            raise PlanUserLimitReachedError(int(detail or 0)) from exc
+        if not isinstance(exc, IntegrityError):
+            raise
         message = _IDENTIFIER_TAKEN.get(constraint_name(exc) or "")
         if message is None:
             raise
@@ -210,7 +235,7 @@ def update_user(
     if "is_active" in changes and before["is_active"] != user.is_active:
         # Date de coupure (ADR 0075) : posée en coupant, effacée en redonnant l'accès.
         user.deactivated_at = None if user.is_active else datetime.now(UTC)
-    session.flush()
+    _flush(session)
 
     # La désactivation d'un compte est un changement d'accès : audit critique.
     if "is_active" in changes:

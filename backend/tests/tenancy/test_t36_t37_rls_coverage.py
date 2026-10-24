@@ -22,6 +22,8 @@ BUS_ROLE = "coges_bus"
 #: Propriétaire des fonctions de surveillance (ADR 0077).
 OPS_ROLE = "coges_ops"
 BACKUP_ROLE = "coges_backup"
+#: Propriétaire des deux règles d'abonnement posées en trigger (ADR 0091).
+BILLING_ROLE = "coges_billing"
 
 #: Seules tables où le rôle analytique peut supprimer. Elles sont intégralement
 #: reconstruisibles depuis le transactionnel : c'est ce qui justifie l'exception.
@@ -33,6 +35,11 @@ BUS_TABLES = ["business_events", "companies", "idempotency_keys"]
 
 #: Seule table que `coges_ops` atteint : le journal des tâches planifiées.
 OPS_TABLES = ["job_runs"]
+
+#: Tables entières que `coges_billing` atteint (plus quatre colonnes de `users`). Il n'a
+#: pas BYPASSRLS : sur `subscriptions` et `users`, il ne voit que l'entreprise du contexte.
+BILLING_TABLES = ["plans", "subscriptions"]
+BILLING_USER_COLUMNS = ["company_id", "deleted_at", "id", "is_active"]
 
 #: Les fonctions du projet dont `EXECUTE` a été retiré à `PUBLIC`. Ce sont celles qui
 #: franchissent la RLS ou qui accordent un geste que le rôle appelant n'a pas.
@@ -49,6 +56,8 @@ PRIVILEGED_FUNCTIONS = {
     "job_run_finish",
     "job_runs_latest",
     "purge_job_runs",
+    "companies_start_trial",
+    "users_plan_limit",
 }
 
 #: Seules tables sur lesquelles `coges_app` a le droit de supprimer (ADR 0007, 0020).
@@ -598,6 +607,51 @@ def test_t36_ops_role_reach_is_job_runs_only(app_engine: Engine) -> None:
     assert reachable == OPS_TABLES, f"portée du contournement inattendue : {reachable}"
 
 
+def test_t36_billing_role_reach_is_named(app_engine: Engine) -> None:
+    """T36 — `coges_billing` : NOLOGIN, sans BYPASSRLS, et une portée écrite ici (ADR 0091)."""
+    with app_engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT rolcanlogin, rolbypassrls FROM pg_roles WHERE rolname = :role"),
+            {"role": BILLING_ROLE},
+        ).one_or_none()
+        assert row is not None, "coges_billing absent : voir deploy/sql/create_billing_role.sql"
+        reachable = sorted(
+            set(_table_privileges(connection, BILLING_ROLE, "SELECT"))
+            | set(_table_privileges(connection, BILLING_ROLE, "INSERT"))
+            | set(_table_privileges(connection, BILLING_ROLE, "UPDATE"))
+            | set(_table_privileges(connection, BILLING_ROLE, "DELETE"))
+        )
+        user_columns = sorted(
+            connection.execute(
+                text(
+                    "SELECT a.attname FROM pg_attribute a "
+                    "WHERE a.attrelid = 'public.users'::regclass AND a.attnum > 0 "
+                    "AND NOT a.attisdropped "
+                    "AND has_column_privilege(:role, a.attrelid, a.attnum, 'SELECT')"
+                ),
+                {"role": BILLING_ROLE},
+            ).scalars()
+        )
+    assert row.rolcanlogin is False, f"{BILLING_ROLE} doit rester NOLOGIN"
+    assert row.rolbypassrls is False, f"{BILLING_ROLE} lit sous la RLS"
+    assert reachable == BILLING_TABLES, f"portée inattendue : {reachable}"
+    assert user_columns == BILLING_USER_COLUMNS
+
+
+@pytest.mark.parametrize("role", [APP_ROLE, RELAY_ROLE, ANALYTICS_ROLE])
+def test_t36_no_runtime_role_touches_subscriptions(app_engine: Engine, role: str) -> None:
+    """T36 — l'abonnement est une donnée de la plateforme : aucun rôle d'exécution
+    commerçant ne le lit ni ne l'écrit, les règles passent par `coges_billing`."""
+    with app_engine.connect() as connection:
+        granted = [
+            (table, privilege)
+            for table in ("plans", "subscriptions", "subscription_payments")
+            for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE")
+            if table in _table_privileges(connection, role, privilege)
+        ]
+    assert granted == [], f"{role} détient {granted}"
+
+
 @pytest.mark.parametrize("role", [APP_ROLE, RELAY_ROLE, ANALYTICS_ROLE])
 def test_t36_no_runtime_role_touches_job_runs(app_engine: Engine, role: str) -> None:
     """T36 — aucun rôle d'exécution n'a de privilège sur `job_runs` : tout passe par
@@ -621,6 +675,10 @@ TABLES_WITHOUT_RLS: dict[str, str] = {
     "platform_users": "comptes de l'équipe CoGes, hors de toute entreprise",
     "platform_auth_sessions": "sessions de l'administration, hors de toute entreprise",
     "platform_audit_logs": "journal de l'administration ; parle d'une entreprise, n'en est pas",
+    # Abonnements (ADR 0091) : `subscriptions` porte `company_id` et a sa RLS ; ces deux-là
+    # n'en portent pas, et `coges_app` n'y a aucun droit.
+    "plans": "catalogue des offres, identique pour toutes les entreprises",
+    "subscription_payments": "paiements déclarés par l'équipe, rattachés à un abonnement",
 }
 
 
