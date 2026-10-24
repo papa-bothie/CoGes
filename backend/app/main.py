@@ -52,6 +52,7 @@ from app.modules.rbac.router import router as rbac_router
 from app.modules.sales.router import returns_router
 from app.modules.sales.router import router as sales_router
 from app.modules.suppliers.router import router as suppliers_router
+from app.modules.system.router import platform_router as system_platform_router
 from app.modules.system.router import router as system_router
 from app.modules.users.router import router as users_router
 
@@ -157,6 +158,7 @@ api_router.include_router(audit_router)
 # Hors des cinq bandes : l'administration de la plateforme (ADR 0089). Un axe à part,
 # sous `/platform`, avec son jeton, son rôle PostgreSQL et son sous-domaine.
 api_router.include_router(platform_router)
+api_router.include_router(system_platform_router)
 
 app.include_router(api_router)
 

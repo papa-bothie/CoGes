@@ -15,6 +15,28 @@ const DATE_TIME = new Intl.DateTimeFormat("fr-FR", {
   timeZone: "Africa/Dakar",
 });
 
+const TIME = new Intl.DateTimeFormat("fr-FR", {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+  timeZone: "Africa/Dakar",
+});
+
+/** Heure seule, à la seconde : « vérifié à 10:45:07 ». */
+export function formatTime(value: string): string {
+  return TIME.format(new Date(value));
+}
+
+/** Âge d'un battement ou d'un retard : « 12 s », « 4 min », « 3 h », « 2 j ». */
+export function formatAge(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined) return "—";
+  if (seconds < 60) return `${Math.round(seconds)} s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} min`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} h`;
+  return `${Math.floor(seconds / 86400)} j`;
+}
+
 export function formatDate(value: string | null | undefined): string {
   return value ? DATE.format(new Date(value)) : "—";
 }

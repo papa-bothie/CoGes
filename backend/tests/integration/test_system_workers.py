@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -20,9 +21,13 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core import heartbeat
 from app.core.tenancy import TenantContext, tenant_transaction
+from app.main import app
+from app.modules.platform import service as platform_service
+from app.modules.system.router import get_ops_now
 from app.workers.beat import JOB_FRESHNESS, ML_TRAIN, REBUILD_STOCK
 from tests.conftest import DemoCompany, login_token
 from tests.integration.ops_harness import OPS_TOKEN, add_run, clear_job_runs, ops_settings
+from tests.integration.platform_harness import create_platform_account, platform_login
 from tests.integration.relay_harness import bury_dead_letters
 from tests.tenancy.harness import Tenant
 
@@ -257,3 +262,87 @@ def test_unconfigured_token_hides_the_route(
     _use_settings(monkeypatch, ops_token=None)
     response = api_client.get(URL, headers=AUTH)
     assert response.status_code == 404
+
+
+# ------------------------------------------------ deux portes, une lecture (ADR 0090)
+#
+# Le jeton d'exploitation (terminal, surveillance externe) ouvre `/system/workers` ; un
+# compte de l'équipe ouvre `/platform/system/workers`, servi seulement derrière le filtre
+# IP de l'administration. Même fonction de route, même service : à état égal et à
+# horloge figée, les deux réponses sont identiques à l'octet près.
+
+PLATFORM_URL = "/api/v1/platform/system/workers"
+
+
+@pytest.fixture
+def frozen_clock() -> Iterator[datetime]:
+    now = datetime.now(UTC)
+    app.dependency_overrides[get_ops_now] = lambda: now
+    yield now
+    app.dependency_overrides.pop(get_ops_now, None)
+
+
+@pytest.fixture
+def platform_token(platform_bound_to_test_database: None, healthy: TestClient) -> str:
+    return platform_login(healthy, create_platform_account("support"))
+
+
+def _both_doors(client: TestClient, platform_token: str) -> tuple[Any, Any]:
+    by_ops = client.get(URL, headers=AUTH)
+    by_platform = client.get(PLATFORM_URL, headers={"Authorization": f"Bearer {platform_token}"})
+    return by_ops, by_platform
+
+
+def test_both_doors_give_the_same_bytes_when_healthy(
+    healthy: TestClient, platform_token: str, frozen_clock: datetime
+) -> None:
+    by_ops, by_platform = _both_doors(healthy, platform_token)
+    assert by_ops.status_code == by_platform.status_code == 200
+    assert by_ops.content == by_platform.content
+
+
+def test_both_doors_give_the_same_bytes_when_broken(
+    healthy: TestClient, platform_token: str, frozen_clock: datetime, ops_redis: redis.Redis
+) -> None:
+    ops_redis.delete(heartbeat.heartbeat_key("worker", HOST))
+    by_ops, by_platform = _both_doors(healthy, platform_token)
+    assert by_ops.status_code == by_platform.status_code == 503
+    assert by_ops.content == by_platform.content
+    assert "heartbeat_missing:worker" in by_platform.json()["problems"]
+
+
+@pytest.mark.parametrize("role", ["administrator", "support"])
+def test_every_platform_profile_reads_the_health(
+    healthy: TestClient, platform_bound_to_test_database: None, role: str
+) -> None:
+    token = platform_login(healthy, create_platform_account(role))
+    response = healthy.get(PLATFORM_URL, headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+
+
+def test_the_platform_door_does_not_need_the_ops_token(
+    healthy: TestClient, platform_token: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sans `COGES_OPS_TOKEN`, la porte du terminal n'existe pas ; celle de l'équipe, si."""
+    _use_settings(monkeypatch, ops_token=None, ops_outbox_max_lag_seconds=GENEROUS_LAG)
+    response = healthy.get(PLATFORM_URL, headers={"Authorization": f"Bearer {platform_token}"})
+    assert response.status_code == 200
+
+
+def test_a_deactivated_platform_account_is_401(
+    healthy: TestClient, platform_bound_to_test_database: None
+) -> None:
+    account = create_platform_account("support")
+    token = platform_login(healthy, account)
+    assert platform_service.deactivate_platform_user(email=account.email)
+    response = healthy.get(PLATFORM_URL, headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+
+
+def test_each_door_takes_only_its_own_token(healthy: TestClient, platform_token: str) -> None:
+    """Un jeton de l'équipe n'ouvre pas la porte du terminal (servie sur le domaine
+    commerçant, sans filtre IP), et le jeton d'exploitation n'ouvre pas celle de l'équipe."""
+    team = {"Authorization": f"Bearer {platform_token}"}
+    assert healthy.get(URL, headers=team).status_code == 401
+    assert healthy.get(PLATFORM_URL, headers=AUTH).status_code == 401
+    assert healthy.get(PLATFORM_URL).status_code == 401

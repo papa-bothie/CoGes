@@ -13,6 +13,8 @@ make admin-check        # types, lint, typecheck, Vitest, build
 make admin-e2e          # coges_e2e recréée, API :8100, administration :3200, axe AA
 ```
 
-Comptes : `make create-platform-user EMAIL=… NAME="…" ROLE=administrator|support`. Écrans de
-ce lot : connexion, liste des entreprises, fiche (comptes, suspendre ou réactiver avec
-confirmation et raison). Aucun montant, aucune donnée commerciale.
+Comptes : `make create-platform-user EMAIL=… NAME="…" ROLE=administrator|support`. Écrans :
+connexion, liste des entreprises, fiche (comptes, suspendre ou réactiver avec confirmation
+et raison) ; **Système** et **Tâches** (ADR 0090 : bilan des workers rafraîchi toutes les
+30 s, rebut de l'outbox, historique des tâches), avec un bandeau rouge sur toute page dès
+que le bilan est en panne. Aucun montant, aucune donnée commerciale.

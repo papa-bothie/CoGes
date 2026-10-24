@@ -60,6 +60,10 @@ PLATFORM = "platform"
 READ_ROUTES: dict[str, tuple[str, dict[str, str]]] = {
     "/api/v1/platform/auth/me": (PLATFORM, {}),
     "/api/v1/platform/companies": (PLATFORM, {}),
+    # Surveillance (ADR 0090) : ni entreprise ni contenu, `test_platform_monitoring.py`.
+    "/api/v1/platform/system/workers": (PLATFORM, {}),
+    "/api/v1/platform/system/job-runs": (PLATFORM, {}),
+    "/api/v1/platform/system/outbox": (PLATFORM, {}),
     "/api/v1/health": (PUBLIC, {}),
     "/api/v1/health/ready": (PUBLIC, {}),
     # Jeton d'exploitation, pas un compte : aucune donnée d'entreprise (ADR 0077).
