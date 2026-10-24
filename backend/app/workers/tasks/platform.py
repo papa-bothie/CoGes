@@ -39,6 +39,7 @@ from app.workers.jobs import tracked_job
 STATUS_CHANGED = "platform.company_status_changed"
 LOGIN_FAILURES = "platform.login_failures"
 SUPPORT_NOTICE = "platform.support_notice"
+SEND_INVITATION = "platform.send_invitation"
 
 MANAGER_ROLE = "gerant"
 
@@ -290,3 +291,38 @@ def support_sessions_close(now: str | None = None) -> int:
     """Ferme à leur échéance les accès support restés ouverts (sous `coges_app_platform`)."""
     moment = datetime.fromisoformat(now) if now else None
     return platform_service.close_expired_support_sessions(moment)
+
+
+# ------------------------------------------------- invitations de l'équipe (ADR 0094)
+
+_ROLE_TEXT = {
+    "administrator": "administrateur (gestion de l'équipe, des entreprises et des abonnements)",
+    "support": "support (consultation, sans modification de l'équipe ni des abonnements)",
+}
+
+
+@celery_app.task(name=SEND_INVITATION, bind=True, max_retries=5, default_retry_delay=60)
+def send_invitation(self: Any, invitation_id: str, issue: int) -> bool:
+    """Tire le jeton du lien ici, jamais dans Redis : la tâche ne porte que l'identifiant
+    de l'invitation et son numéro d'émission. Un renvoi plus récent rend cet envoi muet."""
+    if not mailer.is_configured():
+        return False
+    try:
+        mail = platform_service.issue_invitation_token(UUID(invitation_id), issue)
+        if mail is None:
+            return False
+        until = mail.expires_at.astimezone(ZoneInfo("Africa/Dakar"))
+        return mailer.send_email(
+            to=[mail.email],
+            subject="Vous êtes invité dans l'équipe CoGes",
+            body=(
+                f"Bonjour {mail.display_name},\n\n{mail.inviter} vous invite à rejoindre "
+                f"l'administration de CoGes, avec le profil {_ROLE_TEXT[mail.role]}.\n\n"
+                f"Choisissez votre mot de passe en ouvrant ce lien :\n{mail.url}\n\n"
+                f"Il est valable jusqu'au {dmy(until.date())} à {until:%H:%M} (heure de "
+                "Dakar), une seule fois. Si vous n'attendiez pas cette invitation, ignorez "
+                "ce message.\n\nL'équipe CoGes"
+            ),
+        )
+    except Exception as exc:
+        raise self.retry(exc=exc) from exc

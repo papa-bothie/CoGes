@@ -2483,6 +2483,228 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/platform/auth/accept-invitation": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Accept Invitation
+     * @description Publique : le collègue invité choisit son mot de passe. Compte créé, jeton consommé,
+     *     session ouverte. Même réponse pour tout lien qui n'est plus valable ; freinée par
+     *     adresse IP comme la connexion.
+     */
+    post: operations["accept_invitation_api_v1_platform_auth_accept_invitation_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/team": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Team
+     * @description Les comptes de l'équipe et les invitations en attente.
+     */
+    get: operations["list_team_api_v1_platform_team_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/team/summary": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Team Summary */
+    get: operations["team_summary_api_v1_platform_team_summary_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/team/invitations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Invite
+     * @description Inviter un collègue (profil `administrator`), `Idempotency-Key` obligatoire : un
+     *     double clic n'envoie pas deux e-mails. Sans SMTP, le lien est rendu une fois.
+     */
+    post: operations["invite_api_v1_platform_team_invitations_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/team/invitations/{invitation_id}/resend": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Resend Invitation
+     * @description Nouveau lien valable 72 h ; l'ancien ne sert plus.
+     */
+    post: operations["resend_invitation_api_v1_platform_team_invitations__invitation_id__resend_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/team/invitations/{invitation_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Revoke Invitation */
+    delete: operations["revoke_invitation_api_v1_platform_team_invitations__invitation_id__delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/team/{user_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Update Member
+     * @description Changer le profil d'un collègue, le suspendre (raison obligatoire) ou le réactiver.
+     *     Jamais son propre compte (409 `cannot_modify_self`) ; il reste toujours un
+     *     administrateur actif (409 `last_administrator`).
+     */
+    patch: operations["update_member_api_v1_platform_team__user_id__patch"];
+    trace?: never;
+  };
+  "/api/v1/platform/users": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Merchant Users
+     * @description Comptes des commerçants, toutes entreprises, **en lecture seule** : leur gérant les
+     *     gère. Nom, e-mail, entreprise, rôles, statut, dernière connexion.
+     */
+    get: operations["list_merchant_users_api_v1_platform_users_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/audit": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Audit
+     * @description Journal des modifications de la plateforme (profil `administrator`), le plus récent
+     *     d'abord ; jours de `start` à `end` compris, heure de Dakar. Aucun secret dans `diff`.
+     */
+    get: operations["list_audit_api_v1_platform_audit_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/roles": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Profiles
+     * @description Les deux profils et ce que chacun peut faire, déduit des routes elles-mêmes.
+     */
+    get: operations["list_profiles_api_v1_platform_roles_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/attention": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Attention
+     * @description Essais qui finissent sous 7 jours, entreprises suspendues, invitations qui échoient
+     *     sous 24 h.
+     */
+    get: operations["attention_api_v1_platform_attention_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/platform/system/workers": {
     parameters: {
       query?: never;
@@ -2645,9 +2867,64 @@ export interface components {
     };
     "Amount-Input": number | string;
     "Amount-Output": string;
+    /**
+     * AttentionRead
+     * @description Ce qui demande une action, dès l'ouverture du tableau de bord.
+     */
+    AttentionRead: {
+      /**
+       * Computed At
+       * Format: date-time
+       */
+      computed_at: string;
+      /** Trials Ending */
+      trials_ending: components["schemas"]["TrialEnding"][];
+      /** Suspended Companies */
+      suspended_companies: components["schemas"]["SuspendedCompany"][];
+      /** Suspended Total */
+      suspended_total: number;
+      /** Expiring Invitations */
+      expiring_invitations: components["schemas"]["ExpiringInvitation"][];
+    };
     /** @enum {string} */
     AuditActionName:
       "insert" | "update" | "delete" | "login" | "export" | "confirm" | "cancel" | "rebuild";
+    /**
+     * AuditEntry
+     * @description Une ligne du journal de la plateforme ; `diff` passe par une liste blanche.
+     */
+    AuditEntry: {
+      /** Id */
+      id: number;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at: string;
+      /** Actor Id */
+      actor_id: string | null;
+      /** Actor Name */
+      actor_name: string | null;
+      /**
+       * Action
+       * @enum {string}
+       */
+      action: "login" | "update" | "insert" | "cancel";
+      /** Entity Table */
+      entity_table: string;
+      /** Entity Id */
+      entity_id: string | null;
+      /** Entity Name */
+      entity_name: string | null;
+      /** Target Company Id */
+      target_company_id: string | null;
+      /** Target Company Name */
+      target_company_name: string | null;
+      /** Diff */
+      diff: {
+        [key: string]: unknown;
+      };
+    };
     /** AuditLogPage */
     AuditLogPage: {
       /** Items */
@@ -2687,6 +2964,17 @@ export interface components {
        */
       occurred_at: string;
     };
+    /** AuditPage */
+    AuditPage: {
+      /** Items */
+      items: components["schemas"]["AuditEntry"][];
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Total */
+      total: number;
+    };
     Barcode: string;
     /**
      * BiggestExpense
@@ -2720,6 +3008,13 @@ export interface components {
       file: string;
     };
     CancelReason: string;
+    /** Capability */
+    Capability: {
+      /** Key */
+      key: string;
+      /** Label */
+      label: string;
+    };
     /** @enum {string} */
     CashDirection: "inflow" | "outflow";
     /**
@@ -3697,6 +3992,23 @@ export interface components {
       /** Recent */
       recent: components["schemas"]["RecentExpense"][];
     };
+    /** ExpiringInvitation */
+    ExpiringInvitation: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Email */
+      email: string;
+      /** Display Name */
+      display_name: string;
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+    };
     /** @enum {string} */
     ExportFormat: "csv" | "xlsx";
     /** ExportList */
@@ -4061,6 +4373,36 @@ export interface components {
       /** Insufficient Data Products */
       insufficient_data_products: number;
     };
+    /** InvitationAccept */
+    InvitationAccept: {
+      /** Token */
+      token: string;
+      /** Password */
+      password: string;
+    };
+    /** InvitationCreate */
+    InvitationCreate: {
+      /** Email */
+      email: string;
+      /** Display Name */
+      display_name: string;
+      /**
+       * Role
+       * @enum {string}
+       */
+      role: "administrator" | "support";
+    };
+    /**
+     * InvitationIssued
+     * @description `invitation_url` n'est rendu qu'une fois, quand aucun e-mail ne peut partir.
+     */
+    InvitationIssued: {
+      invitation: components["schemas"]["TeamInvitation"];
+      /** Email Sent */
+      email_sent: boolean;
+      /** Invitation Url */
+      invitation_url: string | null;
+    };
     /**
      * JobHealth
      * @description Dernière exécution d'une tâche planifiée, et ce qu'il faut en penser.
@@ -4225,6 +4567,48 @@ export interface components {
       full_name: string;
       /** Must Change Password */
       must_change_password: boolean;
+    };
+    /**
+     * MerchantUser
+     * @description Un compte commerçant, en lecture seule : colonnes accordées par 0026 seulement.
+     */
+    MerchantUser: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Full Name */
+      full_name: string;
+      /** Email */
+      email: string | null;
+      /**
+       * Company Id
+       * Format: uuid
+       */
+      company_id: string;
+      /** Company Name */
+      company_name: string;
+      /** Roles */
+      roles: string[];
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "active" | "deactivated" | "company_suspended";
+      /** Last Login At */
+      last_login_at: string | null;
+    };
+    /** MerchantUserPage */
+    MerchantUserPage: {
+      /** Items */
+      items: components["schemas"]["MerchantUser"][];
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Total */
+      total: number;
     };
     /**
      * MoneyBucket
@@ -5194,6 +5578,20 @@ export interface components {
       reorder_point?: components["schemas"]["ReorderPoint-Input"] | null;
       /** Is Active */
       is_active?: boolean | null;
+    };
+    /** ProfileRead */
+    ProfileRead: {
+      /**
+       * Role
+       * @enum {string}
+       */
+      role: "administrator" | "support";
+      /** Label */
+      label: string;
+      /** Description */
+      description: string;
+      /** Capabilities */
+      capabilities: components["schemas"]["Capability"][];
     };
     "Quantity-Input": number | string;
     "Quantity-Output": string;
@@ -6370,8 +6768,115 @@ export interface components {
       /** Is Open */
       is_open: boolean;
     };
+    /** SuspendedCompany */
+    SuspendedCompany: {
+      /**
+       * Company Id
+       * Format: uuid
+       */
+      company_id: string;
+      /** Name */
+      name: string;
+    };
     "TaxRate-Input": components["schemas"]["Rate-Input"];
     "TaxRate-Output": components["schemas"]["Rate-Output"];
+    /**
+     * TeamInvitation
+     * @description Une invitation en attente : ni acceptée, ni révoquée, ni échue.
+     */
+    TeamInvitation: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Email */
+      email: string;
+      /** Display Name */
+      display_name: string;
+      /**
+       * Role
+       * @enum {string}
+       */
+      role: "administrator" | "support";
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      /** Invited By Name */
+      invited_by_name: string;
+    };
+    /** TeamList */
+    TeamList: {
+      /** Members */
+      members: components["schemas"]["TeamMember"][];
+      /** Invitations */
+      invitations: components["schemas"]["TeamInvitation"][];
+    };
+    /** TeamMember */
+    TeamMember: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Email */
+      email: string;
+      /** Display Name */
+      display_name: string;
+      /**
+       * Role
+       * @enum {string}
+       */
+      role: "administrator" | "support";
+      /** Is Active */
+      is_active: boolean;
+      /** Last Login At */
+      last_login_at: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Is Me */
+      is_me: boolean;
+    };
+    /**
+     * TeamMemberUpdate
+     * @description Changer le profil, suspendre ou réactiver. Une suspension exige sa raison.
+     */
+    TeamMemberUpdate: {
+      /** Role */
+      role?: ("administrator" | "support") | null;
+      /** Is Active */
+      is_active?: boolean | null;
+      /** Reason */
+      reason?: string | null;
+    };
+    /** TeamSummary */
+    TeamSummary: {
+      /**
+       * Computed At
+       * Format: date-time
+       */
+      computed_at: string;
+      /** Members */
+      members: number;
+      /** Active */
+      active: number;
+      /** Suspended */
+      suspended: number;
+      /** Pending Invitations */
+      pending_invitations: number;
+      /** Expiring Invitations */
+      expiring_invitations: number;
+    };
     /**
      * Timeseries
      * @description Série journalière d'une mesure nommée, jours creux à zéro.
@@ -6428,6 +6933,21 @@ export interface components {
       token_type: string;
       /** Expires In */
       expires_in: number;
+    };
+    /** TrialEnding */
+    TrialEnding: {
+      /**
+       * Company Id
+       * Format: uuid
+       */
+      company_id: string;
+      /** Name */
+      name: string;
+      /**
+       * Trial Ends At
+       * Format: date-time
+       */
+      trial_ends_at: string;
     };
     /**
      * Uncertainty
@@ -10726,6 +11246,7 @@ export interface operations {
         page?: number;
         page_size?: number;
         search?: string | null;
+        status?: ("trial" | "active" | "suspended") | null;
       };
       header?: never;
       path?: never;
@@ -11148,6 +11669,324 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  accept_invitation_api_v1_platform_auth_accept_invitation_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["InvitationAccept"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlatformTokenResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_team_api_v1_platform_team_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TeamList"];
+        };
+      };
+    };
+  };
+  team_summary_api_v1_platform_team_summary_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TeamSummary"];
+        };
+      };
+    };
+  };
+  invite_api_v1_platform_team_invitations_post: {
+    parameters: {
+      query?: never;
+      header?: {
+        "Idempotency-Key"?: string | null;
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["InvitationCreate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["InvitationIssued"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  resend_invitation_api_v1_platform_team_invitations__invitation_id__resend_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        invitation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["InvitationIssued"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  revoke_invitation_api_v1_platform_team_invitations__invitation_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        invitation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  update_member_api_v1_platform_team__user_id__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["TeamMemberUpdate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TeamMember"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_merchant_users_api_v1_platform_users_get: {
+    parameters: {
+      query?: {
+        q?: string | null;
+        role?: string | null;
+        status?: ("active" | "deactivated" | "company_suspended") | null;
+        company_id?: string | null;
+        sort?: "name" | "-name" | "last_login" | "-last_login";
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MerchantUserPage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_audit_api_v1_platform_audit_get: {
+    parameters: {
+      query?: {
+        actor_id?: string | null;
+        action?: ("login" | "update" | "insert" | "cancel") | null;
+        company_id?: string | null;
+        entity_id?: string | null;
+        start?: string | null;
+        end?: string | null;
+        page?: number;
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AuditPage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_profiles_api_v1_platform_roles_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProfileRead"][];
+        };
+      };
+    };
+  };
+  attention_api_v1_platform_attention_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AttentionRead"];
         };
       };
     };

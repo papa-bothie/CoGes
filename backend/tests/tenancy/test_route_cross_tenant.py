@@ -59,6 +59,8 @@ PUBLIC_PATHS = frozenset(
         "/api/v1/platform/auth/login",
         "/api/v1/platform/auth/refresh",
         "/api/v1/platform/auth/logout",
+        # Choix du mot de passe d'un invité (ADR 0094) : le jeton du lien en tient lieu.
+        "/api/v1/platform/auth/accept-invitation",
     }
 )
 

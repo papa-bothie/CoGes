@@ -679,6 +679,8 @@ TABLES_WITHOUT_RLS: dict[str, str] = {
     # n'en portent pas, et `coges_app` n'y a aucun droit.
     "plans": "catalogue des offres, identique pour toutes les entreprises",
     "subscription_payments": "paiements déclarés par l'équipe, rattachés à un abonnement",
+    # Invitations de l'équipe (ADR 0094) : un futur compte de l'équipe, pas d'entreprise.
+    "platform_invitations": "invitations de l'équipe CoGes, hors de toute entreprise",
 }
 
 

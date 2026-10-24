@@ -6966,6 +6966,27 @@
               ],
               "title": "Search"
             }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "trial",
+                    "active",
+                    "suspended"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
           }
         ],
         "responses": {
@@ -7611,6 +7632,642 @@
         }
       }
     },
+    "/api/v1/platform/auth/accept-invitation": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Accept Invitation",
+        "description": "Publique : le collègue invité choisit son mot de passe. Compte créé, jeton consommé,\nsession ouverte. Même réponse pour tout lien qui n'est plus valable ; freinée par\nadresse IP comme la connexion.",
+        "operationId": "accept_invitation_api_v1_platform_auth_accept_invitation_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationAccept"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformTokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/team": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "List Team",
+        "description": "Les comptes de l'équipe et les invitations en attente.",
+        "operationId": "list_team_api_v1_platform_team_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/team/summary": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Team Summary",
+        "operationId": "team_summary_api_v1_platform_team_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/team/invitations": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Invite",
+        "description": "Inviter un collègue (profil `administrator`), `Idempotency-Key` obligatoire : un\ndouble clic n'envoie pas deux e-mails. Sans SMTP, le lien est rendu une fois.",
+        "operationId": "invite_api_v1_platform_team_invitations_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationIssued"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/team/invitations/{invitation_id}/resend": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Resend Invitation",
+        "description": "Nouveau lien valable 72 h ; l'ancien ne sert plus.",
+        "operationId": "resend_invitation_api_v1_platform_team_invitations__invitation_id__resend_post",
+        "parameters": [
+          {
+            "name": "invitation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Invitation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationIssued"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/team/invitations/{invitation_id}": {
+      "delete": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Revoke Invitation",
+        "operationId": "revoke_invitation_api_v1_platform_team_invitations__invitation_id__delete",
+        "parameters": [
+          {
+            "name": "invitation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Invitation Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/team/{user_id}": {
+      "patch": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Update Member",
+        "description": "Changer le profil d'un collègue, le suspendre (raison obligatoire) ou le réactiver.\nJamais son propre compte (409 `cannot_modify_self`) ; il reste toujours un\nadministrateur actif (409 `last_administrator`).",
+        "operationId": "update_member_api_v1_platform_team__user_id__patch",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamMemberUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamMember"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/users": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "List Merchant Users",
+        "description": "Comptes des commerçants, toutes entreprises, **en lecture seule** : leur gérant les\ngère. Nom, e-mail, entreprise, rôles, statut, dernière connexion.",
+        "operationId": "list_merchant_users_api_v1_platform_users_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 60
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "deactivated",
+                    "company_suspended"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "name",
+                "-name",
+                "last_login",
+                "-last_login"
+              ],
+              "type": "string",
+              "default": "-last_login",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MerchantUserPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/audit": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "List Audit",
+        "description": "Journal des modifications de la plateforme (profil `administrator`), le plus récent\nd'abord ; jours de `start` à `end` compris, heure de Dakar. Aucun secret dans `diff`.",
+        "operationId": "list_audit_api_v1_platform_audit_get",
+        "parameters": [
+          {
+            "name": "actor_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor Id"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "login",
+                    "update",
+                    "insert",
+                    "cancel"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Action"
+            }
+          },
+          {
+            "name": "company_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Company Id"
+            }
+          },
+          {
+            "name": "entity_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entity Id"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/roles": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "List Profiles",
+        "description": "Les deux profils et ce que chacun peut faire, déduit des routes elles-mêmes.",
+        "operationId": "list_profiles_api_v1_platform_roles_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProfileRead"
+                  },
+                  "type": "array",
+                  "title": "Response List Profiles Api V1 Platform Roles Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/attention": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Attention",
+        "description": "Essais qui finissent sous 7 jours, entreprises suspendues, invitations qui échoient\nsous 24 h.",
+        "operationId": "attention_api_v1_platform_attention_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttentionRead"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform/system/workers": {
       "get": {
         "tags": [
@@ -7987,6 +8644,51 @@
       "Amount-Output": {
         "type": "string"
       },
+      "AttentionRead": {
+        "properties": {
+          "computed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Computed At"
+          },
+          "trials_ending": {
+            "items": {
+              "$ref": "#/components/schemas/TrialEnding"
+            },
+            "type": "array",
+            "title": "Trials Ending"
+          },
+          "suspended_companies": {
+            "items": {
+              "$ref": "#/components/schemas/SuspendedCompany"
+            },
+            "type": "array",
+            "title": "Suspended Companies"
+          },
+          "suspended_total": {
+            "type": "integer",
+            "title": "Suspended Total"
+          },
+          "expiring_invitations": {
+            "items": {
+              "$ref": "#/components/schemas/ExpiringInvitation"
+            },
+            "type": "array",
+            "title": "Expiring Invitations"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "computed_at",
+          "trials_ending",
+          "suspended_companies",
+          "suspended_total",
+          "expiring_invitations"
+        ],
+        "title": "AttentionRead",
+        "description": "Ce qui demande une action, dès l'ouverture du tableau de bord."
+      },
       "AuditActionName": {
         "type": "string",
         "enum": [
@@ -7999,6 +8701,124 @@
           "cancel",
           "rebuild"
         ]
+      },
+      "AuditEntry": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "actor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Name"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "login",
+              "update",
+              "insert",
+              "cancel"
+            ],
+            "title": "Action"
+          },
+          "entity_table": {
+            "type": "string",
+            "title": "Entity Table"
+          },
+          "entity_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Id"
+          },
+          "entity_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Name"
+          },
+          "target_company_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Company Id"
+          },
+          "target_company_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Company Name"
+          },
+          "diff": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Diff"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "occurred_at",
+          "actor_id",
+          "actor_name",
+          "action",
+          "entity_table",
+          "entity_id",
+          "entity_name",
+          "target_company_id",
+          "target_company_name",
+          "diff"
+        ],
+        "title": "AuditEntry",
+        "description": "Une ligne du journal de la plateforme ; `diff` passe par une liste blanche."
       },
       "AuditLogPage": {
         "properties": {
@@ -8125,6 +8945,38 @@
         "title": "AuditLogRead",
         "description": "Une ligne du journal. `diff` est rendu tel qu'il a été écrit (avant / après)."
       },
+      "AuditPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEntry"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "AuditPage"
+      },
       "Barcode": {
         "type": "string",
         "maxLength": 64,
@@ -8190,6 +9042,25 @@
         "type": "string",
         "maxLength": 500,
         "minLength": 1
+      },
+      "Capability": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "Capability"
       },
       "CashDirection": {
         "type": "string",
@@ -10917,6 +11788,37 @@
         "title": "ExpensesSummary",
         "description": "Écran 20, colonne de droite : ce mois-ci par type et les dernières dépenses."
       },
+      "ExpiringInvitation": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "expires_at"
+        ],
+        "title": "ExpiringInvitation"
+      },
       "ExportFormat": {
         "type": "string",
         "enum": [
@@ -11862,6 +12764,93 @@
         "title": "IntelligenceSummary",
         "description": "Compteurs de l'écran Insights, lus sur les résultats déjà persistés."
       },
+      "InvitationAccept": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 20,
+            "title": "Token"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 12,
+            "title": "Password"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "InvitationAccept"
+      },
+      "InvitationCreate": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 3,
+            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+            "title": "Email"
+          },
+          "display_name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Display Name"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "administrator",
+              "support"
+            ],
+            "title": "Role"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "email",
+          "display_name",
+          "role"
+        ],
+        "title": "InvitationCreate"
+      },
+      "InvitationIssued": {
+        "properties": {
+          "invitation": {
+            "$ref": "#/components/schemas/TeamInvitation"
+          },
+          "email_sent": {
+            "type": "boolean",
+            "title": "Email Sent"
+          },
+          "invitation_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invitation Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "invitation",
+          "email_sent",
+          "invitation_url"
+        ],
+        "title": "InvitationIssued",
+        "description": "`invitation_url` n'est rendu qu'une fois, quand aucun e-mail ne peut partir."
+      },
       "JobHealth": {
         "properties": {
           "job": {
@@ -12285,6 +13274,113 @@
           "must_change_password"
         ],
         "title": "MeUser"
+      },
+      "MerchantUser": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "deactivated",
+              "company_suspended"
+            ],
+            "title": "Status"
+          },
+          "last_login_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "full_name",
+          "email",
+          "company_id",
+          "company_name",
+          "roles",
+          "status",
+          "last_login_at"
+        ],
+        "title": "MerchantUser",
+        "description": "Un compte commerçant, en lecture seule : colonnes accordées par 0026 seulement."
+      },
+      "MerchantUserPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MerchantUser"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "title": "MerchantUserPage"
       },
       "MoneyBucket": {
         "properties": {
@@ -15002,6 +16098,42 @@
         "type": "object",
         "title": "ProductUpdate",
         "description": "Modification de la fiche. **Jamais** du prix : il a son propre endpoint."
+      },
+      "ProfileRead": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "administrator",
+              "support"
+            ],
+            "title": "Role"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/Capability"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "role",
+          "label",
+          "description",
+          "capabilities"
+        ],
+        "title": "ProfileRead"
       },
       "Quantity-Input": {
         "anyOf": [
@@ -18098,6 +19230,26 @@
         "title": "SupportSessionRead",
         "description": "Une session vue par l'équipe : qui l'a ouverte, pourquoi, quand."
       },
+      "SuspendedCompany": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "company_id",
+          "name"
+        ],
+        "title": "SuspendedCompany"
+      },
       "TaxRate-Input": {
         "$ref": "#/components/schemas/Rate-Input",
         "ge": "0",
@@ -18107,6 +19259,233 @@
         "$ref": "#/components/schemas/Rate-Output",
         "ge": "0",
         "lt": "1"
+      },
+      "TeamInvitation": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "administrator",
+              "support"
+            ],
+            "title": "Role"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "invited_by_name": {
+            "type": "string",
+            "title": "Invited By Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "role",
+          "created_at",
+          "expires_at",
+          "invited_by_name"
+        ],
+        "title": "TeamInvitation",
+        "description": "Une invitation en attente : ni acceptée, ni révoquée, ni échue."
+      },
+      "TeamList": {
+        "properties": {
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMember"
+            },
+            "type": "array",
+            "title": "Members"
+          },
+          "invitations": {
+            "items": {
+              "$ref": "#/components/schemas/TeamInvitation"
+            },
+            "type": "array",
+            "title": "Invitations"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "members",
+          "invitations"
+        ],
+        "title": "TeamList"
+      },
+      "TeamMember": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "administrator",
+              "support"
+            ],
+            "title": "Role"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "last_login_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "is_me": {
+            "type": "boolean",
+            "title": "Is Me"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "role",
+          "is_active",
+          "last_login_at",
+          "created_at",
+          "is_me"
+        ],
+        "title": "TeamMember"
+      },
+      "TeamMemberUpdate": {
+        "properties": {
+          "role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "administrator",
+                  "support"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TeamMemberUpdate",
+        "description": "Changer le profil, suspendre ou réactiver. Une suspension exige sa raison."
+      },
+      "TeamSummary": {
+        "properties": {
+          "computed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Computed At"
+          },
+          "members": {
+            "type": "integer",
+            "title": "Members"
+          },
+          "active": {
+            "type": "integer",
+            "title": "Active"
+          },
+          "suspended": {
+            "type": "integer",
+            "title": "Suspended"
+          },
+          "pending_invitations": {
+            "type": "integer",
+            "title": "Pending Invitations"
+          },
+          "expiring_invitations": {
+            "type": "integer",
+            "title": "Expiring Invitations"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "computed_at",
+          "members",
+          "active",
+          "suspended",
+          "pending_invitations",
+          "expiring_invitations"
+        ],
+        "title": "TeamSummary"
       },
       "Timeseries": {
         "properties": {
@@ -18200,6 +19579,32 @@
         ],
         "title": "TokenResponse",
         "description": "Le refresh token n'apparaît pas ici : il part en cookie `httpOnly`."
+      },
+      "TrialEnding": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "trial_ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Trial Ends At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "company_id",
+          "name",
+          "trial_ends_at"
+        ],
+        "title": "TrialEnding"
       },
       "Uncertainty": {
         "properties": {

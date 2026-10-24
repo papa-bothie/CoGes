@@ -236,7 +236,8 @@ avertit seulement en local et en préproduction. Redis Cloud : *Database* → *C
 | Filtre | `COGES_ADMIN_ALLOWED_IPS` (IP ou CIDR séparées par des espaces) : bloc `@admin_allowed remote_ip` du Caddyfile, 403 sinon ; ajout d'une adresse : `docs/runbooks/vps.md` |
 | API | `/api/v1/platform/*`, servi **seulement** sur `admin.` ; 404 sur le domaine commerçant |
 | Base | rôle `coges_app_platform`, DSN `COGES_DATABASE_URL_PLATFORM` (API) |
-| E-mails | `COGES_SMTP_HOST`, `_PORT`, `_USERNAME`, `_PASSWORD`, `_FROM` (worker) ; `COGES_PLATFORM_ALERT_EMAIL` reçoit les échecs de connexion répétés ; sans hôte, aucun envoi |
+| E-mails | `COGES_SMTP_HOST`, `_PORT`, `_USERNAME`, `_PASSWORD`, `_FROM` (worker ; `COGES_SMTP_HOST` aussi pour l'API, qui sait ainsi si une invitation part par e-mail) ; `COGES_PLATFORM_ALERT_EMAIL` reçoit les échecs de connexion répétés ; sans hôte, aucun envoi et le lien d'invitation est montré une fois dans l'administration |
+| Liens d'invitation | `COGES_ADMIN_URL` (API et worker), posée par le compose à `https://admin.<COGES_DOMAIN>` ; `http://localhost:3200` par défaut en local (ADR 0094) |
 
 **Deux accès, deux usages.** `COGES_OPS_TOKEN` reste la voie **machine à machine**
 (`make ops-status`, sonde, futur script) : un jeton unique, sans personne derrière, qui
