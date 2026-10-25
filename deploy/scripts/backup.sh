@@ -8,6 +8,10 @@
 # Le dump en clair ne touche jamais un disque : il passe d'un processus à l'autre par un
 # tube. La clé PRIVÉE age n'est jamais ici : le workflow ne peut pas relire ce qu'il écrit.
 #
+# pg_dump refuse un serveur d'une version majeure plus récente : la version est vérifiée
+# avant le dump, et le manifeste note celle du serveur et celle de pg_dump, pour savoir
+# avec quel client restaurer (ADR 0095).
+#
 # Variables (secrets GitHub) :
 #   BACKUP_DATABASE_URL   DSN du rôle coges_backup, sslmode=require
 #   BACKUP_AGE_RECIPIENT  clé publique age (age1…)
@@ -60,17 +64,33 @@ NAME="coges-$(date -u +%Y-%m-%d-%H%M).dump.age"
 FILE="$WORKDIR/$NAME"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-echo "0/4 — manifeste : lignes des tables clés, comptées avant le dump"
+echo "0/4 — versions, puis manifeste : lignes des tables clés, comptées avant le dump"
+# « pg_dump (PostgreSQL) 18.1 (Ubuntu 18.1-1.pgdg24.04+1) » → 18.1
+dump_version=$(pg_dump --version | sed -nE 's/^pg_dump \(PostgreSQL\) ([0-9][0-9a-z.]*).*/\1/p')
+dump_major=${dump_version%%[!0-9]*}
+[[ -n "$dump_major" ]] || fail "version de pg_dump illisible (client PostgreSQL installé ?)"
+# Base injoignable : psql dit pourquoi sur stderr, et le contrôle ci-dessous échoue.
+IFS=$'\t' read -r server_num server_version < <(psql "$BACKUP_DATABASE_URL" -X -A -t -F $'\t' \
+  -v ON_ERROR_STOP=1 -c "SELECT current_setting('server_version_num'), current_setting('server_version')") \
+  || true
+[[ "${server_num:-}" =~ ^[0-9]{5,6}$ ]] || fail "version du serveur illisible (« ${server_num:-} »)"
+server_major=$((server_num / 10000))
+server_version=${server_version%% *}
+# Un pg_dump plus récent que le serveur sait le lire ; jamais l'inverse.
+((dump_major >= server_major)) \
+  || fail "pg_dump $dump_major trop ancien pour un serveur $server_major : installer postgresql-client-$server_major"
+echo "    serveur $server_version, pg_dump $dump_version"
 # Ces tables ne perdent jamais de ligne : la base restaurée doit en avoir au moins
 # autant (verify_restore.py, ADR 0088).
 psql "$BACKUP_DATABASE_URL" -X -A -t -F $'\t' -v ON_ERROR_STOP=1 \
   -c "$(python3 "$SCRIPT_DIR/verify_restore.py" --print-manifest-query)" \
   | python3 -c 'import json,sys
 rows=[line.split("\t") for line in sys.stdin.read().splitlines() if line]
-print(json.dumps({"tables": {table: int(count) for table, count in rows}}, sort_keys=True))' \
-  >"$FILE.manifest.json"
+print(json.dumps({"pg_dump_version": sys.argv[1], "server_version": sys.argv[2],
+                  "tables": {table: int(count) for table, count in rows}}, sort_keys=True))' \
+    "$dump_version" "$server_version" >"$FILE.manifest.json"
 
-echo "1/4 — pg_dump $(pg_dump --version | awk '{print $NF}') chiffré par age → $NAME"
+echo "1/4 — pg_dump $dump_version chiffré par age → $NAME"
 pg_dump --format=custom --no-password --dbname="$BACKUP_DATABASE_URL" \
   | age --encrypt --recipient "$BACKUP_AGE_RECIPIENT" --output "$FILE"
 size=$(stat -c %s "$FILE")

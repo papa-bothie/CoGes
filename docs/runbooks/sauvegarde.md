@@ -15,6 +15,81 @@ garder la clé sans laquelle elles ne servent à rien.
 | Alerte | Healthchecks.io, délai de grâce 26 h | e-mail si aucune sauvegarde réussie depuis 26 h |
 | Clé de déchiffrement (clé PRIVÉE age) | **chez vous seulement** : gestionnaire de mots de passe + copie hors ligne | — |
 
+## Mise en service (une fois, par le propriétaire)
+
+À faire dans cet ordre. Rien de ceci n'est dans le dépôt : ce sont des comptes, des clés
+et des réglages GitHub. Tant que l'étape 4 n'est pas faite, le workflow « Sauvegarde »
+échoue chaque nuit sur « BACKUP_DATABASE_URL manquant » : ce n'est pas un bug.
+
+1. **Stockage externe en Europe**, hors Neon. Un bucket privé (par ex.
+   `coges-sauvegardes`), et **deux clés distinctes** limitées à ce bucket :
+   - clé de **sauvegarde** : écriture, liste et lecture (le script relit le fichier envoyé
+     pour comparer son sha256), **sans suppression** ;
+   - clé de **purge** : liste et suppression, pour le workflow « Sauvegarde — purge »
+     seulement.
+
+   Backblaze B2 est conseillé : ses *Application Keys* se limitent à un bucket et à des
+   droits précis (`listBuckets`, `listFiles`, `readFiles`, `writeFiles`, sans
+   `deleteFiles` pour la clé de sauvegarde). Région européenne : `eu-central-003`
+   (Amsterdam). Les jetons R2 de Cloudflare « Object Read & Write » incluent la
+   suppression : avec R2, préférer une règle de cycle de vie à la clé de purge.
+2. **Clé age** : voir la section suivante. Clé publique → secret GitHub
+   `BACKUP_AGE_RECIPIENT` ; clé privée → gestionnaire de mots de passe **et** copie hors
+   ligne, puis effacée du poste.
+3. **DSN de `coges_backup`** sur l'**hôte direct** de Neon (le nom d'hôte **sans**
+   `-pooler`) : `pg_dump` passe mal par un pooler en mode transaction. Toujours
+   `sslmode=require`.
+   ```bash
+   DSN='postgresql://coges_backup:<mot de passe>@ep-xxx.eu-central-1.aws.neon.tech/coges?sslmode=require'
+   psql "$DSN" -c "SELECT count(*) FROM companies"   # doit être > 0
+   psql "$DSN" -c "SHOW server_version"              # 18.x
+   ```
+   Un résultat à 0 signifie que le rôle ne passe pas la RLS (BYPASSRLS manquant :
+   `deploy/sql/create_backup_role.sql`).
+4. **Environnements GitHub** (Settings → Environments), chacun limité à la branche
+   `main` (*Deployment branches* : *Selected branches* → `main`).
+
+   Environnement `backup` :
+
+   | Nom | Type | Exemple (factice) |
+   |---|---|---|
+   | `BACKUP_DATABASE_URL` | secret | le DSN de l'étape 3 |
+   | `BACKUP_AGE_RECIPIENT` | secret | `age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs0example` |
+   | `BACKUP_S3_ACCESS_KEY_ID` | secret | B2 : `003a1b2c3d4e5f60000000001` (keyID) ; R2 : `0123456789abcdef0123456789abcdef` |
+   | `BACKUP_S3_SECRET_ACCESS_KEY` | secret | B2 : `K003exempleexempleexempleexempl` (applicationKey) ; R2 : la clé secrète du jeton |
+   | `BACKUP_PING_URL` | secret | `https://hc-ping.com/0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0` |
+   | `BACKUP_S3_PROVIDER` | variable | B2 : `Other` ; R2 : `Cloudflare` |
+   | `BACKUP_S3_ENDPOINT` | variable | B2 : `https://s3.eu-central-003.backblazeb2.com` ; R2 : `https://<ACCOUNT_ID>.eu.r2.cloudflarestorage.com` |
+   | `BACKUP_S3_REGION` | variable | B2 : `eu-central-003` ; R2 : `auto` |
+   | `BACKUP_REMOTE_PATH` | variable | `coges-sauvegardes/prod` (bucket/préfixe) |
+
+   `BACKUP_S3_PROVIDER` est une valeur de rclone (option `provider` du stockage `s3`,
+   <https://rclone.org/s3/>) : `Cloudflare` existe ; rclone n'a **pas** de valeur
+   « Backblaze » pour le S3, B2 passe par `Other`. L'adresse R2 en `.eu.` correspond à
+   un bucket créé en juridiction UE ; sans juridiction, c'est
+   `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`.
+
+   Environnement `backup-purge` : secrets `BACKUP_PURGE_S3_ACCESS_KEY_ID` et
+   `BACKUP_PURGE_S3_SECRET_ACCESS_KEY` (la clé de purge), et les **mêmes variables**
+   `BACKUP_S3_PROVIDER`, `BACKUP_S3_ENDPOINT`, `BACKUP_S3_REGION`, `BACKUP_REMOTE_PATH`.
+5. **Healthchecks.io** : un contrôle « coges-sauvegarde », période 1 jour, **grâce 26 h**,
+   alerte par e-mail. Son URL de ping → `BACKUP_PING_URL`. Le script appelle l'URL en cas
+   de succès et `<URL>/fail` en cas d'échec.
+6. **Premier lancement** : Actions → « Sauvegarde » → *Run workflow* (branche `main`).
+   Dans le journal : « serveur 18.x, pg_dump 18.x », puis « taille et sha256
+   identiques » et « Sauvegarde … : OK ». Dans le bucket, sous `BACKUP_REMOTE_PATH`,
+   **trois fichiers** : `coges-AAAA-MM-JJ-HHMM.dump.age`, `….dump.age.sha256` et
+   `….dump.age.manifest.json` (ce dernier porte `server_version`, `pg_dump_version` et les
+   lignes des tables clés). Healthchecks.io passe au vert.
+7. **Premier exercice de restauration**, chronométré, sur une **branche Neon jetable**
+   (console Neon → Branches → *Create branch*, puis une base vide `coges_secours`) :
+   section « Restaurer pas à pas », puis remplir le tableau de l'« Exercice de
+   restauration ». Faire aussi un exercice de PITR Neon (branche à un instant passé) :
+   l'offre actuelle ne garde que **6 h** d'historique. Supprimer la branche ensuite.
+8. **Une semaine plus tard** : Actions → « Sauvegarde — purge » → *Run workflow*, case
+   « Lister seulement » cochée (essai à blanc). Vérifier la liste « à supprimer » : avec
+   moins de 8 sauvegardes, elle doit être **vide**.
+
 ## La clé privée age : sans elle, les sauvegardes sont inutilisables
 
 1. Sur votre poste : `age-keygen -o coges-backup.key`. La ligne « Public key: age1… » est
@@ -34,13 +109,33 @@ garder la clé sans laquelle elles ne servent à rien.
 | Suppression ou erreur de saisie il y a moins de quelques heures | rien | **PITR de Neon** : branche à l'instant d'avant (console Neon → Branches → Restore) |
 | Erreur découverte après la fenêtre PITR | ce qui a été fait depuis la sauvegarde choisie | cette copie : la sauvegarde de la nuit d'avant l'erreur |
 | Neon perdu (incident long, projet supprimé) | au plus une journée (depuis 02 h 15 UTC) | cette copie, restaurée sur un nouveau projet Neon |
-| Compte Neon bloqué (facture, fraude) | idem | cette copie, sur un autre compte Neon ou un autre PostgreSQL 16 |
+| Compte Neon bloqué (facture, fraude) | idem | cette copie, sur un autre compte Neon ou un autre PostgreSQL 18 |
 
 ## Restaurer pas à pas
 
-Il vous faut : la clé privée, un poste avec `age`, `rclone` et le client PostgreSQL 16
-(`sudo apt install age rclone postgresql-client-16`), le dépôt CoGes, et un accès en
-lecture au stockage.
+Il vous faut : la clé privée, un poste avec `age`, `rclone` et le client PostgreSQL 18
+(voir « Client PostgreSQL » ci-dessous), le dépôt CoGes, et un accès en lecture au
+stockage. **Restaurer avec un client au moins de la version indiquée dans le manifeste**
+(`pg_dump_version` du `.manifest.json`) : `restore_backup.sh` refuse un `pg_restore` plus
+ancien (ADR 0095).
+
+### Client PostgreSQL
+
+La production Neon est en **PostgreSQL 18**. `pg_dump` refuse un serveur d'une version
+majeure plus récente que lui, et `pg_restore` une archive d'un `pg_dump` plus récent.
+
+- Ubuntu ou Debian (le dépôt d'Ubuntu 24.04 n'a que le 16) :
+  ```bash
+  sudo apt install -y postgresql-common age rclone
+  sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+  sudo apt install -y postgresql-client-18
+  export PATH=/usr/lib/postgresql/18/bin:$PATH   # sinon le 16 peut répondre
+  pg_restore --version                            # doit dire 18.x
+  ```
+  Ou, depuis le dépôt : `bash deploy/scripts/install_pg_client.sh 18` (même chose,
+  vérification comprise).
+- macOS : `brew install postgresql@18 age rclone`, puis
+  `export PATH="$(brew --prefix postgresql@18)/bin:$PATH"`.
 
 1. **Choisir** la sauvegarde : `rclone lsf coges:<BACKUP_REMOTE_PATH>` (la plus récente
    AVANT l'incident) — jamais une qui porte un `.suspect` (trop petite, ADR 0088). La
@@ -92,6 +187,9 @@ stockage : elle prouve que les scripts marchent, pas que vous avez la clé.
 1. GitHub → Actions → « Sauvegarde » → dernière exécution : lire l'étape en échec.
 2. Causes habituelles : mot de passe de `coges_backup` changé (secret
    `BACKUP_DATABASE_URL`), clés S3 expirées, quota du stockage atteint, Neon injoignable.
+   « pg_dump N trop ancien pour un serveur M » : Neon est passé à une version majeure
+   plus récente ; changer `PG_CLIENT_MAJOR` dans `.github/workflows/backup.yml` (et les
+   autres fichiers listés par l'ADR 0095).
 3. « moins de 0.5 fois la précédente » : la sauvegarde est envoyée mais suspecte. Vérifier
    la base **avant tout** (données supprimées ?) ; si c'est normal (grosse purge
    volontaire), relancer le workflow à la main.

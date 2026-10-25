@@ -3,7 +3,7 @@
 Logiciel de gestion pour PME ouest-africaines, centré sur le cycle **vente → stock →
 argent → décision**. Interface en français, montants en FCFA.
 
-- **Backend** : FastAPI, SQLAlchemy 2, Alembic, PostgreSQL 16 (Neon), multi-entreprise
+- **Backend** : FastAPI, SQLAlchemy 2, Alembic, PostgreSQL 18 (Neon), multi-entreprise
   isolé par RLS ; asynchrone par outbox → Redis → Celery.
 - **Frontend** : Next.js (App Router), TypeScript, qui n'appelle que `/api/v1`.
 - **Hébergement** : un VPS en Docker derrière Caddy (front, API, Redis, worker, beat,

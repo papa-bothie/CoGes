@@ -72,3 +72,43 @@ def test_jobs_with_secrets_run_only_from_main_or_a_tag(workflow: str, job: str) 
     assert all(part in condition for part in MAIN_OR_TAG), (
         f"{workflow} / {job} lit des secrets depuis n'importe quelle branche : « {condition} »"
     )
+
+
+# ------------------------------------------- version majeure de PostgreSQL (ADR 0095)
+#
+# pg_dump refuse un serveur d'une version majeure plus récente : la sauvegarde, la CI et
+# le poste suivent la production Neon. Une montée de version change UNE valeur par
+# fichier ; ce test refuse qu'elles divergent, ou qu'une version soit écrite en dur.
+
+REPO = WORKFLOWS.parents[1]
+
+
+def _postgres_majors() -> dict[str, str]:
+    ci_job = _load("ci.yml")["jobs"]["database"]
+    compose = yaml.safe_load((REPO / "docker-compose.yml").read_text(encoding="utf-8"))
+    image = compose["services"]["postgres"]["image"]
+    match = re.fullmatch(r"postgres:(\d+)-alpine", image)
+    assert match, f"image locale inattendue : {image}"
+    (ci_major,) = ci_job["strategy"]["matrix"]["postgres"]
+    return {
+        "backup.yml (PG_CLIENT_MAJOR)": str(_load("backup.yml")["env"]["PG_CLIENT_MAJOR"]),
+        "ci.yml (matrix.postgres)": str(ci_major),
+        "docker-compose.yml": match.group(1),
+    }
+
+
+def test_backup_ci_and_local_follow_the_same_postgres_major() -> None:
+    majors = _postgres_majors()
+    assert len(set(majors.values())) == 1, f"versions majeures divergentes : {majors}"
+    assert set(majors.values()) == {"18"}, f"la production Neon est en 18 : {majors}"
+
+
+def test_no_postgres_version_is_hardcoded_in_workflows() -> None:
+    ci = _load("ci.yml")["jobs"]["database"]
+    assert ci["services"]["postgres"]["image"] == "postgres:${{ matrix.postgres }}"
+    for name in ("ci.yml", "backup.yml"):
+        text = (WORKFLOWS / name).read_text(encoding="utf-8")
+        assert not re.search(r"postgresql-client-\d", text), f"{name} : client figé en dur"
+        assert not re.search(r"image: postgres:\d", text), f"{name} : image figée en dur"
+    backup = (WORKFLOWS / "backup.yml").read_text(encoding="utf-8")
+    assert 'install_pg_client.sh "$PG_CLIENT_MAJOR"' in backup

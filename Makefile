@@ -16,20 +16,24 @@ ADMIN_PNPM := pnpm --dir frontend-admin
 API_PORT ?= 8000
 COGES_API_URL ?= http://localhost:$(API_PORT)
 
-.PHONY: help install up down logs psql migrate test test-tenancy test-perf lint format security-scan shellcheck invariants dev api worker relay ops-status seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front admin-install admin-dev admin-api admin-check admin-e2e admin-lighthouse e2e-admin create-platform-user
+.PHONY: help install up down db-upgrade-18 logs psql migrate test test-tenancy test-perf lint format security-scan shellcheck invariants dev api worker relay ops-status seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front admin-install admin-dev admin-api admin-check admin-e2e admin-lighthouse e2e-admin create-platform-user
 
 help: ## Liste les cibles disponibles
-	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+	@grep -hE '^[a-z0-9-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 install: ## Installe les dépendances Python et les hooks de pré-commit
 	uv sync --directory backend
 	$(UV) pre-commit install
 
-up: ## Démarre PostgreSQL 16 et Redis 7 et attend leur bonne santé
+up: ## Démarre PostgreSQL 18 et Redis 7 et attend leur bonne santé
 	docker compose up -d --wait
 
 down: ## Arrête les services (les volumes sont conservés)
 	docker compose down
+
+db-upgrade-18: ## Recopie la base locale 16 dans le volume 18 (une fois ; l'ancien volume est gardé)
+	bash deploy/scripts/local_pg_upgrade.sh
+	docker compose up -d --wait
 
 logs: ## Suit les journaux des services
 	docker compose logs -f

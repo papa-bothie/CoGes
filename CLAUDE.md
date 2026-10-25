@@ -12,7 +12,7 @@
 CoGes est un **logiciel de gestion pour PME ouest-africaines** (pas un ERP), centré sur le cycle
 **vente → stock → argent → décision**. Tout ce qui n'est pas nécessaire à ce cycle est hors V1.
 
-- **Backend** : monolithe modulaire **FastAPI + SQLAlchemy 2 + Alembic + PostgreSQL 16**.
+- **Backend** : monolithe modulaire **FastAPI + SQLAlchemy 2 + Alembic + PostgreSQL 18** (version majeure de la production Neon, suivie par la CI, le poste et la sauvegarde, ADR 0095).
 - **Asynchrone** : outbox transactionnelle `business_events` → relais → **Redis** → **Celery** (Docker).
 - **Frontend** : **Next.js (App Router) + TypeScript**, qui n'appelle **que** l'API REST `/api/v1`.
   L'administration de la plateforme est une application à part, `frontend-admin/` (ADR 0089).
@@ -153,7 +153,8 @@ Toutes les cibles s'exécutent depuis la **racine** du dépôt et délèguent au
 cp .env.example .env         # une fois, puis remplacer les valeurs
 make install                 # uv sync + installation des hooks pre-commit
 make dev                     # API + worker + relais + front ensemble (honcho, Procfile.dev)
-make up / make down          # PostgreSQL 16 + Redis 7 en local (docker compose, --wait)
+make up / make down          # PostgreSQL 18 + Redis 7 en local (docker compose, --wait)
+make db-upgrade-18           # poste d'avant l'ADR 0095 : après ce lot, lancer make db-upgrade-18 ou make up && make migrate && make seed-demo
 make logs / make psql        # journaux des services / psql en coges_app sur coges
 make migrate                 # alembic upgrade head (rôle propriétaire, jamais au boot de l'API)
 make test                    # pytest (toutes suites, sauf le marqueur perf)
@@ -248,6 +249,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | Lot admin 4 : accès support encadré | `25-admin-support-encadre.md` | admin 1 | jeton expiré ou fermé refusé à la requête suivante, aucune écriture acceptée, bandeau et journal, isolation, e2e bris de glace complet | ✅ PR n° 35 : ADR 0092, révision 0029, 1949 tests backend, 267 + 32 Vitest, 69 + 8 e2e |
 | Lot admin 5 : statistiques | `26-admin-statistiques.md` | admin 1 et 3 | revenu bougé par un paiement seulement, invariant statuts = total, routes classées, e2e de l'écran | ✅ PR n° 36 : ADR 0093, sans révision, 1977 tests backend, 267 + 39 Vitest, 69 + 9 e2e ; l'administration couvre les cinq volets (entreprises, abonnements, système, support, statistiques) |
 | Lot admin 6 : interface et accès de l'équipe | `27-admin-interface-et-acces.md` | admin 1 à 5 | invitation (jeton haché, usage unique, renvoi), dernier administrateur, soi-même, support sans écriture, journal sans secret, registre des profils ; partie B : parcours D1 chronométrés, axe clair et sombre, 360 px, Lighthouse | 🟨 partie A ✅ PR n° 37 (ADR 0094, révision 0030, 2046 tests backend) ; partie B (interface) PR n° 38 : thème CoGes et repère ardoise, 6 tâches chronométrées (2, 2, 3, 2, 1, 0 action), 65 Vitest et 20 e2e admin, axe clair et sombre, 360 px, Lighthouse 100 |
+| Sauvegarde sur PostgreSQL 18 | prompt 20 du suivi de production | `main` | pg_dump 16 + serveur 18 refusé avec ping /fail, manifeste à deux versions, pg_restore trop ancien refusé, CI et poste en 18, chaîne complète verte sur 18 | 🟨 PR n° 39 : ADR 0095, sans révision ; `make db-upgrade-18` sur le poste après fusion |
 
 ## 9. Journal des décisions
 
@@ -347,6 +349,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0092 | 2026-10-24 | **Accès support encadré, lot admin 4** (révision 0029) : bris de glace (motif obligatoire, 2 h par défaut, 4 h au plus, une session par entreprise), jeton tenant `via_support_session` relu à chaque requête (fermé ou échu ⇒ 401 `support_session_ended`), lecture seule par trois verrous (GET/HEAD seuls, transaction `READ ONLY`, rôle `support_readonly` en code, jamais en base) ; `coges_app` lit 5 colonnes de `support_sessions` ; journal plateforme **et** journal de l'entreprise, gérant prévenu (e-mail + cloche `support_access`), bandeau pour tous ; « Voir l'entreprise » ouvre le front commerçant (jeton dans le fragment, `COGES_MERCHANT_URL`) ; consentement du gérant reporté | `docs/decisions/0092-acces-support-encadre.md` |
 | 0093 | 2026-10-24 | **Statistiques, lot admin 5** (sans révision ni droit nouveau) : `GET /platform/stats/overview` (statuts, comptes actifs, offres avec les essais à part, une seule requête), `revenue` (paiements **déclarés** seulement, mois en cours, précédent ou 366 jours au plus, heure de Dakar), `signups` (12 mois ou 52 semaines, vides à 0) ; administrateur et support ; écran « Statistiques » daté, barres CSS + tableau | `docs/decisions/0093-statistiques-de-la-plateforme.md` |
 | 0094 | 2026-10-24 | **Équipe et accès, lot admin 6** (révision 0030) : `platform_invitations` (empreinte seule, `issue` par renvoi, 72 h, une en attente par adresse), jeton **tiré par le worker** après COMMIT (sans SMTP : lien montré une fois), acceptation publique freinée, même réponse pour tout lien invalide ; `PATCH /team/{id}` jamais sur soi, toujours un administrateur actif (verrou), suspension = sessions révoquées ; `/users` commerçants en lecture seule, `/audit` (administrateur, `diff` en liste blanche), `/roles` déduit des dépendances (registre), `/attention` ; `COGES_ADMIN_URL` ; partie B : thème CoGes (amende 0089), repère « Administration » en **encre ardoise** (`#1e2320`), menu latéral et recherche « / », tableau de bord « À traiter », confirmation unique, tâches chronométrées en e2e | `docs/decisions/0094-equipe-et-acces-de-l-administration.md` |
+| 0095 | 2026-10-25 | **La sauvegarde suit la version majeure de la production** (Neon en 18 ; pg_dump refuse un serveur plus récent) : client PGDG figé (`PG_CLIENT_MAJOR`, `install_pg_client.sh`), garde-fou de version dans `backup.sh` (ping `/fail`) et `restore_backup.sh`, manifeste à `server_version`/`pg_dump_version` ; CI (`matrix.postgres`) et poste (`postgres:18-alpine`, volume `coges_pgdata18`, `make db-upgrade-18`) en 18, concordance testée | `docs/decisions/0095-la-sauvegarde-suit-la-version-majeure-de-la-production.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043 puis 0091) ; reste **P7**

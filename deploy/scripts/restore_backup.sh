@@ -14,7 +14,9 @@
 #     antérieure à l'ADR 0088) ;
 #   • COGES_PRODUCTION_DB_HOST non donné, ou cible sur cet hôte : on ne restaure jamais
 #     par-dessus la production ;
-#   • base cible non vide (une table dans le schéma public).
+#   • base cible non vide (une table dans le schéma public) ;
+#   • pg_restore d'une version majeure plus ancienne que le pg_dump noté dans le
+#     manifeste (ADR 0095 ; manifeste sans version : avertissement seulement).
 #
 # Le déchiffrement passe par un tube vers pg_restore : la sauvegarde en clair ne touche
 # jamais le disque. La clé privée est lue depuis le fichier donné, jamais copiée.
@@ -55,6 +57,26 @@ if [[ ! -f "$MANIFEST" ]]; then
   [[ "${RESTORE_WITHOUT_MANIFEST:-0}" == 1 ]] \
     || die "manifeste absent : $MANIFEST (RESTORE_WITHOUT_MANIFEST=1 pour une ancienne sauvegarde)"
   manifest_args=()
+fi
+# pg_restore lit les archives des versions précédentes, jamais celles d'une version
+# majeure plus récente : le manifeste dit quel pg_dump a produit le fichier (ADR 0095).
+command -v pg_restore >/dev/null || die "pg_restore introuvable : installer le client PostgreSQL"
+restore_version=$(pg_restore --version | sed -nE 's/^pg_restore \(PostgreSQL\) ([0-9][0-9a-z.]*).*/\1/p')
+restore_major=${restore_version%%[!0-9]*}
+[[ -n "$restore_major" ]] || die "version de pg_restore illisible"
+dump_version=""
+if [[ -f "$MANIFEST" ]]; then
+  dump_version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("pg_dump_version", ""))' "$MANIFEST")
+fi
+if [[ -z "$dump_version" ]]; then
+  echo "AVERTISSEMENT : version de pg_dump inconnue (sauvegarde antérieure à l'ADR 0095) ;" \
+    "pg_restore $restore_version doit être au moins de la version majeure du serveur sauvegardé" >&2
+else
+  dump_major=${dump_version%%[!0-9]*}
+  [[ "$dump_major" =~ ^[0-9]+$ ]] || die "version de pg_dump illisible dans le manifeste : $dump_version"
+  ((restore_major >= dump_major)) \
+    || die "pg_restore $restore_major trop ancien pour une sauvegarde de pg_dump $dump_major : installer postgresql-client-$dump_major"
+  echo "    pg_restore $restore_version, sauvegarde de pg_dump $dump_version"
 fi
 
 echo "2/4 — cible"
