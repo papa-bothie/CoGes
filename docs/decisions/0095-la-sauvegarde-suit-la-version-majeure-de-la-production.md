@@ -112,3 +112,27 @@ neuf : dix rôles, trois bases, aucune erreur).
   masque au lieu de supprimer, et sans cette règle la purge ne libère aucune place.
 - **Secrets posés par `read -rs` et l'entrée standard de `gh`** (guide, étape 4). Le script
   `set_backup_secrets.sh` du propriétaire reste hors du dépôt, à sa demande.
+
+## Complément (2026-10-25, premier exercice de restauration sur Neon)
+
+L'exercice réel sur une branche Neon jetable a échoué en fin de `pg_restore` sur
+`ALTER DEFAULT PRIVILEGES FOR ROLE cloud_admin IN SCHEMA public GRANT ALL ON SEQUENCES TO
+neon_superuser WITH GRANT OPTION` (*permission denied*). Reproduit en local sur 18.6, avec
+un rôle `coges_restorer` non superutilisateur, ainsi qu'un second défaut : sans `CREATE`
+sur `public`, `ALTER FUNCTION … OWNER TO coges_bus` échoue au milieu de la restauration.
+
+- `restore_backup.sh` lit d'abord le sommaire (`pg_restore --list`, premier déchiffrement
+  en tube) ; `restore_toc_filter.py` en retire les entrées `DEFAULT ACL` et `ACL` dont le
+  propriétaire est `cloud_admin`, `neon_superuser` ou `neon_*`, jamais un rôle `coges_*`,
+  et affiche leur nombre et leurs titres ; la restauration suit par `--use-list`
+  (second déchiffrement en tube). Seul le sommaire, sans donnée, passe par un fichier
+  temporaire effacé à la sortie.
+- Base « vide » = aucune table, aucun type, aucune fonction, aucune séquence dans
+  `public`, hors objets d'extension : un essai interrompu se voit, il faut recréer la base.
+- Avant de restaurer : `coges_auth`, `coges_bus`, `coges_ops` et `coges_billing` doivent
+  exister et avoir `USAGE` et `CREATE` sur `public`, sinon refus avec le `GRANT` exact.
+  `backup_chain_check.sh` pose ce `GRANT` comme le guide.
+- Guide : procédure Neon qui a marché (SQL Editor sur `neondb` pour créer `coges_restorer`
+  `LOGIN BYPASSRLS` membre des cinq propriétaires `WITH INHERIT TRUE, SET TRUE`, base créée
+  depuis la console avec `coges_owner` pour propriétaire, `GRANT` sur `public`, client 18,
+  chemin complet, base recréée après tout échec, clé gardée jusqu'au résultat).
