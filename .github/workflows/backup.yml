@@ -18,7 +18,7 @@ name: Sauvegarde
 #   BACKUP_DATABASE_URL     DSN de coges_backup (sslmode=require)
 #   BACKUP_AGE_RECIPIENT    clé publique age (age1…)
 #   BACKUP_S3_ACCESS_KEY_ID / BACKUP_S3_SECRET_ACCESS_KEY   clés d'ÉCRITURE + liste
-#   BACKUP_PING_URL         Healthchecks.io (grâce 26 h), facultatif
+#   BACKUP_PING_URL         Healthchecks.io (période 1 j, grâce 2 h), facultatif
 # variables :
 #   BACKUP_S3_PROVIDER      Cloudflare, Other… (rclone)   BACKUP_S3_ENDPOINT, BACKUP_S3_REGION
 #   BACKUP_REMOTE_PATH      bucket/préfixe, par ex. coges-sauvegardes/prod

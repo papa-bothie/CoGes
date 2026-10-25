@@ -12,7 +12,7 @@ garder la clé sans laquelle elles ne servent à rien.
 |---|---|---|
 | Copie chiffrée de toute la base (`coges-AAAA-MM-JJ-HHMM.dump.age` + `.sha256` + `.manifest.json`) | stockage objet choisi (R2, B2 ou Swiss Backup), dossier `BACKUP_REMOTE_PATH` | chaque nuit à 02 h 15 UTC (workflow « Sauvegarde ») |
 | Rétention | 7 quotidiennes, 4 du dimanche, 12 du 1er du mois | purge le dimanche à 03 h 45 UTC (workflow « Sauvegarde — purge ») |
-| Alerte | Healthchecks.io, délai de grâce 26 h | e-mail si aucune sauvegarde réussie depuis 26 h |
+| Alerte | Healthchecks.io, période 1 jour, délai de grâce 2 h | e-mail si aucune sauvegarde réussie depuis 26 h, ou dès un échec |
 | Clé de déchiffrement (clé PRIVÉE age) | **chez vous seulement** : gestionnaire de mots de passe + copie hors ligne | — |
 
 ## Mise en service (une fois, par le propriétaire)
@@ -25,14 +25,35 @@ et des réglages GitHub. Tant que l'étape 4 n'est pas faite, le workflow « Sau
    `coges-sauvegardes`), et **deux clés distinctes** limitées à ce bucket :
    - clé de **sauvegarde** : écriture, liste et lecture (le script relit le fichier envoyé
      pour comparer son sha256), **sans suppression** ;
-   - clé de **purge** : liste et suppression, pour le workflow « Sauvegarde — purge »
-     seulement.
+   - clé de **purge** : liste, lecture et suppression, pour le workflow « Sauvegarde —
+     purge » seulement (`rclone deletefile` lit d'abord l'en-tête du fichier : sans
+     `readFiles`, B2 répond 403 ; les fichiers sont chiffrés, la lecture ne livre rien).
 
    Backblaze B2 est conseillé : ses *Application Keys* se limitent à un bucket et à des
    droits précis (`listBuckets`, `listFiles`, `readFiles`, `writeFiles`, sans
    `deleteFiles` pour la clé de sauvegarde). Région européenne : `eu-central-003`
    (Amsterdam). Les jetons R2 de Cloudflare « Object Read & Write » incluent la
    suppression : avec R2, préférer une règle de cycle de vie à la clé de purge.
+
+   Avec l'outil `b2` (`uvx --from b2 b2 …` ou `pipx install b2`), connecté par la clé
+   maîtresse du compte, qui ne sert qu'ici :
+   ```bash
+   b2 account authorize      # demande l'applicationKeyId puis la clé, sans les afficher
+   b2 bucket create coges-sauvegardes allPrivate \
+     --default-server-side-encryption SSE-B2 \
+     --lifecycle-rule '{"daysFromHidingToDeleting": 7, "daysFromUploadingToHiding": null, "fileNamePrefix": ""}'
+   b2 key create --bucket coges-sauvegardes coges-backup \
+     listBuckets,listFiles,readFiles,writeFiles
+   b2 key create --bucket coges-sauvegardes coges-backup-purge \
+     listBuckets,listFiles,readFiles,deleteFiles
+   b2 account clear          # oublie la clé maîtresse sur le poste
+   ```
+   Chaque `b2 key create` affiche **une seule fois** le keyID puis la clé : les ranger
+   aussitôt dans le gestionnaire de mots de passe (ce sont les secrets de l'étape 4).
+   La règle de cycle de vie compte : par l'API S3, B2 ne supprime pas un fichier, il le
+   **masque** et garde l'ancienne version. Sans elle, la purge ne libère aucune place ;
+   avec 7 jours, un fichier masqué par erreur (ou par une clé volée) se récupère encore
+   une semaine.
 2. **Clé age** : voir la section suivante. Clé publique → secret GitHub
    `BACKUP_AGE_RECIPIENT` ; clé privée → gestionnaire de mots de passe **et** copie hors
    ligne, puis effacée du poste.
@@ -72,8 +93,21 @@ et des réglages GitHub. Tant que l'étape 4 n'est pas faite, le workflow « Sau
    Environnement `backup-purge` : secrets `BACKUP_PURGE_S3_ACCESS_KEY_ID` et
    `BACKUP_PURGE_S3_SECRET_ACCESS_KEY` (la clé de purge), et les **mêmes variables**
    `BACKUP_S3_PROVIDER`, `BACKUP_S3_ENDPOINT`, `BACKUP_S3_REGION`, `BACKUP_REMOTE_PATH`.
-5. **Healthchecks.io** : un contrôle « coges-sauvegarde », période 1 jour, **grâce 26 h**,
-   alerte par e-mail. Son URL de ping → `BACKUP_PING_URL`. Le script appelle l'URL en cas
+
+   Poser un secret sans qu'il s'affiche ni entre dans l'historique du terminal : le lire
+   avec `read -rs`, puis le passer à `gh` sur l'entrée standard, jamais en argument.
+   ```bash
+   read -rs v && printf '%s' "$v" | gh secret set BACKUP_DATABASE_URL --env backup --repo papa-bothie/CoGes; unset v
+   gh variable set BACKUP_S3_PROVIDER --env backup --repo papa-bothie/CoGes --body Other
+   gh secret list --env backup --repo papa-bothie/CoGes   # noms seulement
+   ```
+   Un script local `deploy/scripts/set_backup_secrets.sh` (hors du dépôt, facultatif)
+   peut enchaîner ces saisies : il ne doit contenir aucune valeur et contrôler, avant
+   tout envoi, que le DSN porte `sslmode=require` sans `-pooler` et que la clé age
+   commence par `age1`.
+5. **Healthchecks.io** : un contrôle « coges-sauvegarde », période 1 jour, **grâce 2 h**,
+   alerte par e-mail. L'alerte part quand période + grâce sont écoulées sans ping (26 h
+   après la dernière sauvegarde réussie), ou dès un ping `/fail`. Son URL de ping → `BACKUP_PING_URL`. Le script appelle l'URL en cas
    de succès et `<URL>/fail` en cas d'échec.
 6. **Premier lancement** : Actions → « Sauvegarde » → *Run workflow* (branche `main`).
    Dans le journal : « serveur 18.x, pg_dump 18.x », puis « taille et sha256

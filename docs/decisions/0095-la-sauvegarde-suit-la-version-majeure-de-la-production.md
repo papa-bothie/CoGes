@@ -98,3 +98,17 @@ neuf : dix rôles, trois bases, aucune erreur).
   § 10) ; le schéma y est le même sous 18.
 - La préproduction Neon `CoGes-preprod` reste en 16 (`deploy/README-infra.md`) : un
   client 18 la sauvegarde et la restaure sans difficulté.
+
+## Complément (2026-10-25, relecture du guide après la mise en service)
+
+- **Grâce Healthchecks.io à 2 h, pas 26 h.** Healthchecks.io alerte quand *période + grâce*
+  sont écoulées sans ping : avec une période d'un jour, la grâce de 26 h écrite au départ
+  n'alertait qu'après 50 h. Période 1 jour + grâce 2 h donne bien « 26 h sans sauvegarde
+  réussie » (guide, en-tête de `backup.yml`).
+- **Clés B2 créées avec l'outil `b2`** (guide, étape 1) : bucket privé chiffré SSE-B2,
+  clé de sauvegarde `listBuckets,listFiles,readFiles,writeFiles`, clé de purge
+  `listBuckets,listFiles,readFiles,deleteFiles` (`rclone deletefile` lit l'en-tête avant
+  de supprimer), règle de cycle de vie `daysFromHidingToDeleting: 7` : par l'API S3, B2
+  masque au lieu de supprimer, et sans cette règle la purge ne libère aucune place.
+- **Secrets posés par `read -rs` et l'entrée standard de `gh`** (guide, étape 4). Le script
+  `set_backup_secrets.sh` du propriétaire reste hors du dépôt, à sa demande.
