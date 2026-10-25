@@ -60,7 +60,10 @@ echo "== base vide coges_restore"
 psql "$RESTORE_ADMIN_URL" -X -q -v ON_ERROR_STOP=1 \
   -c "DROP DATABASE IF EXISTS coges_restore" \
   -c "CREATE DATABASE coges_restore OWNER coges_owner"
-psql "$TARGET" -X -q -v ON_ERROR_STOP=1 -c "REVOKE ALL ON SCHEMA public FROM PUBLIC"
+# Comme sur Neon (docs/runbooks/sauvegarde.md) : les propriétaires des fonctions doivent
+# pouvoir créer dans public, sinon restore_backup.sh refuse avant de restaurer.
+psql "$TARGET" -X -q -v ON_ERROR_STOP=1 -c "REVOKE ALL ON SCHEMA public FROM PUBLIC" \
+  -c "GRANT USAGE, CREATE ON SCHEMA public TO coges_auth, coges_bus, coges_ops, coges_billing"
 
 echo "== restauration et vérifications (restore_backup.sh)"
 COGES_PRODUCTION_DB_HOST=production.invalid \

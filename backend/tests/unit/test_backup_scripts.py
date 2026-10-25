@@ -107,17 +107,38 @@ def _restore(
     target: str,
     *,
     production_host: str | None,
-    psql_says: str = "0",
+    psql_says: str = "0 0 0 0",
+    psql_rights: str = "",
     pg_restore_version: str = "18.1",
+    toc: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    # Un faux `psql` répond au comptage des tables de la cible, un faux `pg_restore` à
-    # `--version` : aucune base requise.
+    # Un faux `psql` répond au comptage des objets de la cible (tables, types, fonctions,
+    # séquences) et au contrôle des droits sur public, un faux `pg_restore` à `--version` :
+    # aucune base requise. Avec `toc`, un faux `age` rend l'archive telle quelle,
+    # `pg_restore --list` rend ce sommaire et `--use-list` recopie la liste reçue dans
+    # `used.list`, à côté de l'archive.
     bin_dir = archive.parent / "bin"
     bin_dir.mkdir(exist_ok=True)
+    used = archive.parent / "used.list"
+    (archive.parent / "toc.list").write_text(toc or "")
     fakes = {
-        "psql": f"#!/bin/sh\necho {psql_says}\n",
-        "pg_restore": f"#!/bin/sh\necho 'pg_restore (PostgreSQL) {pg_restore_version}'\n",
+        "psql": (
+            "#!/bin/sh\n"
+            'case "$*" in *has_schema_privilege*) '
+            f"printf '%s' '{psql_rights}' ;; *) echo '{psql_says}' ;; esac\n"
+        ),
+        "pg_restore": (
+            "#!/bin/sh\n"
+            'case "$1" in\n'
+            f"  --version) echo 'pg_restore (PostgreSQL) {pg_restore_version}' ;;\n"
+            f"  --list) cat >/dev/null; cat '{archive.parent / 'toc.list'}' ;;\n"
+            f'  *) cat >/dev/null; for a; do case "$a" in --use-list=*) '
+            f"cp \"${{a#--use-list=}}\" '{used}' ;; esac; done ;;\n"
+            "esac\n"
+        ),
     }
+    if toc is not None:
+        fakes["age"] = '#!/bin/sh\nfor a; do f="$a"; done\ncat "$f"\n'
     for name, body in fakes.items():
         fake = bin_dir / name
         fake.write_text(body)
@@ -171,10 +192,103 @@ def test_restore_refuses_when_the_production_host_is_unknown(archive: Path) -> N
 
 def test_restore_refuses_a_database_that_is_not_empty(archive: Path) -> None:
     result = _restore(
-        archive, "postgresql://u@secours.local/db", production_host="prod.neon.tech", psql_says="12"
+        archive,
+        "postgresql://u@secours.local/db",
+        production_host="prod.neon.tech",
+        psql_says="12 0 0 0",
     )
     assert result.returncode == 1
     assert "pas vide" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("counts", "what"),
+    [("0 1 0 0", "1 type(s)"), ("0 0 3 0", "3 fonction(s)"), ("0 0 0 2", "2 séquence(s)")],
+)
+def test_restore_refuses_a_database_left_by_a_failed_attempt(
+    archive: Path, counts: str, what: str
+) -> None:
+    """Un essai interrompu laisse des types ou des fonctions sans aucune table."""
+    result = _restore(
+        archive,
+        "postgresql://u@secours.local/db",
+        production_host="prod.neon.tech",
+        psql_says=counts,
+    )
+    assert result.returncode == 1
+    assert "pas vide" in result.stderr
+    assert what in result.stderr
+    assert "recréer" in result.stderr
+
+
+def test_restore_refuses_when_owners_cannot_create_in_public(archive: Path) -> None:
+    result = _restore(
+        archive,
+        "postgresql://u@secours.local/db",
+        production_host="prod.neon.tech",
+        psql_rights="coges_auth droits\ncoges_ops droits\n",
+    )
+    assert result.returncode == 1
+    assert "GRANT USAGE, CREATE ON SCHEMA public TO coges_auth, coges_ops;" in result.stderr
+    assert "restauration" not in result.stdout
+
+
+def test_restore_refuses_when_an_owner_role_is_missing(archive: Path) -> None:
+    result = _restore(
+        archive,
+        "postgresql://u@secours.local/db",
+        production_host="prod.neon.tech",
+        psql_rights="coges_billing absent\n",
+    )
+    assert result.returncode == 1
+    assert "rôle(s) absent(s) de la cible : coges_billing" in result.stderr
+
+
+NEON_TOC = """;
+; Archive created at 2026-10-25 13:27:01 UTC
+;
+3; 2615 2200 SCHEMA - public pg_database_owner
+220; 1259 16390 TABLE public sales coges_owner
+5001; 0 0 ACL - SCHEMA public pg_database_owner
+5002; 0 0 ACL public TABLE sales coges_owner
+5003; 826 16400 DEFAULT ACL public DEFAULT PRIVILEGES FOR SEQUENCES cloud_admin
+5004; 826 16401 DEFAULT ACL public DEFAULT PRIVILEGES FOR TABLES cloud_admin
+5005; 826 16402 DEFAULT ACL - DEFAULT PRIVILEGES FOR FUNCTIONS neon_superuser
+5006; 826 16403 DEFAULT ACL public DEFAULT PRIVILEGES FOR TABLES coges_owner
+5007; 0 0 ACL public FUNCTION auth_lookup(p_login text) coges_auth
+5008; 0 0 ACL - SCHEMA neon neon_service
+"""
+
+
+def test_restore_excludes_neon_internal_acls_and_keeps_coges_ones(archive: Path) -> None:
+    result = _restore(
+        archive, "postgresql://u@secours.local/db", production_host="prod.neon.tech", toc=NEON_TOC
+    )
+    used = (archive.parent / "used.list").read_text()
+    for kept in ("5001;", "5002;", "5006;", "5007;", "220;", "3;"):
+        assert kept in used
+    for excluded in ("5003;", "5004;", "5005;", "5008;"):
+        assert excluded not in used
+    assert "4 entrée(s) interne(s) à Neon exclue(s)" in result.stdout
+    assert "DEFAULT ACL public DEFAULT PRIVILEGES FOR SEQUENCES cloud_admin" in result.stdout
+    lines = result.stdout.splitlines()
+    start = next(i for i, line in enumerate(lines) if "exclue(s)" in line)
+    titles = [line.strip() for line in lines[start + 1 : start + 5]]
+    assert "restauration terminée" in lines[start + 5]
+    assert len(titles) == 4
+    assert not any(title.endswith(("coges_owner", "coges_auth")) for title in titles)
+
+
+def test_toc_filter_never_excludes_a_coges_role() -> None:
+    toc_filter = _load("restore_toc_filter")
+    assert not toc_filter.is_neon_acl(
+        "1; 826 2 DEFAULT ACL public DEFAULT PRIVILEGES FOR TABLES coges_owner"
+    )
+    assert not toc_filter.is_neon_acl("1; 0 0 ACL public TABLE neon_like coges_app")
+    assert not toc_filter.is_neon_acl("1; 1259 3 TABLE public neon_notes cloud_admin")
+    assert toc_filter.is_neon_acl(
+        "1; 826 2 DEFAULT ACL public DEFAULT PRIVILEGES FOR TABLES cloud_admin"
+    )
 
 
 # --------------------------------------------------------------------- sauvegarde

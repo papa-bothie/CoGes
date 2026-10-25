@@ -180,26 +180,60 @@ majeure plus récente que lui, et `pg_restore` une archive d'un `pg_dump` plus r
    rclone copy coges:<chemin>/coges-2026-10-18-0215.dump.age.sha256 .
    rclone copy coges:<chemin>/coges-2026-10-18-0215.dump.age.manifest.json .
    ```
-2. **Préparer une base vide**, JAMAIS la production :
-   - Neon : nouvelle branche (ou nouveau projet) → base `coges_secours`. Sur un projet
-     neuf, lancer d'abord la création des rôles (`deploy/postgres/init/01-roles.sql` adapté,
-     voir `deploy/README-infra.md`, « Rôles PostgreSQL ») puis
-     `deploy/sql/create_backup_role.sql`. L'utilisateur qui restaure doit pouvoir
-     emprunter les rôles propriétaires : `GRANT coges_owner, coges_auth, coges_bus,
-     coges_ops, coges_billing TO neondb_owner;` sur cette cible seulement (et
-     `deploy/sql/create_billing_role.sql` d'abord, ADR 0091).
-   - Local : `make up`, puis `CREATE DATABASE coges_secours OWNER coges_owner`.
-3. **Restaurer et vérifier** :
+2. **Préparer une base vide**, JAMAIS la production. Sur Neon (procédure de l'exercice
+   du 2026-10-25, PostgreSQL 18) :
+   1. Console Neon → *Branches* → nouvelle branche **jetable** depuis la production : elle
+      reprend les rôles `coges_*`. (Projet neuf : créer d'abord les rôles,
+      `deploy/postgres/init/01-roles.sql` adapté, voir `deploy/README-infra.md`, « Rôles
+      PostgreSQL », puis `deploy/sql/create_backup_role.sql` et
+      `deploy/sql/create_billing_role.sql`.)
+   2. *SQL Editor* de cette branche, base **`neondb`** : l'éditeur se connecte en
+      propriétaire de la base choisie, et c'est `neondb_owner` qui peut créer des rôles.
+      Créer le rôle qui restaure, avec un mot de passe tapé seulement dans l'éditeur :
+      ```sql
+      CREATE ROLE coges_restorer LOGIN BYPASSRLS PASSWORD '…';
+      GRANT coges_owner, coges_auth, coges_bus, coges_ops, coges_billing
+        TO coges_restorer WITH INHERIT TRUE, SET TRUE;
+      ```
+      `BYPASSRLS` : les tables sont en RLS `FORCE`, `pg_restore` les remplit sans filtre.
+      `SET TRUE` : il devient chaque propriétaire le temps de créer ses objets.
+   3. Console → *Databases* → *New database* `coges_secours`, propriétaire **`coges_owner`**.
+   4. *SQL Editor*, base `coges_secours` (donc en `coges_owner`, propriétaire du schéma
+      `public`) :
+      ```sql
+      GRANT USAGE, CREATE ON SCHEMA public TO coges_auth, coges_bus, coges_ops, coges_billing;
+      ```
+      Sans ce droit, `ALTER FUNCTION … OWNER TO coges_bus` échoue au milieu de la
+      restauration ; `restore_backup.sh` le vérifie avant et donne le `GRANT` à lancer.
+   5. **Après tout échec**, supprimer `coges_secours` et la recréer (étapes 3 et 4) : le
+      script refuse une base qui contient déjà une table, un type, une fonction ou une
+      séquence dans `public`.
+
+   En local : `make up`, puis `CREATE DATABASE coges_secours OWNER coges_owner` et le même
+   `GRANT` (en superutilisateur, le rôle `coges_restorer` est inutile).
+3. **Restaurer et vérifier**, avec le client PostgreSQL 18 (PGDG, « Client PostgreSQL »
+   ci-dessus) et le **chemin complet** des fichiers :
    ```bash
+   export PATH=/usr/lib/postgresql/18/bin:$PATH
    COGES_PRODUCTION_DB_HOST=<hôte de la base de production> \
-   deploy/scripts/restore_backup.sh coges-2026-10-18-0215.dump.age ~/coges-backup.key \
-     "postgresql://neondb_owner:…@<hôte de la cible>/coges_secours?sslmode=require"
+   deploy/scripts/restore_backup.sh ~/secours/coges-2026-10-18-0215.dump.age ~/coges-backup.key \
+     "postgresql://coges_restorer:…@<hôte direct de la branche, sans -pooler>/coges_secours?sslmode=require"
    ```
    Le script refuse un fichier abîmé (sha256), un manifeste absent, la base de
-   production et une base non vide. Il déchiffre sans écrire de copie en clair, restaure,
-   puis lance `verify_restore.py` : tout doit être **vert**, y compris « autant de lignes
-   qu'à la sauvegarde ». Une sauvegarde antérieure au manifeste (avant l'ADR 0088) se
-   restaure avec `RESTORE_WITHOUT_MANIFEST=1`.
+   production, une base non vide et des droits manquants sur `public`. Il déchiffre deux
+   fois en tube, sans copie en clair : la première pour lire le sommaire, dont il retire
+   les droits internes à Neon (`DEFAULT ACL` et `ACL` de `cloud_admin`, `neon_superuser`,
+   `neon_*` ; jamais ceux d'un rôle `coges_*`), en affichant leur nombre et leurs titres ;
+   la seconde pour restaurer le reste. Sans ce tri, `ALTER DEFAULT PRIVILEGES FOR ROLE
+   cloud_admin …` arrête tout en « permission denied ». Puis `verify_restore.py` : tout
+   doit être **vert**, y compris « autant de lignes qu'à la sauvegarde ». Une sauvegarde
+   antérieure au manifeste (avant l'ADR 0088) se restaure avec
+   `RESTORE_WITHOUT_MANIFEST=1`.
+
+   **Ne pas effacer la clé privée avant le résultat** : un échec oblige à recommencer.
+   Une fois « tout est vert » affiché (ou l'exercice abandonné), effacer la copie du poste
+   (`shred -u ~/coges-backup.key`), puis supprimer la branche jetable, ce qui supprime
+   aussi `coges_restorer`.
 4. **Basculer** (si on remplace la production) : mettre la nouvelle base dans
    `/etc/coges/coges.env` du VPS (`COGES_DATABASE_URL_*`), redéployer la même version
    (`deploy.sh production <version>`), prévenir les commerçants de la période perdue.
