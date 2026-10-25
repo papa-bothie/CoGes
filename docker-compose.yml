@@ -1,9 +1,10 @@
-# Infrastructure de développement local : PostgreSQL 16 et Redis 7.
+# Infrastructure de développement local : PostgreSQL 18 et Redis 7.
 # En production, ces deux services sont managés (zone B du Diagramme 2).
+# PostgreSQL suit la version majeure de la production Neon (ADR 0095).
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: coges-postgres
     environment:
       POSTGRES_USER: postgres
@@ -17,7 +18,10 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - coges_pgdata:/var/lib/postgresql/data
+      # L'image 18 range ses données sous /var/lib/postgresql/18/docker : le volume se
+      # monte sur /var/lib/postgresql (et non plus …/data). Nouveau volume : un volume
+      # de données 16 ne démarre pas sous 18. `make db-upgrade-18` y recopie l'ancien.
+      - coges_pgdata18:/var/lib/postgresql
       - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d coges"]
@@ -41,5 +45,9 @@ services:
       retries: 10
 
 volumes:
-  coges_pgdata:
+  # Ancien volume PostgreSQL 16, conservé tel quel (jamais supprimé par CoGes) : il est
+  # relu par `make db-upgrade-18`. Après vérification, `docker volume rm
+  # coges_coges_pgdata` le libère.
+  # coges_pgdata:
+  coges_pgdata18:
   coges_redisdata:

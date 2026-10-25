@@ -13,7 +13,7 @@ ADR 0042. Guides : `docs/runbooks/vps.md`, `docs/runbooks/deploiement.md`,
 | API FastAPI | conteneur `api` (uvicorn, 2 processus) | idem | `backend/Dockerfile.api` |
 | Worker, beat, relais, ML | conteneurs `worker`, `beat`, `relay` | idem | `backend/Dockerfile.worker` |
 | Redis 7 | conteneur `redis`, réseau interne, `noeviction` | son propre Redis | `deploy/vps/docker-compose.yml` |
-| PostgreSQL 16 | **Neon** offre payante (Francfort), `sslmode=require` | branche Neon de préprod | `deploy/postgres/init/01-roles.sql` |
+| PostgreSQL 18 | **Neon** offre payante (Francfort, `coges-prod-eu`), `sslmode=require` | branche Neon de préprod | `deploy/postgres/init/01-roles.sql` |
 | Images | `ghcr.io/papa-bothie/coges/{front,api,worker,bundle}` (privé) | mêmes images | `.github/workflows/deploy.yml` |
 | Migrations Alembic | job « Déployer » de GitHub Actions (`coges_owner`) | idem | `.github/workflows/deploy.yml` |
 | Système du VPS | Ubuntu 24.04, ufw, fail2ban, Docker | même machine | `deploy/vps/bootstrap.sh` |
@@ -30,10 +30,28 @@ Aucun service payant n'est ouvert sans accord explicite.
 
 ```bash
 cp .env.example .env     # puis remplacer les valeurs
-make up                  # PostgreSQL 16 + Redis 7, avec healthchecks
+make up                  # PostgreSQL 18 + Redis 7, avec healthchecks
 make migrate             # migrations, rôle propriétaire
 make api                 # http://localhost:8000/api/v1/health
 ```
+
+Le PostgreSQL local suit la version majeure de la production Neon (18, ADR 0095), dans
+le volume `coges_pgdata18` monté sur `/var/lib/postgresql` (l'image 18 n'utilise plus
+`…/data`). **Poste créé avant ce changement** (volume 16 `coges_pgdata`, que l'image 18 ne
+sait pas ouvrir) : au choix
+
+```bash
+make db-upgrade-18       # recopie la base 16 dans le volume 18 (pg_dumpall), vérifie
+                         # chaque table ligne à ligne ; l'ancien volume est GARDÉ
+# ou repartir de zéro :
+make up && make migrate && make seed-demo
+```
+
+`make db-upgrade-18` arrête le conteneur 16, le relance à part sur l'ancien volume, copie
+tout (rôles, bases `coges`, `coges_test`, `coges_e2e`) dans le nouveau, compare, puis
+`make up`. Il refuse si le volume 18 contient déjà des données (un `make up` lancé avant) :
+`docker compose down && docker volume rm coges_coges_pgdata18`, puis relancer. L'ancien
+volume ne se supprime qu'à la main, une fois sûr : `docker volume rm coges_coges_pgdata`.
 
 Si un PostgreSQL ou un Redis tourne déjà sur la machine, `make up` échoue sur
 `address already in use` : changer `POSTGRES_PORT` / `REDIS_PORT` dans `.env` et

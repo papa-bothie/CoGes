@@ -191,6 +191,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Version majeure de PostgreSQL : celle de la production Neon (ADR 0095). Seule
+        # source de vérité du fichier, reprise par le service et par le client installé.
+        # `env` n'est pas lisible dans `services`, la matrice l'est.
+        postgres: ["18"]
         suite:
           - name: Tests d'intégrité T1–T40
             id: integrity
@@ -207,7 +211,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.postgres }}
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: ci-postgres
@@ -225,6 +229,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+
+      # pg_dump refuse un serveur plus récent que lui : le client 16 du runner ne
+      # sauvegarde pas un PostgreSQL 18. Installé avant l'amorçage, qui l'utilise aussi.
+      - name: Client PostgreSQL ${{ matrix.postgres }} (PGDG)
+        if: matrix.suite.id == 'backup'
+        run: bash deploy/scripts/install_pg_client.sh "${{ matrix.postgres }}"
 
       - name: Amorcer les rôles et les bases
         # Même script qu'en local et que sur Neon (README-infra).

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 import os
 import subprocess
 from datetime import date
@@ -94,20 +95,33 @@ def archive(tmp_path: Path) -> Path:
     path.write_bytes(b"contenu chiffre de test")
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     (tmp_path / f"{path.name}.sha256").write_text(f"{digest}  {path.name}\n")
-    (tmp_path / f"{path.name}.manifest.json").write_text('{"tables": {"sales": 3}}\n')
+    (tmp_path / f"{path.name}.manifest.json").write_text(
+        '{"pg_dump_version": "18.1", "server_version": "18.1", "tables": {"sales": 3}}\n'
+    )
     (tmp_path / "test.key").write_text("AGE-SECRET-KEY-TEST\n")
     return path
 
 
 def _restore(
-    archive: Path, target: str, *, production_host: str | None, psql_says: str = "0"
+    archive: Path,
+    target: str,
+    *,
+    production_host: str | None,
+    psql_says: str = "0",
+    pg_restore_version: str = "18.1",
 ) -> subprocess.CompletedProcess[str]:
-    # Un faux `psql` répond au comptage des tables de la cible : aucune base requise.
+    # Un faux `psql` répond au comptage des tables de la cible, un faux `pg_restore` à
+    # `--version` : aucune base requise.
     bin_dir = archive.parent / "bin"
     bin_dir.mkdir(exist_ok=True)
-    fake = bin_dir / "psql"
-    fake.write_text(f"#!/bin/sh\necho {psql_says}\n")
-    fake.chmod(0o755)
+    fakes = {
+        "psql": f"#!/bin/sh\necho {psql_says}\n",
+        "pg_restore": f"#!/bin/sh\necho 'pg_restore (PostgreSQL) {pg_restore_version}'\n",
+    }
+    for name, body in fakes.items():
+        fake = bin_dir / name
+        fake.write_text(body)
+        fake.chmod(0o755)
     env = {"PATH": f"{bin_dir}:{os.environ['PATH']}"}
     if production_host is not None:
         env["COGES_PRODUCTION_DB_HOST"] = production_host
@@ -240,7 +254,9 @@ def test_the_latest_backups_survive_even_when_the_last_week_is_empty() -> None:
 
 _STUBS = {
     "pg_dump": """#!/usr/bin/env bash
-if [[ "${1:-}" == --version ]]; then echo "pg_dump (PostgreSQL) 16.4"; exit 0; fi
+if [[ "${1:-}" == --version ]]; then
+  echo "pg_dump (PostgreSQL) ${FAKE_PG_DUMP_VERSION:-18.1} (Ubuntu 18.1-1.pgdg24.04+1)"; exit 0
+fi
 head -c "${FAKE_DUMP_SIZE:-1000}" /dev/zero
 """,
     "age": """#!/usr/bin/env bash
@@ -258,9 +274,17 @@ folder = path if os.path.isdir(path) else os.path.dirname(path)
 sizes = [{"Name": n, "Size": os.path.getsize(os.path.join(folder, n))} for n in names]
 print(json.dumps(sizes))
 """,
-    # Le comptage des tables clés, avant le dump : « table<TAB>lignes ».
+    # La version du serveur, puis le comptage des tables clés : « table<TAB>lignes ».
     "psql": """#!/usr/bin/env bash
+if [[ "$*" == *server_version_num* ]]; then
+  printf '%s\\t%s\\n' "${FAKE_SERVER_VERSION_NUM:-180001}" "${FAKE_SERVER_VERSION:-18.1}"
+  exit 0
+fi
 printf 'users\\t3\\nsales\\t12\\n'
+""",
+    # Les pings Healthchecks, notés au lieu d'être envoyés.
+    "curl": """#!/usr/bin/env bash
+echo "${@: -1}" >>"$FAKE_PINGS"
 """,
     "rclone": """#!/usr/bin/env bash
 local_path() { echo "$FAKE_REMOTE_ROOT/${1#fake:}"; }
@@ -280,7 +304,7 @@ esac
 
 
 def _run_backup(
-    tmp_path: Path, *, size: int, ratio: str | None = None
+    tmp_path: Path, *, size: int, ratio: str | None = None, **versions: str
 ) -> subprocess.CompletedProcess[str]:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
@@ -296,6 +320,9 @@ def _run_backup(
         "BACKUP_REMOTE": "fake:sauvegardes/prod",
         "FAKE_REMOTE_ROOT": str(tmp_path / "remote"),
         "FAKE_DUMP_SIZE": str(size),
+        "FAKE_PINGS": str(tmp_path / "pings.log"),
+        "BACKUP_PING_URL": "https://hc-ping.invalid/coges",
+        **{f"FAKE_{name.upper()}": value for name, value in versions.items()},
     }
     if ratio is not None:
         env["BACKUP_MIN_RATIO"] = ratio
@@ -389,3 +416,101 @@ def test_retention_deletes_a_manifest_with_its_dump() -> None:
     assert "coges-2025-10-02-0215.dump.age.manifest.json" in retention.to_delete(
         names, date(2026, 10, 17)
     )
+
+
+# ------------------------------------------- version majeure du client (ADR 0095)
+#
+# La production Neon est en PostgreSQL 18 : un pg_dump 16 refuse de la sauvegarder
+# (« aborting because of server version mismatch »). backup.sh le dit avant de dumper,
+# en clair, et prévient Healthchecks.
+
+
+def _pings(tmp_path: Path) -> list[str]:
+    log = tmp_path / "pings.log"
+    return log.read_text(encoding="utf-8").split() if log.exists() else []
+
+
+def _manifest(tmp_path: Path) -> dict[str, object]:
+    folder = tmp_path / "remote" / "sauvegardes" / "prod"
+    (path,) = [p for p in folder.iterdir() if p.name.endswith(".manifest.json")]
+    data: dict[str, object] = json.loads(path.read_text(encoding="utf-8"))
+    return data
+
+
+def test_backup_refuses_a_pg_dump_older_than_the_server(tmp_path: Path) -> None:
+    result = _run_backup(tmp_path, size=1000, pg_dump_version="16.4", server_version_num="180001")
+    assert result.returncode == 1
+    assert "pg_dump 16 trop ancien pour un serveur 18" in result.stderr
+    assert "installer postgresql-client-18" in result.stderr
+    assert _pings(tmp_path) == ["https://hc-ping.invalid/coges/fail"]
+    assert not (tmp_path / "remote").exists(), "rien ne doit partir vers le stockage"
+
+
+def test_a_pg_dump_of_the_server_version_passes(tmp_path: Path) -> None:
+    result = _run_backup(tmp_path, size=1000, pg_dump_version="18.1", server_version_num="180001")
+    assert result.returncode == 0, result.stderr
+    assert _pings(tmp_path) == ["https://hc-ping.invalid/coges"]
+
+
+def test_a_pg_dump_newer_than_the_server_passes(tmp_path: Path) -> None:
+    result = _run_backup(
+        tmp_path,
+        size=1000,
+        pg_dump_version="18.1",
+        server_version_num="160010",
+        server_version="16.10",
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_an_unreadable_server_version_fails(tmp_path: Path) -> None:
+    result = _run_backup(tmp_path, size=1000, server_version_num="inconnu")
+    assert result.returncode == 1
+    assert "version du serveur illisible" in result.stderr
+
+
+def test_the_manifest_records_both_versions(tmp_path: Path) -> None:
+    result = _run_backup(tmp_path, size=1000, pg_dump_version="18.1", server_version="18.0")
+    assert result.returncode == 0, result.stderr
+    manifest = _manifest(tmp_path)
+    assert manifest["server_version"] == "18.0"
+    assert manifest["pg_dump_version"] == "18.1"
+    assert manifest["tables"] == {"sales": 12, "users": 3}
+
+
+def test_restore_refuses_a_pg_restore_older_than_the_pg_dump(archive: Path) -> None:
+    result = _restore(
+        archive,
+        "postgresql://u@secours.local/db",
+        production_host="prod.neon.tech",
+        pg_restore_version="16.4",
+    )
+    assert result.returncode == 1
+    assert "pg_restore 16 trop ancien pour une sauvegarde de pg_dump 18" in result.stderr
+    assert "installer postgresql-client-18" in result.stderr
+
+
+def test_restore_accepts_a_pg_restore_of_the_same_major(archive: Path) -> None:
+    result = _restore(
+        archive,
+        "postgresql://u@secours.local/db",
+        production_host="prod.neon.tech",
+        pg_restore_version="18.0",
+    )
+    # Le faux psql dit « base vide » ; la suite échoue plus loin (faux age), pas ici.
+    assert "trop ancien" not in result.stderr
+    assert "base vide" in result.stdout
+
+
+def test_restore_warns_when_the_manifest_has_no_version(archive: Path) -> None:
+    """Sauvegarde antérieure à l'ADR 0095 : on prévient, on ne bloque pas."""
+    Path(f"{archive}.manifest.json").write_text('{"tables": {"sales": 3}}\n')
+    result = _restore(
+        archive,
+        "postgresql://u@secours.local/db",
+        production_host="prod.neon.tech",
+        pg_restore_version="16.4",
+    )
+    assert "AVERTISSEMENT" in result.stderr
+    assert "version de pg_dump inconnue" in result.stderr
+    assert "base vide" in result.stdout

@@ -4,9 +4,15 @@ name: Sauvegarde
 # continue si le VPS tombe, et aucun accès « lecture de toute la base » n'y est déposé.
 #
 # Chaque nuit à 02 h 15 UTC (hors des tâches de beat.py qui écrivent beaucoup), et à la
-# main. pg_dump 16 (même version majeure que Neon) → age (clé PUBLIQUE seulement) →
-# stockage objet S3 hors Neon, par rclone, avec des clés d'écriture et de liste, sans
-# droit de suppression. Le dump en clair ne touche jamais un disque ni un artefact.
+# main. pg_dump → age (clé PUBLIQUE seulement) → stockage objet S3 hors Neon, par rclone,
+# avec des clés d'écriture et de liste, sans droit de suppression. Le dump en clair ne
+# touche jamais un disque ni un artefact.
+#
+# pg_dump refuse un serveur d'une version majeure plus récente que lui : le client suit
+# la version majeure de la production Neon (PostgreSQL 18), installé depuis le dépôt
+# officiel PGDG et figé dans PG_CLIENT_MAJOR ci-dessous, jamais « latest » (ADR 0095).
+# Monter la production de version = changer cette variable, celle de ci.yml et l'image
+# de docker-compose.yml (un test vérifie qu'elles concordent).
 #
 # Environnement GitHub `backup`, secrets :
 #   BACKUP_DATABASE_URL     DSN de coges_backup (sslmode=require)
@@ -29,6 +35,10 @@ concurrency:
   group: backup
   cancel-in-progress: false
 
+env:
+  # Version majeure du client PostgreSQL : celle de la production Neon (ADR 0095).
+  PG_CLIENT_MAJOR: "18"
+
 jobs:
   backup:
     name: pg_dump chiffré vers le stockage externe
@@ -40,12 +50,20 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
-      # Ubuntu 24.04 : postgresql-client-16 (même version majeure que Neon), age 1.1, rclone.
+      # Client PostgreSQL PGDG de la version de PG_CLIENT_MAJOR (Ubuntu 24.04 n'a que le
+      # 16) ; le script échoue si pg_dump, pg_restore ou psql répond dans une autre
+      # version majeure. Puis age 1.1 et rclone d'Ubuntu.
       - name: Outils
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client-16 age rclone >/dev/null
-          pg_dump --version; age --version; rclone version | head -1
+          bash deploy/scripts/install_pg_client.sh "$PG_CLIENT_MAJOR"
+          sudo apt-get install -y -qq age rclone >/dev/null
+          age --version; rclone version | head -1
+      - name: Version de pg_dump
+        run: |
+          pg_dump --version
+          major=$(pg_dump --version | sed -nE 's/^pg_dump \(PostgreSQL\) ([0-9]+).*/\1/p')
+          [[ "$major" == "$PG_CLIENT_MAJOR" ]] \
+            || { echo "::error::pg_dump ${major:-?} au lieu de $PG_CLIENT_MAJOR"; exit 1; }
       - name: Sauvegarde
         env:
           BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
