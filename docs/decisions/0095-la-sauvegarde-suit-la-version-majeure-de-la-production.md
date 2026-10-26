@@ -136,3 +136,17 @@ sur `public`, `ALTER FUNCTION … OWNER TO coges_bus` échoue au milieu de la re
   `LOGIN BYPASSRLS` membre des cinq propriétaires `WITH INHERIT TRUE, SET TRUE`, base créée
   depuis la console avec `coges_owner` pour propriétaire, `GRANT` sur `public`, client 18,
   chemin complet, base recréée après tout échec, clé gardée jusqu'au résultat).
+
+## Complément (2026-10-26, contrôles de la restauration)
+
+L'exercice du 2026-10-25 (`coges-2026-10-25-1327`) s'est terminé avec deux rouges attendus,
+qui ne disaient rien de la sauvegarde : la révision restaurée (0028, celle de la
+production) comparée à la tête du dépôt (0030), et « au moins une entreprise » sur une
+production encore vide.
+
+- `backup.sh` note dans le manifeste `alembic_revision` et `companies` (nombre
+  d'entreprises), lus avant le dump.
+- `verify_restore.py` compare la révision restaurée à celle du manifeste ; un manifeste
+  plus ancien, sans révision, garde la comparaison à la tête du dépôt.
+- Si le manifeste compte 0 entreprise et la base restaurée aussi, « au moins une
+  entreprise » devient un avertissement (`AVERT`, code 0) ; sinon c'est toujours un échec.
