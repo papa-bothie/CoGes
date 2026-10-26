@@ -247,7 +247,10 @@ Une fois par trimestre, sur une branche Neon jetable : étapes 1 à 3 ci-dessus.
 
 | Date | Sauvegarde utilisée | Âge de la sauvegarde au moment de l'exercice (RPO) | Durée de bout en bout (RTO) | Tout vert ? | Qui |
 |---|---|---|---|---|---|
-| 2026-10-25 | `coges-2026-10-25-1327` | à compléter | à compléter | vert, avec 2 rouges attendus : révision 0028 restaurée contre 0030 en tête du dépôt, et aucune entreprise en production (corrigés depuis : la révision et le nombre d'entreprises viennent du manifeste) | Papa Bothie |
+| 2026-10-25 | `coges-2026-10-25-1327` | 16 min (âge au début de l'exercice) | ~5 h 20, mise au point comprise et quatre correctifs : client 18, droits Neon, schéma public, réglages internes de Neon ; ~1 h estimée avec le guide corrigé, à confirmer au prochain exercice (vers 2027-01-25) | vert, avec 2 rouges attendus : révision 0028 restaurée contre 0030 en tête du dépôt, et aucune entreprise en production (corrigés depuis : la révision et le nombre d'entreprises viennent du manifeste) | Papa Bothie |
+
+**Objectifs.** RPO nominal : 24 h au plus (une sauvegarde par nuit, 02 h 15 UTC). RTO visé :
+~1 h en suivant ce guide.
 
 La CI rejoue la même chaîne à chaque changement du code (job « Sauvegarde : chaîne
 complète », `deploy/scripts/backup_chain_check.sh`), avec une clé de test et un faux
