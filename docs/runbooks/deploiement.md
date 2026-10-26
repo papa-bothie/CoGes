@@ -36,6 +36,18 @@ l'intervention sur la machine elle-même : `docs/runbooks/vps.md`.
 - **Production** : toujours à la main, *Run workflow* → `production`, la version déjà
   essayée en préprod (`v1.4.0`). Jamais une version qui n'est pas passée par la préprod.
 
+> **Écart daté (2026-10-26, décidé par le propriétaire).** La version de `main` qui
+> porte les lots admin 4 à 6 (révisions 0029 et 0030, depuis `5d271c8` en production) part
+> en production **sans passer par la préprod**, qui n'est pas utilisable : l'environnement
+> GitHub `preprod` date de Vercel (`COGES_PUBLIC_URL` vers `coges-api.vercel.app`, DSN
+> Neon de préprod du 2026-09-26 jamais revérifié, aucun `DEPLOY_*`), et aucune
+> préprod n'a été déployée sur le VPS. Ce qui compense : migrations seulement additives
+> (règle de l'ADR 0083, retour arrière sans toucher la base), CI verte sur PostgreSQL 18,
+> sauvegarde de la nuit vérifiée et restauration exercée le 2026-10-25. À remettre en
+> état avant le prochain déploiement : `preprod` (variables, secrets, `NEON_OWNER_DSN`,
+> rôles `coges_backup`, `coges_app_platform`, `coges_billing` sur la branche Neon de
+> préprod) et `/etc/coges/preprod.env`.
+
 Avant : la préprod est arrêtée par défaut. La lancer (`deploy.sh preprod v1.4.0` sur le
 VPS, ou le workflow), essayer, puis l'arrêter (`deploy.sh preprod stop`).
 
