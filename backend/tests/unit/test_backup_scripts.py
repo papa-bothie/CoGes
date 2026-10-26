@@ -7,12 +7,14 @@ refus : ils doivent tenir avant même de toucher une base.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import subprocess
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from types import ModuleType
 
@@ -394,6 +396,10 @@ if [[ "$*" == *server_version_num* ]]; then
   printf '%s\\t%s\\n' "${FAKE_SERVER_VERSION_NUM:-180001}" "${FAKE_SERVER_VERSION:-18.1}"
   exit 0
 fi
+if [[ "$*" == *alembic_version* ]]; then
+  printf '0028\\t0\\n'
+  exit 0
+fi
 printf 'users\\t3\\nsales\\t12\\n'
 """,
     # Les pings Healthchecks, notés au lieu d'être envoyés.
@@ -590,6 +596,97 @@ def test_the_manifest_records_both_versions(tmp_path: Path) -> None:
     assert manifest["server_version"] == "18.0"
     assert manifest["pg_dump_version"] == "18.1"
     assert manifest["tables"] == {"sales": 12, "users": 3}
+
+
+def test_the_manifest_records_the_revision_and_the_companies(tmp_path: Path) -> None:
+    assert _run_backup(tmp_path, size=1000).returncode == 0
+    manifest = _manifest(tmp_path)
+    assert manifest["alembic_revision"] == "0028"
+    assert manifest["companies"] == 0
+
+
+# ------------------------------------- base restaurée comparée à la sauvegarde, pas au dépôt
+
+
+class _RestoredDb:
+    """Une base restaurée saine, à la révision et aux entreprises données."""
+
+    def __init__(self, revision: str, companies: list[str]) -> None:
+        self.revision = revision
+        self.companies = companies
+
+    def rows(self, sql: str) -> list[list[str]]:
+        if "FROM companies" in sql:
+            return [[company] for company in self.companies]
+        if "UNION ALL" in sql:
+            return [["sales", "0"]]
+        return []
+
+    def value(self, sql: str) -> str:
+        if "alembic_version" in sql:
+            return self.revision
+        if "pg_class WHERE relname" in sql:
+            return "1"
+        if "pg_sequences" in sql:
+            return "5"
+        return "0"
+
+
+def _verify(db: _RestoredDb, manifest: dict[str, object] | None) -> tuple[int, str]:
+    verify = _load("verify_restore")
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        code = verify.verify(
+            db,
+            expected_revision="0030",
+            today=datetime(2026, 10, 25, tzinfo=UTC),
+            manifest=None if manifest is None else verify.Manifest(manifest),
+        )
+    return code, out.getvalue()
+
+
+def test_the_revision_is_the_one_of_the_backup_not_the_repository_head() -> None:
+    manifest = {"alembic_revision": "0028", "companies": 1, "tables": {}}
+    code, out = _verify(_RestoredDb("0028", ["f2b69faa-0000"]), manifest)
+    assert code == 0, out
+    assert "0028 (attendue 0028, de la sauvegarde)" in out
+
+
+def test_a_restore_at_another_revision_than_the_backup_fails() -> None:
+    manifest = {"alembic_revision": "0028", "companies": 1, "tables": {}}
+    code, out = _verify(_RestoredDb("0030", ["f2b69faa-0000"]), manifest)
+    assert code == 1
+    assert "ÉCHEC révision Alembic — 0030 (attendue 0028" in out
+
+
+def test_an_old_manifest_falls_back_to_the_repository_head() -> None:
+    code, out = _verify(_RestoredDb("0028", ["f2b69faa-0000"]), {"tables": {}})
+    assert code == 1
+    assert "attendue 0030, tête du dépôt" in out
+
+
+def test_no_company_is_only_a_warning_when_the_backup_had_none() -> None:
+    manifest = {"alembic_revision": "0028", "companies": 0, "tables": {}}
+    code, out = _verify(_RestoredDb("0028", []), manifest)
+    assert code == 0, out
+    assert "AVERT au moins une entreprise" in out
+    assert "1 avertissement(s)" in out
+
+
+@pytest.mark.parametrize("manifest", [None, {"alembic_revision": "0028", "tables": {}}])
+def test_no_company_still_fails_without_a_count_in_the_manifest(
+    manifest: dict[str, object] | None,
+) -> None:
+    code, out = _verify(_RestoredDb("0030" if manifest is None else "0028", []), manifest)
+    assert code == 1
+    assert "ÉCHEC au moins une entreprise" in out
+
+
+def test_companies_lost_in_the_restore_still_fail() -> None:
+    manifest = {"alembic_revision": "0028", "companies": 2, "tables": {}}
+    code, out = _verify(_RestoredDb("0028", []), manifest)
+    assert code == 1
+    assert "ÉCHEC au moins une entreprise" in out
 
 
 def test_restore_refuses_a_pg_restore_older_than_the_pg_dump(archive: Path) -> None:

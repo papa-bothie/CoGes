@@ -226,7 +226,10 @@ majeure plus récente que lui, et `pg_restore` une archive d'un `pg_dump` plus r
    `neon_*` ; jamais ceux d'un rôle `coges_*`), en affichant leur nombre et leurs titres ;
    la seconde pour restaurer le reste. Sans ce tri, `ALTER DEFAULT PRIVILEGES FOR ROLE
    cloud_admin …` arrête tout en « permission denied ». Puis `verify_restore.py` : tout
-   doit être **vert**, y compris « autant de lignes qu'à la sauvegarde ». Une sauvegarde
+   doit être **vert**, y compris « autant de lignes qu'à la sauvegarde ». La révision
+   Alembic attendue est celle de la base sauvegardée (notée dans le manifeste), pas la
+   tête du dépôt ; une base sauvegardée sans entreprise ne donne qu'un avertissement
+   (« AVERT »). Une sauvegarde
    antérieure au manifeste (avant l'ADR 0088) se restaure avec
    `RESTORE_WITHOUT_MANIFEST=1`.
 
@@ -244,7 +247,7 @@ Une fois par trimestre, sur une branche Neon jetable : étapes 1 à 3 ci-dessus.
 
 | Date | Sauvegarde utilisée | Âge de la sauvegarde au moment de l'exercice (RPO) | Durée de bout en bout (RTO) | Tout vert ? | Qui |
 |---|---|---|---|---|---|
-| | | | | | |
+| 2026-10-25 | `coges-2026-10-25-1327` | à compléter | à compléter | vert, avec 2 rouges attendus : révision 0028 restaurée contre 0030 en tête du dépôt, et aucune entreprise en production (corrigés depuis : la révision et le nombre d'entreprises viennent du manifeste) | Papa Bothie |
 
 La CI rejoue la même chaîne à chaque changement du code (job « Sauvegarde : chaîne
 complète », `deploy/scripts/backup_chain_check.sh`), avec une clé de test et un faux

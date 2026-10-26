@@ -6,8 +6,12 @@ Lancé par `restore_backup.sh` après `pg_restore`, ou seul :
 
 Contrôles (sortie lisible, code 0 si tout est vert, 1 sinon) :
 
-1. révision Alembic = la dernière du dépôt (`backend/migrations/versions`) ;
-2. lignes des tables clés, par entreprise (identifiant court, jamais de nom) ;
+1. révision Alembic = celle de la base sauvegardée, notée dans le manifeste
+   (`alembic_revision`) ; à défaut (manifeste plus ancien, ou absent), la dernière du dépôt
+   (`backend/migrations/versions`) ;
+2. lignes des tables clés, par entreprise (identifiant court, jamais de nom) ; « au moins
+   une entreprise » n'est qu'un avertissement si le manifeste en compte 0 (base de
+   production encore vide) ;
 3. RLS active et FORCE sur chaque table qui porte `company_id` ;
 4. partition d'audit du mois courant présente, séquences présentes ;
 5. cohérence : stock projeté = somme des mouvements, dans les deux sens (une projection
@@ -33,6 +37,7 @@ import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 VERSIONS = Path(__file__).resolve().parents[2] / "backend" / "migrations" / "versions"
 KEY_TABLES = (
@@ -102,9 +107,24 @@ class Database:
         return rows[0][0] if rows else ""
 
 
+class Manifest:
+    """Ce que `backup.sh` a noté avant le dump (champs absents des anciens manifestes)."""
+
+    def __init__(self, data: dict[str, Any]) -> None:
+        self.tables = {str(table): int(count) for table, count in data["tables"].items()}
+        self.alembic_revision: str | None = data.get("alembic_revision") or None
+        companies = data.get("companies")
+        self.companies = None if companies is None else int(companies)
+
+
 class Report:
     def __init__(self) -> None:
         self.failures = 0
+        self.warnings = 0
+
+    def warn(self, label: str, detail: str = "") -> None:
+        print(f"  AVERT {label}{f' — {detail}' if detail else ''}")
+        self.warnings += 1
 
     def check(self, label: str, ok: bool, detail: str = "") -> None:
         mark = "OK    " if ok else "ÉCHEC "
@@ -118,21 +138,28 @@ def verify(
     *,
     expected_revision: str,
     today: datetime,
-    manifest: dict[str, int] | None = None,
+    manifest: Manifest | None = None,
 ) -> int:
     report = Report()
 
     print("1. Migrations")
     current = db.value("SELECT version_num FROM alembic_version")
+    if manifest is not None and manifest.alembic_revision:
+        expected, source = manifest.alembic_revision, "de la sauvegarde"
+    else:
+        expected, source = expected_revision, "tête du dépôt, manifeste sans révision"
     report.check(
         "révision Alembic",
-        current == expected_revision,
-        f"{current} (attendue {expected_revision})",
+        current == expected,
+        f"{current} (attendue {expected}, {source})",
     )
 
     print("2. Lignes par entreprise")
     companies = db.rows("SELECT id FROM companies ORDER BY created_at")
-    report.check("au moins une entreprise", bool(companies), f"{len(companies)} entreprise(s)")
+    if not companies and manifest is not None and manifest.companies == 0:
+        report.warn("au moins une entreprise", "0, comme la base sauvegardée")
+    else:
+        report.check("au moins une entreprise", bool(companies), f"{len(companies)} entreprise(s)")
     for (company_id,) in companies:
         counts = []
         for table in KEY_TABLES:
@@ -206,12 +233,15 @@ def verify(
         report.check("manifeste", True, "absent : sauvegarde antérieure à l'ADR 0088")
     else:
         actual = {table: int(count) for table, count in db.rows(manifest_query())}
-        gaps = manifest_gaps(manifest, actual)
+        gaps = manifest_gaps(manifest.tables, actual)
         report.check("autant de lignes qu'à la sauvegarde", not gaps, "; ".join(gaps))
 
     if report.failures:
         print(f"Restauration : {report.failures} contrôle(s) en échec")
         return 1
+    if report.warnings:
+        print(f"Restauration vérifiée : tout est vert ({report.warnings} avertissement(s)).")
+        return 0
     print("Restauration vérifiée : tout est vert.")
     return 0
 
@@ -232,7 +262,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("la base restaurée est requise")
     manifest = None
     if args.manifest is not None:
-        manifest = {k: int(v) for k, v in json.loads(args.manifest.read_text())["tables"].items()}
+        manifest = Manifest(json.loads(args.manifest.read_text()))
     db = Database(args.dsn)
     try:
         return verify(

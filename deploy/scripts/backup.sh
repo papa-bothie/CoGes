@@ -80,6 +80,13 @@ server_version=${server_version%% *}
 ((dump_major >= server_major)) \
   || fail "pg_dump $dump_major trop ancien pour un serveur $server_major : installer postgresql-client-$server_major"
 echo "    serveur $server_version, pg_dump $dump_version"
+# La révision Alembic et le nombre d'entreprises de la base sauvegardée : la base
+# restaurée se compare à elles, pas à la tête du dépôt (verify_restore.py).
+IFS=$'\t' read -r alembic_revision companies < <(psql "$BACKUP_DATABASE_URL" -X -A -t -F $'\t' \
+  -v ON_ERROR_STOP=1 -c "SELECT (SELECT version_num FROM alembic_version), (SELECT count(*) FROM companies)") \
+  || true
+[[ -n "${alembic_revision:-}" && "${companies:-}" =~ ^[0-9]+$ ]] \
+  || fail "révision Alembic ou nombre d'entreprises illisible"
 # Ces tables ne perdent jamais de ligne : la base restaurée doit en avoir au moins
 # autant (verify_restore.py, ADR 0088).
 psql "$BACKUP_DATABASE_URL" -X -A -t -F $'\t' -v ON_ERROR_STOP=1 \
@@ -87,8 +94,10 @@ psql "$BACKUP_DATABASE_URL" -X -A -t -F $'\t' -v ON_ERROR_STOP=1 \
   | python3 -c 'import json,sys
 rows=[line.split("\t") for line in sys.stdin.read().splitlines() if line]
 print(json.dumps({"pg_dump_version": sys.argv[1], "server_version": sys.argv[2],
+                  "alembic_revision": sys.argv[3], "companies": int(sys.argv[4]),
                   "tables": {table: int(count) for table, count in rows}}, sort_keys=True))' \
-    "$dump_version" "$server_version" >"$FILE.manifest.json"
+    "$dump_version" "$server_version" "$alembic_revision" "$companies" >"$FILE.manifest.json"
+echo "    révision $alembic_revision, $companies entreprise(s)"
 
 echo "1/4 — pg_dump $dump_version chiffré par age → $NAME"
 pg_dump --format=custom --no-password --dbname="$BACKUP_DATABASE_URL" \
