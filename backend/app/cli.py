@@ -8,6 +8,11 @@ une seule transaction**.
         --name "Boutique Diallo" --slug boutique-diallo \\
         --manager-email gerant@example.test --manager-name "Awa Diallo"
 
+Un gérant sans e-mail se crée avec son téléphone (`--manager-phone "77 123 45 67"`),
+ou avec les deux ; l'un des deux au moins est exigé. Le numéro est ramené à ses
+chiffres comme à la connexion (ADR 0074) : il se tape ensuite sous n'importe quelle
+forme (« +221 77 123 45 67 », « 221771234567 »).
+
 Le mot de passe est demandé de façon interactive : il n'apparaît ni dans la ligne de
 commande, ni dans l'historique du shell.
 
@@ -40,12 +45,11 @@ from datetime import date
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from pydantic import TypeAdapter, ValidationError
-from pydantic.networks import EmailStr
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.config import REPO_ROOT
-from app.core.security import hash_password
+from app.core.errors import ValidationFailedError
 from app.core.tenancy import TenantContext, tenant_transaction
 from app.modules.companies import service as companies_service
 from app.modules.inventory import service as inventory_service
@@ -53,54 +57,75 @@ from app.modules.inventory.schemas import StockRebuildLine
 from app.modules.platform import service as platform_service
 from app.modules.rbac import service as rbac_service
 from app.modules.rbac.matrix import MANAGER
-from app.modules.users.models import User
-from app.modules.users.repository import UserRepository
+from app.modules.users import service as users_service
+from app.modules.users.schemas import UserCreate
 
 MIN_PASSWORD_LENGTH = 12
 
-#: Même validation que l'API : un e-mail refusé au login ne doit pas pouvoir entrer
-#: en base par la porte de service.
-_EMAIL_ADAPTER = TypeAdapter(EmailStr)
+
+def _manager_payload(
+    *, email: str | None, phone: str | None, full_name: str, password: str | None
+) -> UserCreate:
+    """Le gérant passe par le schéma de l'écran Personnes : e-mail validé comme à
+    l'API, numéro ramené à ses chiffres comme à la connexion, l'un des deux exigé.
+
+    Vérifié avant d'ouvrir la transaction : une identité refusée ne crée rien.
+    """
+    try:
+        return UserCreate(
+            email=(email or "").strip() or None,
+            phone=phone,
+            full_name=full_name,
+            password=password,
+        )
+    except ValidationError as exc:
+        error = exc.errors()[0]
+        field = error["loc"][0] if error["loc"] else None
+        if field == "email":
+            raise SystemExit(f"Adresse e-mail invalide : {email}") from exc
+        if field == "password":
+            raise SystemExit(
+                f"Le mot de passe doit faire au moins {MIN_PASSWORD_LENGTH} caractères."
+            ) from exc
+        raise SystemExit(str(error["msg"]).removeprefix("Value error, ")) from exc
 
 
 def create_company(
     *,
     name: str,
     slug: str,
-    manager_email: str,
     manager_name: str,
     password: str,
     currency: str,
     timezone: str,
+    manager_email: str | None = None,
+    manager_phone: str | None = None,
 ) -> tuple[str, str]:
-    """Crée l'entreprise, ses rôles système et son gérant. Renvoie (company_id, user_id)."""
-    try:
-        manager_email = _EMAIL_ADAPTER.validate_python(manager_email)
-    except ValidationError as exc:
-        raise SystemExit(f"Adresse e-mail invalide : {manager_email}") from exc
+    """Crée l'entreprise, ses rôles système et son gérant. Renvoie (company_id, user_id).
+
+    Le gérant a un e-mail, un téléphone, ou les deux (ADR 0074).
+    """
+    payload = _manager_payload(
+        email=manager_email, phone=manager_phone, full_name=manager_name, password=password
+    )
 
     company_id = uuid4()
     manager_id = uuid4()
     ctx = TenantContext(user_id=manager_id, company_id=company_id)
 
-    with tenant_transaction(ctx) as session:
-        companies_service.create_company(
-            session, ctx, name=name, slug=slug, currency=currency, timezone=timezone
-        )
-        roles = rbac_service.create_system_roles(session, ctx)
-
-        UserRepository(session, ctx).add(
-            User(
-                id=manager_id,
-                company_id=company_id,
-                email=manager_email,
-                password_hash=hash_password(password),
-                full_name=manager_name,
-                is_active=True,
+    try:
+        with tenant_transaction(ctx) as session:
+            companies_service.create_company(
+                session, ctx, name=name, slug=slug, currency=currency, timezone=timezone
             )
-        )
-        session.flush()
-        rbac_service.assign_role(session, ctx, manager_id, roles[MANAGER].id)
+            roles = rbac_service.create_system_roles(session, ctx)
+            # Même façade que l'écran Personnes : mêmes contrôles d'unicité, mêmes
+            # messages. Sans rôle ici : le gérant n'existe pas encore pour déléguer.
+            manager, _ = users_service.create_user(session, ctx, payload, user_id=manager_id)
+            # L'auteur de l'audit est le gérant lui-même, déjà écrit (flush) en base.
+            rbac_service.assign_role(session, ctx, manager.id, roles[MANAGER].id)
+    except ValidationFailedError as exc:
+        raise SystemExit(exc.message) from exc
 
     return str(company_id), str(manager_id)
 
@@ -182,7 +207,13 @@ def build_parser() -> argparse.ArgumentParser:
     create = subparsers.add_parser("create-company", help="Créer une entreprise et son gérant")
     create.add_argument("--name", required=True, help="Raison sociale")
     create.add_argument("--slug", required=True, help="Identifiant de connexion, a-z0-9-")
-    create.add_argument("--manager-email", required=True)
+    create.add_argument("--manager-email", default=None, help="E-mail du gérant")
+    create.add_argument(
+        "--manager-phone",
+        default=None,
+        help="Téléphone du gérant, sous toute forme (« 77 123 45 67 », « +221… ») ; "
+        "l'e-mail ou le téléphone au moins",
+    )
     create.add_argument("--manager-name", required=True)
     create.add_argument("--currency", default="XOF")
     create.add_argument("--timezone", default="Africa/Dakar")
@@ -240,11 +271,20 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.command == "create-company":
+        # Identité vérifiée avant de demander le mot de passe : une faute de frappe
+        # ne coûte pas deux saisies.
+        manager = _manager_payload(
+            email=args.manager_email,
+            phone=args.manager_phone,
+            full_name=args.manager_name,
+            password=None,
+        )
         password = args.password or _prompt_password()
         company_id, user_id = create_company(
             name=args.name,
             slug=args.slug,
             manager_email=args.manager_email,
+            manager_phone=args.manager_phone,
             manager_name=args.manager_name,
             password=password,
             currency=args.currency,
@@ -252,7 +292,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"Entreprise créée : {company_id}")
         print(f"Gérant créé      : {user_id}")
-        print(f"Connexion        : slug={args.slug} email={args.manager_email}")
+        login = f"email={manager.email}" if manager.email else f"téléphone={manager.phone}"
+        print(f"Connexion        : slug={args.slug} {login}")
 
     if args.command == "rebuild-stock":
         gaps = rebuild_stock(args.company_id)

@@ -47,6 +47,38 @@ retirerait le dernier est refusée.
 - Depuis la fiche d'une entreprise ou la ligne d'un collègue : **Historique** ouvre le
   journal déjà filtré.
 
+## Créer une entreprise
+
+L'administration ne crée pas d'entreprise et il n'y a pas d'inscription publique
+(ADR 0009) : sur le serveur, une commande crée l'entreprise, ses trois rôles et son
+gérant dans une seule transaction. Le gérant a un **e-mail, un téléphone, ou les deux** :
+
+```bash
+# Gérant avec e-mail
+uv run --directory backend python -m app.cli create-company --name "Boutique Diallo" \
+  --slug boutique-diallo --manager-name "Awa Diallo" --manager-email awa@exemple.com
+
+# Gérant sans e-mail : son téléphone, sous n'importe quelle forme
+uv run --directory backend python -m app.cli create-company --name "Boutique Sarr" \
+  --slug boutique-sarr --manager-name "Fatou Sarr" --manager-phone "+221 77 123 45 67"
+```
+
+Le mot de passe du gérant est demandé à la ligne de commande (12 caractères au moins).
+
+Le numéro est ramené à ses chiffres, sans l'indicatif 221 devant un numéro à neuf
+chiffres, exactement comme à la connexion : la commande affiche `téléphone=771234567`, et
+le gérant se connecte avec le slug et « 77 123 45 67 », « +221 77 123 45 67 » ou
+« 221771234567 », au choix. Le même numéro peut servir dans deux entreprises : ce sont
+deux comptes distincts, départagés par le slug.
+
+Refus, sans rien créer :
+
+- ni e-mail ni téléphone : « Donnez un e-mail ou un numéro de téléphone. » ;
+- numéro de moins de 6 ou de plus de 15 chiffres : « Ce numéro de téléphone n'est pas
+  valide. » ;
+- e-mail mal formé : « Adresse e-mail invalide : … » ;
+- slug déjà pris : erreur d'unicité sur `companies`, choisissez un autre slug.
+
 ## Perte du dernier administrateur
 
 Si plus personne ne peut se connecter en administrateur (mot de passe oublié, départ), sur

@@ -164,12 +164,16 @@ def create_user(
     payload: UserCreate,
     *,
     ip_address: str | None = None,
+    user_id: UUID | None = None,
 ) -> tuple[User, str | None]:
     """Crée un compte dans l'entreprise du contexte ; rend aussi son mot de passe
     provisoire s'il a été tiré par le serveur.
 
     L'e-mail est unique **par entreprise** : le même e-mail peut exister chez un
     autre tenant, ce sont deux comptes distincts (§ 2.2).
+
+    `user_id` n'est donné qu'à l'amorçage (`app.cli create-company`) : le gérant est
+    l'auteur du contexte avant même d'exister.
     """
     # Avant toute écriture : un rôle refusé ne laisse pas un compte sans rôle derrière lui.
     for role_id in payload.role_ids:
@@ -192,6 +196,7 @@ def create_user(
     password = readable_password() if temporary else str(payload.password)
     user = repository.add(
         User(
+            **({"id": user_id} if user_id is not None else {}),
             company_id=ctx.company_id,
             email=str(payload.email) if payload.email is not None else None,
             phone=payload.phone,
