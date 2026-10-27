@@ -48,8 +48,12 @@ make up && make migrate && make seed-demo
 ```
 
 `make db-upgrade-18` arrête le conteneur 16, le relance à part sur l'ancien volume, copie
-tout (rôles, bases `coges`, `coges_test`, `coges_e2e`) dans le nouveau, compare, puis
-`make up`. Il refuse si le volume 18 contient déjà des données (un `make up` lancé avant) :
+tout (rôles, bases `coges`, `coges_test`, `coges_e2e`) dans le nouveau, rend à chaque
+extension son propriétaire (que `pg_dumpall` ne transmet pas), compare, puis `make up`.
+Un poste copié avant ce correctif (extensions à `postgres`, `DROP EXTENSION` refusé au
+downgrade des tests) se répare base par base (`coges`, `coges_test`, `coges_e2e`) :
+`docker compose exec -T postgres psql -U postgres -d <base> -c "UPDATE pg_extension SET
+extowner = 'coges_owner'::regrole WHERE extname <> 'plpgsql'"`. Il refuse si le volume 18 contient déjà des données (un `make up` lancé avant) :
 `docker compose down && docker volume rm coges_coges_pgdata18`, puis relancer. L'ancien
 volume ne se supprime qu'à la main, une fois sûr : `docker volume rm coges_coges_pgdata`.
 

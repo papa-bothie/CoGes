@@ -13,6 +13,11 @@
 # il faut alors le vider soi-même, ou repartir de zéro (make up && make migrate &&
 # make seed-demo).
 #
+# pg_dumpall ne transmet pas le propriétaire d'une extension : rejouée par `postgres`,
+# chacune lui appartiendrait, et `DROP EXTENSION` (downgrade des migrations, base de
+# test) serait refusé à coges_owner. L'étape 4 recopie donc chaque propriétaire depuis
+# l'ancien serveur, et l'étape 5 le compare comme le reste.
+#
 # Variables : POSTGRES_PASSWORD (le .env, exporté par make), COMPOSE_PROJECT_NAME
 # (facultatif, comme docker compose).
 
@@ -62,14 +67,14 @@ else
   created_new=1
 fi
 
-echo "1/4 — arrêt du serveur qui utilise $OLD"
+echo "1/5 — arrêt du serveur qui utilise $OLD"
 running=$(docker ps -q --filter "volume=$OLD")
 if [[ -n "$running" ]]; then
   # shellcheck disable=SC2086 # une liste d'identifiants
   docker stop $running >/dev/null
 fi
 
-echo "2/4 — serveurs temporaires : 16 sur $OLD, 18 sur $NEW"
+echo "2/5 — serveurs temporaires : 16 sur $OLD, 18 sur $NEW"
 docker network create "$NET" >/dev/null
 docker run -d --name "$OLD_CT" --network "$NET" \
   -v "$OLD:/var/lib/postgresql/data" "$FROM_IMAGE" >/dev/null
@@ -85,7 +90,7 @@ for ct in "$OLD_CT" "$NEW_CT"; do
   die "le serveur $ct ne répond pas"
 done
 
-echo "3/4 — pg_dumpall (client 18) depuis 16, restauré dans 18"
+echo "3/5 — pg_dumpall (client 18) depuis 16, restauré dans 18"
 docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$NEW_CT" \
   pg_dumpall -h "$OLD_CT" -U postgres --no-password \
   | docker exec -i "$NEW_CT" psql -X -q -U postgres -d postgres >/dev/null 2>"$WORK/errors"
@@ -93,14 +98,33 @@ docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$NEW_CT" \
 unexpected=$(grep 'ERROR' "$WORK/errors" | grep -v 'role "postgres" already exists' || true)
 [[ -z "$unexpected" ]] || { echo "$unexpected" >&2; die "erreurs pendant la restauration"; }
 
-echo "4/4 — comparaison ligne à ligne (rôles, bases, lignes de chaque table)"
+echo "4/5 — propriétaire de chaque extension, recopié depuis 16"
+databases() {
+  docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$NEW_CT" psql -X -A -t -h "$1" -U postgres \
+    -d postgres -c "SELECT datname FROM pg_database WHERE NOT datistemplate ORDER BY 1"
+}
+for db in $(databases "$OLD_CT"); do
+  # ALTER EXTENSION n'a pas de OWNER TO : le catalogue, en superutilisateur, est la
+  # seule voie. Le membre d'une extension garde son propriétaire, comme à l'origine.
+  docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$NEW_CT" psql -X -A -t -F ' ' -h "$OLD_CT" \
+    -U postgres -d "$db" -c "SELECT extname, extowner::regrole FROM pg_extension ORDER BY 1" \
+    | while read -r ext owner; do
+      # Par l'entrée standard : psql n'interpole pas ses variables dans -c.
+      echo "UPDATE pg_catalog.pg_extension SET extowner = :'owner'::regrole WHERE extname = :'ext'" \
+        | docker exec -i "$NEW_CT" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d "$db" \
+          -v ext="$ext" -v owner="$owner" >/dev/null
+    done
+done
+
+echo "5/5 — comparaison ligne à ligne (rôles, bases, extensions, lignes de chaque table)"
 inventory() {
   local ct=$1 host=$2 db
   docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$ct" psql -X -A -t -h "$host" -U postgres \
     -d postgres -c "SELECT rolname FROM pg_roles WHERE rolname NOT LIKE 'pg\_%' ORDER BY 1"
-  for db in $(docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$ct" psql -X -A -t -h "$host" \
-    -U postgres -d postgres -c "SELECT datname FROM pg_database WHERE NOT datistemplate ORDER BY 1"); do
+  for db in $(databases "$host"); do
     echo "== $db"
+    docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$ct" psql -X -A -t -h "$host" -U postgres \
+      -d "$db" -c "SELECT 'extension ' || extname || ' ' || extowner::regrole FROM pg_extension ORDER BY 1"
     # Superutilisateur : la RLS ne s'applique pas, chaque ligne est comptée.
     docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" "$ct" psql -X -A -t -h "$host" -U postgres \
       -d "$db" -c "SELECT schemaname || '.' || tablename || ' ' || (xpath('/row/c/text()',
@@ -112,7 +136,7 @@ inventory() {
 inventory "$NEW_CT" "$OLD_CT" >"$WORK/old.txt"
 inventory "$NEW_CT" 127.0.0.1 >"$WORK/new.txt"
 diff -u "$WORK/old.txt" "$WORK/new.txt" >&2 || die "la copie diffère de l'original"
-echo "    $(grep -c '^== ' "$WORK/new.txt") bases, $(grep -vc '^== ' "$WORK/new.txt") rôles et tables identiques"
+echo "    $(grep -c '^== ' "$WORK/new.txt") bases, $(grep -vc '^== ' "$WORK/new.txt") rôles, extensions et tables identiques"
 
 created_new=0
 echo "Copie vérifiée. L'ancien volume $OLD est conservé ; une fois sûr de vous :"
