@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyRound, Lightbulb, LogOut, Moon, Settings, Sun } from "lucide-react";
+import { Download, KeyRound, Lightbulb, LogOut, Moon, Settings, Sun } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useState } from "react";
@@ -18,6 +18,9 @@ import { logout, loginUrl } from "@/lib/auth/session";
 import { labels } from "@/lib/labels";
 import { ADVICE_NAV, resolveNav, SETTINGS_NAV } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { useInstall } from "@/components/pwa/install-invite";
+import { promptInstall } from "@/lib/pwa/install";
 
 function roleLabel(me: Me): string {
   return me.roles.map((role) => role.description ?? role.name).join(", ");
@@ -35,6 +38,7 @@ export function SettingsMenu({ me, className }: { me: Me; className?: string }) 
   const [leaving, setLeaving] = useState(false);
   const t = labels.shell;
   const dark = resolvedTheme === "dark";
+  const install = useInstall();
   // Conseils et Réglages s'ouvrent sur un écran que cette personne peut lire (ADR 0099).
   const advice = resolveNav(ADVICE_NAV, me.permissions);
   const settings = resolveNav(SETTINGS_NAV[0]!, me.permissions);
@@ -77,6 +81,17 @@ export function SettingsMenu({ me, className }: { me: Me; className?: string }) 
             <Link href={settings.href}>
               <Settings aria-hidden /> {t.settings}
             </Link>
+          </DropdownMenuItem>
+        )}
+        {!install.installed && (install.canPrompt || install.iosHelp) && (
+          <DropdownMenuItem
+            className="min-h-cible text-corps"
+            onSelect={() => {
+              if (install.canPrompt) void promptInstall();
+              else toast.info(labels.pwa.iosHelpTitle, { description: labels.pwa.iosHelp });
+            }}
+          >
+            <Download aria-hidden /> {labels.pwa.install}
           </DropdownMenuItem>
         )}
         <DropdownMenuItem asChild className="min-h-cible text-corps">

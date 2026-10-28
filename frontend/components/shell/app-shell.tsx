@@ -22,6 +22,8 @@ import {
   visibleNav,
 } from "@/lib/navigation";
 
+import { InstallInvite } from "@/components/pwa/install-invite";
+
 import { ConnectionBanner } from "./connection-banner";
 import { NotificationBell } from "./notification-bell";
 import { SettingsMenu } from "./settings-menu";
@@ -132,6 +134,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <SupportBanner />
         <ConnectionBanner />
+        <InstallInvite />
         {page}
       </main>
       <div className="contents print:hidden">

@@ -171,6 +171,14 @@ class PayloadTooLargeError(CogesError):
     default_message = "La requête dépasse la taille maximale autorisée."
 
 
+class FrontOutdatedError(CogesError):
+    """Version du front trop ancienne pour cette API (ADR 0102) : il se met à jour."""
+
+    code = "front_outdated"
+    status_code = 426
+    default_message = "Une nouvelle version de CoGes est prête."
+
+
 class PasswordChangeRequiredError(CogesError):
     """Le compte doit d'abord remplacer son mot de passe provisoire (ADR 0074).
 

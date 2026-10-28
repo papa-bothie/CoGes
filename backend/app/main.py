@@ -24,6 +24,7 @@ from app.core.errors import (
 )
 from app.core.http_security import (
     BodySizeLimitMiddleware,
+    FrontVersionMiddleware,
     IpRateLimitMiddleware,
     SecurityHeadersMiddleware,
 )
@@ -76,6 +77,7 @@ app = FastAPI(
 # réponse, y compris un 413 ou un 429), CORS (un refus doit rester lisible par le
 # navigateur), taille du corps, débit par IP, puis journalisation.
 app.add_middleware(RequestContextMiddleware)
+app.add_middleware(FrontVersionMiddleware)
 app.add_middleware(IpRateLimitMiddleware)
 app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(
@@ -85,7 +87,13 @@ app.add_middleware(
     # l'envoie qu'avec `credentials: 'include'`, donc sur une origine nommée.
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "X-Request-Id"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Idempotency-Key",
+        "X-Request-Id",
+        "X-CoGes-Front",
+    ],
     expose_headers=["X-Request-Id", "Retry-After", "Content-Disposition"],
     max_age=600,
 )

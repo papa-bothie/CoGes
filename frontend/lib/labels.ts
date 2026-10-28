@@ -129,6 +129,20 @@ export const labels = {
     connectionRetrying: "Connexion difficile. Nous réessayons…",
     connectionLost: "Connexion difficile.",
   },
+  /** Application installable (ADR 0102). */
+  pwa: {
+    offlineTitle: "Pas de connexion",
+    offlineBody:
+      "CoGes a besoin d'Internet pour vendre et compter. Ce que vous aviez commencé à saisir est gardé sur ce téléphone.",
+    offlineRetry: "Réessayer",
+    install: "Installer l'application",
+    installInvite: "Installez CoGes sur ce téléphone : il s'ouvre comme une application.",
+    installLater: "Plus tard",
+    iosHelpTitle: "Installer sur iPhone",
+    iosHelp: "Touchez Partager, puis « Sur l'écran d'accueil ».",
+    outdated: "Une nouvelle version de CoGes est prête.",
+    outdatedReload: "Recharger",
+  },
   /** Accès support encadré (ADR 0092) : l'équipe CoGes lit, en lecture seule. */
   support: {
     banner: (since: string, until: string) =>

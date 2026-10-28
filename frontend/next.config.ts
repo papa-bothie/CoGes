@@ -26,6 +26,9 @@ const contentSecurityPolicy = [
   "img-src 'self' data: blob:",
   "font-src 'self'",
   `connect-src 'self'${isDev ? " ws:" : ""}`,
+  // Application installable (ADR 0102) : le worker et le manifeste viennent de la même origine.
+  "worker-src 'self'",
+  "manifest-src 'self'",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -38,6 +41,9 @@ const nextConfig: NextConfig = {
   distDir: process.env.COGES_NEXT_DIST_DIR || ".next",
   // Image Docker du VPS (ADR 0083) : `server.js` et le strict nécessaire de `node_modules`.
   output: "standalone",
+  // Étiquette de l'image (ADR 0102) : un écran resté ouvert sur l'ancienne version se recharge
+  // au changement d'écran plutôt que de mélanger deux versions. Vide en développement.
+  deploymentId: process.env.NEXT_DEPLOYMENT_ID || undefined,
   poweredByHeader: false,
   // Le bouton « N » de développement ne doit pas apparaître sur les captures d'écran.
   devIndicators: false,
