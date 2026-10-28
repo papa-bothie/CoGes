@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { BackLink, keepFrom } from "@/components/back-link";
+import { DraftBanner } from "@/components/draft-banner";
 import { ErrorState } from "@/components/error-state";
 import { FieldError } from "@/components/field-error";
 import { PaymentAmount } from "@/components/kit/payment-amount";
@@ -14,6 +15,7 @@ import { PaymentMethodChips } from "@/components/kit/payment-method-chips";
 import { RUBRIQUE_CLASSES } from "@/components/kit/rubrique";
 import { StatusPill } from "@/components/kit/status-pill";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDraft } from "@/hooks/use-draft";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { splitAcrossDebts } from "@/lib/allocation";
 import { api, unwrap } from "@/lib/api/client";
@@ -21,12 +23,14 @@ import { errorMessage } from "@/lib/api/errors";
 import { useIdempotencyKey } from "@/lib/api/idempotency";
 import { MONEY_KEYS, queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
+import { draftOneOf, draftString } from "@/lib/drafts";
 import { formatAmount, formatDayMonth } from "@/lib/format";
 import { labels } from "@/lib/labels";
 import { daysUntil, DUE_SOON_DAYS } from "@/lib/money";
 import { debtPaymentCheck, debtShortcuts, wholeUnits } from "@/lib/payment-amount";
 import { todayIn } from "@/lib/period";
 import { initials, shortNames, sinceText } from "@/lib/people";
+import { PAYMENT_METHODS } from "@/lib/payment-methods";
 import { cn } from "@/lib/utils";
 
 type Kind = "customer" | "supplier";
@@ -266,6 +270,23 @@ function SettlePanel({
   const [formError, setFormError] = useState<string | null>(null);
   // Les dettes réglées par ce versement restent affichées, « Payé ».
   const [touched, setTouched] = useState<string[]>([]);
+  // Brouillon d'un encaissement ou d'un paiement (ADR 0101), un par personne ; la clé
+  // d'idempotence voyage avec lui : un versement interrompu puis repris n'est jamais doublé.
+  const draft = useDraft(
+    {
+      formId: `settle-${kind}`,
+      version: 1,
+      fields: ["amount", "method", "idem"],
+      meaningful: ["amount"],
+      objectId: person.id,
+    },
+    { amount, method, idem: idempotency.key },
+    (fields) => {
+      setAmount(draftString(fields.amount) ?? "");
+      setMethod(draftOneOf(fields.method, PAYMENT_METHODS) ?? "cash");
+      idempotency.restore(fields.idem);
+    },
+  );
 
   const filter = kind === "customer" ? { customer_id: person.id } : { supplier_id: person.id };
   const debts = useQuery({
@@ -299,6 +320,7 @@ function SettlePanel({
     mutationFn: (body: Schemas["PaymentCreate"]) =>
       unwrap(api.POST("/api/v1/payments", { body, headers: idempotency.headers })),
     onSuccess: (_, body) => {
+      draft.clear();
       idempotency.renew();
       const paid = wholeUnits(String(body.amount));
       const rest = due - paid;
@@ -340,6 +362,15 @@ function SettlePanel({
       aria-label={person.name}
       className="flex min-w-0 flex-[3_1_460px] flex-col gap-5 rounded-carte border border-border bg-card p-carte"
     >
+      {draft.restored && (
+        <DraftBanner
+          onClear={() => {
+            setAmount("");
+            setMethod("cash");
+            draft.clear();
+          }}
+        />
+      )}
       {done && (
         <div
           role="status"

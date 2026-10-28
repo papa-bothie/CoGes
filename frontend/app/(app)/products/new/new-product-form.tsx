@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useCallback, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { DraftBanner } from "@/components/draft-banner";
 import { FieldError } from "@/components/field-error";
 import { cleanAmount } from "@/components/kit/amount-field";
 import { Chip } from "@/components/kit/chip";
@@ -14,6 +15,7 @@ import { QuantityStepper } from "@/components/kit/quantity-stepper";
 import { fieldClasses } from "@/components/kit/rubrique";
 import { BarcodeScanButton } from "@/components/products/barcode-scanner";
 import { Button } from "@/components/ui/button";
+import { useDraft } from "@/hooks/use-draft";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { usePermission } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
@@ -22,6 +24,7 @@ import { flattenTree, useCategories } from "@/lib/api/queries/categories";
 import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
 import { compareDecimal, parseDecimalInput } from "@/lib/decimal";
+import { draftOneOf, draftString } from "@/lib/drafts";
 import { formatAmount } from "@/lib/format/money";
 import { labels } from "@/lib/labels";
 import { typedAmount } from "@/lib/payment-amount";
@@ -32,6 +35,14 @@ type Unit = Schemas["ProductUnit"];
 
 /** « Vendu par » de la maquette 09, dans son ordre. Le mètre reste sur la fiche. */
 const UNITS: readonly Unit[] = ["piece", "sac", "kg", "litre", "carton", "paquet", "bouteille"];
+
+/** Brouillon de « Nouvel article » (ADR 0101). Le rayon est revérifié par le serveur à l'envoi. */
+const DRAFT = {
+  formId: "product-new",
+  version: 1,
+  fields: ["name", "price", "cost", "unit", "categoryId", "qty", "warnAt", "barcode"],
+  meaningful: ["name", "price", "cost", "qty", "warnAt", "barcode"],
+} as const;
 
 /** Ligne en direct sous les prix (maquette 09) : ce qu'on gagne, ou ce qu'on perd. */
 export function marginLine(
@@ -82,6 +93,30 @@ export function NewProductForm() {
   const [barcode, setBarcode] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [done, setDone] = useState<{ name: string; stock: string; price: string } | null>(null);
+  const draft = useDraft(
+    DRAFT,
+    {
+      name,
+      price,
+      cost,
+      unit,
+      categoryId: categoryId ?? "",
+      // Le stock d'ouverture « 0 » est l'état de départ, pas une saisie.
+      qty: qty === "0" ? "" : qty,
+      warnAt,
+      barcode: barcode ?? "",
+    },
+    (fields) => {
+      setName(draftString(fields.name) ?? "");
+      setPrice(draftString(fields.price) ?? "");
+      setCost(draftString(fields.cost) ?? "");
+      setUnit(draftOneOf(fields.unit, UNITS) ?? "piece");
+      setCategoryId(draftString(fields.categoryId) || null);
+      setQty(draftString(fields.qty) || "0");
+      setWarnAt(draftString(fields.warnAt) ?? "");
+      setBarcode(draftString(fields.barcode) || null);
+    },
+  );
 
   const opening = parseDecimalInput(qty || "0");
   const hasStock = opening !== null && compareDecimal(opening, "0") === 1;
@@ -110,6 +145,7 @@ export function NewProductForm() {
       for (const key of [queryKeys.products.all, queryKeys.stock.all]) {
         void queryClient.invalidateQueries({ queryKey: key });
       }
+      draft.clear();
       toast.success(t.created);
       setDone({
         name: created.product.name,
@@ -195,6 +231,16 @@ export function NewProductForm() {
             submit();
           }}
         >
+          {draft.restored && (
+            <DraftBanner
+              onClear={() => {
+                again();
+                setUnit("piece");
+                setCategoryId(null);
+                draft.clear();
+              }}
+            />
+          )}
           <div className="flex flex-wrap items-center gap-3">
             <BarcodeScanButton onScan={onScan} tile />
             {barcode && (

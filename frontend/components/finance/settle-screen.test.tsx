@@ -72,6 +72,8 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/hooks/use-me", () => ({
   useCompanyLocale: () => ({ currency: "XOF", timeZone: "Africa/Dakar" }),
+  // Sans identité, aucun brouillon n'est lu ni écrit (ADR 0101).
+  useMe: () => ({ data: undefined }),
 }));
 vi.mock("@/lib/api/client", () => ({
   api: {

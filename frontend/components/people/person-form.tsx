@@ -5,12 +5,15 @@ import { Check, Loader2, Truck, UserRound } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
+import { DraftBanner } from "@/components/draft-banner";
 import { FieldError } from "@/components/field-error";
 import { fieldClasses, RUBRIQUE_CLASSES } from "@/components/kit/rubrique";
 import { Button } from "@/components/ui/button";
+import { useDraft } from "@/hooks/use-draft";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/queries/keys";
+import { draftOneOf, draftString } from "@/lib/drafts";
 import type { Schemas } from "@/lib/api/schema";
 import { labels } from "@/lib/labels";
 import { formatPhone, isCompletePhone } from "@/lib/phone";
@@ -64,6 +67,25 @@ export function PersonForm({
   );
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  // Brouillon d'une fiche client ou fournisseur (ADR 0101), un par fiche modifiée.
+  const draft = useDraft(
+    {
+      formId: person ? `person-${kind}` : "person-new",
+      version: 1,
+      fields: ["kind", "name", "phone", "email", "address"],
+      meaningful: ["name", "phone", "email", "address"],
+      objectId: person?.id,
+    },
+    { kind: fixedKind || person ? "" : chosenKind, name, phone, email, address },
+    (fields) => {
+      const savedKind = draftOneOf(fields.kind, ["customer", "supplier"] as const);
+      if (savedKind && !fixedKind && !person) setKind(savedKind);
+      setName(draftString(fields.name) ?? "");
+      setPhone(draftString(fields.phone) ?? "");
+      setEmail(draftString(fields.email) ?? "");
+      setAddress(draftString(fields.address) ?? "");
+    },
+  );
   const t = labels.people;
   const rubrique = PERSON_RUBRIQUE[kind];
   const editing = Boolean(person);
@@ -95,6 +117,7 @@ export function PersonForm({
       return { kind, person: saved };
     },
     onSuccess: (saved) => {
+      draft.clear();
       const keys = saved.kind === "customer" ? queryKeys.customers : queryKeys.suppliers;
       queryClient.setQueryData(keys.detail(saved.person.id), saved.person);
       void queryClient.invalidateQueries({ queryKey: keys.all });
@@ -125,6 +148,17 @@ export function PersonForm({
         submit();
       }}
     >
+      {draft.restored && (
+        <DraftBanner
+          onClear={() => {
+            setName(person?.name ?? "");
+            setPhone(formatPhone(person?.phone ?? ""));
+            setEmail(person && "email" in person ? (person.email ?? "") : "");
+            setAddress(person && "address" in person ? (person.address ?? "") : "");
+            draft.clear();
+          }}
+        />
+      )}
       {!fixedKind && !editing && (
         <div role="radiogroup" aria-label={t.kindLabel} className="grid grid-cols-2 gap-2.5">
           {(["customer", "supplier"] as const).map((value) => {

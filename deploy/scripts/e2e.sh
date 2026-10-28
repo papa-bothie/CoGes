@@ -113,6 +113,15 @@ SQL
     uv run --directory backend python -m app.cli create-company --name "Parcours e2e" \
       --slug e2e --manager-email gerant@e2e.example.com --manager-name "Gérant des parcours" \
       --password demo-coges-2026
+    # Les parcours y créent chacun leurs comptes : le plafond de l'essai Premium (10) les
+    # bloquerait entre eux (ADR 0091). Comme `lift_user_cap` de la suite backend, l'entreprise
+    # de parcours passe au palier « sur devis », sans plafond ; le plafond a ses propres tests.
+    docker compose exec -T postgres psql -U postgres -d "$E2E_DB" -v ON_ERROR_STOP=1 -q <<'SQL'
+INSERT INTO plans (code, name, price_fcfa, max_users, is_orderable)
+VALUES ('sur_devis', 'Sur devis', NULL, NULL, false) ON CONFLICT (code) DO NOTHING;
+UPDATE subscriptions SET plan_id = (SELECT id FROM plans WHERE code = 'sur_devis')
+WHERE company_id = (SELECT id FROM companies WHERE slug = 'e2e');
+SQL
     # Administration (ADR 0089) : un compte de l'équipe, et une entreprise que ses parcours
     # suspendent puis réactivent sans toucher aux autres.
     uv run --directory backend python -m app.cli create-platform-user \

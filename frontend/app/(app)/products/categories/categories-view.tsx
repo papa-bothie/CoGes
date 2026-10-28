@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { DraftBanner } from "@/components/draft-banner";
 import { ErrorState } from "@/components/error-state";
 import { FieldError } from "@/components/field-error";
 import { fieldClasses } from "@/components/kit/rubrique";
@@ -19,11 +20,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDraft } from "@/hooks/use-draft";
 import { Can, usePermission } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import { flattenTree, useCategories, type CategoryNode } from "@/lib/api/queries/categories";
 import { queryKeys } from "@/lib/api/queries/keys";
+import { draftString } from "@/lib/drafts";
 import { labels } from "@/lib/labels";
 import { SHELF_COLORS, shelfClass } from "@/lib/shelf-colors";
 import { cn } from "@/lib/utils";
@@ -112,12 +115,23 @@ function NewShelf() {
   const [name, setName] = useState("");
   const [color, setColor] = useState<number>(5);
   const [error, setError] = useState<string | null>(null);
+  // Brouillon de « Nouveau rayon » (ADR 0101).
+  const draft = useDraft(
+    { formId: "category-new", version: 1, fields: ["name", "color"], meaningful: ["name"] },
+    { name, color: String(color) },
+    (fields) => {
+      setName(draftString(fields.name) ?? "");
+      const saved = Number(draftString(fields.color));
+      setColor(Number.isInteger(saved) && saved >= 1 && saved <= 8 ? saved : 5);
+    },
+  );
   const create = useMutation({
     meta: { toastError: false },
     mutationFn: () =>
       unwrap(api.POST("/api/v1/categories", { body: { name: name.trim(), color } })),
     onSuccess: (shelf) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.categories.all });
+      draft.clear();
       toast.success(t.created(shelf.name));
       setName("");
       setError(null);
@@ -134,6 +148,15 @@ function NewShelf() {
         if (name.trim()) create.mutate();
       }}
     >
+      {draft.restored && (
+        <DraftBanner
+          onClear={() => {
+            setName("");
+            setColor(5);
+            draft.clear();
+          }}
+        />
+      )}
       <label htmlFor="new-shelf" className="text-[17px] font-bold">
         {t.newLabel}
       </label>

@@ -18,6 +18,12 @@ Next 16 · TypeScript strict · Tailwind 4 · shadcn/ui · TanStack Query · ope
   en lecture seule (`lib/auth/support.ts`, jeton dans le `sessionStorage` de l'onglet,
   jamais de `/auth/refresh` ni de `/auth/logout`) ; `/support/termine` à la fin. Le bandeau
   « Accès support actif » (`components/shell/support-banner.tsx`) s'affiche pour tous.
+- **Droits par écran** (ADR 0099) : chaque page de `app/(app)` déclare son droit dans
+  `lib/access.ts` (un test échoue sinon) ; le menu et la garde de page s'y rapportent.
+- **Brouillons** (ADR 0101) : `hooks/use-draft.ts` garde la saisie d'un formulaire dans le
+  `localStorage`, au nom de la personne et de l'entreprise, champs en liste blanche, 24 h au
+  plus, effacée à l'envoi et à la déconnexion. Un nouveau formulaire qui écrit l'ajoute à la
+  liste figée de l'ADR ; jamais un mot de passe.
 
 ## Commandes
 

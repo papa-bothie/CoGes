@@ -12,10 +12,12 @@ import { PaymentAmount } from "@/components/kit/payment-amount";
 import { PaymentMethodChips } from "@/components/kit/payment-method-chips";
 import { CustomerPicker, type PickedCustomer } from "@/components/sales/customer-picker";
 import { RecentSales } from "@/components/sales/recent-sales";
+import { DraftBanner } from "@/components/draft-banner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDraft } from "@/hooks/use-draft";
 import { useCompanyLocale, useMe } from "@/hooks/use-me";
 import { usePermission } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
@@ -36,6 +38,8 @@ import {
   typedAmount,
   wholeUnits,
 } from "@/lib/payment-amount";
+import { draftOneOf, draftString } from "@/lib/drafts";
+import { PAYMENT_METHODS } from "@/lib/payment-methods";
 import { todayIn } from "@/lib/period";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +51,18 @@ type SaleDetail = Schemas["SaleDetail"];
 type Product = Schemas["ProductRead"];
 type PaymentMethod = Schemas["PaymentMethod"];
 type Mode = "full" | "partial" | "credit";
+
+/**
+ * Brouillon de l'encaissement (ADR 0101) : le panier, lui, est déjà au serveur. Un par vente
+ * (« new » avant le premier article) ; la clé d'idempotence voyage avec lui, pour qu'un
+ * encaissement interrompu puis repris ne fasse jamais deux ventes.
+ */
+const DRAFT = {
+  formId: "sale-payment",
+  version: 1,
+  fields: ["mode", "paidInput", "given", "method", "dueDate", "customer", "idem"],
+  meaningful: ["mode", "paidInput", "given", "dueDate", "customer"],
+} as const;
 type Done = { sale: SaleDetail; line: string; phone: string | null };
 
 const MODES: readonly Mode[] = ["full", "partial", "credit"];
@@ -135,6 +151,42 @@ export function SaleEditor({
   useEffect(() => {
     if (resumedId) window.history.replaceState(null, "", `/sales/${resumedId}/edit`);
   }, [resumedId]);
+
+  const draft = useDraft(
+    {
+      ...DRAFT,
+      objectId: saleId ?? "new",
+      enabled: !resuming,
+      busy: false,
+    },
+    {
+      // « Tout payé » et l'espèce sont l'état de départ : ils ne font pas un brouillon.
+      mode: mode === "full" ? "" : mode,
+      paidInput,
+      given,
+      method,
+      dueDate,
+      customer: pendingCustomer ? { id: pendingCustomer.id, name: pendingCustomer.name } : null,
+      idem: idempotency.key,
+    },
+    (fields) => {
+      setMode(draftOneOf(fields.mode, ["partial", "credit"] as const) ?? "full");
+      setPaidInput(draftString(fields.paidInput) ?? "");
+      setGiven(draftString(fields.given) ?? "");
+      setMethod(draftOneOf(fields.method, PAYMENT_METHODS) ?? "cash");
+      setDueDate(draftString(fields.dueDate) ?? "");
+      const customer = fields.customer as { id?: unknown; name?: unknown } | null;
+      if (
+        !saleId &&
+        customer &&
+        typeof customer.id === "string" &&
+        typeof customer.name === "string"
+      ) {
+        setPendingCustomer({ id: customer.id, name: customer.name });
+      }
+      idempotency.restore(fields.idem);
+    },
+  );
 
   const sale = useQuery({
     queryKey: queryKeys.sales.detail(saleId ?? "new"),
@@ -323,6 +375,7 @@ export function SaleEditor({
       setSettlementError(null);
     },
     onSuccess: (confirmed: SaleDetail) => {
+      draft.clear();
       idempotency.renew();
       setDone({ sale: confirmed, line: successLine(confirmed), phone: customerPhone });
       queryClient.setQueryData(queryKeys.sales.detail(confirmed.id), confirmed);
@@ -432,6 +485,19 @@ export function SaleEditor({
           aria-label={labels.sales.receipt}
           className="flex min-w-0 flex-col gap-[18px] rounded-carte border border-border bg-card p-5"
         >
+          {draft.restored && (
+            <DraftBanner
+              onClear={() => {
+                setMode("full");
+                setPaidInput("");
+                setGiven("");
+                setMethod("cash");
+                setDueDate("");
+                if (!saleId) setPendingCustomer(null);
+                draft.clear();
+              }}
+            />
+          )}
           <div>
             <p className="mb-2 text-libelle">{t.client}</p>
             {changingCustomer ? (

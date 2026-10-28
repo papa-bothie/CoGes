@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { BackLink } from "@/components/back-link";
+import { DraftBanner } from "@/components/draft-banner";
 import { ErrorState } from "@/components/error-state";
 import { FieldError } from "@/components/field-error";
 import { AmountField, NumericPad } from "@/components/kit/amount-field";
@@ -14,6 +15,7 @@ import { KitCard } from "@/components/kit/kit-card";
 import { PaymentMethodChips } from "@/components/kit/payment-method-chips";
 import { TODAY, WhenChips, whenDay, type When } from "@/components/kit/when-chips";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDraft } from "@/hooks/use-draft";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { Can, usePermission } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
@@ -27,12 +29,22 @@ import { zonedDateTimeIso } from "@/lib/format/zoned";
 import { labels } from "@/lib/labels";
 import { MINUS } from "@/lib/money";
 import { typedAmount, wholeUnits } from "@/lib/payment-amount";
+import { draftOneOf, draftString, draftWhen } from "@/lib/drafts";
+import { PAYMENT_METHODS } from "@/lib/payment-methods";
 import { addDays, todayIn } from "@/lib/period";
 import { cn } from "@/lib/utils";
 
 import { ExpenseCategoriesDialog } from "../expense-categories-dialog";
 
 type Method = Schemas["PaymentMethod"];
+
+/** Brouillon de « Nouvelle dépense » (ADR 0101) : la clé d'idempotence voyage avec lui. */
+const DRAFT = {
+  formId: "expense",
+  version: 1,
+  fields: ["categoryId", "amount", "when", "method", "idem"],
+  meaningful: ["amount"],
+} as const;
 const t = labels.moneyScreens.expensesScreen;
 
 /** « Aujourd'hui », « Hier », sinon « 3 octobre ». */
@@ -61,6 +73,24 @@ export function ExpensesView() {
   const [formError, setFormError] = useState<string | null>(null);
   const [managing, setManaging] = useState(false);
   const today = todayIn(timeZone);
+  const draft = useDraft(
+    { ...DRAFT, busy: false },
+    { categoryId, amount, when, method, idem: idempotency.key },
+    (fields) => {
+      setCategoryId(draftString(fields.categoryId));
+      setAmount(draftString(fields.amount) ?? "");
+      setWhen(draftWhen(fields.when) ?? TODAY);
+      setMethod(draftOneOf(fields.method, PAYMENT_METHODS) ?? "cash");
+      idempotency.restore(fields.idem);
+    },
+  );
+  const resetForm = () => {
+    setCategoryId(undefined);
+    setAmount("");
+    setWhen(TODAY);
+    setMethod("cash");
+    draft.clear();
+  };
 
   const categories = useQuery({
     queryKey: queryKeys.expenseCategories.all,
@@ -80,6 +110,7 @@ export function ExpensesView() {
       idempotency.renew();
       for (const key of MONEY_KEYS) void queryClient.invalidateQueries({ queryKey: key });
       setDone(t.done(body.label, formatAmount(String(body.amount), currency)));
+      draft.clear();
       setAmount("");
     },
     onError: (error) => setFormError(errorMessage(error)),
@@ -136,6 +167,7 @@ export function ExpensesView() {
               submit();
             }}
           >
+            {draft.restored && <DraftBanner onClear={resetForm} />}
             {done && (
               <div
                 role="status"

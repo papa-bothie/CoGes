@@ -10,6 +10,12 @@ export const labels = {
     version: (v: string) => `Version ${v}`,
     skipToContent: "Aller au contenu",
   },
+  /** Brouillon de saisie retrouvé (ADR 0101). */
+  draft: {
+    restored: "Brouillon retrouvé : votre saisie était gardée.",
+    clear: "Effacer",
+    clearLabel: "Effacer le brouillon et repartir de zéro",
+  },
   /** Adresse tapée sans le droit de l'écran (ADR 0099). */
   noAccess: {
     title: "Vous n'avez pas accès à cette page",
@@ -811,6 +817,11 @@ export const labels = {
       createdAt: "Créé le",
     },
     delivery: {
+      /** Brouillon retrouvé dont un article n'existe plus (ADR 0101). */
+      draftLinesDropped: (count: number) =>
+        count === 1
+          ? "Un article du brouillon n'existe plus : il a été retiré."
+          : `${count} articles du brouillon n'existent plus : ils ont été retirés.`,
       title: "Recevoir une livraison",
       who: "Qui livre ?",
       newSupplier: "+ Nouveau fournisseur",

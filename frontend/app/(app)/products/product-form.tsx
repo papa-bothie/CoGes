@@ -5,10 +5,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { DraftBanner } from "@/components/draft-banner";
 import { FieldError } from "@/components/field-error";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useDraft } from "@/hooks/use-draft";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage, isApiError } from "@/lib/api/errors";
 import { flattenTree, useCategories } from "@/lib/api/queries/categories";
@@ -73,6 +75,19 @@ const schema = z.object({
 });
 type Values = z.infer<typeof schema>;
 
+/** Brouillon de la modification d'un article (ADR 0101), un par article. */
+const DRAFT_FIELDS = [
+  "name",
+  "sku",
+  "barcode",
+  "category_id",
+  "unit",
+  "is_stock_tracked",
+  "is_active",
+  "tax_percent",
+  "reorder_point",
+] as const satisfies readonly (keyof Values)[];
+
 /** Erreurs métier renvoyées sur un champ précis. */
 const FIELD_CODES: Record<string, keyof Values> = {
   product_sku_taken: "sku",
@@ -96,7 +111,9 @@ export function ProductForm({ product }: { product: Product }) {
     control,
     handleSubmit,
     setError,
-    formState: { errors },
+    setValue,
+    reset,
+    formState: { errors, defaultValues },
   } = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -111,6 +128,20 @@ export function ProductForm({ product }: { product: Product }) {
       reorder_point: product.reorder_point ? toInputDecimal(product.reorder_point) : "",
     },
   });
+
+  const watched = useWatch({ control });
+  const draft = useDraft(
+    { formId: "product-edit", version: 1, fields: DRAFT_FIELDS, objectId: product.id },
+    watched,
+    (fields) => {
+      // Chaque champ est revérifié par le schéma du formulaire : une valeur mal formée est ignorée.
+      const parsed = schema.partial().safeParse(fields);
+      if (!parsed.success) return;
+      for (const [name, value] of Object.entries(parsed.data)) {
+        setValue(name as keyof Values, value as never, { shouldDirty: true });
+      }
+    },
+  );
 
   const save = useMutation({
     meta: { toastError: false },
@@ -133,6 +164,7 @@ export function ProductForm({ product }: { product: Product }) {
       );
     },
     onSuccess: (saved) => {
+      draft.clear();
       queryClient.setQueryData(queryKeys.products.detail(saved.id), saved);
       for (const key of [queryKeys.products.all, queryKeys.stock.all]) {
         void queryClient.invalidateQueries({ queryKey: key });
@@ -168,6 +200,14 @@ export function ProductForm({ product }: { product: Product }) {
         save.mutate(values);
       })}
     >
+      {draft.restored && (
+        <DraftBanner
+          onClear={() => {
+            reset(defaultValues);
+            draft.clear();
+          }}
+        />
+      )}
       <Card>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Field id="name" label={labels.products.name} error={errors.name?.message} wide>
