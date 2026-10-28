@@ -11,11 +11,13 @@ import { AmountField, cleanAmount } from "@/components/kit/amount-field";
 import { PaymentAmount } from "@/components/kit/payment-amount";
 import { PaymentMethodChips } from "@/components/kit/payment-method-chips";
 import { CustomerPicker, type PickedCustomer } from "@/components/sales/customer-picker";
+import { RecentSales } from "@/components/sales/recent-sales";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale, useMe } from "@/hooks/use-me";
+import { usePermission } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage, isApiError } from "@/lib/api/errors";
 import { useIdempotencyKey } from "@/lib/api/idempotency";
@@ -78,6 +80,8 @@ export function SaleEditor({
   const queryClient = useQueryClient();
   const { data: me } = useMe();
   const { currency } = useCompanyLocale();
+  // « Dernières ventes » sous le panier, pour qui lit les ventes (ADR 0100).
+  const showRecent = usePermission("sales:read");
   const timeZone = me?.company.timezone ?? "UTC";
 
   const [saleId, setSaleId] = useState(initialId);
@@ -421,240 +425,245 @@ export function SaleEditor({
         <FieldError message={articleError} />
       </div>
 
-      <aside
-        aria-label={labels.sales.receipt}
-        className="flex min-w-0 flex-[2_1_360px] flex-col gap-[18px] rounded-carte border border-border bg-card p-5"
-      >
-        <div>
-          <p className="mb-2 text-libelle">{t.client}</p>
-          {changingCustomer ? (
-            <CustomerPicker
-              onSelect={chooseCustomer}
-              disabled={setCustomer.isPending}
-              currency={currency}
-              autoOpen
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setChangingCustomer(true)}
-              disabled={setCustomer.isPending || loadingDraft}
-              className={cn(
-                "flex min-h-16 w-full items-center gap-3 rounded-champ border-2 border-clients bg-clients-teinte px-3 py-2 text-left text-foreground",
-                "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-              )}
-            >
-              <span
-                aria-hidden
-                className="flex size-11 shrink-0 items-center justify-center rounded-full bg-clients font-bold text-primary-foreground"
-              >
-                {customerName ? <InitialsOf name={customerName} /> : "·"}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-bold">
-                  {customerName ?? labels.kit.walkIn}
-                </span>
-                <span className="block text-muted-foreground">
-                  {customerName ? (customerPhone ?? "") : t.walkInHint}
-                </span>
-              </span>
-              <span className="font-bold text-clients-encre">{t.change}</span>
-            </button>
-          )}
-        </div>
-
-        <div>
-          <p className="mb-1 text-libelle">{t.cart}</p>
-          {loadingDraft ? (
-            <Skeleton className="h-24 w-full" />
-          ) : items.length === 0 ? (
-            <p className="rounded-[18px] border-2 border-dashed border-input px-2 py-7 text-center text-libelle font-normal text-muted-foreground">
-              {t.emptyCart}
-            </p>
-          ) : (
-            items.map((item) => {
-              const line = stock.data?.get(item.product_id);
-              const short = shortProducts.has(item.product_id);
-              return (
-                <TicketLine
-                  key={item.id}
-                  item={item}
-                  currency={currency}
-                  disabled={confirm.isPending}
-                  error={
-                    lineErrors[item.id] ??
-                    (short && line
-                      ? labels.sales.insufficient(formatQty(line.qty_on_hand))
-                      : undefined)
-                  }
-                  onChange={(lineChange) =>
-                    updateItem.mutate({ itemId: item.id, change: lineChange })
-                  }
-                  onRemove={() => removeItem.mutate(item.id)}
-                />
-              );
-            })
-          )}
-        </div>
-
-        <div className="flex items-baseline justify-between rounded-[18px] bg-ventes-teinte px-[18px] py-4">
-          <span className="text-xl font-bold">{t.total}</span>
-          <span
-            aria-live="polite"
-            aria-busy={busy}
-            className="text-[36px] leading-tight font-extrabold numeric text-ventes-encre"
-          >
-            {formatAmount(data?.total ?? "0", currency)}
-          </span>
-        </div>
-
-        <div>
-          <p id="pays" className="mb-2 text-libelle">
-            {t.customerPays}
-          </p>
-          <div role="group" aria-labelledby="pays" className="flex flex-wrap gap-2">
-            {MODES.map((value) => (
+      {/* Colonne de droite dès 1024 px, sous la grille sur téléphone : le panier d'abord, les
+          dernières ventes ensuite, pour ne jamais éloigner le bouton d'encaissement. */}
+      <div className="flex min-w-0 flex-[2_1_360px] flex-col gap-5">
+        <aside
+          aria-label={labels.sales.receipt}
+          className="flex min-w-0 flex-col gap-[18px] rounded-carte border border-border bg-card p-5"
+        >
+          <div>
+            <p className="mb-2 text-libelle">{t.client}</p>
+            {changingCustomer ? (
+              <CustomerPicker
+                onSelect={chooseCustomer}
+                disabled={setCustomer.isPending}
+                currency={currency}
+                autoOpen
+              />
+            ) : (
               <button
-                key={value}
                 type="button"
-                aria-pressed={mode === value}
-                onClick={() => {
-                  setMode(value);
-                  setPaidInput("");
-                  setGiven("");
-                  setSettlementError(null);
-                }}
+                onClick={() => setChangingCustomer(true)}
+                disabled={setCustomer.isPending || loadingDraft}
                 className={cn(
-                  "min-h-16 flex-[1_1_140px] rounded-[18px] border-2 px-3 py-2 text-libelle",
+                  "flex min-h-16 w-full items-center gap-3 rounded-champ border-2 border-clients bg-clients-teinte px-3 py-2 text-left text-foreground",
                   "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                  mode === value
-                    ? "border-ventes bg-ventes text-primary-foreground"
-                    : "border-input bg-card text-foreground hover:bg-voile",
                 )}
               >
-                {labels.sales.settlementModes[value]}
+                <span
+                  aria-hidden
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full bg-clients font-bold text-primary-foreground"
+                >
+                  {customerName ? <InitialsOf name={customerName} /> : "·"}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-bold">
+                    {customerName ?? labels.kit.walkIn}
+                  </span>
+                  <span className="block text-muted-foreground">
+                    {customerName ? (customerPhone ?? "") : t.walkInHint}
+                  </span>
+                </span>
+                <span className="font-bold text-clients-encre">{t.change}</span>
               </button>
-            ))}
+            )}
           </div>
-        </div>
 
-        {mode !== "credit" && (
-          <PaymentMethodChips
-            value={method}
-            onChange={setMethod}
-            label={t.methods}
-            hideLabel
-            stretch
-            tone="teinte"
-          />
-        )}
-
-        {mode === "full" && method === "cash" && total > 0n && (
           <div>
-            <p id="donne" className="mb-2 text-libelle">
-              {labels.payment.customerGives}
+            <p className="mb-1 text-libelle">{t.cart}</p>
+            {loadingDraft ? (
+              <Skeleton className="h-24 w-full" />
+            ) : items.length === 0 ? (
+              <p className="rounded-[18px] border-2 border-dashed border-input px-2 py-7 text-center text-libelle font-normal text-muted-foreground">
+                {t.emptyCart}
+              </p>
+            ) : (
+              items.map((item) => {
+                const line = stock.data?.get(item.product_id);
+                const short = shortProducts.has(item.product_id);
+                return (
+                  <TicketLine
+                    key={item.id}
+                    item={item}
+                    currency={currency}
+                    disabled={confirm.isPending}
+                    error={
+                      lineErrors[item.id] ??
+                      (short && line
+                        ? labels.sales.insufficient(formatQty(line.qty_on_hand))
+                        : undefined)
+                    }
+                    onChange={(lineChange) =>
+                      updateItem.mutate({ itemId: item.id, change: lineChange })
+                    }
+                    onRemove={() => removeItem.mutate(item.id)}
+                  />
+                );
+              })
+            )}
+          </div>
+
+          <div className="flex items-baseline justify-between rounded-[18px] bg-ventes-teinte px-[18px] py-4">
+            <span className="text-xl font-bold">{t.total}</span>
+            <span
+              aria-live="polite"
+              aria-busy={busy}
+              className="text-[36px] leading-tight font-extrabold numeric text-ventes-encre"
+            >
+              {formatAmount(data?.total ?? "0", currency)}
+            </span>
+          </div>
+
+          <div>
+            <p id="pays" className="mb-2 text-libelle">
+              {t.customerPays}
             </p>
-            <div role="group" aria-labelledby="donne" className="flex flex-wrap gap-2">
-              {billShortcuts(total, currency).map((bill) => (
+            <div role="group" aria-labelledby="pays" className="flex flex-wrap gap-2">
+              {MODES.map((value) => (
                 <button
-                  key={bill.value}
+                  key={value}
                   type="button"
-                  aria-pressed={given === bill.value}
-                  onClick={() => setGiven(cleanAmount(bill.value))}
+                  aria-pressed={mode === value}
+                  onClick={() => {
+                    setMode(value);
+                    setPaidInput("");
+                    setGiven("");
+                    setSettlementError(null);
+                  }}
                   className={cn(
-                    "min-h-cible flex-[1_1_90px] rounded-full border-2 px-[18px] font-semibold numeric",
+                    "min-h-16 flex-[1_1_140px] rounded-[18px] border-2 px-3 py-2 text-libelle",
                     "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-                    given === bill.value
-                      ? "border-ventes bg-ventes-teinte text-ventes-encre"
+                    mode === value
+                      ? "border-ventes bg-ventes text-primary-foreground"
                       : "border-input bg-card text-foreground hover:bg-voile",
                   )}
                 >
-                  {bill.value === total.toString()
-                    ? bill.label
-                    : formatFigure(bill.value, currency)}
+                  {labels.sales.settlementModes[value]}
                 </button>
               ))}
             </div>
-            <div className="mt-2">
-              <AmountField
-                label={labels.payment.otherGiven}
-                hideLabel
-                placeholder={labels.payment.otherGivenPlaceholder}
-                size="rendu"
-                value={
-                  billShortcuts(total, currency).some((bill) => bill.value === given) ? "" : given
-                }
-                onChange={setGiven}
+          </div>
+
+          {mode !== "credit" && (
+            <PaymentMethodChips
+              value={method}
+              onChange={setMethod}
+              label={t.methods}
+              hideLabel
+              stretch
+              tone="teinte"
+            />
+          )}
+
+          {mode === "full" && method === "cash" && total > 0n && (
+            <div>
+              <p id="donne" className="mb-2 text-libelle">
+                {labels.payment.customerGives}
+              </p>
+              <div role="group" aria-labelledby="donne" className="flex flex-wrap gap-2">
+                {billShortcuts(total, currency).map((bill) => (
+                  <button
+                    key={bill.value}
+                    type="button"
+                    aria-pressed={given === bill.value}
+                    onClick={() => setGiven(cleanAmount(bill.value))}
+                    className={cn(
+                      "min-h-cible flex-[1_1_90px] rounded-full border-2 px-[18px] font-semibold numeric",
+                      "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                      given === bill.value
+                        ? "border-ventes bg-ventes-teinte text-ventes-encre"
+                        : "border-input bg-card text-foreground hover:bg-voile",
+                    )}
+                  >
+                    {bill.value === total.toString()
+                      ? bill.label
+                      : formatFigure(bill.value, currency)}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2">
+                <AmountField
+                  label={labels.payment.otherGiven}
+                  hideLabel
+                  placeholder={labels.payment.otherGivenPlaceholder}
+                  size="rendu"
+                  value={
+                    billShortcuts(total, currency).some((bill) => bill.value === given) ? "" : given
+                  }
+                  onChange={setGiven}
+                />
+              </div>
+              {change !== null && (
+                <p
+                  role="status"
+                  className="mt-2.5 flex items-baseline justify-between rounded-champ bg-argent-teinte px-4 py-3"
+                >
+                  <span className="font-bold">{labels.payment.change}</span>
+                  <span className="text-[26px] font-extrabold numeric text-argent-encre">
+                    {formatAmount(change.toString(), currency)}
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {mode === "partial" && total > 0n && (
+            <PaymentAmount
+              id="paid-amount"
+              label={labels.payment.givesNow}
+              placeholder={labels.payment.typeAmount}
+              value={paidInput}
+              onChange={setPaidInput}
+              shortcuts={partShortcuts(total, currency)}
+              check={partCheck}
+              okRubrique="stock"
+            />
+          )}
+
+          {mode !== "full" && customerId && (
+            <div className="space-y-1.5">
+              <Label htmlFor="due-date" className="text-libelle">
+                {labels.sales.dueDate}
+              </Label>
+              <Input
+                id="due-date"
+                type="date"
+                value={dueDate}
+                onChange={(event) => setDueDate(event.target.value)}
+                className="h-12 rounded-champ border-2 text-corps"
               />
             </div>
-            {change !== null && (
-              <p
-                role="status"
-                className="mt-2.5 flex items-baseline justify-between rounded-champ bg-argent-teinte px-4 py-3"
-              >
-                <span className="font-bold">{labels.payment.change}</span>
-                <span className="text-[26px] font-extrabold numeric text-argent-encre">
-                  {formatAmount(change.toString(), currency)}
-                </span>
-              </p>
-            )}
-          </div>
-        )}
-
-        {mode === "partial" && total > 0n && (
-          <PaymentAmount
-            id="paid-amount"
-            label={labels.payment.givesNow}
-            placeholder={labels.payment.typeAmount}
-            value={paidInput}
-            onChange={setPaidInput}
-            shortcuts={partShortcuts(total, currency)}
-            check={partCheck}
-            okRubrique="stock"
-          />
-        )}
-
-        {mode !== "full" && customerId && (
-          <div className="space-y-1.5">
-            <Label htmlFor="due-date" className="text-libelle">
-              {labels.sales.dueDate}
-            </Label>
-            <Input
-              id="due-date"
-              type="date"
-              value={dueDate}
-              onChange={(event) => setDueDate(event.target.value)}
-              className="h-12 rounded-champ border-2 text-corps"
-            />
-          </div>
-        )}
-
-        {needCustomer && items.length > 0 && (
-          <p className="rounded-champ bg-stock-teinte px-4 py-3 font-bold text-stock-encre">
-            {t.needCustomer}
-          </p>
-        )}
-        <FieldError message={settlementError} />
-
-        <Button
-          variant="ventes"
-          size="principal"
-          className="w-full text-[21px] font-bold disabled:bg-ventes/45 disabled:opacity-100"
-          disabled={blocked || busy || confirm.isPending}
-          onClick={submitConfirm}
-        >
-          {confirm.isPending ? (
-            <Loader2 className="size-[26px] animate-spin" aria-hidden />
-          ) : (
-            <Check className="size-[26px]" aria-hidden />
           )}
-          {ctaLabel}
-        </Button>
-        {shortProducts.size > 0 && (
-          <p className="text-sm text-danger-ink">{labels.sales.confirmBlocked}</p>
-        )}
-        <FieldError message={confirmError} />
-      </aside>
+
+          {needCustomer && items.length > 0 && (
+            <p className="rounded-champ bg-stock-teinte px-4 py-3 font-bold text-stock-encre">
+              {t.needCustomer}
+            </p>
+          )}
+          <FieldError message={settlementError} />
+
+          <Button
+            variant="ventes"
+            size="principal"
+            className="w-full text-[21px] font-bold disabled:bg-ventes/45 disabled:opacity-100"
+            disabled={blocked || busy || confirm.isPending}
+            onClick={submitConfirm}
+          >
+            {confirm.isPending ? (
+              <Loader2 className="size-[26px] animate-spin" aria-hidden />
+            ) : (
+              <Check className="size-[26px]" aria-hidden />
+            )}
+            {ctaLabel}
+          </Button>
+          {shortProducts.size > 0 && (
+            <p className="text-sm text-danger-ink">{labels.sales.confirmBlocked}</p>
+          )}
+          <FieldError message={confirmError} />
+        </aside>
+        {showRecent && <RecentSales currency={currency} timeZone={timeZone} />}
+      </div>
     </div>
   );
 }
