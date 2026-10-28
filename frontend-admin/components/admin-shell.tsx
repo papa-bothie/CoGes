@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { GlobalSearch } from "@/components/global-search";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { SystemAlert, SystemHealthProvider, useSystemHealth } from "@/components/system-health";
 import { api, unwrap } from "@/lib/api/client";
 import type { PlatformMe } from "@/lib/api/schema";
@@ -103,6 +104,7 @@ function Frame({ me, children }: { me: PlatformMe | null; children: ReactNode })
               {me.display_name} · {PLATFORM_ROLE_LABELS[me.role] ?? me.role}
             </span>
           )}
+          <ThemeToggle className="hover:bg-admin-trait max-sm:hidden" />
           <button
             type="button"
             onClick={() => void signOut()}
@@ -112,11 +114,15 @@ function Frame({ me, children }: { me: PlatformMe | null; children: ReactNode })
             <span className="max-sm:sr-only">Se déconnecter</span>
           </button>
         </div>
-        {me && (
-          <p className="px-4 pb-1.5 text-sm md:hidden">
-            {me.display_name} · {PLATFORM_ROLE_LABELS[me.role] ?? me.role}
-          </p>
-        )}
+        {/* Sur téléphone, la bascule du thème descend ici : la barre du haut reste sur une ligne. */}
+        <div className="flex items-center gap-2 px-4 pb-1.5 md:hidden">
+          {me && (
+            <p className="text-sm">
+              {me.display_name} · {PLATFORM_ROLE_LABELS[me.role] ?? me.role}
+            </p>
+          )}
+          <ThemeToggle className="-my-2 ml-auto hover:bg-admin-trait sm:hidden" />
+        </div>
         <div className="px-4 pb-2 text-encre sm:hidden">
           <GlobalSearch />
         </div>

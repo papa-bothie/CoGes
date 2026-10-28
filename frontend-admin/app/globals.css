@@ -8,10 +8,13 @@
  * refuse les couleurs en dur ailleurs (`lib/no-hardcoded-colors.test.ts`).
  *
  * Repère « Administration » : l'encre ardoise (`--coges-admin`), réservée au bandeau du
- * haut et au favicon, qu'aucune rubrique ni aucun statut n'utilise. Sombre selon le
- * réglage du système, valeurs dérivées comme l'app commerçante.
+ * haut et au favicon, qu'aucune rubrique ni aucun statut n'utilise. Clair par défaut,
+ * sombre seulement sur choix de la personne (`data-theme="dark"` sur <html>, posé avant
+ * l'affichage par le layout, prompt 31) ; valeurs dérivées comme l'app commerçante.
  */
 :root {
+  color-scheme: light;
+
   --coges-vert-marque: #024a2c;
   --coges-vert-action: #117a3c;
   --coges-vert-eclat: #1a9a4c;
@@ -74,48 +77,48 @@
   --info-teinte: var(--coges-argent-teinte);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --coges-vert-marque: #8fdcae;
-    --coges-vert-action: #34b36a;
-    --coges-vert-eclat: #3fc078;
+:root[data-theme="dark"] {
+  color-scheme: dark;
 
-    --coges-papier: #111612;
-    --coges-carte: #19201b;
-    --coges-bordure: #29322c;
-    --coges-bordure-champ: #4a554e;
-    --coges-filet: #222a24;
-    --coges-voile: #232b25;
-    --coges-voile-2: #1e2620;
-    --coges-encre: #eef1ec;
-    --coges-encre-2: #cdd3cd;
-    --coges-sourdine: #a3aca5;
-    --coges-sur-action: #08140c;
+  --coges-vert-marque: #8fdcae;
+  --coges-vert-action: #34b36a;
+  --coges-vert-eclat: #3fc078;
 
-    --coges-ventes: #34b36a;
-    --coges-ventes-teinte: #15301f;
-    --coges-ventes-encre: #8fdcae;
-    --coges-stock: #f07a3a;
-    --coges-stock-teinte: #3a2316;
-    --coges-stock-encre: #fdba8c;
-    --coges-argent: #6b97f0;
-    --coges-argent-teinte: #182744;
-    --coges-argent-encre: #adc6fa;
-    --coges-clients: #a283ec;
-    --coges-clients-teinte: #271e40;
-    --coges-clients-encre: #d0bdf8;
-    --coges-depenses: #e85d63;
-    --coges-depenses-teinte: #3b1a1d;
-    --coges-depenses-encre: #f6a9ad;
-    --coges-conseils: #34aecb;
-    --coges-conseils-teinte: #12303a;
-    --coges-conseils-encre: #96d9e9;
+  --coges-papier: #111612;
+  --coges-carte: #19201b;
+  --coges-bordure: #29322c;
+  --coges-bordure-champ: #4a554e;
+  --coges-filet: #222a24;
+  --coges-voile: #232b25;
+  --coges-voile-2: #1e2620;
+  --coges-encre: #eef1ec;
+  --coges-encre-2: #cdd3cd;
+  --coges-sourdine: #a3aca5;
+  --coges-sur-action: #08140c;
 
-    /* Ardoise éclaircie : le bandeau reste distinct du fond vert-noir. */
-    --coges-admin: #36423b;
-    --coges-admin-encre: #eef1ec;
-    --coges-admin-trait: #4a554e;
-  }
+  --coges-ventes: #34b36a;
+  --coges-ventes-teinte: #15301f;
+  --coges-ventes-encre: #8fdcae;
+  --coges-stock: #f07a3a;
+  --coges-stock-teinte: #3a2316;
+  --coges-stock-encre: #fdba8c;
+  --coges-argent: #6b97f0;
+  --coges-argent-teinte: #182744;
+  --coges-argent-encre: #adc6fa;
+  --coges-clients: #a283ec;
+  --coges-clients-teinte: #271e40;
+  --coges-clients-encre: #d0bdf8;
+  --coges-depenses: #e85d63;
+  --coges-depenses-teinte: #3b1a1d;
+  --coges-depenses-encre: #f6a9ad;
+  --coges-conseils: #34aecb;
+  --coges-conseils-teinte: #12303a;
+  --coges-conseils-encre: #96d9e9;
+
+  /* Ardoise éclaircie : le bandeau reste distinct du fond vert-noir. */
+  --coges-admin: #36423b;
+  --coges-admin-encre: #eef1ec;
+  --coges-admin-trait: #4a554e;
 }
 
 @theme inline {
