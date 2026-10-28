@@ -9,6 +9,7 @@ import { DEFAULT_NEXT, safeNext } from "@/lib/auth/safe-next";
  * Le cookie de rafraîchissement (chemin `/api/v1/auth`) ne lui parvient jamais.
  */
 const SESSION_MARKER = "coges_session";
+const PUBLIC_PWA = new Set(["/manifest.webmanifest", "/sw.js", "/hors-ligne"]);
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -19,6 +20,10 @@ export function proxy(request: NextRequest) {
   if (process.env.NODE_ENV !== "production" && pathname.startsWith("/dev/")) {
     return NextResponse.next();
   }
+
+  // Application installable (ADR 0102) : manifeste, worker et page hors ligne répondent sans
+  // connexion, sans jamais renvoyer vers /login.
+  if (PUBLIC_PWA.has(pathname)) return NextResponse.next();
 
   // Accès support (ADR 0092) : l'entrée lit le jeton du fragment, la fin le dit.
   if (pathname === "/support" || pathname === "/support/termine") {

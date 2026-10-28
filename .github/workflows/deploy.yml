@@ -130,6 +130,8 @@ jobs:
           push: true
           provenance: false
           tags: ${{ env.REGISTRY }}/front:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/front:${{ steps.version.outputs.sha }}
+          # Identifiant de build du service worker et de `deploymentId` (ADR 0102).
+          build-args: NEXT_DEPLOYMENT_ID=${{ steps.version.outputs.version }}
           cache-from: type=gha,scope=front
           cache-to: type=gha,mode=max,scope=front
       # Administration de la plateforme (ADR 0089) : image à part, jamais dans le front.

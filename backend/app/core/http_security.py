@@ -14,6 +14,7 @@ corps de requête pendant sa lecture, ce que ce dernier ne permet pas proprement
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from anyio import to_thread
@@ -23,7 +24,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.core import rate_limit
 from app.core.config import get_settings
 from app.core.deps import raw_client_ip
-from app.core.errors import CogesError, PayloadTooLargeError
+from app.core.errors import CogesError, FrontOutdatedError, PayloadTooLargeError
 
 API_PREFIX = "/api/v1"
 IMPORTS_PREFIX = f"{API_PREFIX}/imports"
@@ -194,3 +195,43 @@ class SecurityHeadersMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_with_headers)
+
+
+FRONT_VERSION_HEADER = "x-coges-front"
+_VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)")
+
+
+def _version(value: str) -> tuple[int, int, int] | None:
+    match = _VERSION.match(value.strip())
+    if not match:
+        return None
+    major, minor, patch = (int(part) for part in match.groups())
+    return major, minor, patch
+
+
+class FrontVersionMiddleware:
+    """Refuse un front plus ancien que `COGES_MIN_FRONT_VERSION` (426, ADR 0102).
+
+    Sans réglage, sans en-tête ou avec une version illisible, rien n'est refusé : un front
+    d'avant ce lot n'envoie rien, et le bloquer le laisserait sans moyen de se mettre à jour.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or not scope["path"].startswith(API_PREFIX):
+            await self.app(scope, receive, send)
+            return
+        minimum = _version(get_settings().min_front_version)
+        sent = Headers(scope=scope).get(FRONT_VERSION_HEADER, "")
+        front = _version(sent)
+        if minimum is not None and front is not None and front < minimum:
+            await _send_error(
+                send,
+                FrontOutdatedError(
+                    details={"minimum": get_settings().min_front_version, "front": sent.strip()}
+                ),
+            )
+            return
+        await self.app(scope, receive, send)

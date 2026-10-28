@@ -172,6 +172,15 @@ SQL
     # tourner à côté sans conflit.
     run_front .next-e2e "$E2E_API_PORT" "$E2E_FRONT_PORT"
     ;;
+  front-prod)
+    # Application installable (ADR 0102) : le service worker ne s'enregistre qu'en production.
+    # Build à part (.next-pwa), identifiant de build fixe, servi sur :3102.
+    cd frontend
+    COGES_NEXT_DIST_DIR=.next-pwa NEXT_DEPLOYMENT_ID="${E2E_BUILD_ID:-pwa-e2e-1}" \
+      COGES_API_URL="http://localhost:$E2E_API_PORT" ./node_modules/.bin/next build
+    exec env COGES_NEXT_DIST_DIR=.next-pwa NEXT_DEPLOYMENT_ID="${E2E_BUILD_ID:-pwa-e2e-1}" \
+      COGES_API_URL="http://localhost:$E2E_API_PORT" ./node_modules/.bin/next start --port 3102
+    ;;
   admin)
     # « Voir l'entreprise » (accès support, ADR 0092) ouvre le front des parcours.
     export COGES_MERCHANT_URL="http://localhost:$E2E_FRONT_PORT"
@@ -181,6 +190,6 @@ SQL
     uv run --directory backend python -m tests.e2e.system_state "${2:-}"
     ;;
   *)
-    die "usage : $0 reset|api|front|admin|system|maquette|maquette-api|maquette-front"
+    die "usage : $0 reset|api|front|front-prod|admin|system|maquette|maquette-api|maquette-front"
     ;;
 esac

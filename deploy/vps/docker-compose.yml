@@ -91,6 +91,8 @@ services:
     image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/front:${COGES_IMAGE_TAG:?}
     networks:
       edge: { aliases: ["${COGES_STACK:?}-front"] }
+    # Fichiers statiques des builds précédents, gardés 14 jours (ADR 0102). Un volume par pile.
+    volumes: [front-static:/srv/front/.next/static]
     mem_limit: 320m
     healthcheck:
       <<: *healthcheck
@@ -123,6 +125,7 @@ services:
       COGES_FORWARDED_ALLOW_IPS: 172.30.0.0/24
       COGES_API_WORKERS: ${COGES_API_WORKERS:-2}
       COGES_OPS_TOKEN: ${COGES_OPS_TOKEN:-}
+      COGES_MIN_FRONT_VERSION: ${COGES_MIN_FRONT_VERSION:-}
       COGES_CORS_ORIGINS: https://${COGES_DOMAIN:?}
       COGES_RATE_LIMIT_IP_PER_MINUTE: ${COGES_RATE_LIMIT_IP_PER_MINUTE:-300}
       COGES_RATE_LIMIT_LOGIN_PER_MINUTE: ${COGES_RATE_LIMIT_LOGIN_PER_MINUTE:-10}
@@ -244,6 +247,7 @@ networks:
   jobs: {}
 
 volumes:
+  front-static:
   caddy-data:
   caddy-config:
   ml-artifacts:

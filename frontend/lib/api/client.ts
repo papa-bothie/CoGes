@@ -19,6 +19,7 @@ import { tokenStore } from "@/lib/auth/token-store";
 import type { paths } from "@/types/api";
 
 import { networkError, toApiError } from "./errors";
+import { FRONT_VERSION, FRONT_VERSION_HEADER, signalOutdated } from "@/lib/pwa/signals";
 
 /** Routes qui ne doivent jamais déclencher de rafraîchissement automatique. */
 const SESSION_ENDPOINTS = ["/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout"];
@@ -47,9 +48,17 @@ export type AuthFetchDeps = {
 };
 
 export function createAuthFetch(deps: AuthFetchDeps) {
+  // Chaque requête dit sa version ; une version refusée (426) déclenche la mise à jour à un
+  // moment sûr (ADR 0102).
+  const versioned = async (request: Request): Promise<Response> => {
+    request.headers.set(FRONT_VERSION_HEADER, FRONT_VERSION);
+    const response = await deps.fetch(request);
+    if (response.status === 426) signalOutdated();
+    return response;
+  };
   const send = (request: Request, token: string | null): Promise<Response> => {
     if (token) request.headers.set("Authorization", `Bearer ${token}`);
-    return deps.fetch(request);
+    return versioned(request);
   };
 
   /** Un 403 ne dit « suspendue » que par son code : on lit une copie du corps. */
@@ -74,7 +83,7 @@ export function createAuthFetch(deps: AuthFetchDeps) {
   };
 
   return async function authFetch(request: Request): Promise<Response> {
-    if (isSessionEndpoint(request.url)) return deps.fetch(request);
+    if (isSessionEndpoint(request.url)) return versioned(request);
 
     // Copie prise **avant** l'envoi : le corps d'une requête ne se lit qu'une fois.
     const retry = request.clone();

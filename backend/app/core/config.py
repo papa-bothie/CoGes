@@ -175,6 +175,12 @@ class Settings(BaseSettings):
     sentry_dsn: SecretStr | None = None
     sentry_traces_sample_rate: float = Field(default=0.0, ge=0, le=1)
 
+    # --- Version minimale du front (ADR 0102) ---
+    # `X-CoGes-Front` sous cette version ⇒ 426 `front_outdated`, qui fait mettre à jour
+    # l'application à un moment sûr. Vide : aucun refus (réglé au déploiement, quand une
+    # incompatibilité est retirée après les 14 jours de compatibilité).
+    min_front_version: str = ""
+
     # --- Surveillance des workers (ADR 0077) ---
     # Jeton de `GET /system/workers`. Absent : la route répond 404, comme si elle
     # n'existait pas.
