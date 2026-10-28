@@ -79,6 +79,49 @@ class PaymentRepository(TenantRepository[Payment]):
         )
         return int(self.session.execute(stmt).scalar_one())
 
+    def cash_received_for_sale(self, sale_id: UUID) -> Decimal:
+        """Argent réellement entré pour cette vente : direct, puis lettré sur sa dette."""
+        direct = select(func.coalesce(func.sum(Payment.amount), 0)).where(
+            Payment.company_id == self.ctx.company_id,
+            Payment.sale_id == sale_id,
+            Payment.direction == "inflow",
+            *_counts_as_cash(),
+        )
+        on_debt = (
+            select(func.coalesce(func.sum(PaymentAllocation.amount), 0))
+            .join(
+                Payment,
+                (Payment.company_id == PaymentAllocation.company_id)
+                & (Payment.id == PaymentAllocation.payment_id),
+            )
+            .join(
+                Debt,
+                (Debt.company_id == PaymentAllocation.company_id)
+                & (Debt.id == PaymentAllocation.debt_id),
+            )
+            .where(
+                PaymentAllocation.company_id == self.ctx.company_id,
+                Debt.sale_id == sale_id,
+                Payment.direction == "inflow",
+                *_counts_as_cash(),
+            )
+        )
+        return Decimal(self.session.execute(direct).scalar_one()) + Decimal(
+            self.session.execute(on_debt).scalar_one()
+        )
+
+    def cash_refunded_for_returns(self, sale_return_ids: Sequence[UUID]) -> Decimal:
+        """Argent déjà rendu sur ces retours, compensations et annulations exclues."""
+        if not sale_return_ids:
+            return Decimal("0")
+        stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(
+            Payment.company_id == self.ctx.company_id,
+            Payment.sale_return_id.in_(list(sale_return_ids)),
+            Payment.direction == "outflow",
+            *_counts_as_cash(),
+        )
+        return Decimal(self.session.execute(stmt).scalar_one())
+
     def reversal_of(self, payment_id: UUID) -> Payment | None:
         """La contre-écriture de ce paiement, s'il a été annulé."""
         stmt = self._select().where(Payment.reversal_of_payment_id == payment_id)

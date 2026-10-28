@@ -88,6 +88,18 @@ class RefundExceedsDueError(BusinessRuleError):
     default_message = "Remboursement supérieur au reste dû de ce retour."
 
 
+class RefundExceedsPaidError(BusinessRuleError):
+    """On ne rend pas en argent plus que le client n'a versé sur la vente (ADR 0097).
+
+    Le cas qui l'exige : une vente payée en partie dont la dette a été abandonnée. Le
+    remboursable du retour (CG041) compte la valeur des articles, pas ce qui est entré
+    en caisse.
+    """
+
+    code = "refund_exceeds_paid"
+    default_message = "On ne peut pas rendre plus que ce que le client a payé sur cette vente."
+
+
 class RefundRequiresOutflowError(BusinessRuleError):
     code = "refund_requires_outflow"
     default_message = (
@@ -360,6 +372,21 @@ def open_balances_by_customer(
 ) -> dict[UUID, Decimal]:
     """Ce que doit chaque client du lot (dettes ouvertes), pour la liste de vente."""
     return DebtRepository(session, ctx).open_balances_by_customer(customer_ids)
+
+
+def cash_left_to_refund(
+    session: Session, ctx: TenantContext, sale_id: UUID, return_ids: Sequence[UUID]
+) -> Decimal:
+    """Argent encore remboursable sur une vente : versé, moins déjà rendu (ADR 0097).
+
+    Versé : l'encaissement direct et ce qui a été lettré sur sa dette, en vrais
+    mouvements de caisse seulement (ni compensation, ni paiement annulé). Rendu : les
+    remboursements en argent de ses retours, que Sales nomme (`return_ids`).
+    """
+    repository = PaymentRepository(session, ctx)
+    return repository.cash_received_for_sale(sale_id) - repository.cash_refunded_for_returns(
+        return_ids
+    )
 
 
 def has_settled_payment(session: Session, ctx: TenantContext, sale_id: UUID) -> bool:

@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Loader2, Plus, Search } from "lucide-react";
+import { Loader2, Plus, Search, Undo2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -76,30 +76,48 @@ function SaleRow({ sale, timeZone, currency }: { sale: Sale; timeZone: string; c
   const pill = salePill(sale, currency);
   const cancelled = sale.status === "cancelled";
   return (
-    <Link
-      href={`/sales/${sale.id}`}
-      className={cn(
-        "flex min-h-[100px] flex-wrap items-center gap-x-4 gap-y-3 rounded-[18px] px-4 py-3.5 text-foreground",
-        "outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50",
-        cancelled && "opacity-60",
-      )}
-    >
-      <Avatar name={sale.customer_name} rubrique="clients" size="moyen" />
-      <span className="min-w-0 flex-[1_1_200px]">
-        <span className="block text-libelle">{sale.customer_name ?? labels.sales.anonymous}</span>
-        <span className="block text-muted-foreground">
-          {t.line(
-            displayNumber(sale.sale_no),
-            formatClock(sale.sold_at, timeZone),
-            sale.item_count,
-          )}
+    <div className="flex items-center gap-2 rounded-[18px] hover:bg-muted">
+      <Link
+        href={`/sales/${sale.id}`}
+        className={cn(
+          "flex min-h-[100px] min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-3 rounded-[18px] px-4 py-3.5 text-foreground",
+          "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+          cancelled && "opacity-60",
+        )}
+      >
+        <Avatar name={sale.customer_name} rubrique="clients" size="moyen" />
+        <span className="min-w-0 flex-[1_1_200px]">
+          <span className="block text-libelle">{sale.customer_name ?? labels.sales.anonymous}</span>
+          <span className="block text-muted-foreground">
+            {t.line(
+              displayNumber(sale.sale_no),
+              formatClock(sale.sold_at, timeZone),
+              sale.item_count,
+            )}
+          </span>
         </span>
-      </span>
-      <span className={cn("text-[19px] font-extrabold numeric", cancelled && "line-through")}>
-        {formatAmount(sale.total, currency)}
-      </span>
-      {pill && <StatusPill status={pill.status} amount={pill.amount} className="min-w-[140px]" />}
-    </Link>
+        <span className={cn("text-[19px] font-extrabold numeric", cancelled && "line-through")}>
+          {formatAmount(sale.total, currency)}
+        </span>
+        {pill && <StatusPill status={pill.status} amount={pill.amount} className="min-w-[140px]" />}
+      </Link>
+      {/* Les mêmes ventes que leur fiche : confirmées, avec quelque chose à rendre. */}
+      {sale.returnable && (
+        <Can permission="sale_returns:create">
+          <Link
+            href={`/sales/${sale.id}/returns/new`}
+            aria-label={t.returnActionLabel(displayNumber(sale.sale_no))}
+            className={cn(
+              "mr-2 inline-flex min-h-12 shrink-0 items-center gap-1.5 rounded-bouton border-2 border-input bg-card px-3 font-bold text-foreground",
+              "outline-none hover:bg-voile focus-visible:ring-3 focus-visible:ring-ring/50",
+            )}
+          >
+            <Undo2 className="size-5" aria-hidden />
+            <span className="max-sm:sr-only">{t.returnAction}</span>
+          </Link>
+        </Can>
+      )}
+    </div>
   );
 }
 
