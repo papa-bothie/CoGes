@@ -13,8 +13,18 @@ export const IDEMPOTENCY_HEADER = "Idempotency-Key";
  * Garder la clé après un refus métier est sans danger : le serveur annule la clé avec
  * la transaction, et une demande corrigée repart comme une demande neuve.
  */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function useIdempotencyKey() {
   const [key, setKey] = useState(() => crypto.randomUUID());
   const renew = useCallback(() => setKey(crypto.randomUUID()), []);
-  return { key, renew, headers: { [IDEMPOTENCY_HEADER]: key } };
+  /**
+   * Reprend la clé d'un brouillon retrouvé (ADR 0101) : un envoi interrompu puis relancé
+   * rejoue avec la **même** clé, jamais deux écritures (ADR 0027, 0085). Ignore ce qui n'est
+   * pas une clé.
+   */
+  const restore = useCallback((value: unknown) => {
+    if (typeof value === "string" && UUID.test(value)) setKey(value);
+  }, []);
+  return { key, renew, restore, headers: { [IDEMPOTENCY_HEADER]: key } };
 }

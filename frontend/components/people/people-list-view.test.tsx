@@ -15,6 +15,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/hooks/use-me", () => ({
   useCompanyLocale: () => ({ currency: "XOF", timeZone: "Africa/Dakar" }),
+  useMe: () => ({ data: undefined }),
 }));
 vi.mock("@/hooks/use-permission", () => ({
   usePermission: (rule: string) => rule !== "debts:read" || state.money,

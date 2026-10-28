@@ -5,12 +5,14 @@ import { Loader2 } from "lucide-react";
 import { useId, useState } from "react";
 import { toast } from "sonner";
 
+import { DraftBanner } from "@/components/draft-banner";
 import { ErrorState } from "@/components/error-state";
 import { FieldError } from "@/components/field-error";
 import { Chip } from "@/components/kit/chip";
 import { initials } from "@/components/kit/list-row";
 import { fieldClasses } from "@/components/kit/rubrique";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDraft } from "@/hooks/use-draft";
 import { useCompanyLocale, useMe } from "@/hooks/use-me";
 import { usePermission } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
@@ -18,6 +20,7 @@ import { errorMessage } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
 import { formatDayMonth } from "@/lib/format";
+import { draftString } from "@/lib/drafts";
 import { labels } from "@/lib/labels";
 import { contactOf, seenWhen, temporaryDeadline } from "@/lib/settings";
 import { cn } from "@/lib/utils";
@@ -317,12 +320,30 @@ function AddPerson({ roles }: { roles: readonly Role[] }) {
   const [errors, setErrors] = useState<{ name?: string; contact?: string; form?: string }>({});
   const [created, setCreated] = useState<Schemas["UserCreated"] | null>(null);
   const chosen = roleId ?? roles.find((role) => role.name === "vendeur")?.id ?? null;
+  // Brouillon d'« Ajouter une personne » (ADR 0101) : nom, téléphone ou e-mail, rôle. Aucun
+  // mot de passe ici : le provisoire est tiré par le serveur et montré une fois.
+  const draft = useDraft(
+    {
+      formId: "user-new",
+      version: 1,
+      fields: ["name", "contact", "roleId"],
+      meaningful: ["name", "contact"],
+    },
+    { name, contact, roleId: roleId ?? "" },
+    (fields) => {
+      setName(draftString(fields.name) ?? "");
+      setContact(draftString(fields.contact) ?? "");
+      const savedRole = draftString(fields.roleId);
+      setRoleId(savedRole && roles.some((role) => role.id === savedRole) ? savedRole : null);
+    },
+  );
 
   const create = useMutation({
     meta: { toastError: false },
     mutationFn: (body: Schemas["UserCreate"]) => unwrap(api.POST("/api/v1/users", { body })),
     onSuccess: (user) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
+      draft.clear();
       setCreated(user);
       setName("");
       setContact("");
@@ -351,6 +372,16 @@ function AddPerson({ roles }: { roles: readonly Role[] }) {
         submit();
       }}
     >
+      {draft.restored && (
+        <DraftBanner
+          onClear={() => {
+            setName("");
+            setContact("");
+            setRoleId(null);
+            draft.clear();
+          }}
+        />
+      )}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
         <div>
           <label htmlFor={`${id}-name`} className="mb-1.5 block font-bold">

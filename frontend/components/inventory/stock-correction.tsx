@@ -18,6 +18,7 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 
+import { DraftBanner } from "@/components/draft-banner";
 import { BackLink } from "@/components/back-link";
 import { FieldError } from "@/components/field-error";
 import { ChoiceTiles } from "@/components/kit/choice-tile";
@@ -25,10 +26,12 @@ import { ProductSquare } from "@/components/kit/list-row";
 import { cleanQuantity } from "@/components/kit/quantity-stepper";
 import { fieldClasses } from "@/components/kit/rubrique";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDraft } from "@/hooks/use-draft";
 import { Can } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import { useIdempotencyKey } from "@/lib/api/idempotency";
+import { draftOneOf, draftString } from "@/lib/drafts";
 import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
 import { compareDecimal, parseDecimalInput, subtractDecimal } from "@/lib/decimal";
@@ -41,6 +44,26 @@ type Reason = Schemas["StockReason"];
 type Direction = "more" | "less";
 
 /** Raisons de la maquette 10, dans son ordre (ADR 0067) ; la première est choisie d'office. */
+/**
+ * Brouillon d'une correction (ADR 0101). Les choix d'office (Moins, 1, Abîmé) ne font pas un
+ * brouillon ; la clé d'idempotence voyage avec lui.
+ */
+const DRAFT = {
+  formId: "stock-correction",
+  version: 1,
+  fields: ["pickedId", "direction", "qty", "reason", "idem"],
+  meaningful: ["direction", "qty", "reason"],
+} as const;
+const ALL_REASONS: readonly Reason[] = [
+  "damaged",
+  "expired",
+  "lost_or_stolen",
+  "home_use",
+  "count_error",
+  "found",
+  "supplier_gift",
+];
+
 const REASONS: Record<Direction, readonly { value: Reason; icon: LucideIcon }[]> = {
   less: [
     { value: "damaged", icon: Hammer },
@@ -85,6 +108,24 @@ export function StockCorrection({ productId }: { productId?: string }) {
   const [reason, setReason] = useState<Reason>("damaged");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const draft = useDraft(
+    { ...DRAFT, objectId: productId },
+    {
+      pickedId: pickedId ?? "",
+      direction: direction === "less" ? "" : direction,
+      qty: qty === "1" ? "" : qty,
+      reason: reason === "damaged" ? "" : reason,
+      idem: idempotency.key,
+    },
+    (fields) => {
+      const picked = draftString(fields.pickedId);
+      if (picked) setPickedId(picked);
+      setDirection(draftOneOf(fields.direction, ["more", "less"] as const) ?? "less");
+      setQty(draftString(fields.qty) || "1");
+      setReason(draftOneOf(fields.reason, ALL_REASONS) ?? "damaged");
+      idempotency.restore(fields.idem);
+    },
+  );
 
   const stock = useQuery({
     queryKey: queryKeys.stock.list({ correction: true }),
@@ -129,6 +170,7 @@ export function StockCorrection({ productId }: { productId?: string }) {
     mutationFn: (body: Schemas["MovementCreate"]) =>
       unwrap(api.POST("/api/v1/inventory/movements", { body, headers: idempotency.headers })),
     onSuccess: () => {
+      draft.clear();
       idempotency.renew();
       for (const key of [queryKeys.stock.all, queryKeys.products.all, queryKeys.movements.all]) {
         void queryClient.invalidateQueries({ queryKey: key });
@@ -161,6 +203,17 @@ export function StockCorrection({ productId }: { productId?: string }) {
   return (
     <div className="mx-auto flex max-w-page flex-col gap-5">
       <BackLink fallback={{ href: "/products", label: labels.kit.nav.stock }} tone="stock" />
+      {draft.restored && (
+        <DraftBanner
+          onClear={() => {
+            setPickedId(productId);
+            setDirection("less");
+            setQty("1");
+            setReason("damaged");
+            draft.clear();
+          }}
+        />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{t.title}</h1>
         <div className="flex flex-wrap gap-2.5">

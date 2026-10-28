@@ -5,6 +5,7 @@ import { ArrowLeft, Check } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
+import { DraftBanner } from "@/components/draft-banner";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { FieldError } from "@/components/field-error";
@@ -14,6 +15,7 @@ import { ProductSquare } from "@/components/kit/list-row";
 import { cleanQuantity } from "@/components/kit/quantity-stepper";
 import { fieldClasses } from "@/components/kit/rubrique";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDraft } from "@/hooks/use-draft";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { usePermission } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
@@ -21,6 +23,7 @@ import { errorMessage } from "@/lib/api/errors";
 import { useIdempotencyKey } from "@/lib/api/idempotency";
 import { queryKeys } from "@/lib/api/queries/keys";
 import { compareDecimal, parseDecimalInput, subtractDecimal, toInputDecimal } from "@/lib/decimal";
+import { draftOneOf, draftString } from "@/lib/drafts";
 import { formatAmount, formatClock, formatDate, formatQty } from "@/lib/format";
 import { labels } from "@/lib/labels";
 import { typedAmount, wholeUnits } from "@/lib/payment-amount";
@@ -35,6 +38,14 @@ type Done = { returnId: string; line: string };
 
 const t = labels.returns.form;
 const METHODS: readonly Method[] = ["cash", "wave", "orange_money"];
+
+/** Brouillon d'un retour (ADR 0101), un par vente ; ses deux clés d'idempotence voyagent avec lui. */
+const DRAFT = {
+  formId: "sale-return",
+  version: 1,
+  fields: ["quantities", "reason", "way", "refundTyped", "method", "createIdem", "refundIdem"],
+  meaningful: ["quantities"],
+} as const;
 
 const STEP = cn(
   "flex size-[52px] shrink-0 items-center justify-center rounded-touche border-2 border-input bg-card text-2xl font-bold text-foreground",
@@ -64,6 +75,38 @@ export function ReturnForm({ saleId }: { saleId: string }) {
   const [method, setMethod] = useState<Method>("cash");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Done | null>(null);
+  const draft = useDraft(
+    { ...DRAFT, objectId: saleId },
+    {
+      // Seules les lignes remplies : une ligne remise à zéro n'est pas une saisie.
+      quantities: Object.fromEntries(Object.entries(quantities).filter(([, qty]) => qty !== "")),
+      reason,
+      way: way ?? "",
+      refundTyped: refundTyped ?? "",
+      method,
+      createIdem: createKey.key,
+      refundIdem: refundKey.key,
+    },
+    (fields) => {
+      const saved = fields.quantities;
+      if (saved && typeof saved === "object") {
+        setQuantities(
+          Object.fromEntries(
+            Object.entries(saved as Record<string, unknown>).filter(
+              (entry): entry is [string, string] => typeof entry[1] === "string",
+            ),
+          ),
+        );
+      }
+      setReason(draftOneOf(fields.reason, t.reasons) ?? t.reasons[0]);
+      setWay(draftOneOf(fields.way, ["cash", "later"] as const) ?? null);
+      const typed = draftString(fields.refundTyped);
+      setRefundTyped(typed ? typed : null);
+      setMethod(draftOneOf(fields.method, METHODS) ?? "cash");
+      createKey.restore(fields.createIdem);
+      refundKey.restore(fields.refundIdem);
+    },
+  );
 
   const sale = useQuery({
     queryKey: queryKeys.sales.detail(saleId),
@@ -83,7 +126,13 @@ export function ReturnForm({ saleId }: { saleId: string }) {
     item,
     returnable: subtractDecimal(item.qty, item.returned_qty) ?? "0",
   }));
-  const qtyOf = (id: string) => parseDecimalInput(quantities[id] ?? "") ?? "0";
+  // Un brouillon retrouvé ne rend jamais plus que ce qui reste à retourner aujourd'hui : un
+  // autre retour a pu passer entre-temps (le serveur revérifie de toute façon, CG040).
+  const qtyOf = (id: string) => {
+    const typed = parseDecimalInput(quantities[id] ?? "") ?? "0";
+    const left = rows.find((row) => row.item.id === id)?.returnable;
+    return left !== undefined && compareDecimal(typed, left) === 1 ? left : typed;
+  };
   const valueCents = rows.reduce((sum, { item }) => sum + refundCents(item, qtyOf(item.id)), 0n);
   const value = wholeUnits(centsToAmount(valueCents));
   // Ce qui est déduit de la dette d'abord, puis ce qui reste à lui rendre.
@@ -133,6 +182,7 @@ export function ReturnForm({ saleId }: { saleId: string }) {
       return { created, amount, failure };
     },
     onSuccess: ({ created, amount, failure }) => {
+      draft.clear();
       for (const key of [
         queryKeys.sales.all,
         queryKeys.stock.all,
@@ -233,6 +283,20 @@ export function ReturnForm({ saleId }: { saleId: string }) {
       ) : (
         <div className="flex flex-wrap items-start gap-5">
           <section className="min-w-0 flex-[3_1_480px] rounded-carte border border-border bg-card p-carte">
+            {draft.restored && (
+              <div className="mb-3">
+                <DraftBanner
+                  onClear={() => {
+                    setQuantities({});
+                    setReason(t.reasons[0]);
+                    setWay(null);
+                    setRefundTyped(null);
+                    setMethod("cash");
+                    draft.clear();
+                  }}
+                />
+              </div>
+            )}
             <p className="mb-2.5 text-libelle">{t.what}</p>
             {rows.map(({ item, returnable }) => {
               const name = item.product_name ?? labels.sales.deletedProduct;

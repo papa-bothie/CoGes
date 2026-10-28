@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { BackLink } from "@/components/back-link";
+import { DraftBanner } from "@/components/draft-banner";
 import { FieldError } from "@/components/field-error";
 import { cleanAmount } from "@/components/kit/amount-field";
 import { Chip } from "@/components/kit/chip";
@@ -15,6 +16,7 @@ import { fieldClasses } from "@/components/kit/rubrique";
 import { PersonFormDialog } from "@/components/people/person-form-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useDraft } from "@/hooks/use-draft";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
@@ -22,6 +24,7 @@ import { useIdempotencyKey } from "@/lib/api/idempotency";
 import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
 import { compareDecimal, parseDecimalInput } from "@/lib/decimal";
+import { draftOneOf, draftString } from "@/lib/drafts";
 import { formatAmount } from "@/lib/format";
 import { labels } from "@/lib/labels";
 import { typedAmount, wholeUnits } from "@/lib/payment-amount";
@@ -38,6 +41,18 @@ const t = labels.stockScreens.delivery;
 const MODES: readonly Mode[] = ["now", "part", "later"];
 const METHODS: readonly Method[] = ["cash", "wave", "orange_money"];
 const DUE_DAYS = [7, 15, 30] as const;
+
+/**
+ * Brouillon d'une livraison (ADR 0101) : des lignes réduites à l'article, la quantité et le
+ * prix ; l'article est relu au serveur à la reprise. La clé d'idempotence voyage avec lui.
+ */
+const DRAFT = {
+  formId: "delivery",
+  version: 1,
+  fields: ["supplierId", "lines", "mode", "paid", "method", "dueDays", "idem"],
+  meaningful: ["lines", "paid"],
+} as const;
+type DraftLine = { productId: string; qty: string; cost: string };
 
 /** Prix d'achat proposé : le prix d'achat moyen, en francs entiers ; vide s'il n'y en a pas. */
 function suggestedCost(line: StockLine): string {
@@ -85,6 +100,77 @@ export function DeliveryForm({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const term = useDebouncedValue(search.trim());
+  const [pendingLines, setPendingLines] = useState<DraftLine[] | null>(null);
+  const draft = useDraft(
+    DRAFT,
+    {
+      supplierId: supplierId ?? "",
+      // Tant que les articles du brouillon sont relus, ce sont eux qu'on garde.
+      lines:
+        pendingLines ??
+        lines.map((line) => ({
+          productId: line.product.product_id,
+          qty: line.qty,
+          cost: line.cost,
+        })),
+      mode,
+      paid,
+      method,
+      dueDays: String(dueDays),
+      idem: idempotency.key,
+    },
+    (fields) => {
+      const savedSupplier = draftString(fields.supplierId);
+      if (savedSupplier) setSupplierId(savedSupplier);
+      setMode(draftOneOf(fields.mode, MODES) ?? "later");
+      setPaid(draftString(fields.paid) ?? "");
+      setMethod(draftOneOf(fields.method, METHODS) ?? "cash");
+      const days = Number(draftString(fields.dueDays));
+      setDueDays(DUE_DAYS.find((value) => value === days) ?? 15);
+      idempotency.restore(fields.idem);
+      if (Array.isArray(fields.lines)) {
+        setSeeded(true);
+        setPendingLines(
+          fields.lines.flatMap((line: unknown) => {
+            const { productId, qty, cost } = (line ?? {}) as Record<string, unknown>;
+            return typeof productId === "string" &&
+              typeof qty === "string" &&
+              typeof cost === "string"
+              ? [{ productId, qty, cost }]
+              : [];
+          }),
+        );
+      }
+    },
+  );
+  // Reprise : les articles sont relus au serveur ; un article disparu est retiré, et dit.
+  const restoredStock = useQuery({
+    queryKey: queryKeys.stock.list({
+      delivery: "draft",
+      product_id: pendingLines?.map((line) => line.productId),
+    }),
+    enabled: Boolean(pendingLines && pendingLines.length > 0),
+    queryFn: () =>
+      unwrap(
+        api.GET("/api/v1/inventory/stock", {
+          params: {
+            query: { product_id: pendingLines!.map((line) => line.productId), page_size: 100 },
+          },
+        }),
+      ),
+  });
+  if (pendingLines && (pendingLines.length === 0 || restoredStock.data)) {
+    const known = new Map((restoredStock.data?.items ?? []).map((item) => [item.product_id, item]));
+    const kept = pendingLines.flatMap((line) => {
+      const product = known.get(line.productId);
+      return product ? [{ product, qty: line.qty, cost: line.cost }] : [];
+    });
+    setPendingLines(null);
+    setLines(kept);
+    if (kept.length < pendingLines.length) {
+      setError(t.draftLinesDropped(pendingLines.length - kept.length));
+    }
+  }
 
   const suppliers = useQuery({
     queryKey: queryKeys.suppliers.list({ delivery: true }),
@@ -202,6 +288,7 @@ export function DeliveryForm({
         }),
       ),
     onSuccess: (delivery) => {
+      draft.clear();
       idempotency.renew();
       for (const key of [
         queryKeys.stock.all,
@@ -256,6 +343,22 @@ export function DeliveryForm({
       ) : (
         <div className="flex flex-wrap items-start gap-5">
           <section className="min-w-0 flex-[3_1_500px] rounded-carte border border-border bg-card p-carte">
+            {draft.restored && (
+              <div className="mb-3">
+                <DraftBanner
+                  onClear={() => {
+                    setLines([]);
+                    setPendingLines(null);
+                    setMode("later");
+                    setPaid("");
+                    setMethod("cash");
+                    setDueDays(15);
+                    setSupplierId(askedSupplierId ?? null);
+                    draft.clear();
+                  }}
+                />
+              </div>
+            )}
             <p id="who" className="mb-2.5 text-libelle">
               {t.who}
             </p>

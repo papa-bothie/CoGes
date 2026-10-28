@@ -9,6 +9,7 @@ import { marginLine, NewProductForm } from "./new-product-form";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/hooks/use-me", () => ({
+  useMe: () => ({ data: undefined }),
   useCompanyLocale: () => ({ currency: "XOF", timeZone: "Africa/Dakar" }),
 }));
 vi.mock("@/hooks/use-permission", () => ({ usePermission: () => true }));
