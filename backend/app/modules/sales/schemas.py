@@ -192,6 +192,9 @@ class SaleRead(BaseModel):
     cancelled_at: datetime | None
     #: Nombre de lignes (« 3 articles » dans la liste, ADR 0070).
     item_count: int
+    #: Vente confirmée dont une ligne reste à retourner : la liste propose « Retour »
+    #: pour les mêmes ventes que la fiche (ADR 0097). Dérivé, jamais stocké.
+    returnable: bool
 
 
 class SaleDetail(SaleRead):
@@ -361,6 +364,11 @@ class SaleReturnCreate(BaseModel):
     #: Date métier du retour. Par défaut `now()`, bornée par `sold_at` et l'instant
     #: présent. Le mouvement de stock, lui, est daté de l'enregistrement.
     returned_at: ZonedDatetime | None = None
+    #: Déduire d'abord la valeur rendue de la dette encore ouverte de la vente, dans la
+    #: même transaction (ADR 0097). Aucun argent ne sort : c'est une compensation
+    #: (ADR 0024), permise à qui enregistre le retour ; le surplus éventuel reste à
+    #: rembourser, et ce remboursement-là exige toujours `sale_returns:confirm`.
+    offset_debt: bool = False
 
     @field_validator("lines")
     @classmethod

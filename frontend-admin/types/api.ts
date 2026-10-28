@@ -6049,6 +6049,8 @@ export interface components {
       cancelled_at: string | null;
       /** Item Count */
       item_count: number;
+      /** Returnable */
+      returnable: boolean;
       /** Seller Name */
       seller_name: string | null;
       /** Items */
@@ -6164,6 +6166,8 @@ export interface components {
       cancelled_at: string | null;
       /** Item Count */
       item_count: number;
+      /** Returnable */
+      returnable: boolean;
     };
     /**
      * SaleReturnCreate
@@ -6178,6 +6182,11 @@ export interface components {
       reason?: components["schemas"]["ReturnReason"] | null;
       /** Returned At */
       returned_at?: string | null;
+      /**
+       * Offset Debt
+       * @default false
+       */
+      offset_debt: boolean;
     };
     /**
      * SaleReturnDetail

@@ -45,6 +45,7 @@ from app.modules.finance.schemas import (
     DebtRead,
     DebtStatus,
     RefundLinkRead,
+    RefundMethod,
 )
 from app.modules.inventory import service as inventory_service
 from app.modules.products import service as products_service
@@ -872,6 +873,7 @@ def build_read(
     customer_name: str | None,
     debt_status: DebtStatus | None,
     item_count: int,
+    returnable: bool,
 ) -> SaleRead:
     """En-tête d'une vente, tel que la liste l'affiche.
 
@@ -900,6 +902,7 @@ def build_read(
         confirmed_at=sale.confirmed_at,
         cancelled_at=sale.cancelled_at,
         item_count=item_count,
+        returnable=sale.status == "confirmed" and returnable,
     )
 
 
@@ -916,7 +919,11 @@ def build_page(
     debt_statuses = finance_service.debt_statuses_for_sales(
         session, ctx, [sale.id for sale in sales]
     )
-    item_counts = SaleItemRepository(session, ctx).counts_by_sale([sale.id for sale in sales])
+    items = SaleItemRepository(session, ctx)
+    item_counts = items.counts_by_sale([sale.id for sale in sales])
+    returnable = items.with_returnable_qty(
+        [sale.id for sale in sales if sale.status == "confirmed"]
+    )
     return [
         build_read(
             sale,
@@ -924,6 +931,7 @@ def build_page(
             customer_name=None if sale.customer_id is None else names.get(sale.customer_id),
             debt_status=debt_statuses.get(sale.id),
             item_count=item_counts.get(sale.id, 0),
+            returnable=sale.id in returnable,
         )
         for sale in sales
     ]
@@ -1117,7 +1125,11 @@ def create_return(
     les deux premières lignes, ni leurs rentrées de stock, ni le numéro de retour.
     """
     # 1. Vente verrouillée et confirmée. Un brouillon n'a rien vendu ; une vente
-    #    annulée a déjà tout repris — dans les deux cas il n'y a rien à rendre.
+    #    annulée a déjà tout repris — dans les deux cas il n'y a rien à rendre. Si la
+    #    dette doit être déduite, elle se verrouille **avant** la vente : c'est l'ordre
+    #    de tout règlement (`pa_sale_rollup`, ADR 0062 et 0088).
+    if payload.offset_debt:
+        finance_service.lock_sale_debt(session, ctx, sale_id)
     sale = SaleRepository(session, ctx).get_for_update(sale_id)
     if sale is None:
         raise NotFoundError("Vente introuvable.")
@@ -1252,6 +1264,22 @@ def create_return(
             lines=lines,
         ),
     )
+
+    # 8. Déduction de la dette restante, d'abord (ADR 0097) : ce que le client doit
+    #    encore sur cette vente baisse de la valeur rendue, sans sortie d'argent.
+    if payload.offset_debt:
+        debt = finance_service.open_debt_for_sale(session, ctx, sale.id)
+        amount = Decimal("0") if debt is None else min(sale_return.total_refund, debt.balance)
+        if debt is not None and amount > 0:
+            sale_return = _settle_return(
+                session,
+                ctx,
+                sale_return,
+                amount=amount,
+                method=OFFSET_METHOD,
+                debt_id=debt.id,
+                ip_address=ip_address,
+            )
     return sale_return
 
 
@@ -1307,12 +1335,60 @@ def refund_return(
             raise OffsetExceedsDebtError(
                 details={**details, "debt_id": str(debt.id), "balance": str(debt.balance)}
             )
+        debt_id: UUID | None = debt.id
+    else:
+        # 2b. Trésorerie : jamais plus que l'argent versé sur la vente, moins ce qui a
+        #     déjà été rendu (ADR 0097). Après une dette abandonnée, la valeur des
+        #     articles dépasse ce qui est entré en caisse.
+        returns = SaleReturnRepository(session, ctx).for_sale(sale_return.sale_id)
+        left = finance_service.cash_left_to_refund(
+            session, ctx, sale_return.sale_id, [item.id for item in returns]
+        )
+        if payload.amount > left:
+            raise finance_service.RefundExceedsPaidError(
+                details={**details, "cash_left": str(max(left, Decimal("0")))}
+            )
+        debt_id = None
+    return _settle_return(
+        session,
+        ctx,
+        sale_return,
+        amount=payload.amount,
+        method=payload.method,
+        reference=payload.reference,
+        debt_id=debt_id,
+        before=before,
+        ip_address=ip_address,
+    )
+
+
+def _settle_return(
+    session: Session,
+    ctx: TenantContext,
+    sale_return: SaleReturn,
+    *,
+    amount: Decimal,
+    method: RefundMethod,
+    debt_id: UUID | None,
+    reference: str | None = None,
+    before: dict[str, Any] | None = None,
+    ip_address: str | None = None,
+) -> SaleReturn:
+    """Écrit un règlement de retour, puis son audit critique et `sale_return.refunded`.
+
+    Compensation si `debt_id` est donné (ADR 0024), trésorerie sinon. Les contrôles
+    (reste dû, dette ouverte, argent versé) sont faits par l'appelant ; les triggers
+    restent l'autorité.
+    """
+    if before is None:
+        before = _audited_return(sale_return)
+    if debt_id is not None:
         payment, _inflow = finance_service.record_return_offset(
             session,
             ctx,
             sale_return_id=sale_return.id,
-            debt_id=debt.id,
-            amount=payload.amount,
+            debt_id=debt_id,
+            amount=amount,
             ip_address=ip_address,
         )
     else:
@@ -1321,9 +1397,9 @@ def refund_return(
             session,
             ctx,
             sale_return_id=sale_return.id,
-            amount=payload.amount,
-            method=payload.method,
-            reference=payload.reference,
+            amount=amount,
+            method=method,
+            reference=reference,
             ip_address=ip_address,
         )
 
@@ -1350,7 +1426,7 @@ def refund_return(
             return_no=sale_return.return_no,
             sale_id=sale_return.sale_id,
             payment_id=payment.id,
-            amount=payload.amount,
+            amount=amount,
             method=payment.method,
             refunded_total=sale_return.refunded_total,
             total_refund=sale_return.total_refund,

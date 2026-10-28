@@ -94,7 +94,8 @@ export function SaleDetailView({ saleId }: { saleId: string }) {
   const pill = salePill(data, currency);
   const cancelled = data.status === "cancelled";
   const owing = compareDecimal(data.balance, "0") === 1 && data.debt?.status !== "written_off";
-  const returnable = data.items.some((item) => compareDecimal(item.qty, item.returned_qty) === 1);
+  // Même règle que la liste (ADR 0097) : le serveur dit s'il reste de quoi retourner.
+  const returnable = data.returnable;
   const phone = customer.data?.phone ?? null;
   const text = receiptText(data, { shop: me?.company.name ?? "", timeZone, currency });
   const seller = data.seller_name?.trim().split(/\s+/)[0];

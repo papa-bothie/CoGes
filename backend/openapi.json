@@ -17310,6 +17310,10 @@
             "type": "integer",
             "title": "Item Count"
           },
+          "returnable": {
+            "type": "boolean",
+            "title": "Returnable"
+          },
           "seller_name": {
             "anyOf": [
               {
@@ -17368,6 +17372,7 @@
           "confirmed_at",
           "cancelled_at",
           "item_count",
+          "returnable",
           "seller_name",
           "items",
           "payments",
@@ -17683,6 +17688,10 @@
           "item_count": {
             "type": "integer",
             "title": "Item Count"
+          },
+          "returnable": {
+            "type": "boolean",
+            "title": "Returnable"
           }
         },
         "additionalProperties": false,
@@ -17706,7 +17715,8 @@
           "cancel_reason",
           "confirmed_at",
           "cancelled_at",
-          "item_count"
+          "item_count",
+          "returnable"
         ],
         "title": "SaleRead",
         "description": "Vente en liste : l'en-tête, sans ses lignes."
@@ -17742,6 +17752,11 @@
               }
             ],
             "title": "Returned At"
+          },
+          "offset_debt": {
+            "type": "boolean",
+            "title": "Offset Debt",
+            "default": false
           }
         },
         "additionalProperties": false,
