@@ -181,6 +181,7 @@ make maquette-check          # compare le front à la maquette v2 (pixelmatch, 2
 make lighthouse              # accessibilité Lighthouse des 26 écrans (≥ 95), rapport docs/design/captures/phase-15/lighthouse.md
 uv run --directory backend python -m app.seed --existing-slug <slug> --password …   # remplit une entreprise existante sans vente
 uv run --directory backend python -m app.cli create-company --help   # créer une entreprise
+uv run --directory backend python -m app.cli create-company … --manager-phone "77 123 45 67"   # gérant sans e-mail (--manager-email ou --manager-phone, l'un au moins)
 uv run --directory backend python -m app.cli rebuild-stock --company-id <uuid>   # recalcul stock/CMP
 uv run --directory backend python -m app.cli run-intelligence --company-id <uuid> [--as-of AAAA-MM-JJ] [--train]
 make front-install           # pnpm (corepack) + dépendances + Chromium pour Playwright
