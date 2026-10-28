@@ -10,6 +10,12 @@ export const labels = {
     version: (v: string) => `Version ${v}`,
     skipToContent: "Aller au contenu",
   },
+  /** Adresse tapée sans le droit de l'écran (ADR 0099). */
+  noAccess: {
+    title: "Vous n'avez pas accès à cette page",
+    hint: "Le gérant choisit ce que chaque personne peut faire, dans Réglages.",
+    home: "Revenir à l'accueil",
+  },
   nav: {
     dashboard: "Tableau de bord",
     sales: "Ventes",
@@ -1517,9 +1523,15 @@ export const labels = {
     rights: {
       title: "Qui peut faire quoi",
       action: "Action",
-      locked: "Réservé au gérant",
+      locked: "Ne se change pas ici",
       saved: "Droits enregistrés.",
       aria: (line: string, role: string) => `${line} : ${role}`,
+      /** Ligne dont le rôle n'a qu'une partie des droits (ADR 0099). */
+      partial: "En partie",
+      partialAria: (line: string, role: string) =>
+        `${line} : ${role}, en partie. Toucher pour donner toute la ligne`,
+      partialHint:
+        "« En partie » : ce rôle a une partie des droits de la ligne. Touchez la case pour lui donner toute la ligne, une seconde fois pour la retirer.",
     },
     history: {
       title: "Historique de ce qui a été fait",

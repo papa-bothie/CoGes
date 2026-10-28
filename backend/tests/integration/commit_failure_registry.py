@@ -588,7 +588,7 @@ REGISTRY: dict[tuple[str, str], Critical | Exempt] = {
         lambda w: Call(
             "PUT",
             f"/api/v1/roles/{role_id(w.client, w.token, 'vendeur')}/abilities",
-            {"abilities": ["sell"]},
+            {"abilities": ["base", "see", "sell", "cancel_sale"]},
         )
     ),
     ("PATCH", "/api/v1/companies/me"): Critical(

@@ -3,6 +3,7 @@ import {
   House,
   Lightbulb,
   Package,
+  Settings,
   ShoppingCart,
   Users,
   type LucideIcon,
@@ -10,87 +11,136 @@ import {
 
 import type { Rubrique } from "@/components/kit/rubrique";
 import { labels } from "@/lib/labels";
-import type { PermissionRule } from "@/lib/permissions";
+import { can, type PermissionRule } from "@/lib/permissions";
+
+export type NavTarget = { href: string; permission: PermissionRule | null };
 
 export type NavItem = {
-  href: string;
   label: string;
   icon: LucideIcon;
   /** Couleur de l'onglet actif (maquette v2). */
   rubrique: Rubrique;
   /** Préfixes de chemins qui allument l'entrée : une rubrique couvre plusieurs pages. */
   matches: readonly string[];
-  /** Droit qui rend l'entrée utile ; absente = visible par tous. */
-  permission?: PermissionRule;
+  /**
+   * Les écrans de la rubrique, dans l'ordre de préférence, chacun avec **son** droit
+   * (celui du registre `lib/access.ts`, vérifié par un test). L'entrée s'affiche si l'un
+   * est permis et s'ouvre sur le premier permis : jamais un écran par un droit voisin
+   * (ADR 0099).
+   */
+  targets: readonly NavTarget[];
 };
+
+/** Une entrée prête à afficher : l'écran où elle mène pour cette personne. */
+export type ResolvedNavItem = Omit<NavItem, "targets"> & { href: string };
 
 /**
  * Les cinq entrées de la maquette v2 (écran 01), dans son ordre, plus « Conseils » à droite.
  *
- * Les droits choisissent les entrées du vendeur : Accueil, Vendre et Clients seulement
- * (prompt de phase 15). Il lit les articles et la caisse pour vendre, mais ne gère ni le
- * stock (`products:create`) ni l'argent (`debts:read`, `expenses:read`).
- *
- * Stock s'allume aussi sur `/inventory` : correction, livraison et « Tous les mouvements »
- * (ADR 0071). Liens provisoires (ADR 0070) : Clients sur `/suppliers`, Conseils sur
- * `/analytics`, jusqu'à la fusion de ces pages aux lots 3c et 3e.
+ * Chaque entrée suit le droit exact de ses écrans (ADR 0099) : le vendeur, qui lit le
+ * stock, voit Stock en lecture ; un comptable à qui le gérant n'a laissé que « Encaisser
+ * une dette » voit Argent ouvert sur les dettes, pas sur les comptes qu'il ne lit plus.
  */
 export const MAIN_NAV: readonly NavItem[] = [
   {
-    href: "/dashboard",
     label: labels.kit.nav.home,
     icon: House,
     rubrique: "ventes",
     matches: ["/dashboard"],
-    permission: "dashboard:read",
+    targets: [{ href: "/dashboard", permission: "dashboard:read" }],
   },
   {
-    href: "/sales/new",
     label: labels.kit.nav.sell,
     icon: ShoppingCart,
     rubrique: "ventes",
     matches: ["/sales"],
-    permission: { anyOf: ["sales:create", "sales:read"] },
+    targets: [
+      { href: "/sales/new", permission: "sales:create" },
+      { href: "/sales", permission: "sales:read" },
+    ],
   },
   {
-    href: "/products",
     label: labels.kit.nav.stock,
     icon: Package,
     rubrique: "stock",
     matches: ["/products", "/inventory"],
-    permission: { anyOf: ["products:create", "analytics:read"] },
+    targets: [{ href: "/products", permission: "inventory:read" }],
   },
   {
-    href: "/customers",
     label: labels.kit.nav.clients,
     icon: Users,
     rubrique: "clients",
     matches: ["/customers", "/suppliers"],
-    permission: "customers:read",
+    targets: [
+      { href: "/customers", permission: "customers:read" },
+      { href: "/suppliers", permission: "suppliers:read" },
+    ],
   },
   {
-    href: "/finance",
     label: labels.kit.nav.money,
     icon: CreditCard,
     rubrique: "argent",
     matches: ["/finance"],
-    permission: { anyOf: ["debts:read", "expenses:read"] },
+    targets: [
+      { href: "/finance", permission: "analytics:read" },
+      { href: "/finance/debts", permission: "debts:read" },
+      { href: "/finance/expenses", permission: "expenses:read" },
+    ],
   },
 ];
 
 export const ADVICE_NAV: NavItem = {
-  href: "/insights",
   label: labels.kit.nav.advice,
   icon: Lightbulb,
   rubrique: "conseils",
   matches: ["/insights", "/analytics"],
-  permission: { anyOf: ["insights:read", "analytics:read"] },
+  targets: [{ href: "/insights", permission: "insights:read" }],
 };
 
-/** Les réglages, derrière l'engrenage. */
-export const SETTINGS_PERMISSION: PermissionRule = {
-  anyOf: ["company:read", "users:read", "roles:read", "audit:read"],
-};
+/** Les réglages, derrière l'engrenage : chaque page a son droit. */
+export const SETTINGS_NAV: readonly NavItem[] = [
+  {
+    label: labels.shell.settings,
+    icon: Settings,
+    rubrique: "ventes",
+    matches: ["/settings"],
+    targets: [
+      { href: "/settings", permission: "company:read" },
+      { href: "/settings/people", permission: "users:read" },
+      { href: "/settings/rights", permission: "roles:read" },
+      { href: "/settings/history", permission: "audit:read" },
+      {
+        href: "/settings/files",
+        permission: { anyOf: ["importexport:export", "importexport:create"] },
+      },
+    ],
+  },
+];
+
+/** L'entrée telle que cette personne la voit, ou `null` si aucun de ses écrans n'est permis. */
+export function resolveNav(
+  item: NavItem,
+  permissions: readonly string[] | undefined,
+): ResolvedNavItem | null {
+  const target = item.targets.find(
+    (candidate) => candidate.permission === null || can(permissions, candidate.permission),
+  );
+  if (!target) return null;
+  return {
+    label: item.label,
+    icon: item.icon,
+    rubrique: item.rubrique,
+    matches: item.matches,
+    href: target.href,
+  };
+}
+
+export function visibleNav(
+  items: readonly NavItem[],
+  permissions: readonly string[] | undefined,
+): ResolvedNavItem[] {
+  return items.flatMap((item) => resolveNav(item, permissions) ?? []);
+}
 
 export function isActive(pathname: string, item: Pick<NavItem, "matches">): boolean {
   return item.matches.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));

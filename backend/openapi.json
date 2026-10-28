@@ -16862,6 +16862,13 @@
             },
             "type": "array",
             "title": "Abilities"
+          },
+          "partial": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Partial"
           }
         },
         "additionalProperties": false,
@@ -16871,7 +16878,8 @@
           "name",
           "label",
           "locked",
-          "abilities"
+          "abilities",
+          "partial"
         ],
         "title": "RoleAbilities"
       },
