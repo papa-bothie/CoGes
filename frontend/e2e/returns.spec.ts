@@ -127,4 +127,9 @@ test("vendeur : le retour s'enregistre, la dette baisse, le gérant rembourse le
   await login(page);
   await page.goto(`/sales/${paid.id}`);
   await expect(page.getByText("À régler", { exact: true })).toBeVisible();
+
+  // Le compte du vendeur ne compte plus dans le plafond d'utilisateurs (ADR 0091).
+  const users = await client.get("/users?page_size=100");
+  const account = users.items.find((user: { email: string | null }) => user.email === seller.email);
+  await client.patch(`/users/${account.id}`, { is_active: false });
 });
