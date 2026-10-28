@@ -29,15 +29,19 @@ async function roleId(request: APIRequestContext, name: string): Promise<string>
   return roles.items.find((item: { name: string }) => item.name === name).id as string;
 }
 
+/** Comptes créés par ce fichier : leur accès est coupé à la fin (plafond de l'offre, ADR 0091). */
+const created: string[] = [];
+
 async function account(request: APIRequestContext, role: string): Promise<Credentials> {
   const headers = { Authorization: `Bearer ${await managerToken(request, E2E)}` };
   const email = `droits-${Date.now()}-${Math.round(Math.random() * 1e6)}@${E2E.slug}.example.com`;
   const password = "droits-e2e-2026-ok";
-  const created = await request.post("/api/v1/users", {
+  const response = await request.post("/api/v1/users", {
     headers,
     data: { email, full_name: "Compte droits", password, role_ids: [role] },
   });
-  expect(created.status(), await created.text()).toBe(201);
+  expect(response.status(), await response.text()).toBe(201);
+  created.push((await response.json()).id as string);
   return { slug: E2E.slug, email, password };
 }
 
@@ -86,8 +90,10 @@ async function denied(page: Page, path: string, forbiddenApi: string) {
 }
 
 test.afterAll(async ({ request }) => {
-  // Le comptable de l'entreprise `e2e` retrouve sa grille par défaut.
+  // Le comptable de l'entreprise `e2e` retrouve sa grille par défaut, et les comptes de
+  // ce fichier ne comptent plus dans le plafond d'utilisateurs.
   const client = await managerApi(request);
+  for (const id of created) await client.patch(`/users/${id}`, { is_active: false });
   await client.put(`/roles/${await roleId(request, "comptable")}/abilities`, {
     abilities: ACCOUNTANT_DEFAULT,
   });

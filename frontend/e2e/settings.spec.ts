@@ -17,24 +17,31 @@ async function login(page: Page) {
 
 type Grid = { roles: { role_id: string; name: string; abilities: string[] }[] };
 
-test("cocher « Corriger le stock » donne ses droits au vendeur", async ({ page, request }) => {
+test("cocher « Corriger le stock et recevoir des livraisons » donne ses droits au vendeur", async ({
+  page,
+  request,
+}) => {
   const client = await managerApi(request);
   const grid = (await client.get("/roles/abilities")) as Grid;
   const seller = grid.roles.find((role) => role.name === "vendeur")!;
   try {
     await login(page);
     await page.goto("/settings/rights");
-    const cell = page.getByRole("button", { name: "Corriger le stock : Vendeur" });
+    const cell = page.getByRole("button", {
+      name: "Corriger le stock et recevoir des livraisons : Vendeur",
+    });
     await expect(cell).toHaveAttribute("aria-pressed", "false");
     await cell.click();
     await expect(cell).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByText("Droits enregistrés.")).toBeVisible();
     const role = await client.get(`/roles/${seller.role_id}`);
     expect(role.permissions).toEqual(
-      expect.arrayContaining(["inventory:create", "inventory:update"]),
+      expect.arrayContaining(["inventory:create", "inventory:update", "debts:create"]),
     );
     // Le gérant garde tout : sa colonne ne se clique pas.
-    await expect(page.getByRole("button", { name: "Vendre : Gérant" })).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Vendre et enregistrer des retours : Gérant" }),
+    ).toBeDisabled();
     await expect(
       page.getByRole("button", { name: "Gérer les personnes : Vendeur" }),
     ).toBeDisabled();

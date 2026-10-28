@@ -126,12 +126,13 @@ test("un vendeur n'accède pas aux paramètres, ni à l'écran ni à l'API", asy
   const seller = await createSalesperson(request);
   await login(page, seller);
 
-  // Côté front : aucune rubrique des réglages (ADR 0075).
+  // Côté front : la page est refusée, sans rien charger (ADR 0099, qui remplace la page
+  // vide de l'ADR 0075).
   await page.goto("/settings");
-  await expect(page.getByRole("heading", { level: 1, name: "Réglages" })).toBeVisible();
   await expect(
-    page.getByRole("navigation", { name: "Rubriques des réglages" }).getByRole("link"),
-  ).toHaveCount(0);
+    page.getByRole("heading", { level: 1, name: "Vous n'avez pas accès à cette page" }),
+  ).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Rubriques des réglages" })).toHaveCount(0);
 
   // Côté API : chaque route refuse, quelle que soit l'interface.
   const signIn = await request.post("/api/v1/auth/login", {
