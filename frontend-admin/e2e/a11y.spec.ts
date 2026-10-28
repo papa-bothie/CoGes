@@ -48,6 +48,22 @@ async function signIn(page: Page): Promise<void> {
   await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
 }
 
+/**
+ * Chaque `goto` recharge la page : le jeton d'accès, gardé en mémoire, est perdu et la session
+ * se rouvre par un rafraîchissement, qui fait tourner le jeton de rafraîchissement. Un écran
+ * peut être « prêt » avant la réponse ; repartir aussitôt l'interromprait (rotation faite côté
+ * serveur, nouveau jeton jamais reçu). Le délai de grâce (ADR 0051) ne couvre qu'une seule
+ * réponse perdue : deux de suite, et la session est révoquée pour réutilisation.
+ */
+async function openScreen(page: Page, screen: (typeof SCREENS)[number]): Promise<void> {
+  const refreshed = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/v1/platform/auth/refresh",
+  );
+  await page.goto(screen.path);
+  expect((await refreshed).status(), `${screen.path} : session rouverte`).toBe(200);
+  await screen.ready(page);
+}
+
 async function axe(page: Page, where: string): Promise<void> {
   const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
   expect(results.violations, where).toEqual([]);
@@ -79,12 +95,11 @@ for (const scheme of ["light", "dark"] as const) {
     await axe(page, `/invitation ${scheme}`);
     await signIn(page);
     for (const screen of SCREENS) {
-      await page.goto(screen.path);
-      await screen.ready(page);
+      await openScreen(page, screen);
       await axe(page, `${screen.path} ${scheme}`);
     }
     // La fiche d'une entreprise et le tiroir du menu.
-    await page.goto("/companies");
+    await openScreen(page, SCREENS[1]!);
     await page.getByRole("link", { name: "Parcours administration" }).first().click();
     await expect(page.getByRole("region", { name: "Abonnement" })).toBeVisible();
     await axe(page, `fiche ${scheme}`);
@@ -98,8 +113,7 @@ test("360 px : aucun défilement horizontal, menu en tiroir", async ({ page }) =
   await noHorizontalScroll(page, "/login");
   await signIn(page);
   for (const screen of SCREENS) {
-    await page.goto(screen.path);
-    await screen.ready(page);
+    await openScreen(page, screen);
     await noHorizontalScroll(page, screen.path);
   }
   // Le repère « Administration » reste visible sur téléphone.
