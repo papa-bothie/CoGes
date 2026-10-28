@@ -16,8 +16,7 @@ import {
 import type { Me } from "@/lib/api/schema";
 import { logout, loginUrl } from "@/lib/auth/session";
 import { labels } from "@/lib/labels";
-import { ADVICE_NAV, SETTINGS_PERMISSION } from "@/lib/navigation";
-import { can } from "@/lib/permissions";
+import { ADVICE_NAV, resolveNav, SETTINGS_NAV } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
 function roleLabel(me: Me): string {
@@ -36,6 +35,9 @@ export function SettingsMenu({ me, className }: { me: Me; className?: string }) 
   const [leaving, setLeaving] = useState(false);
   const t = labels.shell;
   const dark = resolvedTheme === "dark";
+  // Conseils et Réglages s'ouvrent sur un écran que cette personne peut lire (ADR 0099).
+  const advice = resolveNav(ADVICE_NAV, me.permissions);
+  const settings = resolveNav(SETTINGS_NAV[0]!, me.permissions);
 
   const handleLogout = async () => {
     setLeaving(true);
@@ -63,16 +65,16 @@ export function SettingsMenu({ me, className }: { me: Me; className?: string }) 
           <span className="block text-sm font-normal text-muted-foreground">{roleLabel(me)}</span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {can(me.permissions, ADVICE_NAV.permission) && (
+        {advice && (
           <DropdownMenuItem asChild className="min-h-cible text-corps md:hidden">
-            <Link href={ADVICE_NAV.href}>
-              <Lightbulb aria-hidden /> {ADVICE_NAV.label}
+            <Link href={advice.href}>
+              <Lightbulb aria-hidden /> {advice.label}
             </Link>
           </DropdownMenuItem>
         )}
-        {can(me.permissions, SETTINGS_PERMISSION) && (
+        {settings && (
           <DropdownMenuItem asChild className="min-h-cible text-corps">
-            <Link href="/settings">
+            <Link href={settings.href}>
               <Settings aria-hidden /> {t.settings}
             </Link>
           </DropdownMenuItem>

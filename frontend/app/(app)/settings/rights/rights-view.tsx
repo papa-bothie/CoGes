@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check } from "lucide-react";
+import { Check, Minus } from "lucide-react";
 import { toast } from "sonner";
 
 import { ErrorState } from "@/components/error-state";
@@ -22,9 +22,11 @@ type Ability = Schemas["AbilityRead"];
 const t = labels.settingsScreens.rights;
 
 /**
- * Qui peut faire quoi, maquette v2 (écran 24c) : huit gestes, trois rôles. Une case cochée
- * donne au rôle tous les droits de la ligne ; ses autres droits ne bougent pas (ADR 0075).
- * Le gérant garde tout et « Gérer les personnes » lui reste : ces cases sont verrouillées.
+ * Qui peut faire quoi, maquette v2 (écran 24c) : quatorze gestes, trois rôles (ADR 0099).
+ * Une case cochée donne au rôle tous les droits de la ligne, décochée elle les retire. Une
+ * ligne « en partie » (réglée avant la grille regroupée) garde ses droits tant qu'on n'y
+ * touche pas : un appui la complète, un second la retire. Le gérant garde tout ; l'accueil
+ * et les alertes, les personnes et les réglages ne se changent pas ici.
  */
 export function RightsView() {
   const queryClient = useQueryClient();
@@ -83,6 +85,9 @@ export function RightsView() {
   return (
     <div className="flex flex-col gap-2">
       <h2 className="text-titre-carte">{t.title}</h2>
+      {grid?.roles.some((role) => role.partial.length > 0) && (
+        <p className="rounded-champ bg-voile px-4 py-3 font-semibold">{t.partialHint}</p>
+      )}
       {!grid ? (
         <Skeleton className="h-[540px] w-full rounded-champ" />
       ) : (
@@ -156,7 +161,10 @@ export function RightsView() {
   );
 }
 
-/** Une case de la grille : cochée en vert plein, adoucie et verrouillée pour le gérant. */
+/**
+ * Une case de la grille : cochée en vert plein, adoucie et verrouillée pour le gérant ;
+ * « en partie » avec un trait et le mot écrit (jamais la couleur seule, ADR 0099).
+ */
 function Cell({
   line,
   role,
@@ -171,25 +179,41 @@ function Cell({
   onToggle: (role: RoleAbilities, key: string) => void;
 }) {
   const on = role.abilities.includes(line.key);
+  const partial = !on && role.partial.includes(line.key);
   const locked = role.locked || line.locked || !canEdit;
   return (
-    <button
-      type="button"
-      aria-pressed={on}
-      aria-label={t.aria(line.label, role.label)}
-      disabled={locked || pending}
-      onClick={() => onToggle(role, line.key)}
-      className={cn(
-        "flex size-12 shrink-0 items-center justify-center rounded-touche border-2 text-primary-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:mx-auto",
-        on
-          ? role.locked
-            ? "border-primary/65 bg-primary/65"
-            : "border-primary bg-primary"
-          : "border-input bg-card",
-        locked ? "cursor-not-allowed" : "cursor-pointer hover:brightness-95",
+    <span className="flex items-center gap-2 sm:flex-col sm:gap-0.5">
+      <button
+        type="button"
+        aria-pressed={partial ? "mixed" : on}
+        aria-label={
+          partial ? t.partialAria(line.label, role.label) : t.aria(line.label, role.label)
+        }
+        disabled={locked || pending}
+        onClick={() => onToggle(role, line.key)}
+        className={cn(
+          "flex size-12 shrink-0 items-center justify-center rounded-touche border-2 text-primary-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:mx-auto",
+          on
+            ? role.locked
+              ? "border-primary/65 bg-primary/65"
+              : "border-primary bg-primary"
+            : partial
+              ? "border-primary bg-card text-primary"
+              : "border-input bg-card",
+          locked ? "cursor-not-allowed" : "cursor-pointer hover:brightness-95",
+        )}
+      >
+        {partial ? (
+          <Minus aria-hidden className="size-[22px]" />
+        ) : (
+          <Check aria-hidden className={cn("size-[22px]", !on && "opacity-0")} />
+        )}
+      </button>
+      {partial && (
+        <span aria-hidden className="text-sm font-semibold text-muted-foreground">
+          {t.partial}
+        </span>
       )}
-    >
-      <Check aria-hidden className={cn("size-[22px]", !on && "opacity-0")} />
-    </button>
+    </span>
   );
 }

@@ -10,15 +10,24 @@ import { useMe } from "@/hooks/use-me";
 import { errorMessage } from "@/lib/api/errors";
 import { loginUrl, onLogoutElsewhere } from "@/lib/auth/session";
 import { labels } from "@/lib/labels";
-import { ADVICE_NAV, isActive, MAIN_NAV, type NavItem } from "@/lib/navigation";
-import { can, filterByPermission } from "@/lib/permissions";
+import { NoAccess } from "@/components/shell/no-access";
+import { routeRule } from "@/lib/access";
+import { can } from "@/lib/permissions";
+import {
+  ADVICE_NAV,
+  isActive,
+  MAIN_NAV,
+  resolveNav,
+  type ResolvedNavItem,
+  visibleNav,
+} from "@/lib/navigation";
 
 import { ConnectionBanner } from "./connection-banner";
 import { NotificationBell } from "./notification-bell";
 import { SettingsMenu } from "./settings-menu";
 import { SupportBanner } from "./support-banner";
 
-function barItem(item: NavItem, pathname: string): BarItem {
+function barItem(item: ResolvedNavItem, pathname: string): BarItem {
   return {
     href: item.href,
     label: item.label,
@@ -59,6 +68,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
+  // Garde de page (ADR 0099) : le droit exact du registre, sinon la page n'est pas rendue.
+  const rule = routeRule(pathname);
+  const allowed = rule === undefined || rule === null || can(me.data.permissions, rule);
+  const page = allowed ? (
+    children
+  ) : (
+    <NoAccess home={resolveNav(MAIN_NAV[0]!, me.data.permissions)?.href ?? null} />
+  );
+
   // Le reçu s'affiche seul, sans barres (maquette 05) : c'est une feuille à imprimer.
   if (/\/receipt$/.test(pathname)) {
     return (
@@ -67,17 +85,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         tabIndex={-1}
         className="min-h-dvh bg-background px-4 pt-6 pb-12 outline-none md:px-marge-page print:p-0"
       >
-        {children}
+        {page}
       </main>
     );
   }
 
-  const items = filterByPermission(MAIN_NAV, me.data.permissions).map((item) =>
-    barItem(item, pathname),
-  );
-  const advice = can(me.data.permissions, ADVICE_NAV.permission)
-    ? barItem(ADVICE_NAV, pathname)
-    : null;
+  const items = visibleNav(MAIN_NAV, me.data.permissions).map((item) => barItem(item, pathname));
+  const adviceItem = resolveNav(ADVICE_NAV, me.data.permissions);
+  const advice = adviceItem ? barItem(adviceItem, pathname) : null;
 
   return (
     <div className="flex min-h-dvh flex-col bg-background">
@@ -107,7 +122,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <SupportBanner />
         <ConnectionBanner />
-        {children}
+        {page}
       </main>
       <div className="contents print:hidden">
         <BottomNav items={items} />

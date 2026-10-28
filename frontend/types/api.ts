@@ -5886,6 +5886,8 @@ export interface components {
       locked: boolean;
       /** Abilities */
       abilities: string[];
+      /** Partial */
+      partial: string[];
     };
     /** RoleAssignment */
     RoleAssignment: {

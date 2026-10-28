@@ -118,7 +118,7 @@ FIRST_PRICES = {"riz": 15000}
 CORRECTIONS = {"riz": (-1, "damaged", datetime(2026, 10, 5, 18, 20, tzinfo=UTC))}
 EXPORT_AT = datetime(2026, 10, 1, 8, 10, tzinfo=UTC)
 #: Le vendeur vend et encaisse les dettes (grille 24c) ; le reste reste au gérant.
-SELLER_ABILITIES = ["sell", "collect_debt"]
+SELLER_ABILITIES = ["base", "see", "sell", "collect_debt"]
 
 
 @dataclass(frozen=True)

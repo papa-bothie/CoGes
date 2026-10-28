@@ -8,7 +8,12 @@
 
 export type PermissionCode = `${string}:${string}`;
 
-export type PermissionRule = PermissionCode | { anyOf: readonly PermissionCode[] };
+/**
+ * Un droit, l'un de plusieurs (`anyOf`), ou tous (`allOf`, un écran qui en exige deux :
+ * « Encaisser une dette » lit la dette et écrit le paiement, ADR 0099).
+ */
+export type PermissionRule =
+  PermissionCode | { anyOf: readonly PermissionCode[] } | { allOf: readonly PermissionCode[] };
 
 export function can(
   permissions: readonly string[] | undefined,
@@ -17,6 +22,7 @@ export function can(
   if (rule === undefined) return true;
   if (!permissions) return false;
   if (typeof rule === "string") return permissions.includes(rule);
+  if ("allOf" in rule) return rule.allOf.every((code) => permissions.includes(code));
   return rule.anyOf.some((code) => permissions.includes(code));
 }
 

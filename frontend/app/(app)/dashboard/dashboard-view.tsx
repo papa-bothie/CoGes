@@ -27,7 +27,7 @@ import {
   formatWeekdayShort,
 } from "@/lib/format";
 import { labels } from "@/lib/labels";
-import { MAIN_NAV } from "@/lib/navigation";
+import { routeRule } from "@/lib/access";
 import { can } from "@/lib/permissions";
 import { salePill } from "@/lib/sale-status";
 import { cn } from "@/lib/utils";
@@ -85,11 +85,15 @@ export function DashboardView() {
   }
 
   const data = query.data;
+  // Une tuile, un raccourci : visibles seulement si l'écran où ils mènent est permis, au
+  // droit exact du registre (ADR 0099).
+  const opens = (href: string) => can(permissions, routeRule(href) ?? undefined);
   const show = {
-    cash: can(permissions, MAIN_NAV[4]?.permission),
-    receivables: can(permissions, "debts:read"),
-    stock: can(permissions, MAIN_NAV[2]?.permission),
-    sell: can(permissions, "sales:create"),
+    sales: opens(TILE_LINKS.sales),
+    cash: opens(TILE_LINKS.cash),
+    receivables: opens(TILE_LINKS.receivables),
+    stock: opens(TILE_LINKS.stock),
+    sell: opens("/sales/new"),
   };
 
   const tiles =
@@ -104,7 +108,7 @@ export function DashboardView() {
         value: money(data.revenue_today),
         detail: t.salesCount(data.sales_today),
         href: TILE_LINKS.sales,
-        visible: true,
+        visible: show.sales,
       },
       {
         key: "cash",
@@ -211,7 +215,7 @@ export function DashboardView() {
         <WatchCard data={data} currency={currency} />
       </div>
 
-      <RecentSales data={data} currency={currency} timeZone={timeZone} />
+      {show.sales && <RecentSales data={data} currency={currency} timeZone={timeZone} />}
     </div>
   );
 }

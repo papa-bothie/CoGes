@@ -67,7 +67,8 @@ class AbilityRead(BaseModel):
     key: str
     label: str
     permissions: list[str]
-    #: Vraie pour « Gérer les personnes » : réservée au gérant.
+    #: Vraie pour les lignes qui ne se changent pas : l'accueil et les alertes (à tous),
+    #: gérer les personnes et les réglages de l'entreprise (au gérant).
     locked: bool
 
 
@@ -81,6 +82,8 @@ class RoleAbilities(BaseModel):
     locked: bool
     #: Clés des lignes cochées : le rôle porte toutes leurs permissions.
     abilities: list[str]
+    #: Lignes « en partie » : le rôle en porte certains droits, pas tous (ADR 0099).
+    partial: list[str]
 
 
 class AbilityGrid(BaseModel):
