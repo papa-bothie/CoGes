@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { fieldClasses } from "@/components/kit/rubrique";
+import { PasswordField } from "@/components/password-field";
 import { isApiError, errorMessage } from "@/lib/api/errors";
 import { safeNext } from "@/lib/auth/safe-next";
 import { COMPANY_SUSPENDED, login } from "@/lib/auth/session";
@@ -59,7 +60,7 @@ export function LoginForm() {
   const params = useSearchParams();
   const reason = params.get("reason");
   const [formError, setFormError] = useState<string | null>(null);
-  const [shown, setShown] = useState(false);
+  const [submitted, setSubmitted] = useState(0);
 
   const {
     register,
@@ -107,7 +108,15 @@ export function LoginForm() {
   const notice = reason ? (notices[reason] ?? null) : null;
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-5">
+    <form
+      onSubmit={(event) => {
+        // Le mot de passe se remasque à chaque envoi (ADR 0098).
+        setSubmitted((count) => count + 1);
+        void handleSubmit(onSubmit)(event);
+      }}
+      noValidate
+      className="space-y-5"
+    >
       {notice && !formError && (
         <p role="status" className="rounded-champ bg-voile px-4 py-3 font-semibold">
           {notice}
@@ -153,30 +162,14 @@ export function LoginForm() {
         )}
       </Field>
 
-      <Field label={t.password} error={errors.password?.message}>
-        {(id, describedBy) => (
-          <div className="relative">
-            <input
-              id={id}
-              type={shown ? "text" : "password"}
-              autoComplete="current-password"
-              aria-invalid={Boolean(errors.password)}
-              aria-describedby={describedBy}
-              className={cn(FIELD, "pr-28")}
-              {...register("password")}
-            />
-            <button
-              type="button"
-              onClick={() => setShown((on) => !on)}
-              aria-label={shown ? t.hidePassword : t.showPassword}
-              aria-pressed={shown}
-              className="absolute top-1/2 right-1.5 min-h-12 -translate-y-1/2 rounded-touche bg-voile px-3.5 font-bold outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              {shown ? t.hide : t.show}
-            </button>
-          </div>
-        )}
-      </Field>
+      <PasswordField
+        label={t.password}
+        autoComplete="current-password"
+        error={errors.password?.message}
+        submitted={submitted}
+        inputClassName={FIELD}
+        {...register("password")}
+      />
 
       <button
         type="submit"

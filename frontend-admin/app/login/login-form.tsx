@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useId, useState, type FormEvent } from "react";
 
 import { errorMessage, isApiError } from "@/lib/api/errors";
+import { PasswordField } from "@/components/password-field";
 import { BUTTON, FIELD, LABEL } from "@/components/ui";
 import { login } from "@/lib/auth/session";
 
@@ -27,14 +28,15 @@ export function LoginForm() {
   const params = useSearchParams();
   const router = useRouter();
   const emailId = useId();
-  const passwordId = useId();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [submitted, setSubmitted] = useState(0);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setSubmitted((count) => count + 1);
     if (!email.trim() || !password) {
       setError(MESSAGES.required);
       return;
@@ -77,19 +79,13 @@ export function LoginForm() {
           className={FIELD}
         />
       </div>
-      <div className="space-y-1">
-        <label htmlFor={passwordId} className={LABEL}>
-          Mot de passe
-        </label>
-        <input
-          id={passwordId}
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          className={FIELD}
-        />
-      </div>
+      <PasswordField
+        label="Mot de passe"
+        autoComplete="current-password"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+        submitted={submitted}
+      />
       <button type="submit" disabled={busy} className={`${BUTTON.primary} w-full`}>
         {busy ? "Connexion…" : "Se connecter"}
       </button>
