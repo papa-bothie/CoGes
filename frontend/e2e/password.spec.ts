@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
-import { E2E, loginThroughUi, managerToken, type Credentials } from "./fixtures";
+import { E2E, loginThroughUi, managerApi, managerToken, type Credentials } from "./fixtures";
 
 /**
  * Mots de passe (prompt 28, C2, ADR 0098) : « Afficher / Cacher » partout, et « Changer mon
@@ -10,6 +10,14 @@ import { E2E, loginThroughUi, managerToken, type Credentials } from "./fixtures"
  */
 test.describe.configure({ timeout: 90_000, mode: "serial" });
 
+/** Comptes créés ici : leur accès est coupé à la fin (plafond de l'offre, ADR 0091). */
+const created: string[] = [];
+
+test.afterAll(async ({ request }) => {
+  const client = await managerApi(request);
+  for (const id of created) await client.patch(`/users/${id}`, { is_active: false });
+});
+
 async function account(request: APIRequestContext, role: "vendeur" | "comptable") {
   const token = await managerToken(request, E2E);
   const headers = { Authorization: `Bearer ${token}` };
@@ -17,11 +25,12 @@ async function account(request: APIRequestContext, role: "vendeur" | "comptable"
   const roleId = roles.items.find((item: { name: string }) => item.name === role).id;
   const email = `${role}-mdp-${Date.now()}@${E2E.slug}.example.com`;
   const password = `${role}-ancien-2026`;
-  const created = await request.post("/api/v1/users", {
+  const response = await request.post("/api/v1/users", {
     headers,
     data: { email, full_name: `Compte ${role}`, password, role_ids: [roleId] },
   });
-  expect(created.status()).toBe(201);
+  expect(response.status()).toBe(201);
+  created.push((await response.json()).id as string);
   return { slug: E2E.slug, email, password } satisfies Credentials;
 }
 
