@@ -39,7 +39,7 @@ test("statistiques : compteurs datés, revenu déclaré, nouvelles entreprises",
 
   await page.goto("/login");
   await page.getByLabel("E-mail").fill(ADMIN.email);
-  await page.getByLabel("Mot de passe").fill(ADMIN.password);
+  await page.getByLabel("Mot de passe", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
   await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
   await page.goto("/companies");

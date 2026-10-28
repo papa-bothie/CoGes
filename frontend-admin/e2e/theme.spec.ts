@@ -40,7 +40,7 @@ test("clair par défaut malgré un système sombre, bascule mémorisée, retour 
 
   // Connexion, puis bascule depuis l'en-tête.
   await page.getByLabel("E-mail").fill(ADMIN.email);
-  await page.getByLabel("Mot de passe").fill(ADMIN.password);
+  await page.getByLabel("Mot de passe", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
   await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
   await expect(html).toHaveAttribute("data-theme", "light");
@@ -98,7 +98,7 @@ test("360 px : la bascule reste visible dans l'en-tête", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 760 });
   await page.goto("/login");
   await page.getByLabel("E-mail").fill(ADMIN.email);
-  await page.getByLabel("Mot de passe").fill(ADMIN.password);
+  await page.getByLabel("Mot de passe", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
   await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Passer en mode sombre" })).toBeVisible();

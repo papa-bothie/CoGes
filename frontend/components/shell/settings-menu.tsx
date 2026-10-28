@@ -1,6 +1,6 @@
 "use client";
 
-import { Lightbulb, LogOut, Moon, Settings, Sun } from "lucide-react";
+import { KeyRound, Lightbulb, LogOut, Moon, Settings, Sun } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useState } from "react";
@@ -77,6 +77,11 @@ export function SettingsMenu({ me, className }: { me: Me; className?: string }) 
             </Link>
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem asChild className="min-h-cible text-corps">
+          <Link href="/account/password">
+            <KeyRound aria-hidden /> {t.changePassword}
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem
           className="min-h-cible text-corps"
           onSelect={() => setTheme(dark ? "light" : "dark")}

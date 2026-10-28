@@ -91,7 +91,7 @@ const EXTRA_AFTER: typeof SCREENS = [
 async function signIn(page: Page): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("E-mail").fill(ADMIN.email);
-  await page.getByLabel("Mot de passe").fill(ADMIN.password);
+  await page.getByLabel("Mot de passe", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
   await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 }

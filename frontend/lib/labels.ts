@@ -32,6 +32,16 @@ export const labels = {
       count === 0 ? "Alertes, aucune non lue" : `Alertes, ${count} non lue${count > 1 ? "s" : ""}`,
     settingsMenu: "Réglages et compte",
     settings: "Réglages",
+    /** Pour tous les rôles, depuis le menu du compte (prompt 28, C2). */
+    changePassword: "Changer mon mot de passe",
+  },
+  /** « Changer mon mot de passe » (ADR 0098). */
+  accountPassword: {
+    title: "Changer mon mot de passe",
+    intro: "Tapez votre mot de passe actuel, puis le nouveau deux fois.",
+    current: "Mot de passe actuel",
+    submit: "Enregistrer le nouveau mot de passe",
+    done: "Mot de passe changé. Vos autres appareils sont déconnectés : reconnectez-les avec le nouveau.",
   },
   header: {
     logout: "Se déconnecter",
