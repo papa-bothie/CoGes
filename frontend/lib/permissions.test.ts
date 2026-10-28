@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { ADVICE_NAV, isActive, MAIN_NAV } from "./navigation";
-import { can, filterByPermission } from "./permissions";
+import { ADVICE_NAV, isActive, MAIN_NAV, resolveNav, SETTINGS_NAV, visibleNav } from "./navigation";
+import { can } from "./permissions";
 
 // Extraits de la matrice RBAC (ADR 0007).
 const SALESPERSON = [
@@ -50,19 +50,44 @@ describe("can", () => {
   });
 });
 
-describe("navigation de la maquette v2", () => {
+describe("can : tous les droits", () => {
+  it("exige chacun des codes de `allOf`", () => {
+    expect(can(ACCOUNTANT, { allOf: ["debts:read", "payments:read"] })).toBe(true);
+    expect(can(ACCOUNTANT, { allOf: ["debts:read", "payments:create"] })).toBe(false);
+  });
+});
+
+describe("navigation de la maquette v2 (ADR 0099)", () => {
   const MANAGER = [...SALESPERSON, ...ACCOUNTANT, "products:create", "sales:create"];
-  const hrefs = (permissions: string[]) =>
-    filterByPermission(MAIN_NAV, permissions).map((item) => item.label);
+  const labelsFor = (permissions: string[]) =>
+    visibleNav(MAIN_NAV, permissions).map((item) => item.label);
+  const hrefOf = (label: string, permissions: string[]) =>
+    visibleNav(MAIN_NAV, permissions).find((item) => item.label === label)?.href;
 
   it("cinq entrées pour le gérant, dans l'ordre de la maquette", () => {
-    expect(hrefs(MANAGER)).toEqual(["Accueil", "Vendre", "Stock", "Clients", "Argent"]);
-    expect(can(MANAGER, ADVICE_NAV.permission)).toBe(true);
+    expect(labelsFor(MANAGER)).toEqual(["Accueil", "Vendre", "Stock", "Clients", "Argent"]);
+    expect(resolveNav(ADVICE_NAV, MANAGER)?.href).toBe("/insights");
   });
 
-  it("le vendeur ne voit que Accueil, Vendre et Clients", () => {
-    expect(hrefs(SALESPERSON)).toEqual(["Accueil", "Vendre", "Clients"]);
-    expect(can(SALESPERSON, ADVICE_NAV.permission)).toBe(false);
+  it("le vendeur voit le stock qu'il lit, ni l'argent ni les conseils", () => {
+    expect(labelsFor(SALESPERSON)).toEqual(["Accueil", "Vendre", "Stock", "Clients"]);
+    expect(resolveNav(ADVICE_NAV, SALESPERSON)).toBeNull();
+  });
+
+  it("chaque entrée s'ouvre sur un écran permis, jamais par un droit voisin", () => {
+    // Sans `sales:create`, « Vendre » mène à l'historique, pas à la caisse.
+    expect(hrefOf("Vendre", ACCOUNTANT)).toBe("/sales");
+    expect(hrefOf("Vendre", [...ACCOUNTANT, "sales:create"])).toBe("/sales/new");
+    // Comptable à qui il ne reste que « Encaisser une dette » : Argent ouvre les dettes.
+    expect(hrefOf("Argent", ["dashboard:read", "debts:read", "payments:create"])).toBe(
+      "/finance/debts",
+    );
+    // `analytics:read` ne donne plus Stock, `debts:read` ne donne plus le compte d'argent.
+    expect(labelsFor(["dashboard:read", "analytics:read"])).toEqual(["Accueil", "Argent"]);
+    expect(resolveNav(ADVICE_NAV, ["analytics:read"])).toBeNull();
+    // Réglages : la première page permise.
+    expect(resolveNav(SETTINGS_NAV[0]!, ["audit:read"])?.href).toBe("/settings/history");
+    expect(resolveNav(SETTINGS_NAV[0]!, SALESPERSON)).toBeNull();
   });
 
   it("une rubrique s'allume sur ses pages provisoires", () => {

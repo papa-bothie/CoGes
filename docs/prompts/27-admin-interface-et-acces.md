@@ -1,5 +1,7 @@
 # Prompt 27 — Lot admin 4 : interface d'administration modernisée et gestion des accès de l'équipe
 
+> **STATUT : EXÉCUTÉ** (lot admin 6 dans CLAUDE.md : partie A PR n° 37, ADR 0094 ; partie B PR n° 38, thème CoGes et repère « Administration »). Ne pas relancer. Le paragraphe sur « clair par défaut et bascule » ajouté après coup n'a PAS été exécuté : il est repris dans le prompt 31.
+
 Branche `feat/admin-ux-access`, depuis `main` à jour, après les lots admin 1 à 3 (prompts 22 à 26 fusionnés). Reprend l'application `frontend-admin/` (ADR 0089 à 0093) : mêmes écrans, mêmes règles de sécurité, nouvelle interface au thème CoGes, et ce qui manque pour gérer les accès de l'équipe (invitations, profils, suspension, journal des modifications).
 
 Pourquoi ce lot : l'administration actuelle fait le travail mais elle est austère (barre du haut, bleu neutre voulu « distinct » par l'ADR 0089, tableaux bruts), et deux gestes du quotidien n'ont pas d'écran : gérer l'équipe (aujourd'hui uniquement par `make create-platform-user`) et retrouver qui a fait quoi (le journal `platform_audit_logs` est écrit mais jamais lisible). Le principe qui guide tout le lot : **on conçoit d'abord les tâches de l'administrateur, ensuite seulement le décor**. Une belle interface qui ralentit la gestion des accès est un échec.
@@ -98,7 +100,7 @@ mets à jour test_platform_role_grants et T37 (TABLES_WITHOUT_RLS).
 D3. Thème et coque (frontend-admin/)
 - Reprends les jetons de la maquette v2 de frontend/app/globals.css : vert de la marque, fond
   papier, une couleur par rubrique, Figtree hébergée (next/font/local, licence OFL, copie
-  des fichiers), clair ET sombre comme l'app commerçante. Copie ce qu'il faut dans
+  des fichiers), en deux thèmes, clair ET sombre. LE CLAIR EST LE DÉFAUT : à la première visite l'administration est claire, même si le système de l'appareil est en mode sombre (pas de `prefers-color-scheme` pour décider). Un bouton de bascule clair / sombre dans la coque (en-tête, présent sur mobile) mémorise le choix dans le navigateur (localStorage sous try/catch, l'écran marche sans), appliqué avant l'affichage pour éviter tout éclair du mauvais thème, `color-scheme` mis à jour, nom accessible « Passer en mode sombre / clair » et état annoncé. Tests : défaut clair malgré un système sombre, bascule et mémorisation après rechargement, axe 0 violation dans les deux thèmes. Copie ce qu'il faut dans
   frontend-admin/ (pas d'import entre applications : elles restent déployées séparément).
   Mêmes noms de jetons qu'en frontend/, pour qu'un futur partage reste possible.
 - Repère « Administration » : bandeau fin et permanent en haut de chaque écran (étiquette

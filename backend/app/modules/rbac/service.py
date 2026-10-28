@@ -118,10 +118,17 @@ def _resolve_permission_ids(session: Session, codes: Sequence[str]) -> list[UUID
 #: Droits réservés au rôle gérant (ADR 0075, 0088) : qui gère les personnes ou les rôles
 #: peut se donner tout le reste. Le verrou de la grille vaut pour toutes les routes.
 _MANAGER_ONLY_PREFIXES = ("users:", "roles:")
+#: Les réglages de l'entreprise et la santé du système restent eux aussi au gérant
+#: (ADR 0007, 0032) : ligne verrouillée de la grille, refusée à un rôle sur mesure (0099).
+_MANAGER_ONLY_CODES = frozenset({"company:update", "system:read"})
 
 
 def _assert_no_manager_only_rights(codes: Sequence[str]) -> None:
-    reserved = sorted(code for code in codes if code.startswith(_MANAGER_ONLY_PREFIXES))
+    reserved = sorted(
+        code
+        for code in codes
+        if code.startswith(_MANAGER_ONLY_PREFIXES) or code in _MANAGER_ONLY_CODES
+    )
     if reserved:
         raise ValidationFailedError(
             "Gérer les personnes et les rôles reste réservé au gérant.",
@@ -362,6 +369,20 @@ def _checked(codes: set[str]) -> list[str]:
     return [key for key, (_, needed) in ABILITIES.items() if needed <= codes]
 
 
+def _partial(codes: set[str]) -> list[str]:
+    """Lignes « en partie » : le rôle en porte certains droits, pas tous (ADR 0099).
+
+    Un droit partagé avec une ligne cochée ne compte pas : « Encaisser une dette »
+    n'est pas en partie parce que « Vendre » donne `payments:create`.
+    """
+    full = set().union(*(ABILITIES[key][1] for key in _checked(codes)))
+    return [
+        key
+        for key, (_, needed) in ABILITIES.items()
+        if not needed <= codes and (needed & codes) - full
+    ]
+
+
 def ability_grid(session: Session, ctx: TenantContext) -> AbilityGrid:
     """La grille « Qui peut faire quoi » des trois rôles système, dans cet ordre."""
     repository = RoleRepository(session, ctx)
@@ -377,7 +398,8 @@ def ability_grid(session: Session, ctx: TenantContext) -> AbilityGrid:
                 name=role.name,
                 label=SYSTEM_ROLE_LABELS[name],
                 locked=name == MANAGER,
-                abilities=_checked(set(links.codes_for_role(role.id))),
+                abilities=_checked(codes := set(links.codes_for_role(role.id))),
+                partial=_partial(codes),
             )
         )
     return AbilityGrid(
@@ -402,8 +424,11 @@ def set_role_abilities(
     """Coche exactement ces lignes pour un rôle ; ses droits hors grille ne bougent pas.
 
     Nouvelle matrice = (droits actuels − droits de toutes les lignes) ∪ droits des
-    lignes cochées. Le gérant est refusé (409) ; la ligne verrouillée garde l'état
-    qu'elle avait. Audit critique, comme toute modification de rôle.
+    lignes cochées ∪ droits déjà portés des lignes « en partie » non cochées : une
+    ligne incomplète garde ce qu'elle a tant que le gérant n'y touche pas, et à l'écran
+    on la coche d'abord, puis on la décoche entière (ADR 0099). Le gérant est refusé
+    (409) ; une ligne verrouillée garde l'état qu'elle avait. Audit critique, comme
+    toute modification de rôle.
     """
     role = get_role(session, ctx, role_id)
     if role.name == MANAGER and role.is_system:
@@ -420,14 +445,15 @@ def set_role_abilities(
     previously = set(_checked(before))
     if (wanted ^ previously) & LOCKED_ABILITIES:
         raise ValidationFailedError(
-            "« Gérer les personnes » reste au gérant.",
+            "Les lignes verrouillées ne se changent pas depuis la grille.",
             details={"abilities": sorted(LOCKED_ABILITIES)},
         )
 
     grid = set().union(*(needed for _, needed in ABILITIES.values()))
     after = (before - grid).union(*(ABILITIES[key][1] for key in wanted))
-    # Une ligne verrouillée non cochée garde ses droits partiels tels quels.
-    for key in LOCKED_ABILITIES - wanted:
+    # Une ligne verrouillée non cochée, ou « en partie » et laissée telle quelle, garde
+    # ses droits partiels.
+    for key in (LOCKED_ABILITIES | set(_partial(before))) - wanted:
         after |= before & ABILITIES[key][1]
     if after != before:
         links.replace(role_id, _resolve_permission_ids(session, sorted(after)))
@@ -448,4 +474,5 @@ def set_role_abilities(
         label=role_label(role),
         locked=False,
         abilities=_checked(after),
+        partial=_partial(after),
     )

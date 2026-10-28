@@ -1,4 +1,4 @@
-import { MutationCache, QueryClient } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { errorMessage, isApiError, isTransient } from "./errors";
@@ -26,12 +26,26 @@ declare module "@tanstack/react-query" {
   }
 }
 
+/** Clé de `GET /auth/me` (doublée de `hooks/use-me.ts`, que ce module ne peut pas importer). */
+const ME_KEY = ["auth", "me"] as const;
+
+/**
+ * Un droit retiré par le gérant vaut dès la requête suivante côté serveur (ADR 0099) : au
+ * premier 403 `permission_denied`, l'identité est relue pour que le menu, les tuiles et la
+ * garde de page suivent, sans attendre la reconnexion.
+ */
+export function refreshIdentityOnDenial(client: QueryClient, error: unknown): void {
+  if (isApiError(error) && error.status === 403 && error.code === "permission_denied") {
+    void client.invalidateQueries({ queryKey: ME_KEY });
+  }
+}
+
 /**
  * Cache des lectures et des mutations. Aucune donnée métier n'y est **calculée** : il ne
  * garde que des réponses de l'API, invalidées après chaque écriture.
  */
 export function makeQueryClient(): QueryClient {
-  return new QueryClient({
+  const client: QueryClient = new QueryClient({
     defaultOptions: {
       queries: {
         staleTime: 30_000,
@@ -43,11 +57,16 @@ export function makeQueryClient(): QueryClient {
       // « Réessayer » repart avec la même clé d'idempotence (ADR 0052, ADR 0085).
       mutations: { retry: false },
     },
+    queryCache: new QueryCache({
+      onError: (error) => refreshIdentityOnDenial(client, error),
+    }),
     mutationCache: new MutationCache({
       onError: (error, _variables, _context, mutation) => {
+        refreshIdentityOnDenial(client, error);
         if (mutation.meta?.toastError === false) return;
         toast.error(errorMessage(error));
       },
     }),
   });
+  return client;
 }

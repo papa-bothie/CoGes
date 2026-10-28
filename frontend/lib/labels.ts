@@ -10,6 +10,12 @@ export const labels = {
     version: (v: string) => `Version ${v}`,
     skipToContent: "Aller au contenu",
   },
+  /** Adresse tapée sans le droit de l'écran (ADR 0099). */
+  noAccess: {
+    title: "Vous n'avez pas accès à cette page",
+    hint: "Le gérant choisit ce que chaque personne peut faire, dans Réglages.",
+    home: "Revenir à l'accueil",
+  },
   nav: {
     dashboard: "Tableau de bord",
     sales: "Ventes",
@@ -32,6 +38,16 @@ export const labels = {
       count === 0 ? "Alertes, aucune non lue" : `Alertes, ${count} non lue${count > 1 ? "s" : ""}`,
     settingsMenu: "Réglages et compte",
     settings: "Réglages",
+    /** Pour tous les rôles, depuis le menu du compte (prompt 28, C2). */
+    changePassword: "Changer mon mot de passe",
+  },
+  /** « Changer mon mot de passe » (ADR 0098). */
+  accountPassword: {
+    title: "Changer mon mot de passe",
+    intro: "Tapez votre mot de passe actuel, puis le nouveau deux fois.",
+    current: "Mot de passe actuel",
+    submit: "Enregistrer le nouveau mot de passe",
+    done: "Mot de passe changé. Vos autres appareils sont déconnectés : reconnectez-les avec le nouveau.",
   },
   header: {
     logout: "Se déconnecter",
@@ -224,6 +240,9 @@ export const labels = {
     /** Liste de la maquette v2 (écran 03, ADR 0070). */
     list: {
       title: "Ventes",
+      /** Action de la ligne, à côté de la vente (ADR 0097). */
+      returnAction: "Retour",
+      returnActionLabel: (no: string) => `Retour d'articles sur la vente n° ${no}`,
       summary: (count: string, total: string) => `Aujourd'hui : ${count} · ${total}`,
       search: "Chercher par nom du client ou numéro de vente",
       searchLabel: "Chercher une vente",
@@ -503,33 +522,37 @@ export const labels = {
       reasons: ["Abîmé", "Pas le bon article", "Il a changé d’avis", "Périmé", "Autre"],
       value: "Valeur rendue",
       money: "Que fait-on de cet argent ?",
+      /** La dette restante de la vente est déduite d'abord (ADR 0097). */
+      debtFirst: (debt: string, deducted: string) =>
+        `Il doit ${debt} sur cette vente : ${deducted} sont déduits de sa dette`,
+      rest: (amount: string) => `Reste à lui rendre : ${amount}`,
       ways: {
-        debt: "Déduire de ce qu’il doit",
         cash: "Lui rendre de l’argent",
         later: "Plus tard",
       },
       waysHint: {
-        debt: (amount: string) => `Il doit ${amount} : sa dette baisse`,
-        noDebt: "Il ne doit rien sur cette vente",
         cash: "Espèces, Wave ou Orange Money",
         later: "Vous lui devez ce montant",
       },
+      /** Qui n'a pas le droit de rembourser enregistre seulement le retour. */
+      managerRefunds: (amount: string) => `Le gérant lui rendra ${amount}`,
       howMuch: "Combien vous lui rendez ?",
       typeAmount: "Tapez le montant",
       methods: "Moyen de paiement",
       nothing: "Indiquez au moins un article rendu",
       tooMuch: (max: string) => `Vous ne pouvez pas rendre plus que ${max}`,
-      debtCleared: (rest: string) => `Sa dette tombe à 0 ; il restera ${rest} à lui rendre`,
       submit: "Enregistrer le retour",
       done: "Retour enregistré",
       doneDebt: (name: string, amount: string) => `${name} doit maintenant ${amount}`,
       doneCash: (amount: string, name: string) => `${amount} rendus à ${name}`,
       doneLater: (amount: string, name: string) => `Vous devez ${amount} à ${name}`,
+      doneManager: (amount: string) => `Le gérant doit encore rembourser ${amount}`,
       doneStock: "Les articles rendus sont remis dans le stock.",
       printSlip: "Imprimer le bon de retour",
       backToSales: "Retour aux ventes",
-      settleFailed:
-        "Le retour est enregistré, mais l'argent n'a pas pu être réglé : réglez-le depuis la fiche du retour.",
+      /** La vraie raison du refus, jamais un message muet (ADR 0097). */
+      settleFailed: (amount: string, reason: string) =>
+        `${amount} n’ont pas pu être rendus : ${reason} Réglez-les depuis la fiche du retour.`,
     },
     newTitle: (no: string) => `Retour sur la vente ${no}`,
     intro:
@@ -1509,9 +1532,15 @@ export const labels = {
     rights: {
       title: "Qui peut faire quoi",
       action: "Action",
-      locked: "Réservé au gérant",
+      locked: "Ne se change pas ici",
       saved: "Droits enregistrés.",
       aria: (line: string, role: string) => `${line} : ${role}`,
+      /** Ligne dont le rôle n'a qu'une partie des droits (ADR 0099). */
+      partial: "En partie",
+      partialAria: (line: string, role: string) =>
+        `${line} : ${role}, en partie. Toucher pour donner toute la ligne`,
+      partialHint:
+        "« En partie » : ce rôle a une partie des droits de la ligne. Touchez la case pour lui donner toute la ligne, une seconde fois pour la retirer.",
     },
     history: {
       title: "Historique de ce qui a été fait",

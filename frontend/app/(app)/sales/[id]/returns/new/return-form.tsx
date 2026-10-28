@@ -15,6 +15,7 @@ import { cleanQuantity } from "@/components/kit/quantity-stepper";
 import { fieldClasses } from "@/components/kit/rubrique";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale } from "@/hooks/use-me";
+import { usePermission } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import { useIdempotencyKey } from "@/lib/api/idempotency";
@@ -28,7 +29,7 @@ import { centsToAmount, refundCents } from "@/lib/refund";
 import { displayNumber } from "@/lib/units";
 import { cn } from "@/lib/utils";
 
-type Way = "debt" | "cash" | "later";
+type Way = "cash" | "later";
 type Method = "cash" | "wave" | "orange_money";
 type Done = { returnId: string; line: string };
 
@@ -43,13 +44,17 @@ const STEP = cn(
 /**
  * Retour d'articles, maquette v2 (écran 06), en un seul écran : ce qu'il rend (libre,
  * plafonné à ce qui reste retournable), pourquoi, la valeur rendue, et que faire de cet
- * argent — déduire de sa dette (compensation, ADR 0024), lui rendre maintenant, ou plus
- * tard. Le retour et son règlement partent en deux écritures, chacune sous sa clé
- * d'idempotence : si le règlement échoue, le retour reste à régler depuis sa fiche.
+ * argent. La dette restante de la vente est déduite d'abord, par le serveur, dans la
+ * transaction du retour (`offset_debt`, ADR 0097) ; le reste se rend maintenant ou plus
+ * tard, par qui a le droit de rembourser (`sale_returns:confirm`). Pour les autres, le
+ * retour s'enregistre et le gérant rembourse ensuite. Le retour et son remboursement
+ * partent en deux écritures, chacune sous sa clé d'idempotence : si le remboursement
+ * échoue, l'écran dit pourquoi et le retour reste à régler depuis sa fiche.
  */
 export function ReturnForm({ saleId }: { saleId: string }) {
   const queryClient = useQueryClient();
   const { currency, timeZone } = useCompanyLocale();
+  const canRefund = usePermission("sale_returns:confirm");
   const createKey = useIdempotencyKey();
   const refundKey = useIdempotencyKey();
   const [quantities, setQuantities] = useState<Record<string, string>>({});
@@ -72,8 +77,7 @@ export function ReturnForm({ saleId }: { saleId: string }) {
     debt && (debt.status === "open" || debt.status === "partially_paid")
       ? wholeUnits(debt.balance)
       : 0n;
-  const canOffset = debtBalance > 0n;
-  const chosen: Way = way ?? (canOffset ? "debt" : "cash");
+  const chosen: Way = way ?? "cash";
 
   const rows = (data?.items ?? []).map((item) => ({
     item,
@@ -82,15 +86,17 @@ export function ReturnForm({ saleId }: { saleId: string }) {
   const qtyOf = (id: string) => parseDecimalInput(quantities[id] ?? "") ?? "0";
   const valueCents = rows.reduce((sum, { item }) => sum + refundCents(item, qtyOf(item.id)), 0n);
   const value = wholeUnits(centsToAmount(valueCents));
-  const refund = refundTyped === null ? value : typedAmount(refundTyped);
+  // Ce qui est déduit de la dette d'abord, puis ce qui reste à lui rendre.
+  const deducted = min(value, debtBalance);
+  const rest = value - deducted;
+  const paysNow = canRefund && rest > 0n && chosen === "cash";
+  const refund = refundTyped === null ? rest : typedAmount(refundTyped);
   const money = (amount: bigint) => formatAmount(amount.toString(), currency);
 
   let message = "";
   if (value === 0n) message = t.nothing;
-  else if (chosen === "cash" && refund > value) message = t.tooMuch(money(value));
-  else if (chosen === "debt" && value > debtBalance)
-    message = t.debtCleared(money(value - debtBalance));
-  const blocked = value === 0n || (chosen === "cash" && (refund <= 0n || refund > value));
+  else if (paysNow && refund > rest) message = t.tooMuch(money(rest));
+  const blocked = value === 0n || (paysNow && (refund <= 0n || refund > rest));
 
   const save = useMutation({
     meta: { toastError: false },
@@ -101,31 +107,32 @@ export function ReturnForm({ saleId }: { saleId: string }) {
       const created = await unwrap(
         api.POST("/api/v1/sales/{sale_id}/returns", {
           params: { path: { sale_id: saleId } },
-          body: { lines, reason },
+          body: { lines, reason, offset_debt: true },
           headers: createKey.headers,
         }),
       );
       createKey.renew();
+      // Le serveur a déjà déduit la dette : `refund_due` est ce qui reste à rendre.
       const due = wholeUnits(created.refund_due);
-      const amount = chosen === "debt" ? min(due, debtBalance) : min(due, refund);
-      let settled = true;
-      if (chosen !== "later" && amount > 0n) {
+      const amount = paysNow ? min(due, refund) : 0n;
+      let failure: string | null = null;
+      if (amount > 0n) {
         try {
           await unwrap(
             api.POST("/api/v1/sale-returns/{return_id}/refunds", {
               params: { path: { return_id: created.id } },
-              body: { amount: amount.toString(), method: chosen === "debt" ? "offset" : method },
+              body: { amount: amount.toString(), method },
               headers: refundKey.headers,
             }),
           );
           refundKey.renew();
-        } catch {
-          settled = false;
+        } catch (refused) {
+          failure = errorMessage(refused);
         }
       }
-      return { created, amount, settled };
+      return { created, amount, failure };
     },
-    onSuccess: ({ created, amount, settled }) => {
+    onSuccess: ({ created, amount, failure }) => {
       for (const key of [
         queryKeys.sales.all,
         queryKeys.stock.all,
@@ -138,14 +145,15 @@ export function ReturnForm({ saleId }: { saleId: string }) {
       }
       const name = data?.customer_name ?? labels.sales.anonymous;
       const owed = wholeUnits(created.refund_due);
-      const line = !settled
-        ? t.settleFailed
-        : chosen === "debt"
-          ? t.doneDebt(name, money(debtBalance - amount))
-          : chosen === "cash"
-            ? t.doneCash(money(amount), name)
-            : t.doneLater(money(owed), name);
-      setDone({ returnId: created.id, line });
+      const parts: string[] = [];
+      if (deducted > 0n) parts.push(t.doneDebt(name, money(debtBalance - deducted)));
+      if (failure !== null) parts.push(t.settleFailed(money(amount), failure));
+      else if (amount > 0n) parts.push(t.doneCash(money(amount), name));
+      const left = failure !== null ? owed : owed - amount;
+      if (left > 0n && failure === null) {
+        parts.push(canRefund ? t.doneLater(money(left), name) : t.doneManager(money(left)));
+      }
+      setDone({ returnId: created.id, line: parts.join(". ") });
     },
     onError: (failure) => setError(errorMessage(failure)),
   });
@@ -304,55 +312,61 @@ export function ReturnForm({ saleId }: { saleId: string }) {
                 {money(value)}
               </span>
             </div>
-            <p id="return-money" className="text-libelle">
-              {t.money}
-            </p>
-            <div role="group" aria-labelledby="return-money" className="flex flex-col gap-2">
-              {(["debt", "cash", "later"] as const).map((option) => {
-                const hint =
-                  option === "debt"
-                    ? canOffset
-                      ? t.waysHint.debt(money(debtBalance))
-                      : t.waysHint.noDebt
-                    : t.waysHint[option];
-                return (
-                  <button
-                    key={option}
-                    type="button"
-                    aria-pressed={chosen === option}
-                    disabled={option === "debt" && !canOffset}
-                    onClick={() => {
-                      setWay(option);
-                      setRefundTyped(null);
-                    }}
-                    className={cn(
-                      "flex min-h-[76px] flex-[1_1_230px] items-center rounded-[18px] border-2 px-4 py-3 text-left text-[17px] font-bold",
-                      "outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
-                      chosen === option
-                        ? "border-argent bg-argent-teinte text-argent-encre"
-                        : "border-input bg-card text-foreground hover:bg-voile",
-                    )}
-                  >
-                    <span className="flex-1">
-                      {t.ways[option]}
-                      <span className="block text-sm font-medium text-muted-foreground">
-                        {hint}
+            {debtBalance > 0n && value > 0n && (
+              <p className="rounded-champ bg-clients-teinte px-4 py-3 font-bold text-clients-encre">
+                {t.debtFirst(money(debtBalance), money(deducted))}
+              </p>
+            )}
+            {rest > 0n && deducted > 0n && <p className="text-libelle">{t.rest(money(rest))}</p>}
+            {rest > 0n && !canRefund && (
+              <p role="note" className="rounded-champ bg-voile px-4 py-3 font-bold">
+                {t.managerRefunds(money(rest))}
+              </p>
+            )}
+            {rest > 0n && canRefund && (
+              <>
+                <p id="return-money" className="text-libelle">
+                  {t.money}
+                </p>
+                <div role="group" aria-labelledby="return-money" className="flex flex-col gap-2">
+                  {(["cash", "later"] as const).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      aria-pressed={chosen === option}
+                      onClick={() => {
+                        setWay(option);
+                        setRefundTyped(null);
+                      }}
+                      className={cn(
+                        "flex min-h-[76px] flex-[1_1_230px] items-center rounded-[18px] border-2 px-4 py-3 text-left text-[17px] font-bold",
+                        "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                        chosen === option
+                          ? "border-argent bg-argent-teinte text-argent-encre"
+                          : "border-input bg-card text-foreground hover:bg-voile",
+                      )}
+                    >
+                      <span className="flex-1">
+                        {t.ways[option]}
+                        <span className="block text-sm font-medium text-muted-foreground">
+                          {t.waysHint[option]}
+                        </span>
                       </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
-            {chosen === "cash" && (
+            {paysNow && (
               <div className="flex flex-col gap-2.5">
                 <AmountField
                   label={t.howMuch}
                   placeholder={t.typeAmount}
                   rubrique="argent"
-                  value={refundTyped ?? (value > 0n ? value.toString() : "")}
+                  value={refundTyped ?? rest.toString()}
                   onChange={setRefundTyped}
-                  invalid={refund > value}
+                  invalid={refund > rest}
                 />
                 <div role="group" aria-label={t.methods} className="flex flex-wrap gap-2">
                   {METHODS.map((value) => (

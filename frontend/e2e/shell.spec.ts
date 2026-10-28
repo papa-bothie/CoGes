@@ -99,13 +99,14 @@ test("session révoquée côté serveur : retour à la connexion", async ({ page
   await expect(page.getByText("Votre session a expiré. Reconnectez-vous.")).toBeVisible();
 });
 
-test("vendeur : seulement Accueil, Vendre et Clients", async ({ page, request }) => {
+// Depuis l'ADR 0099, Stock suit `inventory:read`, que le vendeur porte : il le lit.
+test("vendeur : Accueil, Vendre, Stock et Clients", async ({ page, request }) => {
   const salesperson = await createSalesperson(request);
   await page.goto("/login");
   await loginThroughUi(page, salesperson);
   await expect(page).toHaveURL(/\/dashboard$/);
   const nav = page.getByRole("navigation", { name: "Menu principal" }).first();
-  await expect(nav.getByRole("link")).toHaveText(["Accueil", "Vendre", "Clients"]);
+  await expect(nav.getByRole("link")).toHaveText(["Accueil", "Vendre", "Stock", "Clients"]);
   await expect(page.getByRole("link", { name: "Conseils" })).toHaveCount(0);
   await page.getByRole("button", { name: "Réglages et compte" }).click();
   await expect(page.getByRole("menu").getByText("Vendeur", { exact: true })).toBeVisible();

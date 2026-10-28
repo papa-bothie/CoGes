@@ -112,27 +112,132 @@ SYSTEM_ROLES: Final[dict[str, frozenset[str] | None]] = {
 }
 
 
-#: Grille « Qui peut faire quoi » (écran 24c, ADR 0075) : une ligne = un geste du
-#: commerçant, cochée pour un rôle quand il porte **toutes** ses permissions. Les
-#: lignes partagent parfois un droit (`inventory:create`) : décocher l'une le garde tant
-#: qu'une autre cochée le demande.
+#: Grille « Qui peut faire quoi » (écran 24c, ADR 0075, regroupée par l'ADR 0099) : une
+#: ligne = un geste du commerçant, cochée pour un rôle quand il porte **toutes** ses
+#: permissions. Tout droit du catalogue, sauf `users:` et `roles:`, appartient à au moins
+#: une ligne (test-registre) ; le vendeur et le comptable par défaut sont exactement une
+#: somme de lignes. Les lignes partagent parfois un droit (`inventory:create`) : décocher
+#: l'une le garde tant qu'une autre cochée le demande.
 ABILITIES: Final[dict[str, tuple[str, frozenset[str]]]] = {
-    "sell": ("Vendre", frozenset({"sales:create", "sales:update", "sales:confirm"})),
-    "cancel_sale": ("Annuler une vente", frozenset({"sales:cancel", "sale_returns:confirm"})),
-    "fix_stock": ("Corriger le stock", frozenset({"inventory:create", "inventory:update"})),
-    "receive": ("Recevoir une livraison", frozenset({"inventory:create", "debts:create"})),
-    "see_money": ("Voir l’argent et les bénéfices", frozenset({"analytics:read", "expenses:read"})),
+    "base": (
+        "Recevoir ses alertes et voir l’accueil",
+        frozenset({"notifications:read", "notifications:update", "dashboard:read"}),
+    ),
+    "see": (
+        "Voir les articles, le stock, les ventes et les fiches",
+        frozenset(
+            {
+                "products:read",
+                "categories:read",
+                "prices:read",
+                "inventory:read",
+                "suppliers:read",
+                "customers:read",
+                "sales:read",
+                "sale_returns:read",
+            }
+        ),
+    ),
+    "sell": (
+        "Vendre et enregistrer des retours",
+        frozenset(
+            {
+                "sales:create",
+                "sales:update",
+                "sales:confirm",
+                "payments:create",
+                "payments:read",
+                "customers:create",
+                "customers:update",
+                "sale_returns:create",
+            }
+        ),
+    ),
+    "cancel_sale": (
+        "Annuler une vente, rembourser un retour, abandonner une dette",
+        frozenset({"sales:cancel", "sale_returns:confirm", "debts:write_off"}),
+    ),
+    "change_prices": (
+        "Gérer les articles et les prix (aussi par fichier)",
+        frozenset(
+            {
+                "products:create",
+                "products:update",
+                "products:delete",
+                "categories:create",
+                "categories:update",
+                "categories:delete",
+                "prices:create",
+                "importexport:create",
+            }
+        ),
+    ),
+    "stock": (
+        "Corriger le stock et recevoir des livraisons",
+        frozenset({"inventory:create", "inventory:update", "debts:create"}),
+    ),
+    "parties": (
+        "Gérer les clients et les fournisseurs",
+        frozenset(
+            {
+                "customers:create",
+                "customers:update",
+                "customers:delete",
+                "suppliers:create",
+                "suppliers:update",
+                "suppliers:delete",
+            }
+        ),
+    ),
+    "see_money": (
+        "Voir l’argent, les bénéfices et les conseils",
+        frozenset(
+            {
+                "analytics:read",
+                "expenses:read",
+                "payments:read",
+                "debts:read",
+                "insights:read",
+                "insights:update",
+            }
+        ),
+    ),
     "collect_debt": ("Encaisser une dette", frozenset({"debts:read", "payments:create"})),
-    "change_prices": ("Changer les prix", frozenset({"prices:create", "products:update"})),
+    "manage_money": (
+        "Gérer les dettes, les dépenses et les paiements",
+        frozenset(
+            {
+                "debts:create",
+                "debts:update",
+                "expenses:create",
+                "expenses:update",
+                "expenses:delete",
+                "payments:update",
+                "payments:cancel",
+            }
+        ),
+    ),
+    "audit": (
+        "Voir le journal d’activité et les réglages",
+        frozenset({"audit:read", "company:read"}),
+    ),
+    "export": (
+        "Exporter des fichiers",
+        frozenset({"sales:export", "analytics:export", "audit:export", "importexport:export"}),
+    ),
     "manage_people": (
         "Gérer les personnes",
         frozenset({"users:create", "users:read", "users:update", "users:delete"}),
     ),
+    "shop_settings": (
+        "Modifier les réglages et voir l’état du système",
+        frozenset({"company:update", "system:read"}),
+    ),
 }
 
-#: Lignes que la grille montre sans permettre de les changer : gérer les personnes
-#: reste au gérant (et le gérant, lui, garde tout).
-LOCKED_ABILITIES: Final[frozenset[str]] = frozenset({"manage_people"})
+#: Lignes que la grille montre sans permettre de les changer : l'accueil et les alertes
+#: sont à tous, gérer les personnes et les réglages reste au gérant (ADR 0007, 0032).
+LOCKED_ABILITIES: Final[frozenset[str]] = frozenset({"base", "manage_people", "shop_settings"})
 
 #: Ordre des colonnes de la grille ; pas de rôle sur mesure à l'écran.
 GRID_ROLES: Final[tuple[str, ...]] = (MANAGER, SALESPERSON, ACCOUNTANT)

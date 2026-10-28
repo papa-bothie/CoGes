@@ -13,7 +13,7 @@ const API = "http://localhost:8100/api/v1";
 async function signIn(page: Page): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("E-mail").fill(ADMIN.email);
-  await page.getByLabel("Mot de passe").fill(ADMIN.password);
+  await page.getByLabel("Mot de passe", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
   await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
   await page.goto("/companies");
@@ -29,7 +29,7 @@ test("connexion : un mauvais mot de passe est refusé sans dire pourquoi", async
   await expect(page.getByRole("heading", { name: "Administration" })).toBeVisible();
   await axe(page);
   await page.getByLabel("E-mail").fill(ADMIN.email);
-  await page.getByLabel("Mot de passe").fill("pas-le-bon-mot-de-passe");
+  await page.getByLabel("Mot de passe", { exact: true }).fill("pas-le-bon-mot-de-passe");
   await page.getByRole("button", { name: "Se connecter" }).click();
   // Le formulaire seul : Next annonce aussi les changements de route dans un `alert`.
   await expect(page.locator("form").getByRole("alert")).toHaveText(

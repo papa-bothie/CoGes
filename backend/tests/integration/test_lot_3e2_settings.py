@@ -14,7 +14,9 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
+from app.core.tenancy import TenantContext, tenant_transaction
 from tests.conftest import (
     TEST_PASSWORD,
     DemoCompany,
@@ -59,67 +61,127 @@ def _set(client: TestClient, token: str, role_id: str, abilities: list[str]) -> 
 # ------------------------------------------------------------------- la grille
 
 
-def test_the_grid_lists_eight_lines_and_three_system_roles(api_client: TestClient) -> None:
+def test_the_grid_lists_fourteen_lines_and_three_system_roles(api_client: TestClient) -> None:
+    """La grille regroupée de l'ADR 0099 : chaque droit du catalogue y figure."""
     _, token = _fresh(api_client)
     grid = _grid(api_client, token)
     assert [line["label"] for line in grid["abilities"]] == [
-        "Vendre",
-        "Annuler une vente",
-        "Corriger le stock",
-        "Recevoir une livraison",
-        "Voir l’argent et les bénéfices",
+        "Recevoir ses alertes et voir l’accueil",
+        "Voir les articles, le stock, les ventes et les fiches",
+        "Vendre et enregistrer des retours",
+        "Annuler une vente, rembourser un retour, abandonner une dette",
+        "Gérer les articles et les prix (aussi par fichier)",
+        "Corriger le stock et recevoir des livraisons",
+        "Gérer les clients et les fournisseurs",
+        "Voir l’argent, les bénéfices et les conseils",
         "Encaisser une dette",
-        "Changer les prix",
+        "Gérer les dettes, les dépenses et les paiements",
+        "Voir le journal d’activité et les réglages",
+        "Exporter des fichiers",
         "Gérer les personnes",
+        "Modifier les réglages et voir l’état du système",
     ]
-    assert [line["key"] for line in grid["abilities"] if line["locked"]] == ["manage_people"]
+    assert [line["key"] for line in grid["abilities"] if line["locked"]] == [
+        "base",
+        "manage_people",
+        "shop_settings",
+    ]
     assert [(role["name"], role["label"], role["locked"]) for role in grid["roles"]] == [
         ("gerant", "Gérant", True),
         ("vendeur", "Vendeur", False),
         ("comptable", "Comptable", False),
     ]
-    assert len(_role(grid, "gerant")["abilities"]) == 8
-    # Le vendeur vend, mais sans `debts:read` il n'encaisse pas une dette.
-    assert _role(grid, "vendeur")["abilities"] == ["sell"]
-    assert set(_role(grid, "comptable")["abilities"]) == {"see_money", "collect_debt"}
+    assert len(_role(grid, "gerant")["abilities"]) == 14
+    # Les rôles par défaut sont exactement une somme de lignes : rien n'est « en partie ».
+    assert _role(grid, "vendeur")["abilities"] == ["base", "see", "sell"]
+    assert set(_role(grid, "comptable")["abilities"]) == {
+        "base",
+        "see",
+        "see_money",
+        "collect_debt",
+        "manage_money",
+        "audit",
+        "export",
+    }
+    assert _role(grid, "vendeur")["partial"] == [] == _role(grid, "comptable")["partial"]
 
 
-def test_ticking_a_line_adds_its_permissions_and_keeps_the_others(
+def test_ticking_a_line_adds_its_permissions_and_unticking_removes_them(
     api_client: TestClient,
 ) -> None:
     _, token = _fresh(api_client)
     seller = _role(_grid(api_client, token), "vendeur")
     before = _permissions(api_client, token, seller["role_id"])
 
-    ticked = _set(api_client, token, seller["role_id"], ["sell", "collect_debt", "fix_stock"])
+    ticked = _set(api_client, token, seller["role_id"], ["base", "see", "sell", "stock"])
     assert ticked.status_code == 200, ticked.text
-    assert ticked.json()["abilities"] == ["sell", "fix_stock", "collect_debt"]
+    assert ticked.json()["abilities"] == ["base", "see", "sell", "stock"]
     after = _permissions(api_client, token, seller["role_id"])
-    assert {"debts:read", "inventory:create", "inventory:update"} <= after
-    # Hors grille, rien ne bouge : le vendeur lit toujours ses ventes et ses alertes.
-    assert {"sales:read", "notifications:read", "customers:create"} <= after
+    assert {"inventory:create", "inventory:update", "debts:create"} <= after
+    assert before <= after
 
-    # Décocher « Corriger le stock » retire ses deux droits, aucun autre.
-    unticked = _set(api_client, token, seller["role_id"], ["sell", "collect_debt"])
+    # Décocher une ligne retire tous ses droits, sauf ceux qu'une ligne cochée demande.
+    unticked = _set(api_client, token, seller["role_id"], ["base", "sell"])
     assert unticked.status_code == 200, unticked.text
     final = _permissions(api_client, token, seller["role_id"])
-    assert "inventory:update" not in final and "inventory:create" not in final
-    assert final == (before | {"debts:read"})
+    assert not final & {"inventory:create", "inventory:update", "debts:create", "products:read"}
+    # `payments:read` appartient aussi à « Vendre », cochée : il reste.
+    assert "payments:read" in final
 
 
 def test_a_shared_permission_stays_while_another_ticked_line_needs_it(
     api_client: TestClient,
 ) -> None:
     _, token = _fresh(api_client)
+    accountant = _role(_grid(api_client, token), "comptable")
+    # `debts:read` est dans « Voir l'argent » et dans « Encaisser une dette ».
+    kept = _set(api_client, token, accountant["role_id"], ["base", "see", "collect_debt"])
+    assert kept.status_code == 200, kept.text
+    permissions = _permissions(api_client, token, accountant["role_id"])
+    assert "debts:read" in permissions and "analytics:read" not in permissions
+
+
+def test_an_incomplete_line_shows_as_partial_and_keeps_its_rights(
+    api_client: TestClient, session_factory: Any
+) -> None:
+    """Un rôle réglé avant l'ADR 0099 garde ce qu'il a tant que le gérant n'y touche pas."""
+    company, token = _fresh(api_client)
     seller = _role(_grid(api_client, token), "vendeur")
-    _set(api_client, token, seller["role_id"], ["sell", "fix_stock", "receive"])
-    kept = _set(api_client, token, seller["role_id"], ["sell", "receive"])
-    assert kept.json()["abilities"] == ["sell", "receive"]
-    permissions = _permissions(api_client, token, seller["role_id"])
-    assert "inventory:create" in permissions and "inventory:update" not in permissions
+    # Ancienne ligne « Corriger le stock » seule : `inventory:create` et `inventory:update`.
+    ctx = TenantContext(user_id=company.manager_id, company_id=company.company_id)
+    with tenant_transaction(ctx, session_factory=session_factory) as session:
+        session.execute(
+            text(
+                "INSERT INTO role_permissions (company_id, role_id, permission_id) "
+                "SELECT :company, :role, id FROM permissions "
+                "WHERE code IN ('inventory:create', 'inventory:update')"
+            ),
+            {"company": str(company.company_id), "role": seller["role_id"]},
+        )
+    grid = _grid(api_client, token)
+    assert _role(grid, "vendeur")["partial"] == ["stock"]
+
+    # Un autre réglage de la grille ne lui retire rien.
+    kept = _set(api_client, token, seller["role_id"], ["base", "see", "sell", "collect_debt"])
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["partial"] == ["stock"]
+    assert {"inventory:create", "inventory:update"} <= _permissions(
+        api_client, token, seller["role_id"]
+    )
+
+    # Cochée, la ligne devient entière ; décochée ensuite, elle retire tous ses droits.
+    whole = _set(api_client, token, seller["role_id"], ["base", "see", "sell", "stock"])
+    assert whole.json()["partial"] == []
+    assert "debts:create" in _permissions(api_client, token, seller["role_id"])
+    _set(api_client, token, seller["role_id"], ["base", "see", "sell"])
+    assert not _permissions(api_client, token, seller["role_id"]) & {
+        "inventory:create",
+        "inventory:update",
+        "debts:create",
+    }
 
 
-def test_the_manager_column_and_the_people_line_are_locked(api_client: TestClient) -> None:
+def test_the_manager_column_and_the_locked_lines_are_locked(api_client: TestClient) -> None:
     _, token = _fresh(api_client)
     grid = _grid(api_client, token)
     manager = _role(grid, "gerant")
@@ -128,10 +190,27 @@ def test_the_manager_column_and_the_people_line_are_locked(api_client: TestClien
     assert refused.json()["error"]["code"] == "role_locked"
 
     seller = _role(grid, "vendeur")
-    people = _set(api_client, token, seller["role_id"], ["sell", "manage_people"])
-    assert people.status_code == 422
-    unknown = _set(api_client, token, seller["role_id"], ["sell", "fly"])
+    for line in ("manage_people", "shop_settings"):
+        refused = _set(api_client, token, seller["role_id"], ["base", "see", "sell", line])
+        assert refused.status_code == 422, line
+    # Les alertes et l'accueil restent à tous.
+    without_base = _set(api_client, token, seller["role_id"], ["see", "sell"])
+    assert without_base.status_code == 422
+    unknown = _set(api_client, token, seller["role_id"], ["base", "sell", "fly"])
     assert unknown.status_code == 422
+
+
+def test_shop_settings_and_system_health_stay_with_the_manager(api_client: TestClient) -> None:
+    """`company:update` et `system:read` ne se délèguent pas, même par un rôle sur mesure."""
+    _, token = _fresh(api_client)
+    for code in ("company:update", "system:read"):
+        created = api_client.post(
+            "/api/v1/roles",
+            headers=auth_headers(token),
+            json={"name": f"Sur mesure {uuid4().hex[:6]}", "permissions": [code]},
+        )
+        assert created.status_code == 422, created.text
+        assert created.json()["error"]["details"]["reserved_permissions"] == [code]
 
 
 def test_a_ticked_line_takes_effect_for_the_person(api_client: TestClient) -> None:
@@ -159,21 +238,26 @@ def test_a_ticked_line_takes_effect_for_the_person(api_client: TestClient) -> No
     modou = logged.json()["access_token"]
     assert api_client.get("/api/v1/debts", headers=auth_headers(modou)).status_code == 403
 
-    _set(api_client, token, seller["role_id"], ["sell", "collect_debt"])
+    _set(api_client, token, seller["role_id"], ["base", "see", "sell", "collect_debt"])
     assert api_client.get("/api/v1/debts", headers=auth_headers(modou)).status_code == 200
+
+    # Le retrait vaut lui aussi dès la requête suivante, avec le même jeton.
+    _set(api_client, token, seller["role_id"], ["base", "sell"])
+    assert api_client.get("/api/v1/debts", headers=auth_headers(modou)).status_code == 403
+    assert api_client.get("/api/v1/products", headers=auth_headers(modou)).status_code == 403
 
 
 def test_changing_the_grid_is_audited(api_client: TestClient) -> None:
     _, token = _fresh(api_client)
     seller = _role(_grid(api_client, token), "vendeur")
-    _set(api_client, token, seller["role_id"], ["sell", "cancel_sale"])
+    _set(api_client, token, seller["role_id"], ["base", "see", "sell", "cancel_sale"])
     logs = api_client.get(
         f"/api/v1/audit-logs?entity_table=roles&entity_id={seller['role_id']}",
         headers=auth_headers(token),
     ).json()
     assert logs["total"] == 1
     diff = logs["items"][0]["diff"]
-    assert diff["after"]["abilities"] == ["cancel_sale", "sell"]
+    assert diff["after"]["abilities"] == ["base", "cancel_sale", "see", "sell"]
     assert "sales:cancel" in diff["after"]["permissions"]
 
 
