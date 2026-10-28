@@ -212,6 +212,15 @@ export const labels = {
     },
     count: (count: number) => `${count} vente${count > 1 ? "s" : ""}`,
     newSale: "Nouvelle vente",
+    /** Les dernières ventes, sur l'écran Vendre (prompt 28, C4, ADR 0100). */
+    recent: {
+      title: "Dernières ventes",
+      empty: "Aucune vente pour l'instant",
+      error: "Les dernières ventes ne se chargent pas. Vous pouvez vendre quand même.",
+      retry: "Réessayer",
+      seeAll: "Voir toutes les ventes",
+      line: (no: string, time: string) => `Vente n° ${no} · ${time}`,
+    },
     /** Liste de la maquette v2 (écran 03, ADR 0070). */
     list: {
       title: "Ventes",
