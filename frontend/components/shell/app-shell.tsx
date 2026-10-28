@@ -26,6 +26,8 @@ import { ConnectionBanner } from "./connection-banner";
 import { NotificationBell } from "./notification-bell";
 import { SettingsMenu } from "./settings-menu";
 import { SupportBanner } from "./support-banner";
+import { purgeExpiredDrafts, setDraftOwner } from "@/lib/drafts";
+import { isSupportMode } from "@/lib/auth/support";
 
 function barItem(item: ResolvedNavItem, pathname: string): BarItem {
   return {
@@ -49,6 +51,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => onLogoutElsewhere(() => window.location.assign(loginUrl("logout"))), []);
+  // Brouillons (ADR 0101) : rangés au nom de cette personne dans cette entreprise, et
+  // tout ce qui a plus de 24 heures disparaît à l'ouverture.
+  const companyId = me.data?.company.id;
+  const userId = me.data?.user.id;
+  useEffect(() => {
+    purgeExpiredDrafts();
+    if (companyId && userId && !isSupportMode()) setDraftOwner({ companyId, userId });
+  }, [companyId, userId]);
   const mustChange = me.data?.user.must_change_password === true;
   // Mot de passe provisoire (ADR 0074) : rien d'autre ne répond tant qu'il n'est pas changé.
   useEffect(() => {
