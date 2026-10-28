@@ -3,7 +3,8 @@ import { expect, test, type Page } from "@playwright/test";
 
 /**
  * Accessibilité de chaque écran (prompt 27, D6) : axe AA sans violation en clair **et** en
- * sombre, et aucun défilement horizontal à 360 px.
+ * sombre, et aucun défilement horizontal à 360 px. Depuis le prompt 31, le sombre vient du
+ * choix mémorisé, pas du système : l'appareil est en sombre dans les deux cas.
  */
 const ADMIN = { email: "admin@e2e.example.com", password: "admin-coges-e2e-2026" };
 
@@ -42,7 +43,7 @@ const SCREENS: { path: string; ready: (page: Page) => Promise<void> }[] = [
 async function signIn(page: Page): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("E-mail").fill(ADMIN.email);
-  await page.getByLabel("Mot de passe").fill(ADMIN.password);
+  await page.getByLabel("Mot de passe", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
   await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
 }
@@ -68,7 +69,10 @@ async function noHorizontalScroll(page: Page, where: string): Promise<void> {
 for (const scheme of ["light", "dark"] as const) {
   test(`axe AA sur chaque écran, ${scheme === "light" ? "clair" : "sombre"}`, async ({ page }) => {
     test.setTimeout(180_000);
-    await page.emulateMedia({ colorScheme: scheme });
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.addInitScript((theme) => {
+      window.localStorage.setItem("coges-admin:theme", theme);
+    }, scheme);
     await page.goto("/login");
     await axe(page, `/login ${scheme}`);
     await page.goto("/invitation/lien-de-demonstration-sans-valeur-0000");
