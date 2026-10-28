@@ -190,6 +190,7 @@ make front-api               # régénère frontend/types/api.ts après `make op
 make front-check             # types à jour, lint, typecheck, Vitest, build (ce que joue la CI)
 make admin-check / admin-e2e # administration (frontend-admin/, :3200) : mêmes contrôles, parcours sur coges_e2e
 make create-platform-user EMAIL=… NAME="…" ROLE=administrator|support   # compte de l'équipe (jamais de route publique)
+make front-pwa-e2e           # application installable sur un build de production (:3102)
 make front-e2e               # e2e-reset puis Playwright sur coges_e2e (API :8100 et front :3100 lancés seuls), axe AA bloquant
 make e2e-reset / e2e-api / e2e-front   # base e2e recréée (migrations + seed) / API e2e sans limite de débit / front e2e
 CAPTURES_STAGE=apres make front-e2e   # + captures clair/sombre de la phase 14 (docs/design/captures/phase-14/<étape>/)
@@ -257,6 +258,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | Corrections du terrain, C3 : droits | `28-corrections-du-terrain.md` | `main` | registre des droits (catalogue ⊂ grille), rôles par défaut = somme de lignes, « en partie », effet à la requête suivante, registre des écrans, matrice rôle × écran en e2e | ✅ ADR 0099, sans révision ; matrice ADR 0007 inchangée ; le vendeur voit Stock en lecture |
 | Corrections du terrain, C4 : dernières ventes | `28-corrections-du-terrain.md` | `main` | bloc vide, erreur, ligne annulée (Vitest), vente confirmée en tête, axe, 360 px (e2e) | ✅ ADR 0100, sans route nouvelle |
 | Brouillons et PWA, P1 : brouillons | `29-brouillons-et-pwa.md` | 28 | magasin et crochet (liste blanche, version, 24 h, personne et entreprise, panne de stockage), 11 écrans, e2e : retrouvé, effacé à l'envoi et à la déconnexion, autre personne, mot de passe jamais gardé, une seule vente | ✅ ADR 0101 ; P2 (PWA) à suivre |
+| Brouillons et PWA, P2 : application installable | `29-brouillons-et-pwa.md` | P1 | manifeste et icônes, worker (aucune donnée en cache), page hors ligne, déconnexion = caches vidés, installation, mise à jour à un moment sûr (Vitest), 426 `front_outdated`, anciens fichiers gardés 14 jours ; `make front-pwa-e2e` | ✅ ADR 0102 |
 
 ## 9. Journal des décisions
 
@@ -363,6 +365,7 @@ Légende : ⬜ à faire · 🟨 en cours · ✅ terminé (tests verts) · ⛔ bl
 | 0099 | 2026-10-28 | **Droits** (prompt 28, C3 ; remplace la grille de 0075) : grille de 14 lignes couvrant tout le catalogue sauf `roles:*`, vendeur et comptable par défaut = somme exacte de lignes, lignes « en partie » conservées, `company:update` et `system:read` réservés au gérant ; front : registre `lib/access.ts` (droit exact par écran, test), menu par cibles (jamais un droit voisin), garde de page sans appel d'API, tuiles filtrées, identité relue au premier 403 | `docs/decisions/0099-droits-grille-regroupee-et-ecrans.md` |
 | 0100 | 2026-10-28 | **Dernières ventes sur Vendre** (prompt 28, C4) : 8 dernières ventes sans brouillon par la liste existante, sous le panier (colonne de droite dès 1024 px), repliable, `sales:read`, annulée ou retournée en mots et icône, erreur qui n'empêche pas de vendre | `docs/decisions/0100-dernieres-ventes-sur-l-ecran-vendre.md` |
 | 0101 | 2026-10-28 | **Brouillons de saisie** (prompt 29, P1) : `useDraft` + `lib/drafts.ts` dans le `localStorage`, clé par entreprise et personne, liste blanche par formulaire, version, 24 h, écriture différée et à la page cachée, effacés à l'envoi, à « Effacer », à la déconnexion et à l'expiration ; clé d'idempotence dans le brouillon (même clé au rejeu) ; 11 écrans figés, jamais de mot de passe | `docs/decisions/0101-brouillons-de-saisie.md` |
+| 0102 | 2026-10-28 | **Application installable** (prompt 29, P2) : manifeste, `sw.js` écrit à la main (statique et `/hors-ligne` seulement, vidé à la déconnexion), mise à jour invisible à un moment sûr (lancement, retour après 5 min, navigation par lien, 24 h ; jamais pendant une écriture, une saisie ou une vente), `deploymentId` = étiquette, fichiers statiques gardés 14 jours dans un volume du front, `X-CoGes-Front` + `COGES_MIN_FRONT_VERSION` ⇒ 426, installation dans le menu ; l'administration n'est pas installable | `docs/decisions/0102-application-installable.md` |
 
 Points ouverts connus, à trancher dans leur phase : voir `docs/architecture/README.md` (P1-P8).
 P1 à P6 et P8 sont tranchés (ADR 0002, 0005, 0005, 0027, 0015, 0019, 0043 puis 0091) ; reste **P7**

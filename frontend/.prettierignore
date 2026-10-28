@@ -1,4 +1,6 @@
 .next
+.next-e2e
+.next-pwa
 node_modules
 pnpm-lock.yaml
 playwright-report

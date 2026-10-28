@@ -111,7 +111,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       # shellcheck préinstallé sur les runners Ubuntu.
-      - run: shellcheck -x deploy/vps/*.sh deploy/scripts/*.sh
+      - run: shellcheck -x deploy/vps/*.sh deploy/scripts/*.sh frontend/static-entrypoint.sh
       - name: Caddyfile valide
         run: |
           docker run --rm -e COGES_DOMAIN=coges.example.sn -e COGES_ACME_EMAIL=ops@example.sn \

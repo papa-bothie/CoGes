@@ -16,7 +16,7 @@ ADMIN_PNPM := pnpm --dir frontend-admin
 API_PORT ?= 8000
 COGES_API_URL ?= http://localhost:$(API_PORT)
 
-.PHONY: help install up down db-upgrade-18 logs psql migrate test test-tenancy test-perf lint format security-scan shellcheck invariants dev api worker relay ops-status seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e e2e-reset e2e-api e2e-front admin-install admin-dev admin-api admin-check admin-e2e admin-lighthouse e2e-admin create-platform-user
+.PHONY: help install up down db-upgrade-18 logs psql migrate test test-tenancy test-perf lint format security-scan shellcheck invariants dev api worker relay ops-status seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e front-pwa-e2e e2e-reset e2e-api e2e-front admin-install admin-dev admin-api admin-check admin-e2e admin-lighthouse e2e-admin create-platform-user
 
 help: ## Liste les cibles disponibles
 	@grep -hE '^[a-z0-9-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -59,7 +59,7 @@ lint: ## ruff (lint + format) puis mypy --strict sur app/
 	$(UV) mypy
 
 shellcheck: ## shellcheck des scripts du VPS (deploy/vps) et de deploy/scripts
-	uvx --from shellcheck-py==0.11.0.1 shellcheck -x deploy/vps/*.sh deploy/scripts/*.sh
+	uvx --from shellcheck-py==0.11.0.1 shellcheck -x deploy/vps/*.sh deploy/scripts/*.sh frontend/static-entrypoint.sh
 
 security-scan: ## gitleaks (tout l'historique), pip-audit et pnpm audit --prod ; exceptions dans security/
 	python3 deploy/scripts/security_scan.py all
@@ -122,6 +122,9 @@ front-check: ## Types à jour, lint, typecheck, tests unitaires, build
 
 front-e2e: e2e-reset ## Parcours Playwright sur la base dédiée coges_e2e (recréée avant la suite)
 	$(PNPM) e2e
+
+front-pwa-e2e: ## Application installable (ADR 0102) : build de production sur :3102, base coges_e2e
+	$(PNPM) exec playwright test --config playwright.pwa.config.ts
 
 maquette-check: ## Compare le front à la maquette v2 (seuil 2 %) ; MAQUETTE_ALL=1 : tous les écrans
 	$(PNPM) exec playwright test --config playwright.maquette.config.ts

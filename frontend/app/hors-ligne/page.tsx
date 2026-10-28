@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 
+import { buttonVariants } from "@/components/ui/button";
 import { labels } from "@/lib/labels";
-
-import { OfflineRetry } from "./offline-retry";
 
 export const metadata: Metadata = { title: labels.pwa.offlineTitle };
 
@@ -19,7 +18,11 @@ export default function OfflinePage() {
           {labels.pwa.offlineTitle}
         </h1>
         <p className="text-lg text-muted-foreground">{labels.pwa.offlineBody}</p>
-        <OfflineRetry />
+        {/* Un lien vide recharge l'adresse demandée : il marche sans aucun script, ceux de
+            l'application n'étant peut-être pas encore gardés sur l'appareil. */}
+        <a href="" className={buttonVariants()}>
+          {labels.pwa.offlineRetry}
+        </a>
       </div>
     </main>
   );

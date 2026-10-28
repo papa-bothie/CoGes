@@ -84,6 +84,33 @@ sudo -u deploy /opt/coges/deploy.sh production v1.4.0
 5. Effacer `coges-deploy` du poste une fois déposée (une copie dans le gestionnaire de mots
    de passe si besoin).
 
+## Ce que voit une personne qui a l'application installée (ADR 0102)
+
+Rien, sauf en dernier recours.
+
+- Le téléphone repère la nouvelle version (le `sw.js` du nouveau build) et la prépare en
+  arrière-plan, sans rien changer à l'écran.
+- Elle s'active à un **moment sûr** : à la prochaine ouverture de l'application, au retour
+  après plus de 5 minutes en arrière-plan, au prochain changement d'écran par un lien, ou
+  après 24 heures sur le même écran — jamais pendant une écriture, une saisie non envoyée,
+  une vente ou un retour en cours.
+- Un écran resté ouvert sur l'ancienne version continue de fonctionner : le front garde les
+  fichiers des builds précédents 14 jours (volume `front-static`). S'il change d'écran, Next
+  recharge la page sur la nouvelle version ; la saisie en cours est gardée (ADR 0101).
+- **Retirer une compatibilité** (une route, un champ) : seulement 14 jours après la version
+  qui ne s'en sert plus, puis régler `COGES_MIN_FRONT_VERSION` à cette version. Un front plus
+  ancien reçoit alors 426 et se met à jour au moment sûr suivant ; s'il est encore refusé,
+  il affiche « Une nouvelle version de CoGes est prête » avec « Recharger ».
+
+### Purge en cas de défaut de cache
+
+Le cache ne contient que des fichiers statiques et la page hors ligne. Si un défaut y est
+découvert : déployer une version (le nom du cache suit l'étiquette, l'ancien est supprimé à
+l'activation). Pour forcer tout de suite sur tous les appareils, déployer en plus
+`COGES_MIN_FRONT_VERSION` égal à la version corrigée. Vider le volume `front-static`
+(`docker volume rm <pile>_front-static`, front arrêté) ne sert que si un fichier statique
+lui-même est fautif.
+
 ## Revenir en arrière
 
 - **Automatique** : si `/api/v1/health/ready` ou `/login` ne répondent pas dans les 3 min

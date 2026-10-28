@@ -35,7 +35,9 @@
     ".next-e2e/types/**/*.ts",
     ".next-e2e/dev/types/**/*.ts",
     ".next-maquette/types/**/*.ts",
-    ".next-maquette/dev/types/**/*.ts"
+    ".next-maquette/dev/types/**/*.ts",
+    ".next-pwa/types/**/*.ts",
+    ".next-pwa/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

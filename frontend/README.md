@@ -24,6 +24,11 @@ Next 16 · TypeScript strict · Tailwind 4 · shadcn/ui · TanStack Query · ope
   `localStorage`, au nom de la personne et de l'entreprise, champs en liste blanche, 24 h au
   plus, effacée à l'envoi et à la déconnexion. Un nouveau formulaire qui écrit l'ajoute à la
   liste figée de l'ADR ; jamais un mot de passe.
+- **Application installable** (ADR 0102) : `app/manifest.ts`, `app/sw.js/route.ts` (service
+  worker écrit à la main : fichiers statiques et `/hors-ligne` seulement, jamais l'API ni
+  une page), `lib/pwa/` (mise à jour à un moment sûr, installation). En production
+  seulement ; `make front-pwa-e2e` le vérifie sur un build de production (:3102).
+  L'administration n'est pas installable.
 
 ## Commandes
 

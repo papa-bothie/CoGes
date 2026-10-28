@@ -21,6 +21,10 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
 # Filet seulement : en production, Caddy envoie /api/v1/* à l'API avant le front.
 ARG COGES_API_URL=http://api:8000
 ENV COGES_API_URL=${COGES_API_URL}
+# Étiquette de l'image (ADR 0102) : nomme le cache du service worker et protège un écran
+# resté ouvert sur l'ancienne version (`deploymentId` de Next).
+ARG NEXT_DEPLOYMENT_ID=
+ENV NEXT_DEPLOYMENT_ID=${NEXT_DEPLOYMENT_ID}
 COPY --from=deps /src/node_modules ./node_modules
 COPY . .
 RUN corepack enable && pnpm build
@@ -32,11 +36,16 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     PORT=3000
 COPY --from=build --chown=node:node /src/.next/standalone ./
-COPY --from=build --chown=node:node /src/.next/static ./.next/static
+# Les fichiers de ce build sont à part : au démarrage, `static-entrypoint.sh` les ajoute au
+# volume `.next/static`, qui garde ceux des builds précédents 14 jours (ADR 0102).
+COPY --from=build --chown=node:node /src/.next/static ./static-build
 COPY --from=build --chown=node:node /src/public ./public
+COPY --chown=node:node static-entrypoint.sh /usr/local/bin/static-entrypoint.sh
+RUN mkdir -p .next/static && chown node:node .next/static
 # `node` (uid 1000) existe dans l'image officielle : aucun processus ne tourne en root.
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=60s --timeout=10s --retries=3 --start-period=30s \
   CMD ["node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+ENTRYPOINT ["/bin/sh", "/usr/local/bin/static-entrypoint.sh"]
 CMD ["node", "server.js"]
