@@ -374,6 +374,35 @@ class SaleItemRepository(TenantRepository[SaleItem]):
         )
         return {sale_id: int(count) for sale_id, count in self.session.execute(stmt).all()}
 
+    def with_returnable_qty(self, sale_ids: Sequence[UUID]) -> set[UUID]:
+        """Parmi ces ventes, celles dont une ligne n'est pas entièrement retournée.
+
+        Une requête pour toute la page (ADR 0097) : la liste propose « Retour » pour
+        les mêmes ventes que leur fiche.
+        """
+        if not sale_ids:
+            return set()
+        returned = (
+            select(
+                SaleReturnItem.sale_item_id.label("sale_item_id"),
+                func.sum(SaleReturnItem.qty).label("qty"),
+            )
+            .where(SaleReturnItem.company_id == self.ctx.company_id)
+            .group_by(SaleReturnItem.sale_item_id)
+            .subquery()
+        )
+        stmt = (
+            select(SaleItem.sale_id)
+            .outerjoin(returned, returned.c.sale_item_id == SaleItem.id)
+            .where(
+                SaleItem.company_id == self.ctx.company_id,
+                SaleItem.sale_id.in_(sale_ids),
+                SaleItem.qty > func.coalesce(returned.c.qty, 0),
+            )
+            .group_by(SaleItem.sale_id)
+        )
+        return set(self.session.execute(stmt).scalars().all())
+
     def for_sale(self, sale_id: UUID) -> Sequence[SaleItem]:
         """Lignes d'une vente, dans l'ordre de saisie."""
         stmt = (

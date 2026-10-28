@@ -4,15 +4,16 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * Captures de l'administration (prompt 27, D0 et D7), lancées seulement avec
- * `ADMIN_CAPTURES=avant|apres` : chaque écran en clair et en sombre (et, « après », à 360 px).
+ * Captures de l'administration (prompt 27, D0 et D7 ; prompt 31), lancées seulement avec
+ * `ADMIN_CAPTURES=avant|apres|theme` : chaque écran en clair et en sombre (et, sauf
+ * « avant », à 360 px).
  * Rangées dans docs/design/captures/admin/<étape>/.
  */
 const STAGE = process.env.ADMIN_CAPTURES;
 const ADMIN = { email: "admin@e2e.example.com", password: "admin-coges-e2e-2026" };
 const OUT = join(__dirname, "..", "..", "docs", "design", "captures", "admin", STAGE ?? "x");
 
-test.skip(!STAGE, "captures à la demande : ADMIN_CAPTURES=avant|apres");
+test.skip(!STAGE, "captures à la demande : ADMIN_CAPTURES=avant|apres|theme");
 
 const SCREENS: { name: string; open: (page: Page) => Promise<void> }[] = [
   { name: "01-connexion", open: async (page) => void (await page.goto("/login")) },
@@ -96,7 +97,7 @@ async function signIn(page: Page): Promise<void> {
 }
 
 const VIEWPORTS =
-  STAGE === "apres"
+  STAGE !== "avant"
     ? [
         { suffix: "", width: 1280, height: 800 },
         { suffix: "-mobile", width: 360, height: 760 },
@@ -109,8 +110,16 @@ for (const scheme of ["light", "dark"] as const) {
       test.setTimeout(180_000);
       mkdirSync(OUT, { recursive: true });
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
-      await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
-      const screens = STAGE === "apres" ? [...SCREENS, ...EXTRA_AFTER] : SCREENS;
+      // « theme » : appareil en sombre dans les deux cas, le clair doit s'afficher quand même.
+      await page.emulateMedia({
+        colorScheme: STAGE === "theme" ? "dark" : scheme,
+        reducedMotion: "reduce",
+      });
+      // Le thème suit le choix mémorisé, plus le système (prompt 31).
+      await page.addInitScript((theme) => {
+        window.localStorage.setItem("coges-admin:theme", theme);
+      }, scheme);
+      const screens = STAGE === "avant" ? SCREENS : [...SCREENS, ...EXTRA_AFTER];
       for (const screen of screens) {
         if (screen.name === "01-connexion") {
           await screen.open(page);
