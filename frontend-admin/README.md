@@ -14,10 +14,13 @@ make admin-e2e          # coges_e2e recréée, API :8100, administration :3200, 
 make admin-lighthouse   # accessibilité Lighthouse de la connexion et du tableau de bord (≥ 95)
 ADMIN_CAPTURES=apres pnpm --dir frontend-admin exec playwright test e2e/captures.spec.ts
                         # captures clair, sombre et 360 px dans docs/design/captures/admin/
+                        # (ADMIN_CAPTURES=theme : appareil en sombre, clair par défaut puis bascule)
 ```
 
 **Interface (ADR 0094).** Thème CoGes : jetons `--coges-*` copiés de `frontend/app/globals.css`
-(mêmes noms), Figtree hébergée, clair ou sombre selon le système. Repère « Administration » :
+(mêmes noms), Figtree hébergée. **Clair par défaut**, même sur un appareil en mode sombre ;
+bouton « Passer en mode sombre / clair » dans l'en-tête, la connexion et l'invitation, choix
+mémorisé dans le navigateur (`coges-admin:theme`) et posé avant l'affichage (ADR 0096). Repère « Administration » :
 bandeau en **encre ardoise** en haut de chaque écran, titre d'onglet « Administration · … »,
 favicon ardoise. Aucune couleur en dur hors de `app/globals.css` (`lib/no-hardcoded-colors.test.ts`).
 Menu latéral dès 1024 px (Accès, Plateforme), tiroir en dessous ; recherche globale au « / »
