@@ -81,3 +81,25 @@ pour RS256), plutôt qu'une seconde bibliothèque JOSE.
 - Après 24 h, la session Cloudflare expire : un rechargement redemande le code.
 - Revenir à une version d'avant ce lot n'est possible qu'en mode `ip`.
 - Le secours `ssh` ne laisse que le mot de passe : à réserver à une panne de Cloudflare.
+
+## Correctif du 2026-10-29 : l'image API ne démarrait pas
+L'image de 3cafc49 s'arrêtait au démarrage (`ModuleNotFoundError: No module named 'httpx'`,
+`app/core/cloudflare_access.py`) : `httpx` n'était que dans le groupe `dev`, que les images
+n'installent pas (`uv sync --no-dev`). Tests verts, déploiement refusé puis annulé ; le
+retour automatique a lui aussi échoué, la version précédente refusant le `coges.env`
+écrit pour celle-ci.
+- `httpx` passe dans `[project].dependencies`, avec `anyio`, `starlette` et `kombu`,
+  importés directement par `app/` mais reçus jusque-là par fastapi ou celery seulement.
+- `tests/architecture/test_runtime_dependencies.py` lit chaque `import` de `app/` (`ast`)
+  et exige un paquet de `[project].dependencies` (ou du groupe `ml`, confiné au worker).
+- `deploy/scripts/check_image_imports.sh` lance l'image construite, sans réseau, et importe
+  son point d'entrée (`app.main` ; l'application Celery et ses tâches, le relais, la
+  sonde) : dans la CI après chaque construction, et dans `deploy.yml` **avant** la
+  poussée vers le registre (l'image publiée est construite depuis l'étiquette, pas depuis
+  le commit vérifié par la CI).
+- `deploy.sh` : `check_env` rend la main au lieu d'arrêter le script et écrit les refus
+  dans le journal ; la version en place est contrôlée avant de commencer (avertissement
+  « pas de retour automatique possible ») ; si le retour est impossible, rien n'est
+  relancé et le journal dit l'état de la pile et les deux issues, avec les commandes
+  exactes ; un fichier refusé par la nouvelle version arrête tout avant le moindre
+  changement.

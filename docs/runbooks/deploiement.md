@@ -122,6 +122,16 @@ lui-même est fautif.
   sudo -u deploy /opt/coges/deploy.sh production rollback   # revenir à la précédente
   sudo -u deploy /opt/coges/deploy.sh production v1.3.2     # ou une version précise
   ```
+- **Retour impossible** : chaque version contrôle `/etc/coges/coges.env` avec son propre
+  `check_runtime_env.py`. Un fichier modifié pour la nouvelle version (par exemple
+  `COGES_ADMIN_GATE=cloudflare` sans liste d'adresses, ADR 0104) peut être refusé par la
+  précédente. `deploy.sh` le vérifie **avant** de commencer et prévient (« pas de retour
+  automatique possible ») ; si la nouvelle version échoue ensuite, il ne relance rien et
+  écrit dans la sortie et dans `/var/log/coges/deploy.log` les refus, l'état de la pile et
+  les deux issues : réparer et redéployer la nouvelle version, ou remettre dans le fichier
+  ce que la précédente exige et la redéployer **par son nom** (`deploy.sh production
+  vX.Y.Z`). Pas `rollback` dans ce cas : il viserait la version d'avant la précédente.
+  Un fichier refusé par la nouvelle version, lui, arrête tout avant le moindre changement.
 - **La base ne revient pas en arrière** : c'est pourquoi chaque migration doit rester
   compatible avec la version précédente du code (on ajoute une colonne d'abord, on retire
   l'ancienne à la version suivante). Une version qui casse cette règle ne se déploie pas.

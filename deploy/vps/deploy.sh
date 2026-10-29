@@ -157,10 +157,39 @@ fetch_bundle() {
 
 check_env() {
   # Garde-fou 2 (ADR 0042) : jamais de DSN propriétaire sur le VPS, Neon en
-  # sslmode=require, Redis interne, domaine en https.
-  python3 "$RELEASES_DIR/$1/check_runtime_env.py" --require-vps \
-    --env-file "$ENV_FILE" --compose "$RELEASES_DIR/$1/docker-compose.yml" >/dev/null \
-    || die "le fichier $ENV_FILE ne passe pas le contrôle (check_runtime_env.py --require-vps)"
+  # sslmode=require, Redis interne, domaine en https. Le contrôle est celui de CETTE
+  # version : une version ancienne peut refuser un fichier écrit pour une plus récente.
+  # Rend 1 sans arrêter le script (un retour arrière doit pouvoir le constater) ; les
+  # refus vont dans le journal, pas seulement sur le terminal.
+  local version=$1 refusals line
+  if refusals=$(python3 "$RELEASES_DIR/$version/check_runtime_env.py" --require-vps \
+    --env-file "$ENV_FILE" --compose "$RELEASES_DIR/$version/docker-compose.yml" 2>&1 >/dev/null); then
+    return 0
+  fi
+  log "$version refuse $ENV_FILE (check_runtime_env.py --require-vps de $version) :"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && log "  $line"
+  done <<<"$refusals"
+  return 1
+}
+
+accepts_env() {
+  # La version $1 démarrerait-elle avec le fichier de secrets actuel ? Sans rien lancer.
+  fetch_bundle "$1" && check_env "$1"
+}
+
+cannot_roll_back() {
+  # Vu le 2026-10-29 : la nouvelle version ne démarre pas, la précédente refuse le
+  # fichier de secrets écrit pour la nouvelle. Rien n'est relancé : on dit quoi faire.
+  local version=$1 previous=$2
+  log "RETOUR IMPOSSIBLE : $previous refuse $ENV_FILE (refus ci-dessus)."
+  log "La pile $STACK tourne sur $version, qui ne répond pas : la page de maintenance est servie."
+  log "À faire à la main, au choix :"
+  log "  1. réparer $version (journaux : docker compose -p $PROJECT logs --tail 100 api worker),"
+  log "     puis : sudo -u deploy $COGES_ROOT/deploy.sh $STACK $version"
+  log "  2. ou remettre dans $ENV_FILE ce que $previous exige (refus ci-dessus),"
+  log "     puis : sudo -u deploy $COGES_ROOT/deploy.sh $STACK $previous"
+  log "     (pas « rollback » : il viserait la version d'avant $previous)"
 }
 
 curl_through_caddy() {
@@ -198,9 +227,10 @@ docker_network() {
 start() {
   # Chaque étape rend son échec : appelée dans un `if`, la fonction ne s'arrête plus
   # d'elle-même (`set -e` y est suspendu), et un `up -d` raté doit déclencher le retour.
+  # Code 2 : le fichier de secrets est refusé avant tout changement.
   local version=$1
   fetch_bundle "$version" || return 1
-  check_env "$version" || return 1
+  check_env "$version" || return 2
   # Une version est immuable : une image déjà présente n'est pas retéléchargée.
   compose "$version" pull --quiet --policy missing || return 1
   compose "$version" up -d --remove-orphans || return 1
@@ -227,12 +257,22 @@ prune_images() {
 }
 
 deploy() {
-  local version=$1 previous=""
+  local version=$1 previous="" status=0 fallback=1
   [[ -f "$CURRENT_FILE" ]] && previous=$(cat "$CURRENT_FILE")
   log "déploiement de $version (actuelle : ${previous:-aucune})"
   registry_login
   docker_network
-  if start "$version" && verify; then
+  # Avant de toucher à la pile : la version en place accepte-t-elle encore le fichier ?
+  # Sinon, un échec de $version ne pourrait pas être rattrapé tout seul.
+  if [[ -n "$previous" && "$previous" != "$version" ]] && ! accepts_env "$previous"; then
+    fallback=0
+    log "ATTENTION : pas de retour automatique possible si $version échoue ($previous refuse $ENV_FILE)."
+  fi
+  if start "$version"; then status=0; else status=$?; fi
+  if ((status == 2)); then
+    die "$ENV_FILE refusé par $version : rien n'a été changé, $previous tourne toujours"
+  fi
+  if ((status == 0)) && verify; then
     if [[ -n "$previous" && "$previous" != "$version" ]]; then
       echo "$previous" >"$PREVIOUS_FILE"
     fi
@@ -242,7 +282,9 @@ deploy() {
     return 0
   fi
   log "$version n'a pas démarré ou ne répond pas après ${COGES_DEPLOY_WAIT} s"
-  if [[ -n "$previous" && "$previous" != "$version" ]]; then
+  if [[ -n "$previous" && "$previous" != "$version" ]] && ((fallback == 0)); then
+    cannot_roll_back "$version" "$previous"
+  elif [[ -n "$previous" && "$previous" != "$version" ]]; then
     log "retour automatique à $previous"
     if start "$previous" && verify; then
       log "retour à $previous : OK"

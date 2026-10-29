@@ -82,7 +82,7 @@ jobs:
           fi
           # Le script de décision vient de ce commit-ci, pas de l'étiquette (qui peut
           # être plus ancienne que lui).
-          cp deploy/scripts/registry_cleanup.py "$RUNNER_TEMP/"
+          cp deploy/scripts/registry_cleanup.py deploy/scripts/check_image_imports.sh "$RUNNER_TEMP/"
           if [[ "$version" == v* ]]; then
             if ! sha=$(git rev-parse --verify --quiet "refs/tags/$version^{commit}"); then
               echo "::error::l'étiquette git $version n'existe pas : poussez-la d'abord (git tag $version && git push origin $version)"
@@ -144,6 +144,31 @@ jobs:
           tags: ${{ env.REGISTRY }}/admin:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/admin:${{ steps.version.outputs.sha }}
           cache-from: type=gha,scope=admin
           cache-to: type=gha,mode=max,scope=admin
+      # API et worker : construites, lancées, puis poussées. Une image qui n'importe pas son
+      # point d'entrée (paquet du seul groupe `dev`, httpx en 3cafc49) n'atteint jamais le
+      # registre. Le second build reprend le cache : rien n'est reconstruit.
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        if: steps.decide.outputs.api == 'build'
+        with:
+          context: backend
+          file: backend/Dockerfile.api
+          load: true
+          tags: coges/api:check
+          cache-from: type=gha,scope=api
+      - name: L'image API importe app.main
+        if: steps.decide.outputs.api == 'build'
+        run: bash "$RUNNER_TEMP/check_image_imports.sh" api coges/api:check
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        if: steps.decide.outputs.worker == 'build'
+        with:
+          context: backend
+          file: backend/Dockerfile.worker
+          load: true
+          tags: coges/worker:check
+          cache-from: type=gha,scope=worker
+      - name: L'image worker importe l'application Celery, le relais et la sonde
+        if: steps.decide.outputs.worker == 'build'
+        run: bash "$RUNNER_TEMP/check_image_imports.sh" worker coges/worker:check
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         if: steps.decide.outputs.api == 'build'
         with:
