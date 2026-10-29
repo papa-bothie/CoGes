@@ -23,7 +23,9 @@ celery==5.6.3
 certifi==2026.10.19
     # via sentry-sdk
 cffi==2.1.1
-    # via argon2-cffi-bindings
+    # via
+    #   argon2-cffi-bindings
+    #   cryptography
 click==8.5.0
     # via
     #   celery
@@ -37,6 +39,8 @@ click-plugins==1.1.1.2
     # via celery
 click-repl==0.4.0
     # via celery
+cryptography==50.0.2
+    # via pyjwt
 defusedxml==0.7.1
     # via coges-backend
 dnspython==2.9.0

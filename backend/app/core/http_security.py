@@ -5,7 +5,9 @@
 * `IpRateLimitMiddleware`   — compteur par IP, et un compteur plus strict sur la
   connexion (le compteur par entreprise est posé après authentification, dans
   `app.core.deps`) ;
-* `SecurityHeadersMiddleware` — en-têtes de sécurité sur toutes les réponses.
+* `SecurityHeadersMiddleware` — en-têtes de sécurité sur toutes les réponses ;
+* `CloudflareAccessMiddleware` — jeton Cloudflare Access exigé sur l'administration
+  (ADR 0104).
 
 Écrits en ASGI pur plutôt qu'avec `BaseHTTPMiddleware` : il faut pouvoir couper un
 corps de requête pendant sa lecture, ce que ce dernier ne permet pas proprement.
@@ -14,6 +16,7 @@ corps de requête pendant sa lecture, ce que ce dernier ne permet pas proprement
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any
 
@@ -22,9 +25,15 @@ from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core import rate_limit
+from app.core.cloudflare_access import ACCESS_HEADER, AccessDeniedError, get_access_verifier
 from app.core.config import get_settings
 from app.core.deps import raw_client_ip
-from app.core.errors import CogesError, FrontOutdatedError, PayloadTooLargeError
+from app.core.errors import (
+    AccessRequiredError,
+    CogesError,
+    FrontOutdatedError,
+    PayloadTooLargeError,
+)
 
 API_PREFIX = "/api/v1"
 IMPORTS_PREFIX = f"{API_PREFIX}/imports"
@@ -40,6 +49,9 @@ LOGIN_PATHS = frozenset(
     }
 )
 DOCS_PATHS = (f"{API_PREFIX}/docs", f"{API_PREFIX}/openapi.json")
+PLATFORM_PREFIX = f"{API_PREFIX}/platform"
+
+logger = logging.getLogger("coges.cloudflare_access")
 
 
 async def _send_error(send: Send, error: CogesError) -> None:
@@ -233,5 +245,38 @@ class FrontVersionMiddleware:
                     details={"minimum": get_settings().min_front_version, "front": sent.strip()}
                 ),
             )
+            return
+        await self.app(scope, receive, send)
+
+
+class CloudflareAccessMiddleware:
+    """Exige un jeton Cloudflare Access valide sur `/api/v1/platform/*` (ADR 0104).
+
+    Posé avant toute route, connexion et acceptation d'invitation comprises : sans jeton,
+    pas même un essai de mot de passe. Sans `COGES_ACCESS_TEAM_DOMAIN`, rien n'est
+    contrôlé (poste, CI, mode `ip` du VPS, que `check_runtime_env.py` encadre). La
+    vérification peut charger les clés de Cloudflare : elle tourne hors de la boucle.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        path: str = scope.get("path", "")
+        verifier = get_access_verifier()
+        if (
+            scope["type"] != "http"
+            or verifier is None
+            or not (path == PLATFORM_PREFIX or path.startswith(f"{PLATFORM_PREFIX}/"))
+        ):
+            await self.app(scope, receive, send)
+            return
+        token = Headers(scope=scope).get(ACCESS_HEADER, "")
+        try:
+            await to_thread.run_sync(verifier.verify, token)
+        except AccessDeniedError as exc:
+            # Le motif seul, jamais le jeton.
+            logger.warning("accès administration refusé", extra={"reason": str(exc), "path": path})
+            await _send_error(send, AccessRequiredError())
             return
         await self.app(scope, receive, send)

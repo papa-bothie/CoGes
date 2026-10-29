@@ -2154,6 +2154,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/platform/access": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Access
+     * @description Contrôle demandé par Caddy avant de servir une page de l'administration (ADR 0104).
+     *
+     *     Le travail est fait avant la route, par `CloudflareAccessMiddleware` : 204 si le jeton
+     *     Cloudflare Access est valide, 403 sinon. Aucun compte, aucune donnée.
+     */
+    get: operations["access_api_v1_platform_access_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/platform/auth/login": {
     parameters: {
       query?: never;
@@ -11160,6 +11183,24 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
         };
+      };
+    };
+  };
+  access_api_v1_platform_access_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

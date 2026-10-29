@@ -24,6 +24,7 @@ from app.core.errors import (
 )
 from app.core.http_security import (
     BodySizeLimitMiddleware,
+    CloudflareAccessMiddleware,
     FrontVersionMiddleware,
     IpRateLimitMiddleware,
     SecurityHeadersMiddleware,
@@ -75,9 +76,11 @@ app = FastAPI(
 # Starlette enveloppe dans l'ordre inverse d'ajout : le dernier ajouté est le plus
 # extérieur. De l'extérieur vers l'intérieur : en-têtes de sécurité (sur toute
 # réponse, y compris un 413 ou un 429), CORS (un refus doit rester lisible par le
-# navigateur), taille du corps, débit par IP, puis journalisation.
+# navigateur), taille du corps, débit par IP (aussi pour un refus d'Access), jeton
+# Cloudflare Access de l'administration (ADR 0104), version du front, puis journalisation.
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(FrontVersionMiddleware)
+app.add_middleware(CloudflareAccessMiddleware)
 app.add_middleware(IpRateLimitMiddleware)
 app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(

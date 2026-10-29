@@ -6819,6 +6819,21 @@
         }
       }
     },
+    "/api/v1/platform/access": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Access",
+        "description": "Contrôle demandé par Caddy avant de servir une page de l'administration (ADR 0104).\n\nLe travail est fait avant la route, par `CloudflareAccessMiddleware` : 204 si le jeton\nCloudflare Access est valide, 403 sinon. Aucun compte, aucune donnée.",
+        "operationId": "access_api_v1_platform_access_get",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
     "/api/v1/platform/auth/login": {
       "post": {
         "tags": [
