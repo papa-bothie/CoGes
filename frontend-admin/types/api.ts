@@ -6217,6 +6217,7 @@ export interface components {
       returned_at: string;
       total_refund: components["schemas"]["Amount-Output"];
       refunded_total: components["schemas"]["Amount-Output"];
+      waived_total: components["schemas"]["Amount-Output"];
       refund_status: components["schemas"]["RefundStatus"];
       refund_due: components["schemas"]["Amount-Output"];
       /**
@@ -6299,6 +6300,7 @@ export interface components {
       returned_at: string;
       total_refund: components["schemas"]["Amount-Output"];
       refunded_total: components["schemas"]["Amount-Output"];
+      waived_total: components["schemas"]["Amount-Output"];
       refund_status: components["schemas"]["RefundStatus"];
       refund_due: components["schemas"]["Amount-Output"];
       /**
