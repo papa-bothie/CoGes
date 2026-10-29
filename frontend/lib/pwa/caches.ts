@@ -1,11 +1,19 @@
 /** Vidage des caches de l'application (ADR 0102), sans dépendance : appelé par la session. */
 
-/** Déconnexion : plus rien de l'application dans le Cache Storage de cet appareil. */
+/**
+ * Déconnexion : plus rien de la session dans le Cache Storage de cet appareil. Le worker vide
+ * tout puis remet la page hors ligne (aucune donnée) ; la page ne vide elle-même que sans
+ * worker, sinon elle effacerait ce qu'il vient de remettre (prompt 32, P2).
+ */
 export function clearAppCaches(): void {
   try {
-    navigator.serviceWorker?.controller?.postMessage({ type: "LOGOUT" });
+    const worker = navigator.serviceWorker?.controller;
+    if (worker) {
+      worker.postMessage({ type: "LOGOUT" });
+      return;
+    }
   } catch {
-    // Pas de worker : rien à lui dire.
+    // Pas de worker : la page vide elle-même.
   }
   try {
     void caches

@@ -96,11 +96,43 @@ test("la déconnexion vide les caches de l'application", async ({ page }) => {
   await page.getByRole("menuitem", { name: "Se déconnecter" }).click();
   await expect(page).toHaveURL(/\/login/);
   await page.waitForLoadState("networkidle");
-  // Tout ce que la session avait gardé est parti ; la connexion ne remet que ses propres
-  // fichiers statiques, jamais une donnée.
+  // Tout ce que la session avait gardé est parti ; restent la pré-mise en cache du worker
+  // (page hors ligne, manifeste) et les fichiers statiques de la connexion, jamais une donnée.
   const after = await cachedUrls(page);
   expect(before.filter((path) => !after.includes(path)).length).toBeGreaterThan(0);
-  expect(after.filter((path) => !/^\/(_next\/static|brand|icons)\//.test(path))).toEqual([]);
+  expect(
+    after.filter(
+      (path) =>
+        !/^\/(_next\/static|brand|icons)\//.test(path) &&
+        !["/hors-ligne", "/manifest.webmanifest"].includes(path),
+    ),
+  ).toEqual([]);
+});
+
+test("après la déconnexion, sans réseau : la page hors ligne, avec ses styles", async ({
+  page,
+  context,
+}) => {
+  await login(page);
+  await controlled(page);
+  await page.getByRole("button", { name: "Réglages et compte" }).click();
+  await page.getByRole("menuitem", { name: "Se déconnecter" }).click();
+  await expect(page).toHaveURL(/\/login/);
+  // Le worker a vidé puis remis sa pré-mise en cache.
+  await expect
+    .poll(async () => (await cachedUrls(page)).filter((path) => path === "/hors-ligne"))
+    .toEqual(["/hors-ligne"]);
+  await context.setOffline(true);
+  await page.goto("/customers").catch(() => undefined);
+  const heading = page.getByRole("heading", { name: "Pas de connexion" });
+  await expect(heading).toBeVisible();
+  // Styles et police chargés hors ligne : la mise en page de l'application, pas celle du
+  // navigateur.
+  expect(await page.locator("main").evaluate((main) => getComputedStyle(main).display)).toBe(
+    "grid",
+  );
+  expect(await heading.evaluate((node) => getComputedStyle(node).fontFamily)).toMatch(/figtree/i);
+  await context.setOffline(false);
 });
 
 test("l'installation se propose dans le menu, puis disparaît une fois installée", async ({

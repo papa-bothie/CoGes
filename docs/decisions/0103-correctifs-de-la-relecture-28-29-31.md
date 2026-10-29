@@ -89,11 +89,51 @@ remboursement de plus de 400 ms écrivait un brouillon complet avec une clé neu
 | B5 rechargement de Next pendant une vente | Non : seulement à une navigation (lecture du code de Next) | Aucun ; documenté |
 | Test d'installation instable (trouvé en route) | **Oui** (1 sur 3 : invite simulée avant l'hydratation) | Le test attend la coquille (4 sur 4) |
 
+## Bloc P — PWA, cache et fichiers conservés (ADR 0102)
+
+### Décision
+- **Fichiers des anciens builds** (`frontend/static-entrypoint.sh`) : chaque build a son témoin
+  dans le volume, `.next/static/.coges-builds/<build>.files` (la liste de ses fichiers ;
+  l'identifiant est l'empreinte `cksum` de cette liste). Au démarrage d'une image, tout autre
+  build reçoit `<build>.retired` = maintenant s'il n'en a pas ; ses fichiers partent **14 jours
+  exactement après** ce moment, sauf ceux qu'un build encore gardé utilise aussi. Un build qui
+  redevient courant (retour arrière) perd sa date de fin. Les fichiers d'un volume d'avant ce
+  script (sans témoin) forment un build « orphelin » retiré au premier démarrage. Plus de
+  `-mtime` (qui comptait 15 jours), plus de `cp -n` (copie fichier par fichier), plus de
+  `set -e` : une erreur de nettoyage est écrite et le front démarre quand même. Les témoins
+  contiennent des noms de fichiers déjà publics ; Next ne sert pas les dossiers cachés.
+- **Déconnexion** : le worker vide tous les caches puis **remet sa pré-mise en cache** ; la page
+  ne vide elle-même que sans worker (sinon elle effacerait ce qu'il vient de remettre).
+- **Page hors ligne** : la pré-mise en cache suit ses styles et ses polices (`href` et `url(...)`
+  sous `/_next/static/`, lus dans la page puis dans chaque feuille de style). Aucune donnée.
+- **Identifiant de build** : `frontend/Dockerfile` refuse de construire si `NEXT_DEPLOYMENT_ID`
+  est vide (vérifié : `docker build` échoue à cette étape) ; `deploy.yml` passe l'étiquette de
+  version (déjà le cas), la construction de contrôle de `ci.yml` passe `ci-<sha>`. Le build local
+  (`pnpm build`, `make front-check`) n'est pas concerné : il ne produit pas d'image.
+- **Mineurs** : la règle `set-cookie` du worker, inopérante (en-tête jamais visible depuis Fetch),
+  est retirée — ce qui protège, c'est le chemin (`isStatic`, page hors ligne) et `no-store` /
+  `private` ; le commentaire de tête ne porte plus que le nom de cache nettoyé (un `*/` dans
+  l'étiquette cassait le worker).
+
+### Tableau
+| Point | Reproduit | Correctif |
+|---|---|---|
+| P1 14 jours comptés depuis le dernier démarrage | **Oui** (Vitest : deux déploiements à 20 jours, l'ancien supprimé au démarrage du nouveau ; deux le même jour ; volume en lecture seule = démarrage en échec, avertissement `cp -n`) | Témoin par build, purge 14 j après la fin, jamais d'échec au démarrage |
+| P2 déconnexion = page hors ligne perdue | **Oui** (Vitest du worker, e2e sur build de production : plus de `/hors-ligne` en cache après déconnexion) | Pré-mise en cache remise par le worker |
+| P3 styles de la page hors ligne | **Oui** dans la pré-mise en cache (Vitest : ni CSS ni police) ; hors déconnexion, les styles n'étaient gardés qu'à l'usage | Styles et polices pré-mis en cache ; e2e : mise en page (`grid`) et Figtree hors ligne |
+| P4 `NEXT_DEPLOYMENT_ID` vide | **Oui** (aucun garde ; image de contrôle de la CI sans identifiant) | Garde dans le Dockerfile, `ci-<sha>` en CI ; `deploy.yml` vérifié |
+| P5 `set-cookie` inopérant | **Oui** (lecture : en-tête filtré par Fetch) | Retiré, règle documentée |
+| P5 `*/` dans l'identifiant | **Oui** (Vitest : la source ne s'exécute plus) | Commentaire sur le nom nettoyé |
+| P5 `-mtime +14` = 15 jours | **Oui** (lecture : `find` arrondit au jour entier) | Secondes, 14 × 86 400 |
+| P5 `Cache-Control` de `/sw.js` en production | Non : `no-cache, no-store, must-revalidate` servi (e2e existant sur build de production) | Aucun |
+
 ## Conséquences
 - Tests : Vitest `hooks/use-draft.test.tsx` (+5), `lib/drafts.test.ts` (+2) ; e2e
   `frontend/e2e/drafts.spec.ts` (+3, et la vente vérifie désormais l'absence de brouillon une
   seconde après l'envoi puis au rechargement). Les e2e rouges ont été joués sur le code d'avant.
 - Bloc B : Vitest `lib/pwa/update.test.ts` (+8) ; e2e `make front-pwa-e2e` (+1, vraie
   `ChunkLoadError` de Turbopack).
+- Bloc P : Vitest `lib/static-entrypoint.test.ts` (+5), `lib/pwa/sw-source.test.ts` (4, nouveau,
+  le worker exécuté dans un faux environnement), `lib/build-config.test.ts` (3) ; e2e PWA (+1).
 - Un brouillon n'est plus écrit pendant un envoi : une frappe faite à ce moment, puis une page
   tuée avant la fin, est perdue (l'envoi, lui, est rejoué à l'identique).

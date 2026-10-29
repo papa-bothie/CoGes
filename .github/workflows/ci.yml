@@ -139,7 +139,8 @@ jobs:
       # pas le jour du déploiement. Rien n'est poussé ici.
       - name: Image front
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with: { context: frontend, push: false, cache-from: "type=gha,scope=front", cache-to: "type=gha,mode=max,scope=front" }
+        # Identifiant obligatoire (ADR 0103, P4) : celui de la CI, jamais poussé.
+        with: { context: frontend, push: false, build-args: "NEXT_DEPLOYMENT_ID=ci-${{ github.sha }}", cache-from: "type=gha,scope=front", cache-to: "type=gha,mode=max,scope=front" }
       - name: Image administration
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with: { context: frontend-admin, push: false, cache-from: "type=gha,scope=admin", cache-to: "type=gha,mode=max,scope=admin" }

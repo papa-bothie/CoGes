@@ -1,7 +1,7 @@
 # Front Next.js de CoGes sur le VPS (ADR 0083). Construit dans GitHub Actions, jamais sur
 # le VPS : un `next build` prendrait la mémoire de la production.
 #
-#   docker build -t coges/front:local frontend
+#   docker build --build-arg NEXT_DEPLOYMENT_ID=local-1 -t coges/front:local frontend
 #
 # Trois étapes : dépendances (pnpm, lockfile figé), build en `output: "standalone"`, puis
 # une image d'exécution sans pnpm ni sources, sous un utilisateur sans privilège.
@@ -27,6 +27,9 @@ ARG NEXT_DEPLOYMENT_ID=
 ENV NEXT_DEPLOYMENT_ID=${NEXT_DEPLOYMENT_ID}
 COPY --from=deps /src/node_modules ./node_modules
 COPY . .
+# Vide, le worker serait identique d'un build à l'autre : jamais de mise à jour (ADR 0103, P4).
+RUN test -n "$NEXT_DEPLOYMENT_ID" \
+    || { echo "NEXT_DEPLOYMENT_ID vide : --build-arg NEXT_DEPLOYMENT_ID=<étiquette>" >&2; exit 1; }
 RUN corepack enable && pnpm build
 
 FROM ${NODE_IMAGE} AS runtime
