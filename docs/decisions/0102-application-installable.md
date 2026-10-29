@@ -92,3 +92,7 @@ cache suit l'étiquette, l'ancien est supprimé à l'activation), au besoin avec
   fichier manquant rattrapé par `error.tsx` / `global-error.tsx` (il n'atteint jamais
   `window.onerror`), gestionnaire actif même sans service worker ; rechargement de Next lié à
   `deploymentId` vérifié : seulement à une navigation.
+- **2026-10-29, prompt 32, bloc P (ADR 0103)** : les fichiers d'un ancien build partent 14 jours
+  après qu'il a cessé d'être courant (témoin par build dans le volume), jamais au démarrage
+  suivant ; le script ne fait plus échouer le démarrage. La déconnexion remet la page hors ligne,
+  ses styles et ses polices en cache. L'image refuse de se construire sans `NEXT_DEPLOYMENT_ID`.

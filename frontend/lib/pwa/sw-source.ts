@@ -8,11 +8,14 @@
  *
  * Il ne s'active pas seul (`skipWaiting` seulement sur demande) : la page choisit un moment
  * sûr (`lib/pwa/update.ts`). Les caches d'un autre build sont supprimés à l'activation ; tout
- * est vidé sur le message `LOGOUT`.
+ * est vidé sur le message `LOGOUT`, puis la pré-mise en cache (page hors ligne, ses styles et
+ * ses polices, icônes, manifeste : aucune donnée) est remise — sans quoi une navigation sans
+ * réseau après une déconnexion montrerait l'erreur du navigateur (prompt 32, P2).
  */
 export function serviceWorkerSource(build: string): string {
   const cache = `coges-static-${build.replace(/[^A-Za-z0-9._-]/g, "-")}`;
-  return `/* CoGes — service worker du build ${JSON.stringify(build)} (ADR 0102). */
+  // Le commentaire ne porte que le nom de cache nettoyé : un `*/` dans l'étiquette le fermerait.
+  return `/* CoGes — service worker, cache ${cache} (ADR 0102). */
 "use strict";
 const BUILD = ${JSON.stringify(build)};
 const CACHE = ${JSON.stringify(cache)};
@@ -29,28 +32,52 @@ function isStatic(url) {
   );
 }
 
+// Un en-tête de cookie n'est jamais lisible depuis Fetch : ce qui garde les données hors du
+// cache, c'est le chemin (\`isStatic\`, la page hors ligne), et \`no-store\` / \`private\` en plus.
 function cacheable(response) {
   return (
     response &&
     response.ok &&
     response.type === "basic" &&
-    !response.headers.has("set-cookie") &&
     !/no-store|private/.test(response.headers.get("cache-control") || "")
   );
 }
 
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) =>
-      Promise.all(
-        PRECACHE.map((path) =>
-          fetch(path, { credentials: "omit", cache: "no-cache" }).then((response) =>
-            cacheable(response) ? cache.put(path, response) : undefined,
-          ),
+// Fichiers statiques nommés par la page hors ligne (styles, polices) et par ses styles (polices).
+function assetsOf(text, base) {
+  const found = new Set();
+  const pattern = /(?:href=["']|url\\(["']?)([^"')\\s]+\\.(?:css|woff2)(?:\\?[^"')\\s]*)?)/g;
+  for (const match of text.matchAll(pattern)) {
+    const url = new URL(match[1], base);
+    if (url.origin === self.location.origin && url.pathname.startsWith("/_next/static/")) {
+      found.add(url.pathname + url.search);
+    }
+  }
+  return [...found];
+}
+
+function precache() {
+  return caches.open(CACHE).then((cache) => {
+    const keep = (path) =>
+      fetch(path, { credentials: "omit", cache: "no-cache" }).then((response) => {
+        if (!cacheable(response)) return "";
+        const copy = response.clone();
+        return cache.put(path, response).then(() =>
+          /\\.css(\\?|$)|^\\/hors-ligne$/.test(path) ? copy.text() : "",
+        );
+      });
+    const nested = (path) =>
+      keep(path).then((text) =>
+        Promise.all(
+          assetsOf(text, new URL(path, self.location.origin)).map((asset) => nested(asset)),
         ),
-      ),
-    ),
-  );
+      );
+    return Promise.all(PRECACHE.map((path) => (path === OFFLINE ? nested(path) : keep(path))));
+  });
+}
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(precache());
 });
 
 self.addEventListener("activate", (event) => {
@@ -73,7 +100,10 @@ self.addEventListener("message", (event) => {
   if (type === "SKIP_WAITING") self.skipWaiting();
   if (type === "LOGOUT") {
     event.waitUntil(
-      caches.keys().then((names) => Promise.all(names.map((name) => caches.delete(name)))),
+      caches
+        .keys()
+        .then((names) => Promise.all(names.map((name) => caches.delete(name))))
+        .then(precache),
     );
   }
   if (type === "VERSION" && event.ports && event.ports[0]) event.ports[0].postMessage(BUILD);
