@@ -20,6 +20,9 @@ export const E2E: Credentials = {
 };
 
 export async function loginThroughUi(page: Page, credentials: Credentials) {
+  // Une fois chargé, le formulaire remet le dernier code de boutique puis place le curseur.
+  // Remplir avant, c'est risquer d'ajouter au code remis au lieu de le remplacer (« e2ee2e »).
+  await expect(page.locator("form input:focus")).toHaveCount(1);
   await page.getByLabel("Code de la boutique").fill(credentials.slug);
   await page.getByLabel("Votre e-mail ou téléphone").fill(credentials.email);
   await page.getByLabel("Mot de passe", { exact: true }).fill(credentials.password);
