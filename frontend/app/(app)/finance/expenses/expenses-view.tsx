@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -44,7 +44,9 @@ const DRAFT = {
   version: 1,
   fields: ["categoryId", "amount", "when", "method", "idem"],
   meaningful: ["amount"],
+  keys: ["idem"],
 } as const;
+const SAVE_KEY = ["expense", "create"];
 const t = labels.moneyScreens.expensesScreen;
 
 /** « Aujourd'hui », « Hier », sinon « 3 octobre ». */
@@ -73,8 +75,9 @@ export function ExpensesView() {
   const [formError, setFormError] = useState<string | null>(null);
   const [managing, setManaging] = useState(false);
   const today = todayIn(timeZone);
+  const saving = useIsMutating({ mutationKey: SAVE_KEY }) > 0;
   const draft = useDraft(
-    { ...DRAFT, busy: false },
+    { ...DRAFT, busy: saving },
     { categoryId, amount, when, method, idem: idempotency.key },
     (fields) => {
       setCategoryId(draftString(fields.categoryId));
@@ -103,14 +106,15 @@ export function ExpensesView() {
   });
 
   const create = useMutation({
+    mutationKey: SAVE_KEY,
     meta: { toastError: false },
     mutationFn: (body: Schemas["ExpenseCreate"]) =>
       unwrap(api.POST("/api/v1/expenses", { body, headers: idempotency.headers })),
     onSuccess: (_data, body) => {
+      draft.clear();
       idempotency.renew();
       for (const key of MONEY_KEYS) void queryClient.invalidateQueries({ queryKey: key });
       setDone(t.done(body.label, formatAmount(String(body.amount), currency)));
-      draft.clear();
       setAmount("");
     },
     onError: (error) => setFormError(errorMessage(error)),

@@ -23,6 +23,8 @@ function isBlank(values: Record<string, unknown>, names: readonly string[]): boo
   });
 }
 
+const NO_KEYS: readonly string[] = [];
+
 export function hasUnsentDrafts(): boolean {
   return unsent.size > 0;
 }
@@ -43,7 +45,16 @@ export type DraftSpec = {
   objectId?: string;
   /** `false` tant que le formulaire n'est pas prêt (données pas encore chargées). */
   enabled?: boolean;
-  /** Envoi en cours : un onglet voisin n'écrase rien pendant ce temps. */
+  /**
+   * Champs de clé d'idempotence : écrits avec le brouillon (un envoi interrompu rejoue avec la
+   * même clé), mais une clé renouvelée seule n'est pas une saisie — après un envoi réussi, elle
+   * ne recrée jamais le brouillon.
+   */
+  keys?: readonly string[];
+  /**
+   * Envoi en cours, ou écran « enregistré » : rien n'est écrit (le brouillon d'avant l'envoi
+   * reste tel quel, avec la même clé), et un onglet voisin n'écrase rien.
+   */
   busy?: boolean;
 };
 
@@ -71,6 +82,7 @@ export function useDraft(
     meaningful = fields,
     objectId,
     enabled = true,
+    keys = NO_KEYS,
     busy = false,
   } = spec;
   const me = useMe().data;
@@ -91,16 +103,31 @@ export function useDraft(
   const latest = useRef(values);
   const applyRef = useRef(apply);
   const busyRef = useRef(busy);
+  const keyRef = useRef(key);
   // Dernières valeurs lues par les rappels (minuterie, `storage`), mises à jour après rendu.
   useEffect(() => {
     latest.current = values;
     applyRef.current = apply;
     busyRef.current = busy;
+    keyRef.current = key;
   });
 
   const serialize = useCallback(
     (current: Record<string, unknown>) => JSON.stringify(pick(current, fields)),
     // `fields` est une constante du module de chaque formulaire.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  // La saisie sans ses clés : ce qui dit si quelque chose a été tapé.
+  const content = useCallback(
+    (current: Record<string, unknown>) =>
+      JSON.stringify(
+        pick(
+          current,
+          fields.filter((name) => !keys.includes(name)),
+        ),
+      ),
+    // `fields` et `keys` sont des constantes du module de chaque formulaire.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
@@ -111,12 +138,16 @@ export function useDraft(
       clearTimeout(timer.current);
       timer.current = null;
     }
+    // Pendant un envoi, le brouillon d'avant reste tel quel : une page qui meurt là rejoue
+    // avec la même clé (R1, prompt 32).
+    if (busyRef.current) return;
     const snapshot = serialize(latest.current);
+    const typed = content(latest.current);
     if (cleared.current !== null) {
-      if (snapshot === cleared.current) return;
+      if (typed === cleared.current) return;
       cleared.current = null;
     }
-    if (snapshot === initial.current || isBlank(latest.current, meaningful)) {
+    if (typed === initial.current || isBlank(latest.current, meaningful)) {
       removeDraft(key);
       unsent.delete(key);
       lastWritten.current = null;
@@ -126,24 +157,20 @@ export function useDraft(
     writeDraft(key, version, latest.current, fields);
     lastWritten.current = snapshot;
     unsent.add(key);
-  }, [key, version, fields, meaningful, serialize]);
+  }, [key, version, fields, meaningful, serialize, content]);
 
   // Ouverture : on note l'état de départ, puis on remet le brouillon s'il existe.
   useEffect(() => {
     if (!key || !enabled || initial.current !== null) return;
-    initial.current = serialize(latest.current);
+    initial.current = content(latest.current);
     const found = readDraft(key, version, fields);
-    if (
-      found &&
-      JSON.stringify(found.fields) !== initial.current &&
-      !isBlank(found.fields, meaningful)
-    ) {
+    if (found && content(found.fields) !== initial.current && !isBlank(found.fields, meaningful)) {
       applyRef.current(found.fields);
       lastWritten.current = JSON.stringify(found.fields);
       unsent.add(key);
       setRestored(true);
     }
-  }, [key, enabled, version, fields, meaningful, serialize]);
+  }, [key, enabled, version, fields, meaningful, content]);
 
   // L'objet change sous le formulaire (la vente naît au premier article) : le brouillon suit
   // la nouvelle clé, l'ancienne est effacée.
@@ -159,16 +186,16 @@ export function useDraft(
     }
   }, [key, flush]);
 
-  // Écriture différée après la dernière frappe.
+  // Écriture différée après la dernière frappe (et après un envoi qui n'a pas abouti).
   const snapshot = serialize(values);
   useEffect(() => {
-    if (!key || initial.current === null) return;
+    if (!key || initial.current === null || busy) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(flush, DRAFT_DELAY_MS);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [key, snapshot, flush]);
+  }, [key, snapshot, busy, flush]);
 
   // Page cachée (onglet changé, application en arrière-plan, déchargement) : écrit tout de suite.
   useEffect(() => {
@@ -183,6 +210,15 @@ export function useDraft(
       flush();
     };
   }, [flush]);
+
+  // Écran quitté (ou caché par Next) : le brouillon est en stockage et sera retrouvé ; il ne
+  // retient plus la mise à jour invisible (R2, prompt 32). Revenu, il la retient de nouveau.
+  useEffect(() => {
+    if (keyRef.current && lastWritten.current !== null) unsent.add(keyRef.current);
+    return () => {
+      if (keyRef.current) unsent.delete(keyRef.current);
+    };
+  }, []);
 
   // Onglet voisin sur le même formulaire : le dernier qui écrit gagne, sans boucle.
   useEffect(() => {
@@ -213,10 +249,10 @@ export function useDraft(
       removeDraft(key);
       unsent.delete(key);
     }
-    cleared.current = serialize(latest.current);
+    cleared.current = content(latest.current);
     lastWritten.current = null;
     setRestored(false);
-  }, [key, serialize]);
+  }, [key, content]);
 
   return { restored, clear };
 }

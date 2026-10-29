@@ -73,3 +73,11 @@ façon).
   e2e `frontend/e2e/drafts.spec.ts` (dépense retrouvée après un autre écran et un rechargement,
   effacée à l'envoi ; déconnexion ; autre personne ; mot de passe jamais gardé ; vente à moitié
   encaissée retrouvée, une seule vente à la fin).
+
+## Corrections
+- **2026-10-29, prompt 32, bloc R (ADR 0103)** : la clé d'idempotence renouvelée après un envoi ne
+  recrée plus le brouillon (`DraftSpec.keys`) ; rien n'est écrit pendant un envoi (`busy` branché
+  sur la mutation en cours, et sur l'écran « enregistré » de la vente et du retour) ; le retour ne
+  renouvelle ses clés qu'après l'envoi complet ; un formulaire quitté ne retient plus la mise à
+  jour invisible ; le dernier propriétaire est gardé pour effacer ses brouillons quand la session
+  est refusée à la réouverture ; plus aucune écriture après un signal de déconnexion.

@@ -11,7 +11,7 @@
  */
 import { networkError, toApiError } from "@/lib/api/errors";
 import type { LoginRequest, TokenResponse } from "@/lib/api/schema";
-import { clearOwnDrafts } from "@/lib/drafts";
+import { clearOwnDrafts, freezeDrafts } from "@/lib/drafts";
 import { clearAppCaches } from "@/lib/pwa/caches";
 
 import { DEFAULT_NEXT, safeNext } from "./safe-next";
@@ -141,7 +141,9 @@ function channel(): BroadcastChannel | null {
 function forgetLocally(): void {
   tokenStore.clear();
   clearSessionMarker();
-  // Ce qui reste sur l'appareil ne doit pas survivre à la session (ADR 0101, 0102).
+  // Ce qui reste sur l'appareil ne doit pas survivre à la session (ADR 0101, 0102). Le gel
+  // passe d'abord : la page cachée par la redirection ne réécrit rien (R4, prompt 32).
+  freezeDrafts();
   clearOwnDrafts();
   clearAppCaches();
 }

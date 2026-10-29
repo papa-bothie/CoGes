@@ -5,6 +5,7 @@ import {
   clearOwnDrafts,
   DRAFT_TTL_MS,
   draftKey,
+  freezeDrafts,
   purgeExpiredDrafts,
   readDraft,
   setDraftOwner,
@@ -81,5 +82,31 @@ describe("brouillons (ADR 0101)", () => {
     expect(() => writeDraft(draftKey(AWA, "x"), 1, { a: 1 }, ["a"])).not.toThrow();
     expect(readDraft(draftKey(AWA, "x"), 1, ["a"])).toBeNull();
     expect(() => purgeExpiredDrafts()).not.toThrow();
+  });
+
+  it("efface les brouillons du dernier propriétaire même avant de connaître l'identité", async () => {
+    setDraftOwner(AWA);
+    writeDraft(draftKey(AWA, "expense"), 1, { amount: "1" }, ["amount"]);
+    writeDraft(draftKey(MODOU, "expense"), 1, { amount: "2" }, ["amount"]);
+    // Application rouverte : le module repart de zéro, `/auth/me` n'a pas encore répondu.
+    vi.resetModules();
+    const fresh = await import("./drafts");
+    expect(fresh.draftOwner()).toBeNull();
+    fresh.clearOwnDrafts();
+    expect(window.localStorage.getItem(draftKey(AWA, "expense"))).toBeNull();
+    expect(window.localStorage.getItem(draftKey(MODOU, "expense"))).not.toBeNull();
+    // Seuls deux identifiants étaient gardés, et ils ne le sont plus.
+    expect(
+      Object.keys(window.localStorage).filter((key) => !key.startsWith("coges:draft:v1:")),
+    ).toEqual([]);
+  });
+
+  it("après le signal de déconnexion, aucune écriture jusqu'à la personne suivante", () => {
+    freezeDrafts();
+    writeDraft(draftKey(AWA, "expense"), 1, { amount: "1" }, ["amount"]);
+    expect(window.localStorage.getItem(draftKey(AWA, "expense"))).toBeNull();
+    setDraftOwner(AWA);
+    writeDraft(draftKey(AWA, "expense"), 1, { amount: "1" }, ["amount"]);
+    expect(window.localStorage.getItem(draftKey(AWA, "expense"))).not.toBeNull();
   });
 });

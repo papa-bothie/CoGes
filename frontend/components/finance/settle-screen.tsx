@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, CheckCircle2, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -272,13 +272,17 @@ function SettlePanel({
   const [touched, setTouched] = useState<string[]>([]);
   // Brouillon d'un encaissement ou d'un paiement (ADR 0101), un par personne ; la clé
   // d'idempotence voyage avec lui : un versement interrompu puis repris n'est jamais doublé.
+  const saveKey = ["settle", kind, person.id];
+  const saving = useIsMutating({ mutationKey: saveKey }) > 0;
   const draft = useDraft(
     {
       formId: `settle-${kind}`,
       version: 1,
       fields: ["amount", "method", "idem"],
       meaningful: ["amount"],
+      keys: ["idem"],
       objectId: person.id,
+      busy: saving,
     },
     { amount, method, idem: idempotency.key },
     (fields) => {
@@ -316,6 +320,7 @@ function SettlePanel({
   );
 
   const settle = useMutation({
+    mutationKey: saveKey,
     meta: { toastError: false },
     mutationFn: (body: Schemas["PaymentCreate"]) =>
       unwrap(api.POST("/api/v1/payments", { body, headers: idempotency.headers })),
