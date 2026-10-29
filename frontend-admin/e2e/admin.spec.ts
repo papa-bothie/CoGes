@@ -37,6 +37,32 @@ test("connexion : un mauvais mot de passe est refusé sans dire pourquoi", async
   );
 });
 
+test("sans jeton Cloudflare Access, même le bon mot de passe est refusé (ADR 0104)", async ({
+  page,
+  request,
+}) => {
+  // Vide, le jeton est absent : c'est une requête qui aurait contourné Cloudflare.
+  const bypass = { "Cf-Access-Jwt-Assertion": "" };
+  await page.setExtraHTTPHeaders(bypass);
+  await page.goto("/login");
+  await page.getByLabel("E-mail").fill(ADMIN.email);
+  await page.getByLabel("Mot de passe", { exact: true }).fill(ADMIN.password);
+  await page.getByRole("button", { name: "Se connecter" }).click();
+  await expect(page.locator("form").getByRole("alert")).toContainText(
+    "l'accès passe par la vérification Cloudflare",
+  );
+
+  const probe = await request.get(`${API}/platform/access`, { headers: bypass });
+  expect(probe.status()).toBe(403);
+  expect((await probe.json()).error.code).toBe("access_required");
+  const forged = await request.get(`${API}/platform/access`, {
+    headers: { "Cf-Access-Jwt-Assertion": "faux.jeton.fabrique" },
+  });
+  expect(forged.status()).toBe(403);
+  // Avec le jeton du parcours (en-tête de la configuration), la même sonde passe.
+  expect((await request.get(`${API}/platform/access`)).status()).toBe(204);
+});
+
 test("sans session, toute page renvoie à la connexion", async ({ page }) => {
   await page.goto("/companies");
   await expect(page).toHaveURL(/\/login$/);

@@ -31,6 +31,9 @@ celerybeat.pid
 .idea/
 .vscode/
 
+# Faux jetons Cloudflare Access des parcours e2e (ADR 0104), régénérés au besoin
+.e2e-access/
+
 # Artefacts de modèle CoGes Intelligence (ADR 0035)
 .ml-artifacts/
 

@@ -23,4 +23,11 @@ describe("messages de connexion de l'administration", () => {
       MESSAGES.tooMany,
     );
   });
+
+  it("sans passage par Cloudflare Access, la phrase du serveur dit quoi faire (ADR 0104)", () => {
+    const message =
+      "Ouvrez l'administration depuis son adresse habituelle : l'accès passe par la " +
+      "vérification Cloudflare.";
+    expect(failure(new ApiError(403, "access_required", message))).toBe(message);
+  });
 });
