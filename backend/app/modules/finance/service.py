@@ -101,6 +101,19 @@ class RefundExceedsPaidError(BusinessRuleError):
     default_message = "On ne peut pas rendre plus que ce que le client a payé sur cette vente."
 
 
+class PaymentAlreadyRefundedError(BusinessRuleError):
+    """Annuler cet encaissement laisserait la vente avec plus de rendu que de versé (C2).
+
+    Même code que le plafond du remboursement : c'est la même règle vue de l'autre côté,
+    tenue en base par `payments_reversal_refund_guard` (`CG054`, ADR 0103).
+    """
+
+    code = "refund_exceeds_paid"
+    default_message = (
+        "Cet argent a déjà été rendu au client sur un retour : annulez d'abord le remboursement."
+    )
+
+
 class RefundRequiresOutflowError(BusinessRuleError):
     code = "refund_requires_outflow"
     default_message = (
@@ -241,6 +254,7 @@ _TRIGGER_ERRORS: dict[str, type[BusinessRuleError]] = {
     "CG051": CannotCancelAReversalError,
     "CG052": PaymentCancelledError,
     "CG053": PaymentDebtWrittenOffError,
+    "CG054": PaymentAlreadyRefundedError,
 }
 
 

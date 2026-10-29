@@ -382,12 +382,19 @@ class SaleItemRepository(TenantRepository[SaleItem]):
         """
         if not sale_ids:
             return set()
+        # Seules les lignes de ces ventes : pas toutes celles de l'entreprise (ADR 0103).
+        page_items = select(SaleItem.id).where(
+            SaleItem.company_id == self.ctx.company_id, SaleItem.sale_id.in_(sale_ids)
+        )
         returned = (
             select(
                 SaleReturnItem.sale_item_id.label("sale_item_id"),
                 func.sum(SaleReturnItem.qty).label("qty"),
             )
-            .where(SaleReturnItem.company_id == self.ctx.company_id)
+            .where(
+                SaleReturnItem.company_id == self.ctx.company_id,
+                SaleReturnItem.sale_item_id.in_(page_items),
+            )
             .group_by(SaleReturnItem.sale_item_id)
             .subquery()
         )

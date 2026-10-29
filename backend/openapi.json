@@ -17813,6 +17813,9 @@
           "refunded_total": {
             "$ref": "#/components/schemas/Amount-Output"
           },
+          "waived_total": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
           "refund_status": {
             "$ref": "#/components/schemas/RefundStatus"
           },
@@ -17856,6 +17859,7 @@
           "returned_at",
           "total_refund",
           "refunded_total",
+          "waived_total",
           "refund_status",
           "refund_due",
           "created_at",
@@ -17985,6 +17989,9 @@
           "refunded_total": {
             "$ref": "#/components/schemas/Amount-Output"
           },
+          "waived_total": {
+            "$ref": "#/components/schemas/Amount-Output"
+          },
           "refund_status": {
             "$ref": "#/components/schemas/RefundStatus"
           },
@@ -18007,6 +18014,7 @@
           "returned_at",
           "total_refund",
           "refunded_total",
+          "waived_total",
           "refund_status",
           "refund_due",
           "created_at"

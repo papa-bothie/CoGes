@@ -186,6 +186,36 @@ Neon : la révision 0031 traite les deux cas où qu'ils soient, avec audit.
 | D4 verrou du rôle | **Oui** (test : `FOR SHARE NOWAIT` passait pendant un enregistrement) | `FOR UPDATE` |
 | D4 « en partie » non recalculé après la mise à jour optimiste | **Oui** (Vitest : l'avis « en partie » restait) | Recalcul optimiste, réponse du serveur appliquée |
 
+## Bloc C — retours (ADR 0097)
+
+### Décision (utilisateur, via AskUserQuestion)
+- **C1, retour après une dette abandonnée** : la part qui correspond à la dette abandonnée est
+  **soldée sans argent**, d'office, à la création du retour. Nouvelle colonne
+  `sale_returns.waived_total` (révision 0032) ; le reste dû devient
+  `total_refund − refunded_total − waived_total` partout (plafond `sale_returns_refund_cap`,
+  statut, `refund_check`, lecture `refund_due`). Montant soldé : ce que le retour doit au-delà
+  de l'argent encore remboursable sur la vente, jamais plus que la dette abandonnée moins ce que
+  les retours précédents en ont déjà soldé. Seulement si la dette de la vente est
+  `written_off`. Audit critique (`waived_because: debt_written_off`), aucun événement (aucun
+  argent ne bouge). Tout soldé ainsi ⇒ `none_due`. Le détail du retour montre la ligne « Non
+  payé (dette abandonnée) ». Non couvert : une dette abandonnée **après** le retour ne solde
+  rien rétroactivement (le retour garde son reste dû, réglable en argent jusqu'au plafond).
+- **C2, annuler un encaissement déjà rendu** : **refusé** (409 `refund_exceeds_paid`, message
+  « annulez d'abord le remboursement ») quand l'argent qui resterait versé sur la vente
+  deviendrait inférieur à ce qui a été rendu en argent sur ses retours. Tenu en base par
+  `payments_reversal_refund_guard` (`CG054`, révision 0032), sur le modèle de l'ADR 0014 :
+  Finance ne lit pas les retours de Sales. L'ordre inverse (annuler le remboursement, puis
+  l'encaissement) reste possible.
+- **C3** : la sous-requête de `returnable` ne lit plus que les lignes de retour des ventes de la
+  page (`sale_item_id IN (lignes de ces ventes)`), plus celles de toute l'entreprise.
+
+### Tableau
+| Point | Reproduit | Correctif |
+|---|---|---|
+| C1 retour jamais réglable après une dette abandonnée | **Oui** (test API : 6 000 F dus, 2 000 F rendus, 4 000 F refusés en argent et en compensation, retour « partiel » pour toujours) | `waived_total`, part abandonnée soldée sans argent, audit |
+| C2 annulation d'un encaissement déjà remboursé | **Oui** (test API : annulation acceptée, 3 000 F sortis pour 0 F versé) | Refus en base (`CG054`) ⇒ 409 |
+| C3 sous-requête sur toute l'entreprise | **Oui** (SQL émis : aucun filtre sur les ventes de la page) | Filtre sur les lignes de la page |
+
 ## Conséquences
 - Tests : Vitest `hooks/use-draft.test.tsx` (+5), `lib/drafts.test.ts` (+2) ; e2e
   `frontend/e2e/drafts.spec.ts` (+3, et la vente vérifie désormais l'absence de brouillon une
@@ -197,5 +227,7 @@ Neon : la révision 0031 traite les deux cas où qu'ils soient, avec audit.
 - Bloc D : `backend/tests/integration/test_review_32_rights.py` (7 : D1 ×4, D2, D4, révision
   0031 aller et retour) ; Vitest `rights-view.test.tsx` (1). Un vendeur à qui le gérant donne
   « Encaisser une dette » encaisse les dettes client, rien d'autre.
+- Bloc C : `backend/tests/integration/test_review_32_returns.py` (7 : C1 ×4 dont le plafond
+  en base, C2 ×2, C3 sur le SQL émis).
 - Un brouillon n'est plus écrit pendant un envoi : une frappe faite à ce moment, puis une page
   tuée avant la fin, est perdue (l'envoi, lui, est rejoué à l'identique).

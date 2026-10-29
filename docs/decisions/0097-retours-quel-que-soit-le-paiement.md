@@ -56,3 +56,10 @@ comptable, liste) puis en e2e (`frontend/e2e/returns.spec.ts`).
   retours et remboursements).
 - Ce que le propriétaire refait à la main : retour d'une vente payée en totalité, puis d'une vente
   payée en partie, avec le gérant puis avec un vendeur.
+
+## Corrections
+- **2026-10-29, prompt 32, bloc C (ADR 0103, révision 0032)** : après une dette abandonnée, la part
+  d'un retour que le client n'a jamais versée est soldée sans argent (`waived_total`, audit) ; le
+  retour ne reste plus « à régler » pour toujours. Annuler un encaissement est refusé s'il a déjà
+  été rendu sur un retour (`CG054` ⇒ 409 `refund_exceeds_paid`). `returnable` ne lit plus que les
+  lignes de la page.

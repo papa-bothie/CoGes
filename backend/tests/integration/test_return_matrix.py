@@ -225,11 +225,14 @@ def test_a_confirmed_sale_is_returned_whatever_its_payment(
 
     # La dette restante est déduite d'abord, par le vendeur comme par le gérant.
     offset = min(value, open_debt)
-    assert Decimal(body["refund_due"]) == value - offset, case
+    # Dette abandonnée : la part jamais versée est soldée sans argent (ADR 0103, C1).
+    waived = max(value - paid, Decimal("0")) if written_off else Decimal("0")
+    assert Decimal(body["waived_total"]) == waived, case
+    assert Decimal(body["refund_due"]) == value - offset - waived, case
     if debt_before is not None and not written_off:
         assert _debt_balance(api_client, alpha_token, sale_id) == debt_before - offset
 
-    surplus = value - offset
+    surplus = value - offset - waived
     if surplus == 0:
         assert body["refund_status"] == "settled"
         return

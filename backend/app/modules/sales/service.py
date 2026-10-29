@@ -1280,6 +1280,58 @@ def create_return(
                 debt_id=debt.id,
                 ip_address=ip_address,
             )
+        sale_return = _waive_written_off_part(session, ctx, sale_return, ip_address=ip_address)
+    return sale_return
+
+
+def _refund_due(sale_return: SaleReturn) -> Decimal:
+    """Ce qui reste à rendre : ni déjà rendu, ni soldé sans argent."""
+    return sale_return.total_refund - sale_return.refunded_total - sale_return.waived_total
+
+
+def _waive_written_off_part(
+    session: Session,
+    ctx: TenantContext,
+    sale_return: SaleReturn,
+    *,
+    ip_address: str | None,
+) -> SaleReturn:
+    """Solde sans argent ce qu'un retour doit au-delà de l'argent versé (prompt 32, C1).
+
+    Seulement quand la dette de la vente a été abandonnée (ADR 0029) : le client rend des
+    articles qu'il n'a payés qu'en partie, et la part jamais versée ne se rend pas — ni en
+    argent (plafonné à ce qui est entré en caisse, ADR 0097), ni en compensation (plus de
+    dette ouverte). Sans cela, le retour restait « à régler » pour toujours. Jamais plus que
+    ce qui a été abandonné, moins ce que les retours précédents de la vente en ont déjà
+    soldé. Audit critique ; aucun événement (aucun argent ne bouge, ADR 0103).
+    """
+    debt = finance_service.debt_for_sale(session, ctx, sale_return.sale_id)
+    if debt is None or debt.status != "written_off":
+        return sale_return
+    returns = SaleReturnRepository(session, ctx).for_sale(sale_return.sale_id)
+    cash_left = finance_service.cash_left_to_refund(
+        session, ctx, sale_return.sale_id, [item.id for item in returns]
+    )
+    already = sum(
+        (item.waived_total for item in returns if item.id != sale_return.id), Decimal("0")
+    )
+    waived = min(_refund_due(sale_return) - max(cash_left, Decimal("0")), debt.balance - already)
+    if waived <= 0:
+        return sale_return
+    before = _audited_return(sale_return)
+    sale_return.waived_total += waived
+    session.flush()
+    session.refresh(sale_return)
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.UPDATE,
+        entity_table="sale_returns",
+        entity_id=sale_return.id,
+        before=before,
+        after={**_audited_return(sale_return), "waived_because": "debt_written_off"},
+        ip_address=ip_address,
+    )
     return sale_return
 
 
@@ -1315,7 +1367,7 @@ def refund_return(
         raise NotFoundError("Retour introuvable.")
 
     before = _audited_return(sale_return)
-    due = sale_return.total_refund - sale_return.refunded_total
+    due = _refund_due(sale_return)
     details: dict[str, Any] = {
         "return_id": str(sale_return.id),
         "amount": str(payload.amount),
@@ -1444,6 +1496,7 @@ def _audited_return(sale_return: SaleReturn) -> dict[str, Any]:
         "sale_id": str(sale_return.sale_id),
         "total_refund": str(sale_return.total_refund),
         "refunded_total": str(sale_return.refunded_total),
+        "waived_total": str(sale_return.waived_total),
         "refund_status": sale_return.refund_status,
         "reason": sale_return.reason,
     }
@@ -1459,8 +1512,9 @@ def build_return_read(sale_return: SaleReturn) -> SaleReturnRead:
         returned_at=sale_return.returned_at,
         total_refund=sale_return.total_refund,
         refunded_total=sale_return.refunded_total,
+        waived_total=sale_return.waived_total,
         refund_status=sale_return.refund_status,
-        refund_due=sale_return.total_refund - sale_return.refunded_total,
+        refund_due=_refund_due(sale_return),
         created_at=sale_return.created_at,
     )
 

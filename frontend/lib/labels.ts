@@ -593,6 +593,8 @@ export const labels = {
     returnedAt: "Date du retour",
     totalRefund: "Remboursable",
     refunded: "Déjà réglé",
+    // Part d'une dette abandonnée : jamais versée, donc jamais rendue (ADR 0103).
+    waived: "Non payé (dette abandonnée)",
     refundDue: "Reste à régler",
     refundStatus: {
       none_due: "Rien à régler",

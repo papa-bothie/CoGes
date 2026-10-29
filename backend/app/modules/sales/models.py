@@ -110,6 +110,8 @@ class SaleReturn(IdentifiedTenantBase):
     total_refund: Mapped[Decimal] = mapped_column(Numeric(14, 2), server_default=text("0"))
     #: Maintenu par `refund_rollup` depuis `sale_return_refunds`.
     refunded_total: Mapped[Decimal] = mapped_column(Numeric(14, 2), server_default=text("0"))
+    #: Part soldée sans argent : celle d'une dette abandonnée, jamais versée (ADR 0103).
+    waived_total: Mapped[Decimal] = mapped_column(Numeric(14, 2), server_default=text("0"))
     #: Dérivé par `return_refund_status_set`.
     refund_status: Mapped[str] = mapped_column(
         RETURN_REFUND_STATUS, server_default=text("'pending'")
