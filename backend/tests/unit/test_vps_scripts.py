@@ -310,3 +310,48 @@ def test_old_images_are_removed_but_current_and_previous_kept(tmp_path: Path) ->
     ]
     assert any(":v0.9.0" in line for line in removed) and any(":v1.0.0" in line for line in removed)
     assert not any(":v1.1.0" in line or ":v1.2.0" in line for line in removed), removed
+
+
+# ------------------------------------------- porte de l'administration (ADR 0104)
+
+_ACCESS = (
+    "COGES_ADMIN_GATE=cloudflare\n"
+    "COGES_ACCESS_TEAM_DOMAIN=coges.cloudflareaccess.com\n"
+    f"COGES_ACCESS_AUD={'a' * 64}\n"
+    f"COGES_CLOUDFLARE_TUNNEL_TOKEN={'t' * 120}\n"
+)
+
+
+def _compose_lines(tmp_path: Path) -> list[str]:
+    log = (tmp_path / "docker.log").read_text(encoding="utf-8")
+    return [line for line in log.splitlines() if line.startswith("docker compose")]
+
+
+def test_the_cloudflare_gate_starts_the_tunnel(tmp_path: Path) -> None:
+    env = _stage(tmp_path, stack="production", env_stack="production", versions=("v1.0.0",))
+    with (tmp_path / "etc" / "coges.env").open("a", encoding="utf-8") as file:
+        file.write(_ACCESS)
+    result = _run(env, "production", "v1.0.0")
+    assert result.returncode == 0, result.stdout + result.stderr
+    ups = [line for line in _compose_lines(tmp_path) if " up " in line]
+    assert ups and all("--profile edge --profile tunnel" in line for line in ups)
+    assert not any(" rm " in line for line in _compose_lines(tmp_path))
+
+
+def test_the_ip_gate_stops_a_tunnel_left_running(tmp_path: Path) -> None:
+    """Retour arrière : cloudflared, hors profil, ne serait pas arrêté par `up`."""
+    env = _stage(tmp_path, stack="production", env_stack="production", versions=("v1.0.0",))
+    result = _run(env, "production", "v1.0.0")
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = _compose_lines(tmp_path)
+    assert not any("--profile tunnel up" in line for line in lines)
+    assert any("--profile tunnel rm --stop --force cloudflared" in line for line in lines)
+
+
+def test_the_preprod_never_touches_the_tunnel(tmp_path: Path) -> None:
+    env = _stage(tmp_path, stack="preprod", env_stack="preprod", versions=("v1.0.0",))
+    with (tmp_path / "etc" / "preprod.env").open("a", encoding="utf-8") as file:
+        file.write(_ACCESS)
+    result = _run(env, "preprod", "v1.0.0")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not any("tunnel" in line for line in _compose_lines(tmp_path))

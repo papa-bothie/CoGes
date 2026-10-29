@@ -1,0 +1,23 @@
+# Accès de secours à l'administration (ADR 0104), COGES_ADMIN_GATE=ssh : quand Cloudflare
+# est en panne. Servie en HTTP sur le port 8082, publié sur 127.0.0.1 du VPS seulement :
+# il faut une session SSH sur la machine pour l'atteindre
+#   ssh -L 8082:127.0.0.1:8082 <compte>@<VPS>   puis   http://localhost:8082
+# Rien d'autre que le compte de l'équipe dans l'API : à ne garder que le temps de la
+# panne (deploy/vps/cloudflare-access.md, étape 7).
+http://:8082 {
+	import securite
+	header X-Robots-Tag "noindex, nofollow"
+	request_body {
+		max_size 1MB
+	}
+	handle /api/v1/platform/* {
+		reverse_proxy production-api:8000
+	}
+	handle /api/v1/* {
+		respond 404
+	}
+	handle {
+		reverse_proxy production-admin:3000
+	}
+	import maintenance
+}

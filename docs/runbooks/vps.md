@@ -214,11 +214,18 @@ pour ne pas attendre).
 
 ## Administration de la plateforme (ADR 0089)
 
-`admin.<domaine>` sert l'administration (application `admin`, comptes de l'équipe). Deux
-barrières : l'**adresse IP** (Caddy, 403 pour toute autre) puis le **compte** (API).
+`admin.<domaine>` sert l'administration (application `admin`, comptes de l'équipe). Sa
+porte se choisit par `COGES_ADMIN_GATE` (ADR 0104) :
 
-**Ajouter ou changer une adresse autorisée** (peut attendre, sauf si l'équipe est
-bloquée dehors) :
+- `cloudflare` (cible) : **Cloudflare Access** (code par e-mail) par un tunnel, puis le
+  **compte** (API) ; aucun port public. Mise en place, vérifications, retour arrière et
+  accès de secours par SSH : **`deploy/vps/cloudflare-access.md`**.
+- `ip` (retour arrière, et fichiers d'avant ce lot) : l'**adresse IP** (Caddy, 403 pour
+  toute autre) puis le compte, comme ci-dessous.
+- `ssh` : secours quand Cloudflare est en panne (étape 7 du guide).
+
+**Mode `ip` : ajouter ou changer une adresse autorisée** (peut attendre, sauf si l'équipe
+est bloquée dehors) :
 
 ```bash
 curl -4 https://ifconfig.me             # depuis le poste à autoriser : son adresse publique

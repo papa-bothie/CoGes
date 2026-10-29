@@ -3,7 +3,8 @@
 Jeton à part (audience `coges-platform`), cookie de rafraîchissement à part, limité à
 `/api/v1/platform/auth` : il ne part jamais vers les routes commerçantes, et le cookie
 commerçant ne vient jamais ici. Derrière Caddy, ces routes ne répondent que sur le
-sous-domaine de l'administration, filtré par adresse IP.
+sous-domaine de l'administration, derrière Cloudflare Access (ADR 0104, jeton vérifié par
+`CloudflareAccessMiddleware` avant toute route) ou, en retour arrière, une liste d'adresses.
 """
 
 from __future__ import annotations
@@ -90,6 +91,15 @@ def _set_refresh_cookie(response: Response, raw_token: str) -> None:
         # `Strict` : l'administration n'est jamais atteinte par un lien venu d'ailleurs.
         samesite="strict",
     )
+
+
+@router.get("/access", status_code=status.HTTP_204_NO_CONTENT)
+def access() -> None:
+    """Contrôle demandé par Caddy avant de servir une page de l'administration (ADR 0104).
+
+    Le travail est fait avant la route, par `CloudflareAccessMiddleware` : 204 si le jeton
+    Cloudflare Access est valide, 403 sinon. Aucun compte, aucune donnée.
+    """
 
 
 @router.post("/auth/login", response_model=PlatformTokenResponse)

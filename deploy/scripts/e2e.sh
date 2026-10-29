@@ -37,6 +37,10 @@ E2E_ADMIN_PORT="${E2E_ADMIN_PORT:-3200}"
 # Compte de l'administration des parcours (ADR 0089), sans valeur hors de coges_e2e.
 E2E_ADMIN_EMAIL=admin@e2e.example.com
 E2E_ADMIN_PASSWORD=admin-coges-e2e-2026
+# Cloudflare Access simulé (ADR 0104) : clé de test, jeu de clés servi sur ce port local,
+# jeton lu par Playwright (frontend-admin/playwright.config.ts).
+E2E_ACCESS_DIR="$ROOT/.e2e-access"
+E2E_ACCESS_PORT="${E2E_ACCESS_PORT:-8199}"
 MAQUETTE_API_PORT="${MAQUETTE_API_PORT:-8101}"
 MAQUETTE_FRONT_PORT="${MAQUETTE_FRONT_PORT:-3101}"
 # Le moment des captures de la maquette v2 (ADR 0065), repris de app/seed_maquette.py.
@@ -165,7 +169,19 @@ SQL
     # s'additionneraient d'une suite à l'autre sur les mêmes comptes.
     export COGES_LOGIN_THROTTLE_FREE_FAILURES=1000000
     export COGES_LOGIN_THROTTLE_ALERT_AFTER=1000000
-    exec uv run --directory backend uvicorn app.main:app --port "$E2E_API_PORT"
+    # L'administration exige un jeton Cloudflare Access (ADR 0104), signé par une clé de
+    # test dont le jeu public est servi ici ; les routes commerçantes ne changent pas.
+    uv run --directory backend python -m tests.helpers.access_tokens "$E2E_ACCESS_DIR"
+    python3 -m http.server "$E2E_ACCESS_PORT" --bind 127.0.0.1 \
+      --directory "$E2E_ACCESS_DIR" >/dev/null 2>&1 &
+    certs_server=$!
+    trap 'kill "$certs_server" 2>/dev/null || true' EXIT
+    trap 'exit 143' TERM INT
+    export COGES_ACCESS_TEAM_DOMAIN=coges-test.cloudflareaccess.com
+    export COGES_ACCESS_AUD="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    export COGES_ACCESS_CERTS_URL="http://127.0.0.1:$E2E_ACCESS_PORT/cdn-cgi/access/certs"
+    # Pas d'`exec` : le serveur des clés s'arrête avec l'API.
+    uv run --directory backend uvicorn app.main:app --port "$E2E_API_PORT"
     ;;
   front)
     # Répertoire de build distinct : le front de développement (:3000, .next) continue de

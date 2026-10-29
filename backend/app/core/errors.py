@@ -179,6 +179,21 @@ class FrontOutdatedError(CogesError):
     default_message = "Une nouvelle version de CoGes est prête."
 
 
+class AccessRequiredError(CogesError):
+    """Administration ouverte sans passer par Cloudflare Access (ADR 0104).
+
+    Le motif précis (absent, expiré, autre application…) va au journal : le client n'en
+    apprend rien.
+    """
+
+    code = "access_required"
+    status_code = 403
+    default_message = (
+        "Ouvrez l'administration depuis son adresse habituelle : l'accès passe par la "
+        "vérification Cloudflare."
+    )
+
+
 class PasswordChangeRequiredError(CogesError):
     """Le compte doit d'abord remplacer son mot de passe provisoire (ADR 0074).
 

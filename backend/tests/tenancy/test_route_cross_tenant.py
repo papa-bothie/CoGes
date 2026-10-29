@@ -61,6 +61,8 @@ PUBLIC_PATHS = frozenset(
         "/api/v1/platform/auth/logout",
         # Choix du mot de passe d'un invité (ADR 0094) : le jeton du lien en tient lieu.
         "/api/v1/platform/auth/accept-invitation",
+        # Contrôle Cloudflare Access de Caddy (ADR 0104) : aucun compte, aucune donnée.
+        "/api/v1/platform/access",
     }
 )
 

@@ -254,8 +254,9 @@ avertit seulement en local et en préproduction. Redis Cloud : *Database* → *C
 | Élément | Valeur |
 |---|---|
 | Application | `frontend-admin/` (Next.js à part), image `ghcr.io/…/admin`, service `admin` du compose (192 Mo) |
-| Adresse | `admin.<COGES_DOMAIN>` (pile de production seulement) : enregistrement DNS A/AAAA vers le VPS, comme le domaine principal |
-| Filtre | `COGES_ADMIN_ALLOWED_IPS` (IP ou CIDR séparées par des espaces) : bloc `@admin_allowed remote_ip` du Caddyfile, 403 sinon ; ajout d'une adresse : `docs/runbooks/vps.md` |
+| Adresse | `admin.<COGES_DOMAIN>` (pile de production seulement). Porte `COGES_ADMIN_GATE` (ADR 0104) : `cloudflare` = route d'un tunnel Cloudflare (CNAME créé par Cloudflare, aucun port public) ; `ip` = enregistrement A « DNS only » vers le VPS ; `ssh` = secours sur `127.0.0.1:8082` du VPS |
+| Cloudflare Access (ADR 0104) | Zero Trust Free : application *Self-hosted* `admin.<COGES_DOMAIN>`, règle par e-mail, session 24 h ; `COGES_ACCESS_TEAM_DOMAIN` (`<équipe>.cloudflareaccess.com`) et `COGES_ACCESS_AUD` (API : jeton `Cf-Access-Jwt-Assertion` exigé, 403 `access_required`) ; `COGES_CLOUDFLARE_TUNNEL_TOKEN` (conteneur `cloudflared`, profil `tunnel`, secret). Guide : `deploy/vps/cloudflare-access.md` |
+| Filtre d'adresses | `COGES_ADMIN_ALLOWED_IPS` (IP ou CIDR séparées par des espaces) : obligatoire en mode `ip` (403 sinon) ; filet facultatif en mode `cloudflare`, sur l'adresse réelle (`CF-Connecting-IP`) ; ajout d'une adresse : `docs/runbooks/vps.md` |
 | API | `/api/v1/platform/*`, servi **seulement** sur `admin.` ; 404 sur le domaine commerçant |
 | Base | rôle `coges_app_platform`, DSN `COGES_DATABASE_URL_PLATFORM` (API) |
 | E-mails | `COGES_SMTP_HOST`, `_PORT`, `_USERNAME`, `_PASSWORD`, `_FROM` (worker ; `COGES_SMTP_HOST` aussi pour l'API, qui sait ainsi si une invitation part par e-mail) ; `COGES_PLATFORM_ALERT_EMAIL` reçoit les échecs de connexion répétés ; sans hôte, aucun envoi et le lien d'invitation est montré une fois dans l'administration |
@@ -373,7 +374,7 @@ supprime à la version suivante) : un retour arrière ne touche jamais la base.
 
 | Où | Nom | Contenu |
 |---|---|---|
-| VPS, `/etc/coges/coges.env` (root:deploy, 0640) | modèle `deploy/vps/coges.env.example` | `COGES_DOMAIN`, `COGES_ACME_EMAIL`, DSN Neon d'exécution (`sslmode=require`, dont `COGES_DATABASE_URL_PLATFORM`), `COGES_REDIS_PASSWORD`, `COGES_JWT_SECRET`, `COGES_OPS_TOKEN`, `COGES_SENTRY_DSN`, `COGES_JOB_PING_URLS`, `COGES_ADMIN_ALLOWED_IPS`, `COGES_PLATFORM_ALERT_EMAIL`, `COGES_SMTP_*` |
+| VPS, `/etc/coges/coges.env` (root:deploy, 0640) | modèle `deploy/vps/coges.env.example` | `COGES_DOMAIN`, `COGES_ACME_EMAIL`, DSN Neon d'exécution (`sslmode=require`, dont `COGES_DATABASE_URL_PLATFORM`), `COGES_REDIS_PASSWORD`, `COGES_JWT_SECRET`, `COGES_OPS_TOKEN`, `COGES_SENTRY_DSN`, `COGES_JOB_PING_URLS`, `COGES_ADMIN_GATE`, `COGES_ACCESS_TEAM_DOMAIN`, `COGES_ACCESS_AUD`, `COGES_CLOUDFLARE_TUNNEL_TOKEN`, `COGES_ADMIN_ALLOWED_IPS`, `COGES_PLATFORM_ALERT_EMAIL`, `COGES_SMTP_*` |
 | VPS, `/etc/coges/preprod.env` | même modèle | valeurs de la préprod (branche Neon de préprod) |
 | VPS, `/etc/coges/ghcr-user`, `ghcr-token` | jeton GitHub **`read:packages` seulement** | lecture des images |
 | GitHub, environnements `preprod` / `production` | secrets `NEON_OWNER_DSN`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`, `SMOKE_SLUG`, `SMOKE_EMAIL`, `SMOKE_PASSWORD` | voir `docs/runbooks/deploiement.md` |
@@ -381,8 +382,11 @@ supprime à la version suivante) : un retour arrière ne touche jamais la base.
 
 `check_runtime_env.py --require-vps` refuse un fichier de secrets qui contient un DSN
 propriétaire, un DSN sans `sslmode=require`, un Redis externe, un domaine avec schéma,
-des secrets de moins de 32 caractères ou, en production, une liste `COGES_ADMIN_ALLOWED_IPS`
-vide, illisible ou ouverte à tous ; `deploy.sh` le lance avant chaque démarrage.
+des secrets de moins de 32 caractères ou, en production, une administration sans
+protection (ADR 0104) : en mode `cloudflare`, domaine d'équipe, AUD ou jeton du tunnel
+absents ou mal formés ; en mode `ip`, une liste `COGES_ADMIN_ALLOWED_IPS` vide ; hors
+`cloudflare`, des variables Access encore posées ; partout, une liste illisible ou ouverte
+à tous. `deploy.sh` le lance avant chaque démarrage.
 
 ### Registre d'images (ADR 0083, 0087)
 

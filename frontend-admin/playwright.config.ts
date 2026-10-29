@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { defineConfig, devices } from "@playwright/test";
 
 /**
@@ -7,6 +11,22 @@ import { defineConfig, devices } from "@playwright/test";
  * (:3100, pour l'accès support) et l'administration (:3200) s'ils ne tournent pas déjà.
  */
 const E2E_ADMIN = "http://localhost:3200";
+
+/**
+ * Cloudflare Access simulé (ADR 0104) : l'API des parcours exige `Cf-Access-Jwt-Assertion`
+ * sur `/api/v1/platform/*`, comme en production. Le jeton est signé par une clé de test
+ * (`backend/tests/helpers/access_tokens.py`), dont `e2e.sh api` sert le jeu public ; il
+ * part avec chaque requête du navigateur et de `request`, comme le joindrait Cloudflare.
+ */
+function accessToken(): string {
+  const dir = path.resolve(__dirname, "../.e2e-access");
+  execFileSync(
+    "uv",
+    ["run", "--directory", "../backend", "python", "-m", "tests.helpers.access_tokens", dir],
+    { cwd: __dirname, stdio: "ignore" },
+  );
+  return readFileSync(path.join(dir, "token"), "utf-8").trim();
+}
 
 export default defineConfig({
   testDir: "./e2e",
@@ -21,6 +41,7 @@ export default defineConfig({
     locale: "fr-FR",
     timezoneId: "Africa/Dakar",
     trace: "retain-on-failure",
+    extraHTTPHeaders: process.env.E2E_BASE_URL ? {} : { "Cf-Access-Jwt-Assertion": accessToken() },
   },
   webServer: process.env.E2E_BASE_URL
     ? undefined

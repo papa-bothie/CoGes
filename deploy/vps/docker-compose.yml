@@ -11,6 +11,8 @@
 #   • coges_edge (externe, 172.30.0.0/24, créé par deploy.sh) : Caddy, front et API des
 #     deux piles. Seul Caddy publie des ports. L'API ne croit X-Forwarded-For que venu
 #     de ce réseau (--forwarded-allow-ips).
+#   • coges_tunnel (172.30.1.0/28) : cloudflared et Caddy, pour l'administration derrière
+#     Cloudflare Access (ADR 0104).
 #   • data (interne, sans sortie) : Redis et ceux qui lui parlent.
 #   • jobs : sortie vers Neon et Sentry pour worker, beat et relais.
 #
@@ -55,19 +57,49 @@ services:
       - "${COGES_HTTP_PORT:-80}:80"
       - "${COGES_HTTPS_PORT:-443}:443"
       - "${COGES_HTTPS_PORT:-443}:443/udp"
+      # Secours de l'administration (ADR 0104, COGES_ADMIN_GATE=ssh) : sur la boucle locale
+      # du VPS seulement, atteinte par tunnel SSH. Le port 8081 du tunnel n'est jamais publié.
+      - "127.0.0.1:8082:8082"
     environment:
       COGES_DOMAIN: ${COGES_DOMAIN:?}
       COGES_ACME_EMAIL: ${COGES_ACME_EMAIL:?COGES_ACME_EMAIL manquant (Let's Encrypt)}
-      # Adresses admises sur admin.<domaine> (ADR 0089), séparées par des espaces. Vide,
-      # Caddy refuserait de démarrer : check_runtime_env.py l'exige avant (production).
+      # Porte de l'administration (ADR 0104) : cloudflare, ip ou ssh ; choisit le fichier
+      # admin-<porte>.caddy. check_runtime_env.py vérifie ce qui va avec, avant le démarrage.
+      COGES_ADMIN_GATE: ${COGES_ADMIN_GATE:-ip}
+      # Adresses admises (ADR 0089), séparées par des espaces : obligatoires en mode `ip`.
       COGES_ADMIN_ALLOWED_IPS: ${COGES_ADMIN_ALLOWED_IPS:-}
+      # Filet facultatif du mode `cloudflare`, sur l'adresse réelle : vide, aucun filtre.
+      COGES_ADMIN_TUNNEL_IPS: ${COGES_ADMIN_ALLOWED_IPS:-0.0.0.0/0 ::/0}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./admin-cloudflare.caddy:/etc/caddy/admin-cloudflare.caddy:ro
+      - ./admin-ip.caddy:/etc/caddy/admin-ip.caddy:ro
+      - ./admin-ssh.caddy:/etc/caddy/admin-ssh.caddy:ro
       - ./maintenance.html:/srv/maintenance/maintenance.html:ro
       - caddy-data:/data
       - caddy-config:/config
-    networks: [edge]
+    # `tunnel` : le seul chemin de cloudflared vers l'administration (port 8081).
+    networks: [edge, tunnel]
     mem_limit: 128m
+
+  # Tunnel Cloudflare (ADR 0104, COGES_ADMIN_GATE=cloudflare) : connexion SORTANTE vers
+  # Cloudflare, aucun port. Cloudflare Access laisse passer la règle (une adresse e-mail),
+  # puis envoie admin.<domaine> ici ; la route du tunnel, posée dans le tableau de bord
+  # Zero Trust, vise http://caddy:8081. Profil `tunnel`, ajouté par deploy.sh dans ce mode.
+  cloudflared:
+    profiles: [tunnel]
+    # Figée par condensat : elle tient le seul chemin vers l'administration.
+    image: cloudflare/cloudflared:2026.10.0@sha256:9b49eed8f62806d5d45ddf59ecefb5710429598ea6d3fcccd2af938f621b2b07
+    restart: unless-stopped
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      # Secret : le jeton du tunnel (tableau de bord Zero Trust). Lu par cloudflared seul.
+      TUNNEL_TOKEN: ${COGES_CLOUDFLARE_TUNNEL_TOKEN:-}
+    networks: [tunnel]
+    mem_limit: 64m
 
   # Relance les conteneurs « unhealthy » étiquetés `autoheal=true`, des deux piles.
   autoheal:
@@ -133,6 +165,10 @@ services:
       # partir (sinon elle montre le lien une fois) ; c'est le worker qui envoie.
       COGES_SMTP_HOST: ${COGES_SMTP_HOST:-}
       COGES_ADMIN_URL: https://admin.${COGES_DOMAIN:?}
+      # Cloudflare Access (ADR 0104) : posés, /api/v1/platform/* exige un jeton valide.
+      # Vides en mode `ip` ou `ssh` (check_runtime_env.py l'impose).
+      COGES_ACCESS_TEAM_DOMAIN: ${COGES_ACCESS_TEAM_DOMAIN:-}
+      COGES_ACCESS_AUD: ${COGES_ACCESS_AUD:-}
     networks:
       edge: { aliases: ["${COGES_STACK:?}-api"] }
       data: {}
@@ -245,6 +281,13 @@ networks:
   data:
     internal: true
   jobs: {}
+  # cloudflared et Caddy seulement (ADR 0104) : Caddy ne croit CF-Connecting-IP que venu
+  # de ce sous-réseau (Caddyfile, `servers :8081`). Sortie ouverte : cloudflared appelle
+  # Cloudflare.
+  tunnel:
+    name: coges_tunnel
+    ipam:
+      config: [{ subnet: 172.30.1.0/28 }]
 
 volumes:
   front-static:

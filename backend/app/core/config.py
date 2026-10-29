@@ -15,6 +15,7 @@ Aucun secret n'est journalisé : les valeurs sensibles sont des ``SecretStr``.
 """
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -31,6 +32,9 @@ MIN_JWT_SECRET_LENGTH = 32
 
 #: Environnements où les défauts de développement restent acceptés.
 DEVELOPMENT_ENVS = ("local", "ci")
+#: Cloudflare Access (ADR 0104) : domaine d'équipe et AUD d'une application.
+ACCESS_TEAM_DOMAIN = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com")
+ACCESS_AUD = re.compile(r"[0-9a-f]{64}")
 
 
 class Settings(BaseSettings):
@@ -151,6 +155,16 @@ class Settings(BaseSettings):
     # Sur le VPS, `https://admin.<COGES_DOMAIN>`, posée par le compose.
     admin_url: str = "http://localhost:3200"
 
+    # --- Cloudflare Access devant l'administration (ADR 0104) ---
+    # Domaine d'équipe (`<nom>.cloudflareaccess.com`) et AUD de l'application. Les deux
+    # posés : toute requête `/api/v1/platform/*` exige un `Cf-Access-Jwt-Assertion`
+    # valide (403 sinon). Les deux vides : aucun contrôle (poste, CI, mode `ip` du VPS).
+    access_team_domain: str | None = None
+    access_aud: str | None = None
+    # Adresse des clés publiques, pour les parcours e2e seulement (clé de test servie en
+    # local) : refusée hors `local` et `ci`. Vide : celle de l'équipe.
+    access_certs_url: str | None = None
+
     # --- Envoi d'e-mails (ADR 0089) ---
     # Sans hôte, aucun envoi : le message est journalisé (sans destinataire) et sauté.
     smtp_host: str | None = None
@@ -246,6 +260,35 @@ class Settings(BaseSettings):
         if self.frozen_now is not None and self.env not in DEVELOPMENT_ENVS:
             raise ValueError(
                 "COGES_FROZEN_NOW n'est accepté qu'en local et en CI "
+                f"(COGES_ENV vaut « {self.env} »)."
+            )
+        return self
+
+    @field_validator("access_team_domain", "access_aud", "access_certs_url", mode="before")
+    @classmethod
+    def _empty_is_unset(cls, value: Any) -> Any:
+        """Le compose transmet une chaîne vide quand rien n'est configuré."""
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @model_validator(mode="after")
+    def _access_is_complete(self) -> "Settings":
+        """Refuse au démarrage une configuration Access à moitié posée (ADR 0104)."""
+        if (self.access_team_domain is None) != (self.access_aud is None):
+            raise ValueError(
+                "COGES_ACCESS_TEAM_DOMAIN et COGES_ACCESS_AUD vont ensemble : posez les deux, "
+                "ou aucun."
+            )
+        if self.access_team_domain is not None and not ACCESS_TEAM_DOMAIN.fullmatch(
+            self.access_team_domain
+        ):
+            raise ValueError(
+                "COGES_ACCESS_TEAM_DOMAIN est un nom d'hôte nu : <équipe>.cloudflareaccess.com."
+            )
+        if self.access_aud is not None and not ACCESS_AUD.fullmatch(self.access_aud):
+            raise ValueError("COGES_ACCESS_AUD compte 64 caractères hexadécimaux.")
+        if self.access_certs_url is not None and self.env not in DEVELOPMENT_ENVS:
+            raise ValueError(
+                "COGES_ACCESS_CERTS_URL n'est accepté qu'en local et en CI "
                 f"(COGES_ENV vaut « {self.env} »)."
             )
         return self

@@ -41,6 +41,9 @@ OPEN_PATHS = frozenset(
         "/api/v1/platform/auth/logout",
         # Le collègue invité n'a pas encore de compte (ADR 0094) : le jeton du lien suffit.
         "/api/v1/platform/auth/accept-invitation",
+        # Contrôle de Caddy (ADR 0104) : jeton Cloudflare Access seulement, aucun compte,
+        # aucune donnée (`test_platform_access_gate.py`).
+        "/api/v1/platform/access",
     }
 )
 #: Protégée par `COGES_OPS_TOKEN` : 404 sans jeton configuré, 401 sinon (ADR 0077).

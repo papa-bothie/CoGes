@@ -5,5 +5,5 @@
 #
 #   docker build -f deploy/vps/Dockerfile.bundle -t coges/bundle:local .
 FROM scratch
-COPY deploy/vps/docker-compose.yml deploy/vps/Caddyfile deploy/vps/maintenance.html deploy/vps/coges.env.example /bundle/
+COPY deploy/vps/docker-compose.yml deploy/vps/Caddyfile deploy/vps/admin-cloudflare.caddy deploy/vps/admin-ip.caddy deploy/vps/admin-ssh.caddy deploy/vps/maintenance.html deploy/vps/coges.env.example deploy/vps/cloudflare-access.md /bundle/
 COPY deploy/scripts/check_runtime_env.py /bundle/

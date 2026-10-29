@@ -1,0 +1,28 @@
+# Administration filtrée par adresse IP (ADR 0089), COGES_ADMIN_GATE=ip : retour arrière
+# de l'ADR 0104. Deux barrières : l'adresse IP ici (403 pour toute autre), puis le compte
+# de l'équipe dans l'API. L'enregistrement DNS admin.<domaine> doit pointer sur le VPS
+# (« DNS only »). Ajouter une adresse : docs/runbooks/vps.md.
+admin.{$COGES_DOMAIN} {
+	import securite
+	header X-Robots-Tag "noindex, nofollow"
+	request_body {
+		max_size 1MB
+	}
+	@admin_allowed remote_ip {$COGES_ADMIN_ALLOWED_IPS}
+	handle @admin_allowed {
+		handle /api/v1/platform/* {
+			reverse_proxy production-api:8000
+		}
+		# Les routes commerçantes ne passent pas par ici.
+		handle /api/v1/* {
+			respond 404
+		}
+		handle {
+			reverse_proxy production-admin:3000
+		}
+	}
+	handle {
+		respond "Accès refusé." 403
+	}
+	import maintenance
+}

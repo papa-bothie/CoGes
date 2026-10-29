@@ -3,8 +3,8 @@
 #   /api/v1/*  → API FastAPI (un saut de moins que la réécriture de Next)
 #   le reste   → front Next.js
 # L'administration de la plateforme (ADR 0089) a son sous-domaine, admin.<domaine>,
-# filtré par adresse IP (COGES_ADMIN_ALLOWED_IPS) : /api/v1/platform/* n'est servi que
-# là, jamais sur le domaine commerçant.
+# derrière Cloudflare Access ou une liste d'adresses (ADR 0104, fin du fichier) :
+# /api/v1/platform/* n'est servi que là, jamais sur le domaine commerçant.
 # La préproduction (sous-domaine preprod.) passe par le même Caddy ; arrêtée, elle
 # répond 502.
 #
@@ -21,6 +21,17 @@
 	}
 	servers {
 		# HTTP/3 ouvert (443/udp), délais pour ne pas garder une connexion lente indéfiniment.
+		timeouts {
+			read_header 10s
+			idle 2m
+		}
+	}
+	# Port interne de l'administration, atteint par le seul conteneur cloudflared
+	# (ADR 0104) : l'adresse réelle du client est dans CF-Connecting-IP, crue uniquement
+	# venue du réseau `tunnel` (cloudflared et Caddy, rien d'autre).
+	servers :8081 {
+		trusted_proxies static 172.30.1.0/28
+		client_ip_headers CF-Connecting-IP
 		timeouts {
 			read_header 10s
 			idle 2m
@@ -95,30 +106,10 @@ preprod.{$COGES_DOMAIN} {
 	import pile preprod
 }
 
-# Administration de la plateforme (ADR 0089), pile de production seulement. Deux
-# barrières : l'adresse IP ici (403 pour toute autre), puis le compte de l'équipe dans
-# l'API. Ajouter une adresse : docs/runbooks/vps.md.
-admin.{$COGES_DOMAIN} {
-	import securite
-	header X-Robots-Tag "noindex, nofollow"
-	request_body {
-		max_size 1MB
-	}
-	@admin_allowed remote_ip {$COGES_ADMIN_ALLOWED_IPS}
-	handle @admin_allowed {
-		handle /api/v1/platform/* {
-			reverse_proxy production-api:8000
-		}
-		# Les routes commerçantes ne passent pas par ici.
-		handle /api/v1/* {
-			respond 404
-		}
-		handle {
-			reverse_proxy production-admin:3000
-		}
-	}
-	handle {
-		respond "Accès refusé." 403
-	}
-	import maintenance
-}
+# Administration de la plateforme (ADR 0089), pile de production seulement. Sa porte
+# (ADR 0104) se choisit par COGES_ADMIN_GATE dans /etc/coges/coges.env :
+#   cloudflare  admin-cloudflare.caddy : Cloudflare Access par le tunnel, aucun port public ;
+#   ip          admin-ip.caddy         : liste d'adresses sur 443 (retour arrière) ;
+#   ssh         admin-ssh.caddy        : secours, port local du VPS par tunnel SSH.
+# Sans valeur, `ip` : le comportement d'avant ce lot. Guide : deploy/vps/cloudflare-access.md.
+import admin-{$COGES_ADMIN_GATE:ip}.caddy
