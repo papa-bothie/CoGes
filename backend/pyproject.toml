@@ -19,13 +19,19 @@ dependencies = [
     "openpyxl>=3.1",
     "python-multipart>=0.0.20",
     "defusedxml>=0.7",
+    # Importés directement par app/ : déclarés ici, pas seulement reçus par fastapi ou
+    # celery (tests/architecture/test_runtime_dependencies.py). httpx sert à l'API
+    # (clés de Cloudflare Access, ADR 0104), pas seulement aux tests.
+    "httpx>=0.28",
+    "anyio>=4.15",
+    "starlette>=1.7",
+    "kombu>=5.6",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.3",
     "pytest-cov>=6.0",
-    "httpx>=0.28",
     "ruff>=0.16.8",
     "mypy>=1.13",
     "pre-commit>=4.0",
