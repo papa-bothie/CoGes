@@ -62,7 +62,9 @@ const DRAFT = {
   version: 1,
   fields: ["mode", "paidInput", "given", "method", "dueDate", "customer", "idem"],
   meaningful: ["mode", "paidInput", "given", "dueDate", "customer"],
+  keys: ["idem"],
 } as const;
+const CONFIRM_KEY = ["sale-editor", "confirm"];
 type Done = { sale: SaleDetail; line: string; phone: string | null };
 
 const MODES: readonly Mode[] = ["full", "partial", "credit"];
@@ -152,12 +154,14 @@ export function SaleEditor({
     if (resumedId) window.history.replaceState(null, "", `/sales/${resumedId}/edit`);
   }, [resumedId]);
 
+  // Pendant l'encaissement, puis sur l'écran « Vente enregistrée », rien n'est réécrit.
+  const confirming = useIsMutating({ mutationKey: CONFIRM_KEY }) > 0;
   const draft = useDraft(
     {
       ...DRAFT,
       objectId: saleId ?? "new",
       enabled: !resuming,
-      busy: false,
+      busy: confirming || done !== null,
     },
     {
       // « Tout payé » et l'espèce sont l'état de départ : ils ne font pas un brouillon.
@@ -360,7 +364,7 @@ export function SaleEditor({
   };
 
   const confirm = useMutation({
-    mutationKey: ["sale-editor", "confirm"],
+    mutationKey: CONFIRM_KEY,
     meta: { toastError: false },
     mutationFn: (body: Schemas["SaleConfirm"]) =>
       unwrap(

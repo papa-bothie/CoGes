@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -51,7 +51,9 @@ const DRAFT = {
   version: 1,
   fields: ["supplierId", "lines", "mode", "paid", "method", "dueDays", "idem"],
   meaningful: ["lines", "paid"],
+  keys: ["idem"],
 } as const;
+const SAVE_KEY = ["delivery", "save"];
 type DraftLine = { productId: string; qty: string; cost: string };
 
 /** Prix d'achat proposé : le prix d'achat moyen, en francs entiers ; vide s'il n'y en a pas. */
@@ -101,8 +103,9 @@ export function DeliveryForm({
   const [done, setDone] = useState<string | null>(null);
   const term = useDebouncedValue(search.trim());
   const [pendingLines, setPendingLines] = useState<DraftLine[] | null>(null);
+  const saving = useIsMutating({ mutationKey: SAVE_KEY }) > 0;
   const draft = useDraft(
-    DRAFT,
+    { ...DRAFT, busy: saving },
     {
       supplierId: supplierId ?? "",
       // Tant que les articles du brouillon sont relus, ce sont eux qu'on garde.
@@ -268,6 +271,7 @@ export function DeliveryForm({
     (mode === "part" && (paidAmount === 0n || paidAmount >= total));
 
   const save = useMutation({
+    mutationKey: SAVE_KEY,
     meta: { toastError: false },
     mutationFn: () =>
       unwrap(

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { draftKey, writeDraft } from "@/lib/drafts";
+import { draftKey, freezeDrafts, setDraftOwner, writeDraft } from "@/lib/drafts";
 
 import { DRAFT_DELAY_MS, hasUnsentDrafts, useDraft } from "./use-draft";
 
@@ -41,6 +41,48 @@ function Form() {
     </form>
   );
 }
+
+const KEYED = {
+  ...SPEC,
+  fields: ["label", "idem"],
+  meaningful: ["label"],
+  keys: ["idem"],
+} as const;
+
+/** Un formulaire qui envoie comme les écrans : clé d'idempotence gardée, envoi qui dure. */
+function KeyedForm({
+  order = "clear-then-renew",
+}: {
+  order?: "clear-then-renew" | "renew-then-clear";
+}) {
+  const [label, setLabel] = useState("");
+  const [idem, setIdem] = useState("k1");
+  const [busy, setBusy] = useState(false);
+  const draft = useDraft({ ...KEYED, busy }, { label, idem }, (fields) => {
+    if (typeof fields.label === "string") setLabel(fields.label);
+    if (typeof fields.idem === "string") setIdem(fields.idem);
+  });
+  const send = async () => {
+    setBusy(true);
+    // Le retour renouvelait sa clé au milieu de l'envoi (R1).
+    if (order === "renew-then-clear") setIdem("k2");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_DELAY_MS * 3));
+    draft.clear();
+    if (order === "clear-then-renew") setIdem("k2");
+    setBusy(false);
+  };
+  return (
+    <form>
+      <input aria-label="Libellé" value={label} onChange={(e) => setLabel(e.target.value)} />
+      <button type="button" onClick={() => void send()}>
+        Envoyer
+      </button>
+      <output>{busy ? "envoi" : "prêt"}</output>
+    </form>
+  );
+}
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe("useDraft (ADR 0101)", () => {
   beforeEach(() => {
@@ -121,5 +163,67 @@ describe("useDraft (ADR 0101)", () => {
     await new Promise((resolve) => setTimeout(resolve, DRAFT_DELAY_MS + 50));
     // La valeur reçue n'est pas réécrite : pas de ping-pong entre onglets.
     expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it.each(["clear-then-renew", "renew-then-clear"] as const)(
+    "une clé renouvelée autour de l'envoi ne recrée jamais le brouillon (%s)",
+    async (order) => {
+      const user = userEvent.setup();
+      const view = render(<KeyedForm order={order} />);
+      await user.type(screen.getByLabelText("Libellé"), "Riz");
+      await wait(DRAFT_DELAY_MS + 50);
+      expect(JSON.parse(window.localStorage.getItem(KEY)!).fields).toEqual({
+        label: "Riz",
+        idem: "k1",
+      });
+      await user.click(screen.getByRole("button", { name: "Envoyer" }));
+      // Pendant l'envoi, le brouillon d'avant reste tel quel, avec la même clé.
+      await wait(DRAFT_DELAY_MS + 50);
+      expect(JSON.parse(window.localStorage.getItem(KEY)!).fields.idem).toBe("k1");
+      await screen.findByText("prêt", {}, { timeout: 3_000 });
+      await wait(DRAFT_DELAY_MS + 50);
+      expect(window.localStorage.getItem(KEY)).toBeNull();
+      view.unmount();
+      expect(window.localStorage.getItem(KEY)).toBeNull();
+      expect(hasUnsentDrafts()).toBe(false);
+    },
+  );
+
+  it("n'écrit rien pendant un envoi, même page cachée", async () => {
+    const user = userEvent.setup();
+    render(<KeyedForm />);
+    await user.type(screen.getByLabelText("Libellé"), "Riz");
+    await wait(DRAFT_DELAY_MS + 50);
+    await user.click(screen.getByRole("button", { name: "Envoyer" }));
+    await user.type(screen.getByLabelText("Libellé"), " blanc");
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    expect(JSON.parse(window.localStorage.getItem(KEY)!).fields.label).toBe("Riz");
+  });
+
+  it("un écran quitté sans envoyer garde son brouillon sans bloquer la mise à jour", async () => {
+    const user = userEvent.setup();
+    const view = render(<Form />);
+    await user.type(screen.getByLabelText("Libellé"), "Riz");
+    view.unmount();
+    expect(JSON.parse(window.localStorage.getItem(KEY)!).fields.label).toBe("Riz");
+    expect(hasUnsentDrafts()).toBe(false);
+  });
+
+  it("plus rien n'est écrit après le signal de déconnexion", async () => {
+    const user = userEvent.setup();
+    const view = render(<Form />);
+    await user.type(screen.getByLabelText("Libellé"), "Riz");
+    act(() => {
+      freezeDrafts();
+      window.localStorage.clear();
+      window.dispatchEvent(new StorageEvent("storage", { key: KEY, newValue: null }));
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    view.unmount();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+    // La personne suivante écrit de nouveau.
+    setDraftOwner(AWA);
   });
 });

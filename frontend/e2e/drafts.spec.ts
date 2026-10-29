@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import {
   createSalesperson,
+  customerWithCredit,
   E2E,
   emptyMyDrafts,
   loginThroughUi,
@@ -182,8 +183,110 @@ test("vente à moitié encaissée : retrouvée au retour, une seule vente à la 
   await expect(partial).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: /^Encaisser 400\sF$/ }).click();
   await expect(page.getByRole("heading", { name: "Vente enregistrée" })).toBeVisible();
-  await expect.poll(() => drafts(page)).toEqual([]);
+  // La clé renouvelée après l'envoi ne recrée pas le brouillon, même après l'écriture différée.
+  await page.waitForTimeout(1_000);
+  expect(await drafts(page)).toEqual([]);
+  await page.reload();
+  await expect(page.getByRole("searchbox", { name: "Chercher un article" })).toBeVisible();
+  await expect(page.getByText(RESTORED)).toHaveCount(0);
 
   const sales = await client.get(`/sales?customer_id=${customer.id}&include_drafts=false`);
   expect(sales.items).toHaveLength(1);
+});
+
+test("retour partiel au remboursement lent : rien n'est retrouvé, aucun second retour", async ({
+  page,
+  request,
+}) => {
+  const client = await managerApi(request);
+  const product = await stockedProduct(client, { stock: "20" });
+  const customer = await customerWithCredit(client);
+  const draft = await client.post("/sales", { customer_id: customer.id });
+  await client.post(`/sales/${draft.id}/items`, {
+    product_id: product.id,
+    qty: "4",
+    discount: "0",
+  });
+  await client.post(`/sales/${draft.id}/confirm`, { paid_amount: "4000", method: "cash" });
+  await login(page);
+
+  // Le remboursement prend bien plus que l'écriture différée (400 ms).
+  await page.route("**/api/v1/sale-returns/*/refunds", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    await route.continue();
+  });
+  await page.goto(`/sales/${draft.id}/returns/new`);
+  const qty = page.getByRole("textbox", { name: `Quantité rendue de ${product.name}` });
+  await qty.fill("2");
+  await expect.poll(async () => (await drafts(page)).length).toBe(1);
+  await page.getByRole("button", { name: "Enregistrer le retour" }).click();
+  await expect(page.getByRole("heading", { name: "Retour enregistré" })).toBeVisible({
+    timeout: 15_000,
+  });
+  await page.waitForTimeout(1_000);
+  expect(await drafts(page)).toEqual([]);
+
+  await page.reload();
+  await expect(qty).toBeVisible();
+  await expect(page.getByText(RESTORED)).toHaveCount(0);
+  await expect(qty).toHaveValue("");
+  const detail = await client.get(`/sales/${draft.id}`);
+  expect(detail.items[0].returned_qty).toBe("2.000");
+});
+
+test("session refusée à la réouverture : les brouillons disparaissent", async ({
+  page,
+  request,
+}) => {
+  const client = await managerApi(request);
+  const category = await client.post("/expense-categories", {
+    name: `Sel ${crypto.randomUUID().slice(0, 6)}`,
+    kind: "variable",
+  });
+  await login(page);
+  await page.goto("/finance/expenses");
+  await page.getByRole("radio", { name: category.name }).click();
+  await typeAmount(page, ["3", "0", "0"]);
+  await expect.poll(async () => (await drafts(page)).length).toBe(1);
+
+  // Application rouverte : le jeton en mémoire est perdu et le serveur refuse le refresh,
+  // avant que l'identité de la personne soit relue.
+  await page.route("**/api/v1/auth/refresh", (route) =>
+    route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: { code: "invalid_refresh_token", message: "Session expirée.", details: {} },
+      }),
+    }),
+  );
+  await page.reload();
+  await expect(page).toHaveURL(/\/login\?reason=expired/, { timeout: 15_000 });
+  await expect.poll(() => drafts(page)).toEqual([]);
+  expect(await page.evaluate(() => window.localStorage.getItem("coges:draft-owner"))).toBeNull();
+});
+
+test("déconnexion depuis un autre onglet : le brouillon n'est pas réécrit", async ({
+  page,
+  request,
+}) => {
+  const client = await managerApi(request);
+  const category = await client.post("/expense-categories", {
+    name: `Thé ${crypto.randomUUID().slice(0, 6)}`,
+    kind: "variable",
+  });
+  await login(page);
+  const other = await page.context().newPage();
+  await other.goto("/finance/expenses");
+  await other.getByRole("radio", { name: category.name }).click();
+  await typeAmount(other, ["9", "0", "0"]);
+  await expect.poll(async () => (await drafts(other)).length).toBe(1);
+
+  await page.getByRole("button", { name: "Réglages et compte" }).click();
+  await page.getByRole("menuitem", { name: "Se déconnecter" }).click();
+  await expect(page).toHaveURL(/\/login/);
+  await expect(other).toHaveURL(/\/login/, { timeout: 15_000 });
+  await other.waitForTimeout(1_000);
+  expect(await drafts(other)).toEqual([]);
+  await other.close();
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -45,7 +45,9 @@ const DRAFT = {
   version: 1,
   fields: ["quantities", "reason", "way", "refundTyped", "method", "createIdem", "refundIdem"],
   meaningful: ["quantities"],
+  keys: ["createIdem", "refundIdem"],
 } as const;
+const SAVE_KEY = ["sale-return", "save"];
 
 const STEP = cn(
   "flex size-[52px] shrink-0 items-center justify-center rounded-touche border-2 border-input bg-card text-2xl font-bold text-foreground",
@@ -75,8 +77,10 @@ export function ReturnForm({ saleId }: { saleId: string }) {
   const [method, setMethod] = useState<Method>("cash");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Done | null>(null);
+  // Tout l'envoi (retour puis remboursement), puis l'écran « enregistré » : rien n'est réécrit.
+  const saving = useIsMutating({ mutationKey: SAVE_KEY }) > 0;
   const draft = useDraft(
-    { ...DRAFT, objectId: saleId },
+    { ...DRAFT, objectId: saleId, busy: saving || done !== null },
     {
       // Seules les lignes remplies : une ligne remise à zéro n'est pas une saisie.
       quantities: Object.fromEntries(Object.entries(quantities).filter(([, qty]) => qty !== "")),
@@ -148,6 +152,7 @@ export function ReturnForm({ saleId }: { saleId: string }) {
   const blocked = value === 0n || (paysNow && (refund <= 0n || refund > rest));
 
   const save = useMutation({
+    mutationKey: SAVE_KEY,
     meta: { toastError: false },
     mutationFn: async () => {
       const lines = rows
@@ -160,7 +165,6 @@ export function ReturnForm({ saleId }: { saleId: string }) {
           headers: createKey.headers,
         }),
       );
-      createKey.renew();
       // Le serveur a déjà déduit la dette : `refund_due` est ce qui reste à rendre.
       const due = wholeUnits(created.refund_due);
       const amount = paysNow ? min(due, refund) : 0n;
@@ -174,7 +178,6 @@ export function ReturnForm({ saleId }: { saleId: string }) {
               headers: refundKey.headers,
             }),
           );
-          refundKey.renew();
         } catch (refused) {
           failure = errorMessage(refused);
         }
@@ -182,7 +185,12 @@ export function ReturnForm({ saleId }: { saleId: string }) {
       return { created, amount, failure };
     },
     onSuccess: ({ created, amount, failure }) => {
+      // Les clés ne changent qu'une fois tout l'envoi fini et le brouillon effacé (R1, prompt
+      // 32) : une page morte en route rejoue avec les mêmes. Un remboursement refusé repart
+      // de la fiche du retour, sous une clé à lui.
       draft.clear();
+      createKey.renew();
+      refundKey.renew();
       for (const key of [
         queryKeys.sales.all,
         queryKeys.stock.all,

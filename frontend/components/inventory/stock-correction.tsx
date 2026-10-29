@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarX,
   Check,
@@ -53,7 +53,9 @@ const DRAFT = {
   version: 1,
   fields: ["pickedId", "direction", "qty", "reason", "idem"],
   meaningful: ["direction", "qty", "reason"],
+  keys: ["idem"],
 } as const;
+const SAVE_KEY = ["stock-correction", "save"];
 const ALL_REASONS: readonly Reason[] = [
   "damaged",
   "expired",
@@ -108,8 +110,9 @@ export function StockCorrection({ productId }: { productId?: string }) {
   const [reason, setReason] = useState<Reason>("damaged");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const saving = useIsMutating({ mutationKey: SAVE_KEY }) > 0;
   const draft = useDraft(
-    { ...DRAFT, objectId: productId },
+    { ...DRAFT, objectId: productId, busy: saving },
     {
       pickedId: pickedId ?? "",
       direction: direction === "less" ? "" : direction,
@@ -166,6 +169,7 @@ export function StockCorrection({ productId }: { productId?: string }) {
   const ready = Boolean(line) && positive && !tooMany;
 
   const save = useMutation({
+    mutationKey: SAVE_KEY,
     meta: { toastError: false },
     mutationFn: (body: Schemas["MovementCreate"]) =>
       unwrap(api.POST("/api/v1/inventory/movements", { body, headers: idempotency.headers })),

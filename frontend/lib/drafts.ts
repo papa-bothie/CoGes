@@ -21,11 +21,45 @@ export type DraftOwner = { companyId: string; userId: string };
 
 type Stored = { v: number; at: number; fields: Record<string, unknown> };
 
+/**
+ * Dernier propriétaire, gardé sur l'appareil (deux identifiants, rien d'autre) : une session
+ * expirée à la réouverture, avant que `/auth/me` réponde, efface quand même ses brouillons.
+ */
+export const DRAFT_OWNER_KEY = "coges:draft-owner";
+
 let owner: DraftOwner | null = null;
+// Posé par la déconnexion avant toute redirection : plus aucune écriture (page cachée,
+// démontage) ne recrée un brouillon que l'on vient d'effacer.
+let frozen = false;
 
 /** Posée par la coquille dès que l'identité est connue ; `null` hors session. */
 export function setDraftOwner(next: DraftOwner | null): void {
   owner = next;
+  if (!next) return;
+  frozen = false;
+  try {
+    storage()?.setItem(DRAFT_OWNER_KEY, JSON.stringify(next));
+  } catch {
+    // Sans stockage, il n'y a pas de brouillon à effacer non plus.
+  }
+}
+
+/** Signal de déconnexion : plus aucune écriture jusqu'à la personne suivante. */
+export function freezeDrafts(): void {
+  frozen = true;
+}
+
+function rememberedOwner(): DraftOwner | null {
+  try {
+    const parsed = JSON.parse(storage()?.getItem(DRAFT_OWNER_KEY) ?? "null") as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const { companyId, userId } = parsed as Partial<DraftOwner>;
+    return typeof companyId === "string" && typeof userId === "string"
+      ? { companyId, userId }
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export function draftOwner(): DraftOwner | null {
@@ -93,7 +127,7 @@ export function writeDraft(
   now = Date.now(),
 ): void {
   const store = storage();
-  if (!store) return;
+  if (!store || frozen) return;
   try {
     const stored: Stored = { v: version, at: now, fields: pick(values, allowed) };
     store.setItem(key, JSON.stringify(stored));
@@ -131,10 +165,15 @@ export function clearDraftsOf(who: DraftOwner): void {
   for (const key of keys()) if (key.startsWith(prefix)) removeDraft(key);
 }
 
-/** Efface les brouillons de la personne courante, s'il y en a une, puis l'oublie. */
+/**
+ * Efface les brouillons de la personne courante — ou, avant que son identité soit relue, du
+ * dernier propriétaire gardé — puis l'oublie.
+ */
 export function clearOwnDrafts(): void {
-  if (owner) clearDraftsOf(owner);
+  const who = owner ?? rememberedOwner();
+  if (who) clearDraftsOf(who);
   owner = null;
+  removeDraft(DRAFT_OWNER_KEY);
 }
 
 /** Nettoyage au démarrage : tout brouillon de plus de 24 h ou illisible disparaît. */
