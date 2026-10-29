@@ -170,3 +170,89 @@ def test_the_preprod_stack_needs_no_admin_allow_list(tmp_path: Path) -> None:
         'COGES_ADMIN_ALLOWED_IPS="196.207.1.10 2001:db8::/48"', ""
     )
     assert _module().main([*_env(tmp_path, text), "--stack", "preprod"]) == 0
+
+
+# ------------------------------------------- porte de l'administration (ADR 0104)
+
+_TEAM = "coges.cloudflareaccess.com"
+_AUD = "a" * 64
+_TUNNEL = "t" * 120
+_CLOUDFLARE_ENV = _GOOD_ENV.replace(
+    'COGES_ADMIN_ALLOWED_IPS="196.207.1.10 2001:db8::/48"',
+    f"COGES_ADMIN_GATE=cloudflare\nCOGES_ADMIN_ALLOWED_IPS=\nCOGES_ACCESS_TEAM_DOMAIN={_TEAM}\n"
+    f"COGES_ACCESS_AUD={_AUD}\nCOGES_CLOUDFLARE_TUNNEL_TOKEN={_TUNNEL}",
+)
+
+
+def test_without_a_gate_the_admin_stays_behind_its_ip_list(tmp_path: Path) -> None:
+    """Un fichier d'avant ce lot (sans `COGES_ADMIN_GATE`) se lit comme le mode `ip`."""
+    assert "COGES_ADMIN_GATE" not in _GOOD_ENV
+    assert _module().main(_env(tmp_path, _GOOD_ENV)) == 0
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        _CLOUDFLARE_ENV,
+        # Filet facultatif : des adresses en plus de Cloudflare Access.
+        _CLOUDFLARE_ENV.replace("COGES_ADMIN_ALLOWED_IPS=", "COGES_ADMIN_ALLOWED_IPS=196.207.1.10"),
+        _GOOD_ENV.replace("COGES_STACK=production", "COGES_STACK=production\nCOGES_ADMIN_GATE=ip"),
+        # Secours par SSH : ni adresses ni Access.
+        _GOOD_ENV.replace("COGES_STACK=production", "COGES_ADMIN_GATE=ssh").replace(
+            'COGES_ADMIN_ALLOWED_IPS="196.207.1.10 2001:db8::/48"', ""
+        ),
+    ],
+    ids=["cloudflare", "cloudflare+ip", "ip", "ssh"],
+)
+def test_the_admin_gates_that_pass(tmp_path: Path, text: str) -> None:
+    assert _module().main(_env(tmp_path, text)) == 0
+
+
+@pytest.mark.parametrize(
+    ("text", "reason"),
+    [
+        (_CLOUDFLARE_ENV.replace("=cloudflare", "=ouvert"), "COGES_ADMIN_GATE vaut « ouvert »"),
+        (_CLOUDFLARE_ENV.replace("=cloudflare", "="), "COGES_ADMIN_GATE vaut «  »"),
+        (
+            _CLOUDFLARE_ENV.replace(
+                f"COGES_ACCESS_TEAM_DOMAIN={_TEAM}", "COGES_ACCESS_TEAM_DOMAIN="
+            ),
+            "COGES_ACCESS_TEAM_DOMAIN",
+        ),
+        (
+            _CLOUDFLARE_ENV.replace(_TEAM, "https://coges.cloudflareaccess.com"),
+            "COGES_ACCESS_TEAM_DOMAIN",
+        ),
+        (_CLOUDFLARE_ENV.replace(_TEAM, "coges.example.com"), "COGES_ACCESS_TEAM_DOMAIN"),
+        (_CLOUDFLARE_ENV.replace(_AUD, "abc"), "COGES_ACCESS_AUD"),
+        (_CLOUDFLARE_ENV.replace(_AUD, ""), "COGES_ACCESS_AUD"),
+        (_CLOUDFLARE_ENV.replace(_TUNNEL, ""), "COGES_CLOUDFLARE_TUNNEL_TOKEN"),
+        (_CLOUDFLARE_ENV.replace(_TUNNEL, "court"), "COGES_CLOUDFLARE_TUNNEL_TOKEN"),
+        (
+            _CLOUDFLARE_ENV.replace(
+                "COGES_ADMIN_ALLOWED_IPS=", "COGES_ADMIN_ALLOWED_IPS=0.0.0.0/0"
+            ),
+            "à tous",
+        ),
+        # Retour arrière à moitié fait : l'API exigerait un jeton qui n'arrive plus.
+        (
+            _CLOUDFLARE_ENV.replace("=cloudflare", "=ip").replace(
+                "COGES_ADMIN_ALLOWED_IPS=", "COGES_ADMIN_ALLOWED_IPS=196.207.1.10"
+            ),
+            "videz COGES_ACCESS_TEAM_DOMAIN",
+        ),
+        (_CLOUDFLARE_ENV.replace("=cloudflare", "=ssh"), "videz COGES_ACCESS_TEAM_DOMAIN"),
+        (
+            _GOOD_ENV.replace("COGES_STACK=production", "COGES_ADMIN_GATE=ip").replace(
+                'COGES_ADMIN_ALLOWED_IPS="196.207.1.10 2001:db8::/48"', ""
+            ),
+            "ALLOWED_IPS est vide",
+        ),
+    ],
+    ids=lambda value: value if len(value) < 60 else "",
+)
+def test_the_admin_gates_that_are_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], text: str, reason: str
+) -> None:
+    assert _module().main(_env(tmp_path, text)) == 1
+    assert reason in capsys.readouterr().err

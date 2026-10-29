@@ -103,6 +103,15 @@ DOMAIN=$(env_value COGES_DOMAIN)
 REGISTRY=$(env_value COGES_IMAGE_REGISTRY)
 REGISTRY=${REGISTRY:-$REGISTRY_DEFAULT}
 
+# Porte de l'administration (ADR 0104) : en mode `cloudflare`, le conteneur cloudflared
+# (profil `tunnel`) démarre avec la pile de production. Les guillemets sont tolérés.
+ADMIN_GATE=$(env_value COGES_ADMIN_GATE | tr -d "\"'")
+TUNNEL=0
+if [[ "$STACK" == production && "$ADMIN_GATE" == cloudflare ]]; then
+  TUNNEL=1
+  PROFILE+=(--profile tunnel)
+fi
+
 mkdir -p "$STATE_DIR" "$RELEASES_DIR"
 CURRENT_FILE="$STATE_DIR/$STACK.version"
 PREVIOUS_FILE="$STATE_DIR/$STACK.previous"
@@ -195,6 +204,11 @@ start() {
   # Une version est immuable : une image déjà présente n'est pas retéléchargée.
   compose "$version" pull --quiet --policy missing || return 1
   compose "$version" up -d --remove-orphans || return 1
+  # Hors du mode `cloudflare`, un tunnel resté allumé (retour arrière, secours) n'est pas
+  # arrêté par `up` : son profil n'est pas actif, ce n'est donc pas un « orphelin ».
+  if [[ "$STACK" == production && "$TUNNEL" == 0 ]]; then
+    compose "$version" --profile tunnel rm --stop --force cloudflared >/dev/null || return 1
+  fi
 }
 
 prune_images() {

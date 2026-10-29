@@ -1,0 +1,39 @@
+# Administration derrière Cloudflare Access (ADR 0104), COGES_ADMIN_GATE=cloudflare.
+#
+# Aucun site admin.<domaine> sur les ports publics : 443 refuse la poignée TLS pour ce
+# nom. Le seul chemin est le tunnel : Cloudflare (Access : code par e-mail) → conteneur
+# cloudflared (connexion sortante) → ce port 8081, jamais publié, sur le réseau `tunnel`.
+# Deux contrôles du jeton Cf-Access-Jwt-Assertion, par le même code de l'API :
+#   • les pages : `forward_auth` demande /api/v1/platform/access (204, sinon 403) ;
+#   • l'API de la plateforme : son middleware revérifie chaque requête.
+# COGES_ADMIN_ALLOWED_IPS, facultative ici, filtre en plus l'adresse réelle du client
+# (CF-Connecting-IP). Le compose la transmet en COGES_ADMIN_TUNNEL_IPS, « 0.0.0.0/0 ::/0 »
+# quand elle est vide : Caddy ne prend pas la valeur par défaut d'une variable vide, et un
+# `client_ip` sans plage ne laisserait passer personne.
+http://:8081 {
+	import securite
+	header X-Robots-Tag "noindex, nofollow"
+	request_body {
+		max_size 1MB
+	}
+	@admin_allowed client_ip {$COGES_ADMIN_TUNNEL_IPS}
+	handle @admin_allowed {
+		handle /api/v1/platform/* {
+			reverse_proxy production-api:8000
+		}
+		# Les routes commerçantes ne passent pas par ici.
+		handle /api/v1/* {
+			respond 404
+		}
+		handle {
+			forward_auth production-api:8000 {
+				uri /api/v1/platform/access
+			}
+			reverse_proxy production-admin:3000
+		}
+	}
+	handle {
+		respond "Accès refusé." 403
+	}
+	import maintenance
+}

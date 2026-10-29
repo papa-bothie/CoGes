@@ -13,7 +13,9 @@ Sources contrôlées :
    (`/etc/coges/coges.env`, ADR 0083). Il doit en plus : désigner Neon en
    `sslmode=require` pour chaque DSN, garder Redis sur le réseau interne (aucune URL
    Redis vers l'extérieur), donner un domaine public servi en HTTPS (nom d'hôte nu,
-   jamais `http://`) et des secrets assez longs (JWT et Redis, 32 caractères au moins).
+   jamais `http://`), des secrets assez longs (JWT et Redis, 32 caractères au moins) et
+   une administration protégée (Cloudflare Access, liste d'adresses ou secours SSH,
+   ADR 0104).
 
 `deploy.sh` le lance avant chaque démarrage sur le VPS ; la CI, sur les fichiers versionnés.
 
@@ -54,6 +56,13 @@ HOSTNAME = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-
 #: Hôtes Redis du réseau Docker interne.
 INTERNAL_REDIS_HOSTS = frozenset({"redis"})
 MIN_SECRET_LENGTH = 32
+#: Porte de l'administration (ADR 0104).
+ADMIN_GATES = frozenset({"cloudflare", "ip", "ssh"})
+ACCESS_TEAM_DOMAIN = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com")
+ACCESS_AUD = re.compile(r"[0-9a-f]{64}")
+#: Le jeton d'un tunnel est du JSON en base64 (compte, tunnel, secret) : bien plus long.
+TUNNEL_TOKEN = re.compile(r"[A-Za-z0-9+/=_-]+")
+MIN_TUNNEL_TOKEN_LENGTH = 100
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_COMPOSES = (
@@ -117,6 +126,66 @@ def read_env_file(text: str) -> list[tuple[str, str]]:
     return pairs
 
 
+def _allowed_ips_violations(entries: list[str], *, source: str) -> list[str]:
+    """Une entrée illisible, Caddy refuserait de démarrer ; `0.0.0.0/0` ouvrirait à tous."""
+    found: list[str] = []
+    for entry in entries:
+        try:
+            network = ipaddress.ip_network(entry, strict=False)
+        except ValueError:
+            found.append(f"{source} : COGES_ADMIN_ALLOWED_IPS contient « {entry} », illisible")
+            continue
+        if network.prefixlen == 0:
+            found.append(f"{source} : COGES_ADMIN_ALLOWED_IPS ouvre l'administration à tous")
+    return found
+
+
+def admin_gate_violations(values: dict[str, str], *, source: str) -> list[str]:
+    """La porte de l'administration (ADR 0104) : jamais une admin sans protection.
+
+    * `cloudflare` : Cloudflare Access par le tunnel, configuration complète ; les adresses
+      deviennent un filet facultatif ;
+    * `ip` (aussi quand la variable manque, fichiers d'avant ce lot) : liste d'adresses
+      obligatoire, comme à l'ADR 0089 ;
+    * `ssh` : secours, servi sur le seul port local du VPS (tunnel SSH).
+    Hors `cloudflare`, les variables d'Access doivent être vides : l'API exigerait un
+    jeton que plus rien n'apporte, et l'administration resterait fermée.
+    """
+    found: list[str] = []
+    gate = values.get("COGES_ADMIN_GATE", "ip")
+    allowed = values.get("COGES_ADMIN_ALLOWED_IPS", "").split()
+    if gate not in ADMIN_GATES:
+        return [f"{source} : COGES_ADMIN_GATE vaut « {gate} » (cloudflare, ip ou ssh)"]
+
+    if gate == "cloudflare":
+        team = values.get("COGES_ACCESS_TEAM_DOMAIN", "")
+        if not ACCESS_TEAM_DOMAIN.fullmatch(team):
+            found.append(
+                f"{source} : COGES_ACCESS_TEAM_DOMAIN doit être <équipe>.cloudflareaccess.com"
+            )
+        if not ACCESS_AUD.fullmatch(values.get("COGES_ACCESS_AUD", "")):
+            found.append(f"{source} : COGES_ACCESS_AUD compte 64 caractères hexadécimaux")
+        tunnel = values.get("COGES_CLOUDFLARE_TUNNEL_TOKEN", "")
+        if len(tunnel) < MIN_TUNNEL_TOKEN_LENGTH or not TUNNEL_TOKEN.fullmatch(tunnel):
+            found.append(
+                f"{source} : COGES_CLOUDFLARE_TUNNEL_TOKEN manque ou ne ressemble pas au jeton "
+                "du tunnel (tableau de bord Zero Trust)"
+            )
+    else:
+        for key in ("COGES_ACCESS_TEAM_DOMAIN", "COGES_ACCESS_AUD"):
+            if values.get(key):
+                found.append(
+                    f"{source} : COGES_ADMIN_GATE={gate} : videz {key} (l'API exigerait "
+                    "un jeton Cloudflare qui n'arrive plus)"
+                )
+        if gate == "ip" and not allowed:
+            found.append(f"{source} : COGES_ADMIN_ALLOWED_IPS est vide")
+
+    if gate != "ssh":
+        found += _allowed_ips_violations(allowed, source=source)
+    return found
+
+
 def vps_violations(
     pairs: list[tuple[str, str]], *, source: str, stack: str | None = None
 ) -> list[str]:
@@ -157,21 +226,9 @@ def vps_violations(
     elif not HOSTNAME.match(domain):
         found.append(f"{source} : COGES_DOMAIN invalide ou vide")
 
-    # Le sous-domaine de l'administration n'est ouvert qu'à ces adresses (ADR 0089) :
-    # vide, Caddy refuserait tout le monde ; une entrée illisible, Caddy refuserait de
-    # démarrer. `0.0.0.0/0` ouvrirait l'administration au monde entier.
     # Seule la production sert l'administration : la préprod n'en a pas besoin.
-    allowed = values.get("COGES_ADMIN_ALLOWED_IPS", "").split()
-    if not allowed and (declared or stack) != "preprod":
-        found.append(f"{source} : COGES_ADMIN_ALLOWED_IPS est vide")
-    for entry in allowed:
-        try:
-            network = ipaddress.ip_network(entry, strict=False)
-        except ValueError:
-            found.append(f"{source} : COGES_ADMIN_ALLOWED_IPS contient « {entry} », illisible")
-            continue
-        if network.prefixlen == 0:
-            found.append(f"{source} : COGES_ADMIN_ALLOWED_IPS ouvre l'administration à tous")
+    if (declared or stack) != "preprod":
+        found += admin_gate_violations(values, source=source)
 
     for key in ("COGES_JWT_SECRET", "COGES_REDIS_PASSWORD"):
         if len(values.get(key, "")) < MIN_SECRET_LENGTH:
