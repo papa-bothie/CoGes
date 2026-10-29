@@ -21,6 +21,11 @@ class RoleRepository(TenantRepository[Role]):
     def _ordered(self) -> Select[tuple[Role]]:
         return self._select().order_by(Role.name)
 
+    def get_for_update(self, role_id: UUID) -> Role | None:
+        """Le rôle, verrouillé jusqu'à la fin de la transaction (grille, ADR 0103)."""
+        stmt = self._select().where(Role.id == role_id).with_for_update()
+        return self.session.execute(stmt).scalar_one_or_none()
+
     def get_by_name(self, name: str) -> Role | None:
         return self.session.execute(self._select().where(Role.name == name)).scalar_one_or_none()
 

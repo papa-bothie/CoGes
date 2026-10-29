@@ -53,8 +53,18 @@ export function RightsView() {
         (grid) =>
           grid && {
             ...grid,
+            // Une ligne touchée n'est plus « en partie » : un appui la complète, un second la
+            // retire entière (ADR 0103).
             roles: grid.roles.map((item) =>
-              item.role_id === role.role_id ? { ...item, abilities } : item,
+              item.role_id === role.role_id
+                ? {
+                    ...item,
+                    abilities,
+                    partial: item.partial.filter(
+                      (key) => abilities.includes(key) === role.abilities.includes(key),
+                    ),
+                  }
+                : item,
             ),
           },
       );
@@ -64,7 +74,18 @@ export function RightsView() {
       if (context?.previous) queryClient.setQueryData(queryKeys.roles.abilities, context.previous);
       toast.error(errorMessage(error));
     },
-    onSuccess: () => toast.success(t.saved),
+    onSuccess: (saved) => {
+      // Ce que le serveur a vraiment réglé, sans attendre la relecture de la grille.
+      queryClient.setQueryData<Grid>(
+        queryKeys.roles.abilities,
+        (grid) =>
+          grid && {
+            ...grid,
+            roles: grid.roles.map((item) => (item.role_id === saved.role_id ? saved : item)),
+          },
+      );
+      toast.success(t.saved);
+    },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.roles.abilities });
       void queryClient.invalidateQueries({ queryKey: queryKeys.roles.all });

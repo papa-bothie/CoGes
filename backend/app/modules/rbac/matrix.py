@@ -9,7 +9,9 @@ la liste ci-dessous, et rien d'autre.
 Arbitrages consignés dans l'ADR :
 
 * le vendeur **confirme** une vente et encaisse — c'est la caisse — mais n'annule
-  jamais : une annulation touche à la fois le stock, la finance et la dette ;
+  jamais : une annulation touche à la fois le stock, la finance et la dette. Il
+  encaisse **par la confirmation** (`sales:confirm`) : `payments:create`, la saisie
+  d'un paiement à la main, n'est pas à lui (ADR 0103) ;
 * l'ajustement manuel de stock (`inventory:update`) est réservé au gérant : c'est la
   seule écriture de stock qui ne vient pas d'un flux métier ;
 * le comptable ne confirme aucune vente et ne touche pas au stock ;
@@ -54,7 +56,6 @@ SALESPERSON_PERMISSIONS: Final[frozenset[str]] = frozenset(
         "sale_returns:create",
         "inventory:read",
         "payments:read",
-        "payments:create",
         "dashboard:read",
         "notifications:read",
         "notifications:update",
@@ -116,8 +117,11 @@ SYSTEM_ROLES: Final[dict[str, frozenset[str] | None]] = {
 #: ligne = un geste du commerçant, cochée pour un rôle quand il porte **toutes** ses
 #: permissions. Tout droit du catalogue, sauf `users:` et `roles:`, appartient à au moins
 #: une ligne (test-registre) ; le vendeur et le comptable par défaut sont exactement une
-#: somme de lignes. Les lignes partagent parfois un droit (`inventory:create`) : décocher
-#: l'une le garde tant qu'une autre cochée le demande.
+#: somme de lignes. Les lignes partagent parfois un droit (`debts:create`, `debts:read`,
+#: `payments:read`) : décocher l'une le garde tant qu'une autre **cochée** le demande, jamais
+#: pour une ligne seulement « en partie » (ADR 0103). « Vendre » ne donne pas
+#: `payments:create` : la caisse encaisse par la confirmation ; « Encaisser une dette »
+#: le donne, borné à l'encaissement de dettes client (`finance.record_manual_payment`).
 ABILITIES: Final[dict[str, tuple[str, frozenset[str]]]] = {
     "base": (
         "Recevoir ses alertes et voir l’accueil",
@@ -145,7 +149,6 @@ ABILITIES: Final[dict[str, tuple[str, frozenset[str]]]] = {
                 "sales:create",
                 "sales:update",
                 "sales:confirm",
-                "payments:create",
                 "payments:read",
                 "customers:create",
                 "customers:update",

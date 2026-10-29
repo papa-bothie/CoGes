@@ -821,7 +821,7 @@
           "rbac"
         ],
         "summary": "Read Abilities",
-        "description": "Grille « Qui peut faire quoi » (ADR 0075) : 8 lignes, gérant, vendeur, comptable.",
+        "description": "Grille « Qui peut faire quoi » (ADR 0075, 0099) : 14 lignes, gérant, vendeur, comptable.",
         "operationId": "read_abilities_api_v1_roles_abilities_get",
         "responses": {
           "200": {
@@ -3719,7 +3719,7 @@
           "payments"
         ],
         "summary": "Create Payment",
-        "description": "Encaisse ou décaisse, et impute sur une ou plusieurs dettes (Diagramme 5).\n\nLe sur-paiement est refusé : ni au-delà du versement (422), ni au-delà du solde\nd'une dette (409). Aucun avoir ni solde créditeur en V1 — le trop-perçu se\nrègle en rendant l'argent, pas en le gardant.",
+        "description": "Encaisse ou décaisse, et impute sur une ou plusieurs dettes (Diagramme 5).\n\nLe sur-paiement est refusé : ni au-delà du versement (422), ni au-delà du solde\nd'une dette (409). Aucun avoir ni solde créditeur en V1 — le trop-perçu se\nrègle en rendant l'argent, pas en le gardant. Sans `payments:update`, seul un\nencaissement de dettes client est accepté (403, ADR 0103).",
         "operationId": "create_payment_api_v1_payments_post",
         "requestBody": {
           "required": true,

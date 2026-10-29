@@ -373,7 +373,7 @@ def _partial(codes: set[str]) -> list[str]:
     """Lignes « en partie » : le rôle en porte certains droits, pas tous (ADR 0099).
 
     Un droit partagé avec une ligne cochée ne compte pas : « Encaisser une dette »
-    n'est pas en partie parce que « Vendre » donne `payments:create`.
+    n'est pas en partie parce que « Voir l'argent » donne `debts:read`.
     """
     full = set().union(*(ABILITIES[key][1] for key in _checked(codes)))
     return [
@@ -424,13 +424,18 @@ def set_role_abilities(
     """Coche exactement ces lignes pour un rôle ; ses droits hors grille ne bougent pas.
 
     Nouvelle matrice = (droits actuels − droits de toutes les lignes) ∪ droits des
-    lignes cochées ∪ droits déjà portés des lignes « en partie » non cochées : une
-    ligne incomplète garde ce qu'elle a tant que le gérant n'y touche pas, et à l'écran
-    on la coche d'abord, puis on la décoche entière (ADR 0099). Le gérant est refusé
-    (409) ; une ligne verrouillée garde l'état qu'elle avait. Audit critique, comme
-    toute modification de rôle.
+    lignes cochées ∪ droits déjà portés des lignes « en partie » non cochées, **moins**
+    ceux des lignes que l'on décoche : une ligne incomplète garde ce qu'elle a tant que
+    le gérant n'y touche pas, et à l'écran on la coche d'abord, puis on la décoche
+    entière (ADR 0099) — un droit partagé avec une ligne « en partie » part aussi, sans
+    quoi le second appui laisserait la ligne « en partie » (ADR 0103). Aucun droit n'est
+    jamais ajouté qu'une ligne cochée ne demande. Le gérant est refusé (409) ; une ligne
+    verrouillée garde l'état qu'elle avait. Le rôle est verrouillé : deux enregistrements
+    simultanés se suivent. Audit critique, comme toute modification de rôle.
     """
-    role = get_role(session, ctx, role_id)
+    role = RoleRepository(session, ctx).get_for_update(role_id)
+    if role is None:
+        raise NotFoundError("Rôle introuvable.")
     if role.name == MANAGER and role.is_system:
         raise RoleLockedError()
     wanted = set(abilities)
@@ -451,10 +456,12 @@ def set_role_abilities(
 
     grid = set().union(*(needed for _, needed in ABILITIES.values()))
     after = (before - grid).union(*(ABILITIES[key][1] for key in wanted))
+    # Les droits des lignes décochées partent, sauf ceux qu'une ligne cochée demande.
+    dropped = set().union(*(ABILITIES[key][1] for key in previously - wanted))
     # Une ligne verrouillée non cochée, ou « en partie » et laissée telle quelle, garde
-    # ses droits partiels.
+    # ses droits partiels — hors ceux d'une ligne que l'on vient de décocher.
     for key in (LOCKED_ABILITIES | set(_partial(before))) - wanted:
-        after |= before & ABILITIES[key][1]
+        after |= (before & ABILITIES[key][1]) - dropped
     if after != before:
         links.replace(role_id, _resolve_permission_ids(session, sorted(after)))
         session.flush()
