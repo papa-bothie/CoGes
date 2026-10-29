@@ -355,3 +355,66 @@ def test_the_preprod_never_touches_the_tunnel(tmp_path: Path) -> None:
     result = _run(env, "preprod", "v1.0.0")
     assert result.returncode == 0, result.stdout + result.stderr
     assert not any("tunnel" in line for line in _compose_lines(tmp_path))
+
+
+# ------------------------- retour impossible : la précédente refuse le fichier (3cafc49)
+
+_REFUSING_CHECK = """import sys
+print("REFUS — coges.env : COGES_ADMIN_ALLOWED_IPS est vide", file=sys.stderr)
+sys.exit(1)
+"""
+
+
+def _refusing(tmp_path: Path, version: str) -> None:
+    """Une version d'avant le changement du fichier de secrets : son contrôle le refuse."""
+    release = tmp_path / "opt" / "releases" / version / "check_runtime_env.py"
+    release.write_text(_REFUSING_CHECK, encoding="utf-8")
+
+
+def test_when_the_previous_version_refuses_the_env_file_deploy_says_what_to_do(
+    tmp_path: Path,
+) -> None:
+    env = _stage(
+        tmp_path, stack="production", env_stack="production", versions=("v1.0.0", "v1.1.0")
+    )
+    (tmp_path / "log").mkdir()
+    _state(tmp_path, "production", "v1.0.0", previous="v0.9.0")
+    _refusing(tmp_path, "v1.0.0")
+    env["FAKE_BROKEN"] = "v1.1.0"
+
+    result = _run(env, "production", "v1.1.0")
+
+    out = result.stdout + result.stderr
+    assert result.returncode == 1
+    # Prévenu avant de commencer, puis la raison, l'état réel et les deux issues.
+    assert "pas de retour automatique possible" in out
+    assert "COGES_ADMIN_ALLOWED_IPS est vide" in out
+    assert "RETOUR IMPOSSIBLE" in out
+    assert "tourne sur v1.1.0" in out
+    assert "deploy.sh production v1.1.0" in out
+    assert "deploy.sh production v1.0.0" in out
+    assert "pas « rollback »" in out
+    # Le même texte dans le journal, et aucun `up` de v1.0.0 tenté pour rien.
+    journal = (tmp_path / "log" / "deploy.log").read_text(encoding="utf-8")
+    assert "RETOUR IMPOSSIBLE" in journal and "deploy.sh production v1.0.0" in journal
+    ups = [line for line in _compose_lines(tmp_path) if " up " in line]
+    assert ups and all("TAG=v1.1.0" in line for line in ups)
+    # L'état ne bouge pas : la version courante connue reste v1.0.0.
+    state = tmp_path / "opt" / "state"
+    assert (state / "production.version").read_text().strip() == "v1.0.0"
+
+
+def test_an_env_file_refused_by_the_new_version_changes_nothing(tmp_path: Path) -> None:
+    env = _stage(
+        tmp_path, stack="production", env_stack="production", versions=("v1.0.0", "v1.1.0")
+    )
+    _state(tmp_path, "production", "v1.0.0")
+    _refusing(tmp_path, "v1.1.0")
+
+    result = _run(env, "production", "v1.1.0")
+
+    out = result.stdout + result.stderr
+    assert result.returncode == 1
+    assert "COGES_ADMIN_ALLOWED_IPS est vide" in out
+    assert "rien n'a été changé" in out
+    assert not any(" up " in line for line in _compose_lines(tmp_path))
