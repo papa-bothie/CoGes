@@ -112,3 +112,32 @@ def test_no_postgres_version_is_hardcoded_in_workflows() -> None:
         assert not re.search(r"image: postgres:\d", text), f"{name} : image figée en dur"
     backup = (WORKFLOWS / "backup.yml").read_text(encoding="utf-8")
     assert 'install_pg_client.sh "$PG_CLIENT_MAJOR"' in backup
+
+
+# ------------------------------- les images importent leur point d'entrée (3cafc49)
+
+
+@pytest.mark.parametrize("kind", ["api", "worker"])
+def test_ci_runs_each_backend_image_before_trusting_it(kind: str) -> None:
+    steps = _load("ci.yml")["jobs"]["vps"]["steps"]
+    builds = [step for step in steps if f"Dockerfile.{kind}" in str(step.get("with", {}))]
+    assert builds and all(step["with"].get("load") is True for step in builds)
+    checks = "\n".join(str(step.get("run", "")) for step in steps)
+    assert f"check_image_imports.sh {kind} coges/{kind}:ci" in checks
+
+
+@pytest.mark.parametrize("kind", ["api", "worker"])
+def test_no_backend_image_is_pushed_before_it_imports_its_entry_point(kind: str) -> None:
+    steps = _load("deploy.yml")["jobs"]["images"]["steps"]
+    check = next(
+        index
+        for index, step in enumerate(steps)
+        if f'check_image_imports.sh" {kind} ' in str(step.get("run", ""))
+    )
+    push = next(
+        index
+        for index, step in enumerate(steps)
+        if f"Dockerfile.{kind}" in str(step.get("with", {})) and step["with"].get("push")
+    )
+    assert check < push
+    assert steps[check]["if"] == steps[push]["if"] == f"steps.decide.outputs.{kind} == 'build'"

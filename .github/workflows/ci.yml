@@ -148,12 +148,19 @@ jobs:
       - name: Image administration
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with: { context: frontend-admin, push: false, cache-from: "type=gha,scope=admin", cache-to: "type=gha,mode=max,scope=admin" }
+      # `load` : l'image est gardée dans Docker pour être lancée juste après.
       - name: Image API
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with: { context: backend, file: backend/Dockerfile.api, push: false, cache-from: "type=gha,scope=api", cache-to: "type=gha,mode=max,scope=api" }
+        with: { context: backend, file: backend/Dockerfile.api, push: false, load: true, tags: "coges/api:ci", cache-from: "type=gha,scope=api", cache-to: "type=gha,mode=max,scope=api" }
       - name: Image worker
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
-        with: { context: backend, file: backend/Dockerfile.worker, push: false, cache-from: "type=gha,scope=worker", cache-to: "type=gha,mode=max,scope=worker" }
+        with: { context: backend, file: backend/Dockerfile.worker, push: false, load: true, tags: "coges/worker:ci", cache-from: "type=gha,scope=worker", cache-to: "type=gha,mode=max,scope=worker" }
+      # Chaque image importe son point d'entrée : un paquet du seul groupe `dev` importé
+      # par app/ (httpx, 3cafc49) cassait la production au démarrage, tests verts.
+      - name: Les images API et worker importent leur point d'entrée
+        run: |
+          deploy/scripts/check_image_imports.sh api coges/api:ci
+          deploy/scripts/check_image_imports.sh worker coges/worker:ci
       - name: Bundle de déploiement
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with: { context: ., file: deploy/vps/Dockerfile.bundle, push: false }
