@@ -84,3 +84,11 @@ cache suit l'étiquette, l'ancien est supprimé à l'activation), au besoin avec
 - Non automatisé : la bascule réelle entre deux builds sur un téléphone (deux builds successifs) ;
   elle est couverte par les tests du gestionnaire et par la vérification du propriétaire (prompt 29,
   « Ce que le propriétaire fait lui-même », point 3). Lighthouse n'a pas été rejoué pour ce lot.
+
+## Corrections
+- **2026-10-29, prompt 32, bloc B (ADR 0103)** : un onglet dont un autre a activé la version se
+  recharge au moment sûr suivant (`controllerchange`) ; drapeaux posés au rechargement effectif ;
+  bannière après 3 refus en 426 ou 2 minutes ; moment sûr revérifié juste avant de recharger ;
+  fichier manquant rattrapé par `error.tsx` / `global-error.tsx` (il n'atteint jamais
+  `window.onerror`), gestionnaire actif même sans service worker ; rechargement de Next lié à
+  `deploymentId` vérifié : seulement à une navigation.

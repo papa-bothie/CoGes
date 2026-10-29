@@ -15,6 +15,12 @@
 export const BACKGROUND_MS = 5 * 60 * 1000;
 export const IDLE_MS = 24 * 60 * 60 * 1000;
 export const CHECK_EVERY_MS = 6 * 60 * 60 * 1000;
+/**
+ * Version refusée (426) sans moment sûr pour recharger : passé ce nombre de refus, ou ce délai,
+ * la bannière s'affiche — sans recharger d'office (une saisie est peut-être en cours).
+ */
+export const OUTDATED_REFUSALS = 3;
+export const OUTDATED_PATIENCE_MS = 2 * 60 * 1000;
 
 const RELOADED_FOR_OUTDATED = "coges:pwa:reloaded-outdated";
 const RELOADED_FOR_CHUNK = "coges:pwa:reloaded-chunk";
@@ -44,7 +50,16 @@ export class UpdateManager {
   private hiddenAt: number | null = null;
   /** Rechargement voulu sans worker en attente (fichier manquant, version refusée). */
   private reloadWanted: Trigger | null = null;
+  /**
+   * La nouvelle version contrôle déjà la page (activée ici, ou par un autre onglet) : il ne
+   * reste qu'à recharger au prochain moment sûr.
+   */
+  private stale = false;
+  private outdatedSince: number | null = null;
+  private refusals = 0;
   private busy = false;
+  /** Rechargement lancé : plus rien à faire dans cette page. */
+  private reloading = false;
 
   constructor(private readonly deps: UpdateDeps) {}
 
@@ -53,8 +68,14 @@ export class UpdateManager {
     this.waitingSince ??= this.deps.now();
   }
 
+  /** Le worker qui contrôle la page a changé : elle tourne sur une version plus ancienne. */
+  controllerChanged(): void {
+    this.stale = true;
+    this.waitingSince ??= this.deps.now();
+  }
+
   hasWaiting(): boolean {
-    return this.waitingSince !== null;
+    return this.waitingSince !== null || this.stale;
   }
 
   pageHidden(): void {
@@ -75,19 +96,31 @@ export class UpdateManager {
       if (waited < IDLE_MS && this.reloadWanted === null) return Promise.resolve(false);
     }
     if (!this.hasWaiting() && this.reloadWanted === null) return Promise.resolve(false);
-    if (this.busy || !isSafeMoment(this.deps)) return Promise.resolve(false);
+    if (this.busy || this.reloading || !isSafeMoment(this.deps)) return Promise.resolve(false);
     return this.apply();
   }
 
   /** Le serveur refuse cette version (426 `front_outdated`). */
-  outdated(): Promise<boolean> {
+  async outdated(): Promise<boolean> {
     // Déjà rechargé pour cette raison et toujours refusé : seul le dernier recours reste.
     if (this.deps.session?.getItem(RELOADED_FOR_OUTDATED)) {
       this.deps.showOutdated();
-      return Promise.resolve(false);
+      return false;
     }
     this.reloadWanted = "outdated";
-    return this.consider("outdated");
+    this.refusals += 1;
+    this.outdatedSince ??= this.deps.now();
+    const reloaded = await this.consider("outdated");
+    // Jamais de moment sûr (saisie, vente) alors que tout est refusé : la personne doit le
+    // savoir, et choisir elle-même de recharger.
+    if (
+      !reloaded &&
+      (this.refusals >= OUTDATED_REFUSALS ||
+        this.deps.now() - this.outdatedSince >= OUTDATED_PATIENCE_MS)
+    ) {
+      this.deps.showOutdated();
+    }
+    return reloaded;
   }
 
   /** Un fichier de l'application n'a pas pu être chargé : un seul rechargement propre. */
@@ -105,12 +138,19 @@ export class UpdateManager {
   private async apply(): Promise<boolean> {
     this.busy = true;
     try {
+      if (this.waitingSince !== null && !this.stale) {
+        const ready = await this.deps.activateWaiting();
+        // Plus de worker en attente : un autre onglet l'a peut-être activé entre-temps.
+        if (!ready && !this.stale) return false;
+        this.stale = true;
+      }
+      // L'activation a pu prendre jusqu'à 5 s : une vente ou une saisie a pu commencer.
+      if (!isSafeMoment(this.deps)) return false;
+      // Les drapeaux ne sont posés qu'au rechargement effectif : un échec en route laisse la
+      // page suivante réessayer.
       if (this.reloadWanted === "outdated") this.deps.session?.setItem(RELOADED_FOR_OUTDATED, "1");
       if (this.reloadWanted === "chunk") this.deps.session?.setItem(RELOADED_FOR_CHUNK, "1");
-      if (this.hasWaiting()) {
-        const ready = await this.deps.activateWaiting();
-        if (!ready) return false;
-      }
+      this.reloading = true;
       this.deps.reload();
       return true;
     } finally {
@@ -119,17 +159,32 @@ export class UpdateManager {
   }
 }
 
-/** Reconnaît l'échec de chargement d'un fichier de l'application (anciens fichiers retirés). */
-export function isChunkLoadError(reason: unknown): boolean {
-  const text =
-    reason instanceof Error
-      ? `${reason.name} ${reason.message}`
-      : typeof reason === "string"
-        ? reason
-        : "";
-  return /ChunkLoadError|Loading chunk [\w-]+ failed|Failed to fetch dynamically imported module|Importing a module script failed/i.test(
-    text,
-  );
+const CHUNK_FAILURE =
+  /ChunkLoadError|Loading chunk [\w-]+ failed|Failed to load chunk|Failed to fetch dynamically imported module|Importing a module script failed/i;
+
+/**
+ * Reconnaît l'échec de chargement d'un fichier de l'application (anciens fichiers retirés) :
+ * webpack (« Loading chunk 12 failed »), Turbopack de Next 16 (`ChunkLoadError`, « Failed to
+ * load chunk … from module … »), import dynamique du navigateur ; erreur, objet ou texte, et
+ * jusque dans sa cause.
+ */
+export function isChunkLoadError(reason: unknown, depth = 0): boolean {
+  if (typeof reason === "string") return CHUNK_FAILURE.test(reason);
+  if (!reason || typeof reason !== "object" || depth > 3) return false;
+  const { name, message, cause } = reason as { name?: unknown; message?: unknown; cause?: unknown };
+  const text = `${typeof name === "string" ? name : ""} ${typeof message === "string" ? message : ""}`;
+  return CHUNK_FAILURE.test(text) || isChunkLoadError(cause, depth + 1);
+}
+
+/**
+ * Sans gestionnaire (erreur dans la mise en page racine, qui l'a démonté) : un seul
+ * rechargement par session pour un fichier manquant. Les saisies sont déjà en brouillon.
+ */
+export function reloadOnceForChunk(session: UpdateDeps["session"], reload: () => void): boolean {
+  if (!session || session.getItem(RELOADED_FOR_CHUNK)) return false;
+  session.setItem(RELOADED_FOR_CHUNK, "1");
+  reload();
+  return true;
 }
 
 export function outdatedFlagCleared(session: UpdateDeps["session"]): void {
