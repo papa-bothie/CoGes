@@ -2,7 +2,10 @@
 
 import "./globals.css";
 
+import { useEffect } from "react";
+
 import { IncidentScreen } from "@/components/incident-screen";
+import { reportRenderError } from "@/lib/pwa/register";
 
 /**
  * Erreur dans la mise en page racine (ADR 0085) : ce fichier remplace tout le document,
@@ -15,6 +18,7 @@ export default function GlobalError({
   error: Error & { digest?: string };
   retry: () => void;
 }) {
+  useEffect(() => reportRenderError(error), [error]);
   return (
     <html lang="fr">
       <body>
