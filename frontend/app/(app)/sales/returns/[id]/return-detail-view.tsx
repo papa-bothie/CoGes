@@ -213,6 +213,11 @@ export function ReturnDetailView({ returnId }: { returnId: string }) {
               <Row label={labels.returns.refunded}>
                 <Money value={data.refunded_total} currency={currency} />
               </Row>
+              {compareDecimal(data.waived_total, "0") === 1 && (
+                <Row label={labels.returns.waived}>
+                  <Money value={data.waived_total} currency={currency} />
+                </Row>
+              )}
               <div className="flex items-baseline justify-between border-t pt-3">
                 <span className="font-semibold">{labels.returns.refundDue}</span>
                 <Money value={data.refund_due} currency={currency} className="text-figure-sm" />

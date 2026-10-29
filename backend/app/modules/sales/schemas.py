@@ -428,8 +428,10 @@ class SaleReturnRead(BaseModel):
     returned_at: datetime
     total_refund: Amount
     refunded_total: Amount
+    #: Soldé sans argent : la part d'une dette abandonnée, que le client n'a jamais versée.
+    waived_total: Amount
     refund_status: RefundStatus
-    #: Reste à rembourser. Dérivé : `total_refund - refunded_total`.
+    #: Reste à rembourser. Dérivé : `total_refund - refunded_total - waived_total`.
     refund_due: Amount
     created_at: datetime
 
