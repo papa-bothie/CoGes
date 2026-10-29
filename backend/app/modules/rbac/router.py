@@ -68,7 +68,7 @@ def create_role(
 def read_abilities(
     tenant: Annotated[TenantSession, Depends(require_permission("roles:read"))],
 ) -> AbilityGrid:
-    """Grille « Qui peut faire quoi » (ADR 0075) : 8 lignes, gérant, vendeur, comptable."""
+    """Grille « Qui peut faire quoi » (ADR 0075, 0099) : 14 lignes, gérant, vendeur, comptable."""
     return service.ability_grid(tenant.session, tenant.ctx)
 
 

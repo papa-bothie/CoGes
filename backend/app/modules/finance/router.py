@@ -95,7 +95,8 @@ def create_payment(
 
     Le sur-paiement est refusé : ni au-delà du versement (422), ni au-delà du solde
     d'une dette (409). Aucun avoir ni solde créditeur en V1 — le trop-perçu se
-    règle en rendant l'argent, pas en le gardant.
+    règle en rendant l'argent, pas en le gardant. Sans `payments:update`, seul un
+    encaissement de dettes client est accepté (403, ADR 0103).
     """
     replay = idempotency.reserve(
         tenant.session,
@@ -107,7 +108,7 @@ def create_payment(
     if replay is not None:
         return idempotency.replay_response(replay)
 
-    payment = service.record_payment(
+    payment = service.record_manual_payment(
         tenant.session, tenant.ctx, payload, ip_address=client_ip(request)
     )
     allocations = service.allocations_of_payments(tenant.session, tenant.ctx, [payment.id])

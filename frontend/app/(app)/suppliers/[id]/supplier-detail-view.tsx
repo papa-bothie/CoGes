@@ -39,7 +39,10 @@ export function SupplierDetailView({ supplierId }: { supplierId: string }) {
   const { timeZone, currency } = useCompanyLocale();
   const money = usePermission("debts:read");
   const canReadPayments = usePermission("payments:read");
-  const canPay = usePermission("payments:create");
+  // Payer un fournisseur sort de l'argent : « Gérer… les paiements » en plus (ADR 0103).
+  const canCreatePayment = usePermission("payments:create");
+  const canPayOut = usePermission("payments:update");
+  const canPay = canCreatePayment && canPayOut;
   const sheet = useQuery({
     queryKey: queryKeys.people.sheet("supplier", supplierId),
     queryFn: () =>

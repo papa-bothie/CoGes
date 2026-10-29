@@ -46,7 +46,8 @@ export const ROUTE_ACCESS: Readonly<Record<string, PermissionRule | null>> = {
   "/finance": "analytics:read",
   "/finance/cash": "analytics:read",
   "/finance/collect": { allOf: ["debts:read", "payments:create"] },
-  "/finance/pay": { allOf: ["debts:read", "payments:create"] },
+  // Payer un fournisseur sort de l'argent : « Gérer… les paiements » (ADR 0103).
+  "/finance/pay": { allOf: ["debts:read", "payments:create", "payments:update"] },
   "/finance/debts": "debts:read",
   "/finance/expenses": "expenses:read",
   "/finance/expenses/all": "expenses:read",

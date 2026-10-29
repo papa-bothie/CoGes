@@ -47,7 +47,9 @@ export function DebtsTab() {
   const queryClient = useQueryClient();
   const table = useTableParams();
   const { timeZone, currency } = useCompanyLocale();
-  const canSettle = usePermission("payments:create");
+  const canCollect = usePermission("payments:create");
+  // Une dette fournisseur se règle en sortant de l'argent (ADR 0103).
+  const canPayOut = usePermission("payments:update");
   const canWriteOff = usePermission("debts:write_off");
   const [settling, setSettling] = useState<Debt | null>(null);
   const [writingOff, setWritingOff] = useState<Debt | null>(null);
@@ -202,15 +204,17 @@ export function DebtsTab() {
                     trailing={
                       <>
                         {pill}
-                        {isOpen(debt) && canSettle && (
-                          <button
-                            type="button"
-                            className={OUTLINE_ACTION}
-                            onClick={() => setSettling(debt)}
-                          >
-                            {t.settle}
-                          </button>
-                        )}
+                        {isOpen(debt) &&
+                          canCollect &&
+                          (debt.party_type === "customer" || canPayOut) && (
+                            <button
+                              type="button"
+                              className={OUTLINE_ACTION}
+                              onClick={() => setSettling(debt)}
+                            >
+                              {t.settle}
+                            </button>
+                          )}
                         {isOpen(debt) && canWriteOff && debt.party_type === "customer" && (
                           <button
                             type="button"

@@ -368,7 +368,7 @@ export interface paths {
     };
     /**
      * Read Abilities
-     * @description Grille « Qui peut faire quoi » (ADR 0075) : 8 lignes, gérant, vendeur, comptable.
+     * @description Grille « Qui peut faire quoi » (ADR 0075, 0099) : 14 lignes, gérant, vendeur, comptable.
      */
     get: operations["read_abilities_api_v1_roles_abilities_get"];
     put?: never;
@@ -1159,7 +1159,8 @@ export interface paths {
      *
      *     Le sur-paiement est refusé : ni au-delà du versement (422), ni au-delà du solde
      *     d'une dette (409). Aucun avoir ni solde créditeur en V1 — le trop-perçu se
-     *     règle en rendant l'argent, pas en le gardant.
+     *     règle en rendant l'argent, pas en le gardant. Sans `payments:update`, seul un
+     *     encaissement de dettes client est accepté (403, ADR 0103).
      */
     post: operations["create_payment_api_v1_payments_post"];
     delete?: never;

@@ -32,6 +32,7 @@ from app.core.errors import (
     BusinessRuleError,
     CogesError,
     NotFoundError,
+    PermissionDeniedError,
     ValidationFailedError,
     constraint_name,
     sqlstate,
@@ -861,6 +862,36 @@ def _allocate(
             settled.append(debt)
 
     return settled
+
+
+#: « Gérer les dettes, les dépenses et les paiements » (ADR 0099) : sans ce droit, une saisie
+#: à la main n'est qu'un encaissement de dettes client (prompt 32, D1, ADR 0103).
+FREE_PAYMENT_PERMISSION = "payments:update"
+
+
+def record_manual_payment(
+    session: Session,
+    ctx: TenantContext,
+    payload: PaymentCreate,
+    *,
+    ip_address: str | None = None,
+) -> Payment:
+    """Paiement saisi à la main (`POST /payments`), borné par le geste de qui le saisit.
+
+    « Encaisser une dette » (`debts:read` + `payments:create`) ne permet que cela : une
+    entrée d'argent lettrée sur des dettes — une entrée ne se lettre que sur une dette
+    client. Sortir de l'argent, payer un fournisseur, régler une dépense ou encaisser sans
+    dette demande `payments:update`. La caisse, elle, encaisse par la confirmation d'une
+    vente, sans passer par ici.
+    """
+    if not ctx.has_permission(FREE_PAYMENT_PERMISSION) and (
+        payload.direction != "inflow" or not payload.allocations or payload.expense_id is not None
+    ):
+        raise PermissionDeniedError(
+            "Vous pouvez seulement encaisser une dette d'un client.",
+            details={"required_permission": FREE_PAYMENT_PERMISSION},
+        )
+    return record_payment(session, ctx, payload, ip_address=ip_address)
 
 
 def record_payment(

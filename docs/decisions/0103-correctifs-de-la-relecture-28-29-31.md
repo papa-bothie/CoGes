@@ -127,6 +127,65 @@ remboursement de plus de 400 ms écrivait un brouillon complet avec une clé neu
 | P5 `-mtime +14` = 15 jours | **Oui** (lecture : `find` arrondit au jour entier) | Secondes, 14 × 86 400 |
 | P5 `Cache-Control` de `/sw.js` en production | Non : `no-cache, no-store, must-revalidate` servi (e2e existant sur build de production) | Aucun |
 
+## Bloc D — droits (ADR 0099)
+
+### Ce qu'un vendeur par défaut pouvait faire par `POST /api/v1/payments`
+Test joué avant correction, tout en 201 : encaisser une dette client, **payer une dette
+fournisseur**, **sortir 20 000 F de la caisse sans motif**, enregistrer une entrée d'argent
+libre. Il tenait `payments:create` de la ligne « Vendre », dont la caisse n'a pas besoin : la
+confirmation encaisse par `sales:confirm` (`finance_service.record_sale_payment`), la déduction
+de dette d'un retour par `sale_returns:create`.
+
+### Décision (utilisateur, via AskUserQuestion)
+- **« Vendre » ne donne plus `payments:create`** (ni le vendeur par défaut). L'encaissement au
+  moment de vendre (tout, une partie, à crédit) ne change pas : test dédié.
+- **`POST /payments` borné** (`finance.record_manual_payment`) : sans `payments:update`
+  (« Gérer les dettes, les dépenses et les paiements »), seul un encaissement **lettré sur des
+  dettes client** est accepté ; sortie d'argent, dette fournisseur, dépense ou entrée sans
+  dette ⇒ 403 `permission_denied` (`required_permission: payments:update`). Aucun droit
+  nouveau. Le front suit : « Payer » (raccourci, fiche fournisseur, dette fournisseur dans la
+  liste) exige aussi `payments:update`.
+- **Révision 0031** (données seulement) : retire `payments:create` de tout rôle sauf le gérant
+  système qui n'a ni `debts:read` ni `payments:update` (un vendeur à qui « Encaisser une dette »
+  a été donnée garde tout), et `company:update` / `system:read` de tout rôle sauf le gérant
+  système (D3). Une ligne d'audit critique par rôle touché (auteur NULL, `diff.source =
+  "0031"`, droits avant, retirés, après) ; le `downgrade` remet exactement les droits retirés,
+  relus dans ces lignes.
+- **D2** : décocher une ligne retire ses droits, même ceux qu'une ligne « en partie » partage
+  (sauf ceux d'une ligne cochée) ; aucun droit n'est ajouté en silence.
+- **D4** : le rôle est lu `FOR UPDATE` dans `set_role_abilities` ; la grille applique la réponse
+  du serveur (« en partie » compris) dès l'enregistrement, et retire « en partie » d'une ligne
+  touchée dans l'affichage optimiste ; docstrings « 8 lignes » et droit partagé mis à jour.
+
+### Requête de contrôle (D3)
+```sql
+SELECT c.slug, r.name, r.is_system, p.code
+  FROM roles r
+  JOIN companies c ON c.id = r.company_id
+  JOIN role_permissions rp ON rp.company_id = r.company_id AND rp.role_id = r.id
+  JOIN permissions p ON p.id = rp.permission_id
+ WHERE NOT (r.is_system AND r.name = 'gerant')
+   AND (p.code IN ('company:update', 'system:read')
+        OR (p.code = 'payments:create' AND NOT EXISTS (
+              SELECT 1 FROM role_permissions o JOIN permissions q ON q.id = o.permission_id
+               WHERE o.company_id = r.company_id AND o.role_id = r.id
+                 AND q.code IN ('debts:read', 'payments:update'))))
+ ORDER BY 1, 2, 4;
+```
+Jouée sur les bases locales `coges` et `coges_e2e` (propriétaire, lecture seule) : aucun rôle
+avec `company:update` ou `system:read` ; chaque vendeur avec `payments:create`. Non jouée sur
+Neon : la révision 0031 traite les deux cas où qu'ils soient, avec audit.
+
+### Tableau
+| Point | Reproduit | Correctif |
+|---|---|---|
+| D1 « Encaisser une dette » décoché ne retire pas `payments:create` | **Oui** (test API : vendeur par défaut, 4 écritures d'argent en 201) | Retiré de « Vendre », `POST /payments` borné, révision 0031, front |
+| D2 ligne « en partie » qui retient un droit partagé | **Oui** (test du cas exact : `debts:create` reste après le second appui) | Droits des lignes décochées retirés |
+| D3 rôles avec `company:update` / `system:read` | Non sur les bases locales ; inconnu sur Neon | Révision 0031, avec audit |
+| D4 docstrings périmés | **Oui** (« 8 lignes », exemple `payments:create`) | Mis à jour |
+| D4 verrou du rôle | **Oui** (test : `FOR SHARE NOWAIT` passait pendant un enregistrement) | `FOR UPDATE` |
+| D4 « en partie » non recalculé après la mise à jour optimiste | **Oui** (Vitest : l'avis « en partie » restait) | Recalcul optimiste, réponse du serveur appliquée |
+
 ## Conséquences
 - Tests : Vitest `hooks/use-draft.test.tsx` (+5), `lib/drafts.test.ts` (+2) ; e2e
   `frontend/e2e/drafts.spec.ts` (+3, et la vente vérifie désormais l'absence de brouillon une
@@ -135,5 +194,8 @@ remboursement de plus de 400 ms écrivait un brouillon complet avec une clé neu
   `ChunkLoadError` de Turbopack).
 - Bloc P : Vitest `lib/static-entrypoint.test.ts` (+5), `lib/pwa/sw-source.test.ts` (4, nouveau,
   le worker exécuté dans un faux environnement), `lib/build-config.test.ts` (3) ; e2e PWA (+1).
+- Bloc D : `backend/tests/integration/test_review_32_rights.py` (7 : D1 ×4, D2, D4, révision
+  0031 aller et retour) ; Vitest `rights-view.test.tsx` (1). Un vendeur à qui le gérant donne
+  « Encaisser une dette » encaisse les dettes client, rien d'autre.
 - Un brouillon n'est plus écrit pendant un envoi : une frappe faite à ce moment, puis une page
   tuée avant la fin, est perdue (l'envoi, lui, est rejoué à l'identique).

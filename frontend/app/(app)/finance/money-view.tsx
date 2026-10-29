@@ -157,7 +157,8 @@ const SHORTCUTS: readonly {
     label: t.shortcuts.pay,
     icon: ArrowUpRight,
     tone: "border-argent/20 bg-argent-teinte [&_svg]:text-argent-encre",
-    permission: "payments:create",
+    // Sortir de l'argent : jamais par « Encaisser une dette » seul (ADR 0103).
+    permission: "payments:update",
   },
   {
     href: "/finance/expenses",

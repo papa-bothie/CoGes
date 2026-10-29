@@ -98,3 +98,11 @@ sont **exactement** une somme de lignes : la matrice de l'ADR 0007 ne change pas
   au serveur ; aucun appel d'API derrière un écran refusé).
 - Les boutons d'action restent gardés par `<Can>` sur le droit de leur route ; ils ne sont pas au
   registre des écrans.
+
+## Corrections
+- **2026-10-29, prompt 32, bloc D (ADR 0103, révision 0031)** : « Vendre » ne donne plus
+  `payments:create` (la caisse encaisse par la confirmation) ; `POST /payments` sans
+  `payments:update` n'accepte qu'un encaissement lettré sur des dettes client ; rôles existants
+  repris avec audit (`payments:create` sans `debts:read` ni `payments:update`, `company:update` et
+  `system:read` hors gérant) ; décocher une ligne retire aussi ce qu'elle partage avec une ligne
+  « en partie » ; rôle verrouillé à l'enregistrement de la grille.
