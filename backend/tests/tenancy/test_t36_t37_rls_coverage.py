@@ -681,6 +681,10 @@ TABLES_WITHOUT_RLS: dict[str, str] = {
     "subscription_payments": "paiements déclarés par l'équipe, rattachés à un abonnement",
     # Invitations de l'équipe (ADR 0094) : un futur compte de l'équipe, pas d'entreprise.
     "platform_invitations": "invitations de l'équipe CoGes, hors de toute entreprise",
+    # Double authentification de l'équipe (ADR 0105) : des comptes de la plateforme.
+    "platform_mfa_challenges": "jetons intermédiaires de connexion de l'équipe CoGes",
+    "platform_recovery_codes": "empreintes des codes de secours de l'équipe CoGes",
+    "platform_known_devices": "appareils déjà vus des comptes de l'équipe CoGes",
 }
 
 

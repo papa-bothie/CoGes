@@ -35,6 +35,7 @@ _PLATFORM = "/api/v1/platform"
 #: Une phrase par route à profil, en français, du point de vue de qui agit.
 LABELS: dict[str, str] = {
     f"GET {_PLATFORM}/auth/me": "Voir son propre compte",
+    f"POST {_PLATFORM}/auth/mfa/recovery-codes": "Régénérer ses codes de secours",
     f"GET {_PLATFORM}/companies": "Chercher une entreprise",
     f"GET {_PLATFORM}/companies/{{company_id}}": "Voir la fiche d'une entreprise",
     f"PATCH {_PLATFORM}/companies/{{company_id}}/status": "Suspendre ou réactiver une entreprise",
@@ -58,6 +59,9 @@ LABELS: dict[str, str] = {
     f"POST {_PLATFORM}/team/invitations/{{invitation_id}}/resend": "Renvoyer une invitation",
     f"DELETE {_PLATFORM}/team/invitations/{{invitation_id}}": "Annuler une invitation",
     f"PATCH {_PLATFORM}/team/{{user_id}}": "Changer le profil d'un collègue ou le suspendre",
+    f"POST {_PLATFORM}/team/{{user_id}}/mfa-reset": (
+        "Réinitialiser la double authentification d'un collègue"
+    ),
     f"GET {_PLATFORM}/users": "Consulter les comptes des commerçants",
     f"GET {_PLATFORM}/audit": "Lire le journal des modifications",
     f"GET {_PLATFORM}/roles": "Voir ce que peut chaque profil",

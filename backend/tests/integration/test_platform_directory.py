@@ -349,6 +349,7 @@ def test_attention_lists_what_needs_doing(
         "suspended_companies",
         "suspended_total",
         "expiring_invitations",
+        "security_events",
     }
     trials = {item["company_id"] for item in body["trials_ending"]}
     assert str(ending.company_id) in trials

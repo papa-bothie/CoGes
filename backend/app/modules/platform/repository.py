@@ -24,6 +24,9 @@ from app.modules.platform.models import (
     PlatformAuditLog,
     PlatformAuthSession,
     PlatformInvitation,
+    PlatformKnownDevice,
+    PlatformMfaChallenge,
+    PlatformRecoveryCode,
     PlatformUser,
     Subscription,
     SubscriptionPayment,
@@ -216,6 +219,110 @@ class PlatformSessionRepository:
                 PlatformAuthSession.revoked_at.is_(None),
             )
             .values(revoked_at=datetime.now(UTC))
+        )
+        return int(self.session.execute(statement).rowcount or 0)  # type: ignore[attr-defined]
+
+
+class MfaRepository:
+    """Double authentification (ADR 0105) : jetons intermédiaires, codes de secours,
+    appareils connus. Des empreintes seulement, jamais une valeur en clair."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def lock_user(self, platform_user_id: UUID) -> PlatformUser | None:
+        """Verrou du compte : deux codes envoyés en même temps se sérialisent, et le
+        second voit le pas déjà consommé par le premier."""
+        stmt = select(PlatformUser).where(PlatformUser.id == platform_user_id).with_for_update()
+        return self.session.execute(stmt).scalar_one_or_none()
+
+    def add_challenge(self, challenge: PlatformMfaChallenge) -> PlatformMfaChallenge:
+        self.session.add(challenge)
+        self.session.flush()
+        return challenge
+
+    def lock_challenge(self, token_hash: str) -> PlatformMfaChallenge | None:
+        stmt = (
+            select(PlatformMfaChallenge)
+            .where(PlatformMfaChallenge.token_hash == token_hash)
+            .with_for_update()
+        )
+        return self.session.execute(stmt).scalar_one_or_none()
+
+    def consume_open_challenges(self, platform_user_id: UUID, now: datetime) -> None:
+        """Un nouveau jeton intermédiaire rend caducs les précédents du compte."""
+        self.session.execute(
+            update(PlatformMfaChallenge)
+            .where(
+                PlatformMfaChallenge.platform_user_id == platform_user_id,
+                PlatformMfaChallenge.consumed_at.is_(None),
+                PlatformMfaChallenge.expires_at > now,
+            )
+            .values(consumed_at=now)
+        )
+
+    def lock_recovery_code(
+        self, platform_user_id: UUID, code_hash: str
+    ) -> PlatformRecoveryCode | None:
+        stmt = (
+            select(PlatformRecoveryCode)
+            .where(
+                PlatformRecoveryCode.platform_user_id == platform_user_id,
+                PlatformRecoveryCode.code_hash == code_hash,
+                PlatformRecoveryCode.used_at.is_(None),
+                PlatformRecoveryCode.revoked_at.is_(None),
+            )
+            .with_for_update()
+        )
+        return self.session.execute(stmt).scalar_one_or_none()
+
+    def revoke_recovery_codes(self, platform_user_id: UUID, now: datetime) -> int:
+        statement = (
+            update(PlatformRecoveryCode)
+            .where(
+                PlatformRecoveryCode.platform_user_id == platform_user_id,
+                PlatformRecoveryCode.used_at.is_(None),
+                PlatformRecoveryCode.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
+        )
+        return int(self.session.execute(statement).rowcount or 0)  # type: ignore[attr-defined]
+
+    def add_recovery_codes(self, platform_user_id: UUID, hashes: list[str]) -> None:
+        self.session.add_all(
+            PlatformRecoveryCode(platform_user_id=platform_user_id, code_hash=code_hash)
+            for code_hash in hashes
+        )
+        self.session.flush()
+
+    def recovery_codes_left(self, platform_user_id: UUID) -> int:
+        stmt = select(func.count()).where(
+            PlatformRecoveryCode.platform_user_id == platform_user_id,
+            PlatformRecoveryCode.used_at.is_(None),
+            PlatformRecoveryCode.revoked_at.is_(None),
+        )
+        return int(self.session.execute(stmt).scalar_one())
+
+    def device(self, platform_user_id: UUID, token_hash: str) -> PlatformKnownDevice | None:
+        stmt = select(PlatformKnownDevice).where(
+            PlatformKnownDevice.platform_user_id == platform_user_id,
+            PlatformKnownDevice.token_hash == token_hash,
+        )
+        return self.session.execute(stmt).scalar_one_or_none()
+
+    def add_device(self, device: PlatformKnownDevice) -> PlatformKnownDevice:
+        self.session.add(device)
+        self.session.flush()
+        return device
+
+    def revoke_sessions(self, platform_user_id: UUID, now: datetime) -> int:
+        statement = (
+            update(PlatformAuthSession)
+            .where(
+                PlatformAuthSession.platform_user_id == platform_user_id,
+                PlatformAuthSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
         )
         return int(self.session.execute(statement).rowcount or 0)  # type: ignore[attr-defined]
 
@@ -788,6 +895,32 @@ _SUSPENDED = text(
 )
 
 
+#: Signaux de sécurité de l'équipe (ADR 0105), lus dans le journal de la plateforme.
+_SECURITY_EVENTS = text(
+    """
+    SELECT CASE
+             WHEN l.diff ->> 'mfa' = 'enabled' THEN 'mfa_enabled'
+             WHEN l.diff ->> 'mfa' = 'reset' THEN 'mfa_reset'
+             WHEN l.diff ->> 'method' = 'recovery_code' THEN 'recovery_code_used'
+             ELSE 'new_device'
+           END AS kind,
+           l.entity_id AS platform_user_id,
+           coalesce(u.display_name, 'Compte supprimé') AS display_name,
+           CASE WHEN l.diff ->> 'new_device' = 'true' THEN l.diff ->> 'device' END AS device,
+           l.occurred_at
+    FROM platform_audit_logs l
+    LEFT JOIN platform_users u ON u.id = l.entity_id
+    WHERE l.entity_table = 'platform_users'
+      AND l.occurred_at >= :since
+      AND (l.diff ->> 'mfa' IN ('enabled', 'reset')
+           OR l.diff ->> 'method' = 'recovery_code'
+           OR l.diff ->> 'new_device' = 'true')
+    ORDER BY l.occurred_at DESC, l.id DESC
+    LIMIT 20
+    """
+)
+
+
 class AttentionRepository:
     """Ce qui demande une action : essais qui finissent, entreprises suspendues."""
 
@@ -800,3 +933,6 @@ class AttentionRepository:
     def suspended(self) -> tuple[list[Any], int]:
         rows = list(self.session.execute(_SUSPENDED).all())
         return rows, int(rows[0].total) if rows else 0
+
+    def security_events(self, since: datetime) -> list[Any]:
+        return list(self.session.execute(_SECURITY_EVENTS, {"since": since}).all())

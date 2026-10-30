@@ -249,7 +249,10 @@ dc exec api python -m app.cli create-platform-user \
 ```
 
 Le mot de passe est demandé deux fois (12 caractères au moins) et ne s'affiche pas.
-`support` lit les entreprises ; seul `administrator` suspend ou réactive.
+`support` lit les entreprises ; seul `administrator` suspend ou réactive. À sa première
+connexion, le compte enrôle sa double authentification (ADR 0105) ; téléphone perdu :
+`dc exec api python -m app.cli reset-platform-mfa --email …`
+(`docs/runbooks/administration.md`).
 
 **Désactiver un compte de l'équipe** (immédiat si soupçon de vol) : ses sessions tombent
 aussitôt (trigger), il ne se reconnecte plus.

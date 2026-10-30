@@ -37,6 +37,9 @@ E2E_ADMIN_PORT="${E2E_ADMIN_PORT:-3200}"
 # Compte de l'administration des parcours (ADR 0089), sans valeur hors de coges_e2e.
 E2E_ADMIN_EMAIL=admin@e2e.example.com
 E2E_ADMIN_PASSWORD=admin-coges-e2e-2026
+# Secret TOTP du compte des parcours (ADR 0105), repris par frontend-admin/e2e/mfa.ts :
+# --mfa-secret n'est accepté qu'en local et en CI.
+E2E_ADMIN_MFA_SECRET=COGESEXADMINQMFAQSECRETQAAAAAAAA
 # Cloudflare Access simulé (ADR 0104) : clé de test, jeu de clés servi sur ce port local,
 # jeton lu par Playwright (frontend-admin/playwright.config.ts).
 E2E_ACCESS_DIR="$ROOT/.e2e-access"
@@ -130,7 +133,9 @@ SQL
     # suspendent puis réactivent sans toucher aux autres.
     uv run --directory backend python -m app.cli create-platform-user \
       --email "$E2E_ADMIN_EMAIL" --name "Équipe des parcours" --role administrator \
-      --password "$E2E_ADMIN_PASSWORD"
+      --password "$E2E_ADMIN_PASSWORD" --mfa-secret "$E2E_ADMIN_MFA_SECRET"
+    # Codes déjà servis par les parcours précédents : base neuve, registre neuf.
+    rm -f "$E2E_ACCESS_DIR/totp-steps.json"
     uv run --directory backend python -m app.cli create-company --name "Parcours administration" \
       --slug admin-e2e --manager-email gerant@admin-e2e.example.com \
       --manager-name "Gérant suspendu" --password demo-coges-2026

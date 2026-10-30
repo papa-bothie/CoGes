@@ -112,9 +112,9 @@ jobs:
       - uses: actions/checkout@v5
       # shellcheck préinstallé sur les runners Ubuntu.
       - run: shellcheck -x deploy/vps/*.sh deploy/scripts/*.sh frontend/static-entrypoint.sh
-      - name: Caddyfile valide (les trois portes de l'administration, ADR 0104)
+      - name: Caddyfile valide (les quatre portes de l'administration, ADR 0104, 0105)
         run: |
-          for gate in cloudflare ip ssh; do
+          for gate in mfa cloudflare ip ssh; do
             docker run --rm -e COGES_DOMAIN=coges.example.sn -e COGES_ACME_EMAIL=ops@example.sn \
               -e COGES_ADMIN_GATE="$gate" -e COGES_ADMIN_ALLOWED_IPS="192.0.2.10 2001:db8::/48" \
               -e COGES_ADMIN_TUNNEL_IPS="0.0.0.0/0 ::/0" \
@@ -138,6 +138,7 @@ jobs:
           COGES_DATABASE_URL_PLATFORM: postgresql+psycopg://coges_app_platform:x@ep.neon.tech/coges?sslmode=require
           COGES_REDIS_PASSWORD: ci-redis
           COGES_JWT_SECRET: ci-jwt-secret-0000000000000000000000
+          COGES_MFA_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       # Les quatre images du VPS se construisent : un Dockerfile cassé se voit sur la PR,
       # pas le jour du déploiement. Rien n'est poussé ici.

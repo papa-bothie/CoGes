@@ -26,11 +26,11 @@ from tests.conftest import (
     login_token,
 )
 from tests.integration.platform_harness import (
-    PLATFORM_PASSWORD,
     PlatformAccount,
     create_platform_account,
     failing_platform_commit,
     platform_login,
+    platform_login_response,
 )
 
 
@@ -117,10 +117,7 @@ def test_a_merchant_cannot_log_into_the_administration(
 def test_refresh_rotates_and_a_replayed_token_revokes_the_family(
     client: TestClient, administrator: PlatformAccount
 ) -> None:
-    login = client.post(
-        "/api/v1/platform/auth/login",
-        json={"email": administrator.email, "password": PLATFORM_PASSWORD},
-    )
+    login = platform_login_response(client, administrator)
     first = login.cookies["coges_platform_refresh"]
 
     rotated = client.post("/api/v1/platform/auth/refresh")
@@ -323,6 +320,7 @@ def test_a_refused_commit_keeps_the_status(
 ) -> None:
     with TestClient(app, base_url=TEST_BASE_URL, raise_server_exceptions=False) as raw:
         token = platform_login(raw, administrator)
+        enqueued.clear()  # l'alerte « nouvel appareil » de la connexion (ADR 0105)
         with failing_platform_commit(owner_engine):
             failed = _suspend(raw, token, shop.company_id)
         assert failed.status_code >= 500

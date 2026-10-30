@@ -1,0 +1,24 @@
+# Administration ouverte sur 443, sans filtre d'adresse (ADR 0105), COGES_ADMIN_GATE=mfa :
+# la porte par défaut du lancement. La barrière est le compte de l'équipe dans l'API, avec
+# sa double authentification **obligatoire** (mot de passe puis code TOTP, freinage par
+# compte, débit par adresse IP dans l'API). check_runtime_env.py n'accepte cette porte
+# qu'avec une version qui impose la double authentification et COGES_MFA_ENCRYPTION_KEY.
+# L'enregistrement DNS admin.<domaine> pointe sur le VPS (« DNS only »).
+admin.{$COGES_DOMAIN} {
+	import securite
+	header X-Robots-Tag "noindex, nofollow"
+	request_body {
+		max_size 1MB
+	}
+	handle /api/v1/platform/* {
+		reverse_proxy production-api:8000
+	}
+	# Les routes commerçantes ne passent pas par ici.
+	handle /api/v1/* {
+		respond 404
+	}
+	handle {
+		reverse_proxy production-admin:3000
+	}
+	import maintenance
+}

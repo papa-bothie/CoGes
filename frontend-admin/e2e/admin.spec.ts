@@ -1,8 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
+import { ADMIN, enterCode } from "./mfa";
+
 /** Créés par `deploy/scripts/e2e.sh reset` (ADR 0089), sans valeur hors de coges_e2e. */
-const ADMIN = { email: "admin@e2e.example.com", password: "admin-coges-e2e-2026" };
 const SHOP = {
   slug: "admin-e2e",
   email: "gerant@admin-e2e.example.com",
@@ -15,6 +16,7 @@ async function signIn(page: Page): Promise<void> {
   await page.getByLabel("E-mail").fill(ADMIN.email);
   await page.getByLabel("Mot de passe", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
+  await enterCode(page);
   await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
   await page.goto("/companies");
 }

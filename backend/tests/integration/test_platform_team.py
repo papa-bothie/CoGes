@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.engine import Engine
 from sqlalchemy.sql import text
 
-from app.core import mailer, queue
+from app.core import mailer, queue, totp
 from app.main import app
 from app.modules.platform import service as platform_service
 from app.workers.tasks import platform as platform_tasks
@@ -230,10 +230,26 @@ def test_accepting_creates_the_account_once_and_signs_in(
 
     accepted = _accept(client, token)
     assert accepted.status_code == 200, accepted.text
-    assert set(accepted.json()) == {"access_token", "token_type", "expires_in"}
-    assert "coges_platform_refresh" in accepted.headers["set-cookie"]
+    # Aucune session avant la double authentification (ADR 0105) : l'enrôlement d'abord.
+    assert set(accepted.json()) == {"step", "challenge_token", "expires_in"}
+    assert accepted.json()["step"] == "enroll"
+    assert "coges_platform_refresh" not in accepted.headers.get("set-cookie", "")
+    challenge = accepted.json()["challenge_token"]
+    enrollment = client.post(
+        "/api/v1/platform/auth/mfa/enrollment", json={"challenge_token": challenge}
+    )
+    assert enrollment.status_code == 200, enrollment.text
+    activated = client.post(
+        "/api/v1/platform/auth/mfa/enrollment/confirm",
+        json={
+            "challenge_token": challenge,
+            "code": totp.code_at(enrollment.json()["secret"], totp.current_step()),
+        },
+    )
+    assert activated.status_code == 200, activated.text
+    assert "coges_platform_refresh" in activated.headers["set-cookie"]
     me = client.get(
-        "/api/v1/platform/auth/me", headers=auth_headers(accepted.json()["access_token"])
+        "/api/v1/platform/auth/me", headers=auth_headers(activated.json()["access_token"])
     )
     assert me.json()["email"] == email
     assert me.json()["role"] == "support"
@@ -667,6 +683,7 @@ def test_the_team_lists_members_and_pending_invitations(
         "last_login_at",
         "created_at",
         "is_me",
+        "mfa_enabled",
     }
     assert me["is_me"] is True
     invitation = next(item for item in team["invitations"] if item["email"] == email)

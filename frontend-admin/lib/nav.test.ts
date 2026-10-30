@@ -11,6 +11,7 @@ describe("menu", () => {
       "Utilisateurs",
       "Équipe",
       "Journal",
+      "Ma sécurité",
     ]);
   });
   it("la page courante est le lien le plus précis", () => {

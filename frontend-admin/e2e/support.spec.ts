@@ -1,12 +1,13 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
+import { ADMIN, enterCode } from "./mfa";
+
 /**
  * Accès support encadré (ADR 0092), de bout en bout, sur l'entreprise `support-e2e` créée
  * par `e2e.sh reset` : bris de glace dans l'administration, bandeau côté commerçant,
  * lecture de données réelles, écriture refusée, fermeture, puis les deux journaux.
  */
-const ADMIN = { email: "admin@e2e.example.com", password: "admin-coges-e2e-2026" };
 const SHOP = {
   slug: "support-e2e",
   email: "gerant@support-e2e.example.com",
@@ -52,6 +53,7 @@ async function openShopInAdmin(page: Page): Promise<void> {
   await page.getByLabel("E-mail").fill(ADMIN.email);
   await page.getByLabel("Mot de passe", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
+  await enterCode(page);
   await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
   await page.goto("/companies");
   await page.getByLabel("Nom ou code").fill(SHOP.slug);

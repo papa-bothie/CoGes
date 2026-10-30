@@ -62,6 +62,9 @@ configure_logging()
 init_sentry("api")
 
 settings = get_settings()
+# L'administration exige la double authentification (ADR 0105) : sans sa clé, hors
+# `local` et `ci`, l'API refuse de démarrer plutôt que de refuser chaque connexion.
+settings.require_mfa_encryption_key()
 
 # La documentation interactive charge Swagger UI depuis un CDN : elle n'est pas servie
 # en production. Le contrat reste lisible dans `backend/openapi.json`, versionné.

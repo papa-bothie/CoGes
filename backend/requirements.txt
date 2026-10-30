@@ -45,7 +45,9 @@ click-plugins==1.1.1.2
 click-repl==0.4.0
     # via celery
 cryptography==50.0.2
-    # via pyjwt
+    # via
+    #   coges-backend
+    #   pyjwt
 defusedxml==0.7.1
     # via coges-backend
 dnspython==2.9.0
@@ -120,6 +122,8 @@ redis==6.4.0
     # via
     #   coges-backend
     #   kombu
+segno==1.6.6
+    # via coges-backend
 sentry-sdk==2.70.0
     # via coges-backend
 six==1.17.0

@@ -246,7 +246,8 @@ def get_platform_session() -> Iterator[Session]:  # à prendre en portée `funct
 # de l'administration — et ses GRANT colonne par colonne — ouvrent quelque chose.
 
 _LOAD_PLATFORM_USER = text(
-    "SELECT role::text AS role, is_active FROM platform_users WHERE id = :platform_user_id"
+    "SELECT role::text AS role, is_active, mfa_enabled_at FROM platform_users "
+    "WHERE id = :platform_user_id"
 )
 
 
@@ -296,6 +297,10 @@ def get_platform_admin_session(
             _LOAD_PLATFORM_USER, {"platform_user_id": claims.platform_user_id}
         ).one_or_none()
         if row is None or not row.is_active:
+            raise AuthenticationRequiredError("Session invalide.")
+        # Double authentification retirée (réinitialisation) ou réactivée depuis : le
+        # jeton tombe tout de suite, sans attendre ses 15 minutes (ADR 0105).
+        if row.mfa_enabled_at is None or claims.issued_at < int(row.mfa_enabled_at.timestamp()):
             raise AuthenticationRequiredError("Session invalide.")
         yield PlatformSession(
             session=session,

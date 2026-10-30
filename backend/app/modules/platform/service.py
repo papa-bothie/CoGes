@@ -7,7 +7,10 @@ la connexion commerçante s'appliquent à l'identique :
 * le mot de passe est toujours vérifié, contre un leurre si le compte n'existe pas ;
 * freinage par compte avant Argon2 (ADR 0078, 0088), jamais de verrou définitif ; au
   10ᵉ échec, l'équipe est prévenue par e-mail (`COGES_PLATFORM_ALERT_EMAIL`) ;
-* refresh opaque, rotatif, famille révoquée à la réutilisation, 30 s de grâce (ADR 0051).
+* refresh opaque, rotatif, famille révoquée à la réutilisation, 30 s de grâce (ADR 0051) ;
+* **double authentification obligatoire** (ADR 0105) : le mot de passe ne donne qu'un
+  jeton intermédiaire ; la session s'ouvre après le code TOTP (ou un code de secours).
+  Session de 12 h au plus, refusée après 1 h sans rafraîchissement.
 
 Toutes les transactions passent par `platform_transaction` : rôle `coges_app_platform`,
 jamais `coges_app`.
@@ -26,12 +29,13 @@ from typing import Any, cast
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
+import segno
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import clock, mailer, queue, rate_limit
+from app.core import clock, mailer, mfa, queue, rate_limit, totp
 from app.core.audit import AuditAction, audit_critical
-from app.core.config import get_settings
+from app.core.config import DEVELOPMENT_ENVS, get_settings
 from app.core.deps import PlatformAdmin, platform_transaction
 from app.core.errors import (
     AuthenticationRequiredError,
@@ -60,6 +64,8 @@ from app.modules.platform.models import (
     PlatformAuditLog,
     PlatformAuthSession,
     PlatformInvitation,
+    PlatformKnownDevice,
+    PlatformMfaChallenge,
     PlatformUser,
     Subscription,
     SubscriptionPayment,
@@ -71,6 +77,7 @@ from app.modules.platform.repository import (
     CompanyDirectory,
     CompanyRow,
     MerchantUserDirectory,
+    MfaRepository,
     PlatformAuditRepository,
     PlatformSessionRepository,
     PlatformUserRepository,
@@ -94,11 +101,13 @@ from app.modules.platform.schemas import (
     InvitationIssued,
     MerchantUser,
     MerchantUserPage,
+    MfaEnrollment,
     PlanBreakdown,
     PlanRead,
     PlatformMe,
     ProfileRead,
     RevenueRead,
+    SecurityEvent,
     SignupBucket,
     SignupsRead,
     StatsGranularity,
@@ -134,6 +143,13 @@ STATUS_CHANGED_TASK = "platform.company_status_changed"
 
 ROTATION_GRACE = timedelta(seconds=30)
 
+#: Double authentification (ADR 0105).
+CHALLENGE_TTL = timedelta(minutes=5)
+SESSION_MAX_AGE = timedelta(hours=12)
+SESSION_IDLE = timedelta(hours=1)
+SECURITY_NOTICE_TASK = "platform.security_notice"
+SECURITY_EVENTS_WINDOW = timedelta(days=7)
+
 MIN_PASSWORD_LENGTH = 12
 
 
@@ -142,6 +158,19 @@ class IssuedPlatformTokens:
     access_token: str
     expires_in: int
     refresh_token: str
+    #: Jeton d'appareil à (re)poser en cookie ; `None` : rien à poser.
+    device_token: str | None = None
+    #: Codes de secours tirés à l'activation, montrés une seule fois.
+    recovery_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class LoginStep:
+    """Mot de passe accepté : l'étape suivante et son jeton intermédiaire."""
+
+    step: str
+    challenge_token: str
+    expires_in: int
 
 
 def _audit(
@@ -176,15 +205,21 @@ def _issue_session(
     family_id: UUID,
     user_agent: str | None,
     ip_address: str | None,
+    authenticated_at: datetime | None = None,
 ) -> tuple[PlatformAuthSession, str]:
+    """Une session de l'administration : 12 h au plus depuis `authenticated_at` (le
+    mot de passe et le code), quelle que soit la durée d'un refresh commerçant."""
     raw_token, token_hash = generate_refresh_token()
+    now = datetime.now(UTC)
+    started = authenticated_at or now
     auth_session = PlatformSessionRepository(session).add(
         PlatformAuthSession(
             platform_user_id=platform_user_id,
             token_hash=token_hash,
             family_id=family_id,
-            issued_at=datetime.now(UTC),
-            expires_at=refresh_token_expiry(),
+            issued_at=now,
+            authenticated_at=started,
+            expires_at=min(refresh_token_expiry(), started + SESSION_MAX_AGE),
             user_agent=user_agent,
             ip_address=ip_address,
         )
@@ -195,9 +230,8 @@ def _issue_session(
 # ------------------------------------------------------------------- connexion
 
 
-def login(
-    email: str, password: str, *, user_agent: str | None = None, ip_address: str | None = None
-) -> IssuedPlatformTokens:
+def login(email: str, password: str) -> LoginStep:
+    """Première étape : le mot de passe. Rend un jeton intermédiaire, jamais une session."""
     key = email.strip().lower()
     with platform_transaction() as session:
         user = PlatformUserRepository(session).get_by_email(key)
@@ -220,32 +254,20 @@ def login(
             )
         raise AuthenticationRequiredError(_INVALID_CREDENTIALS)
 
-    rate_limit.reset_account(attempt)
+    # Le mot de passe seul n'ouvre rien : le compteur n'est remis à zéro qu'après le
+    # code (ADR 0105). L'essai réservé est rendu, sans compter ni effacer d'échec.
+    rate_limit.cancel_attempt(attempt)
     platform_user_id = found[0]
     with platform_transaction() as session:
         user = PlatformUserRepository(session).get(platform_user_id)
         if user is None or not user.is_active:  # désactivé entre les deux transactions
             raise AuthenticationRequiredError(_INVALID_CREDENTIALS)
-        user.last_login_at = datetime.now(UTC)
-        _, raw_token = _issue_session(
-            session,
-            platform_user_id=user.id,
-            family_id=uuid4(),
-            user_agent=user_agent,
-            ip_address=ip_address,
-        )
-        _audit(
-            session,
-            actor_id=user.id,
-            action="login",
-            entity_table="platform_users",
-            entity_id=user.id,
-            ip_address=ip_address,
-        )
-        access_token, expires_in = create_platform_access_token(user.id, user.role)
-
-    return IssuedPlatformTokens(
-        access_token=access_token, expires_in=expires_in, refresh_token=raw_token
+        purpose = "verify" if user.mfa_enabled_at is not None else "enroll"
+        raw_challenge = _open_challenge(session, user.id, purpose)
+    return LoginStep(
+        step=purpose,
+        challenge_token=raw_challenge,
+        expires_in=int(CHALLENGE_TTL.total_seconds()),
     )
 
 
@@ -293,7 +315,15 @@ def refresh(
                 ip_address=ip_address,
             )
             reuse_detected = True
-        elif current.expires_at <= now or user is None or not user.is_active:
+        elif (
+            current.expires_at <= now
+            or user is None
+            or not user.is_active
+            or user.mfa_enabled_at is None
+            # 12 h depuis le mot de passe et le code, 1 h sans rafraîchissement (ADR 0105).
+            or now - current.authenticated_at > SESSION_MAX_AGE
+            or (successor is None and now - current.issued_at > SESSION_IDLE)
+        ):
             refused = True
         else:
             rotated, new_raw_token = _issue_session(
@@ -302,6 +332,7 @@ def refresh(
                 family_id=current.family_id,
                 user_agent=user_agent,
                 ip_address=ip_address,
+                authenticated_at=current.authenticated_at,
             )
             if successor is not None:
                 successor.revoked_at = now
@@ -338,7 +369,490 @@ def me(session: Session, admin: PlatformAdmin) -> PlatformMe:
         email=user.email,
         display_name=user.display_name,
         role=user.role,
+        mfa_enabled_at=user.mfa_enabled_at,
+        recovery_codes_left=MfaRepository(session).recovery_codes_left(user.id),
     )
+
+
+# ------------------------------------------------ double authentification (ADR 0105)
+
+
+class MfaChallengeInvalidError(CogesError):
+    """Jeton intermédiaire inconnu, échu, déjà utilisé ou d'une autre étape."""
+
+    code = "mfa_challenge_invalid"
+    status_code = 401
+    default_message = "Cette étape de connexion a expiré. Reconnectez-vous."
+
+
+class MfaCodeInvalidError(CogesError):
+    code = "mfa_code_invalid"
+    status_code = 401
+    default_message = "Code incorrect. Vérifiez l'heure de votre téléphone et réessayez."
+
+
+class MfaConfirmationInvalidError(MfaCodeInvalidError):
+    """Code faux pour confirmer un geste dans une session ouverte : 422, pas 401 (un 401
+    ferait rafraîchir la session puis renvoyer la même requête, comptée deux fois)."""
+
+    status_code = 422
+
+
+class MfaAlreadyEnabledError(BusinessRuleError):
+    code = "mfa_already_enabled"
+    default_message = "La double authentification de ce compte est déjà active."
+
+
+class CannotResetOwnMfaError(BusinessRuleError):
+    code = "cannot_reset_own_mfa"
+    default_message = (
+        "Vous ne pouvez pas réinitialiser votre propre double authentification : "
+        "demandez-le à un autre administrateur."
+    )
+
+
+def _open_challenge(session: Session, platform_user_id: UUID, purpose: str) -> str:
+    """Un jeton intermédiaire neuf ; ceux encore ouverts pour ce compte tombent."""
+    repository = MfaRepository(session)
+    now = datetime.now(UTC)
+    repository.consume_open_challenges(platform_user_id, now)
+    raw_token, token_hash = mfa.new_opaque_token()
+    repository.add_challenge(
+        PlatformMfaChallenge(
+            platform_user_id=platform_user_id,
+            token_hash=token_hash,
+            purpose=purpose,
+            created_at=now,
+            expires_at=now + CHALLENGE_TTL,
+        )
+    )
+    return raw_token
+
+
+def _locked_challenge(
+    session: Session, raw_token: str, purpose: str
+) -> tuple[PlatformMfaChallenge, PlatformUser]:
+    """Le jeton intermédiaire et son compte, verrouillés ; refus uniforme sinon."""
+    repository = MfaRepository(session)
+    challenge = repository.lock_challenge(mfa.opaque_token_digest(raw_token))
+    now = datetime.now(UTC)
+    if (
+        challenge is None
+        or challenge.purpose != purpose
+        or challenge.consumed_at is not None
+        or challenge.expires_at <= now
+    ):
+        raise MfaChallengeInvalidError()
+    user = repository.lock_user(challenge.platform_user_id)
+    if user is None or not user.is_active:
+        raise MfaChallengeInvalidError()
+    return challenge, user
+
+
+def _challenge_owner(raw_token: str) -> tuple[UUID, str]:
+    """Le compte d'un jeton intermédiaire, lu dans une courte transaction : la clé du
+    freinage doit être connue **avant** de vérifier le code."""
+    with platform_transaction() as session:
+        repository = MfaRepository(session)
+        challenge = repository.lock_challenge(mfa.opaque_token_digest(raw_token))
+        if challenge is None:
+            raise MfaChallengeInvalidError()
+        user = PlatformUserRepository(session).get(challenge.platform_user_id)
+        if user is None:
+            raise MfaChallengeInvalidError()
+        return user.id, user.email
+
+
+def _qr_svg(uri: str) -> str:
+    qr = segno.make(uri, error="m", micro=False)
+    return str(qr.svg_inline(scale=5, border=2, dark="#111111", light="#ffffff"))
+
+
+def start_enrollment(raw_token: str) -> MfaEnrollment:
+    """Propose un secret (QR code et clé texte) ; il ne sera actif qu'après un premier
+    code juste. Un nouvel appel en propose un autre."""
+    with platform_transaction() as session:
+        challenge, user = _locked_challenge(session, raw_token, "enroll")
+        if user.mfa_enabled_at is not None:
+            raise MfaAlreadyEnabledError()
+        secret = totp.generate_secret()
+        challenge.pending_secret = mfa.encrypt_secret(secret, user.id)
+        uri = totp.provisioning_uri(secret, user.email)
+        account = user.email
+    return MfaEnrollment(
+        secret=secret,
+        otpauth_uri=uri,
+        qr_svg=_qr_svg(uri),
+        account=account,
+        issuer=totp.ISSUER,
+    )
+
+
+def _record_code_failure(attempt: rate_limit.AccountAttempt, platform_user_id: UUID) -> None:
+    failure = rate_limit.record_failure(attempt)
+    if failure.failures == get_settings().login_throttle_alert_after:
+        queue.enqueue(
+            LOGIN_FAILURES_TASK,
+            countdown=0,
+            platform_user_id=str(platform_user_id),
+            failures=failure.failures,
+        )
+
+
+def _new_recovery_codes(session: Session, platform_user_id: UUID, now: datetime) -> list[str]:
+    repository = MfaRepository(session)
+    repository.revoke_recovery_codes(platform_user_id, now)
+    codes = mfa.generate_recovery_codes()
+    repository.add_recovery_codes(
+        platform_user_id,
+        [
+            mfa.recovery_code_digest(platform_user_id, cast(str, mfa.normalise_recovery_code(c)))
+            for c in codes
+        ],
+    )
+    return codes
+
+
+def _recognise_device(
+    session: Session,
+    platform_user_id: UUID,
+    device_token: str | None,
+    user_agent: str | None,
+    now: datetime,
+) -> tuple[bool, str, str]:
+    """(nouvel appareil, jeton à reposer en cookie, navigateur).
+
+    L'appareil est un jeton aléatoire en cookie (un an) **et** son navigateur ; aucune
+    adresse IP (elle change chaque jour chez la plupart des opérateurs). Un cookie qui
+    change de navigateur compte comme un nouvel appareil.
+    """
+    repository = MfaRepository(session)
+    browser = mfa.browser_label(user_agent)
+    if device_token and 20 <= len(device_token) <= 200:
+        known = repository.device(platform_user_id, mfa.opaque_token_digest(device_token))
+        if known is not None and known.browser == browser:
+            known.last_seen_at = now
+            return False, device_token, browser
+        if known is None:
+            repository.add_device(
+                PlatformKnownDevice(
+                    platform_user_id=platform_user_id,
+                    token_hash=mfa.opaque_token_digest(device_token),
+                    browser=browser,
+                    first_seen_at=now,
+                    last_seen_at=now,
+                )
+            )
+            return True, device_token, browser
+    raw, digest = mfa.new_opaque_token()
+    repository.add_device(
+        PlatformKnownDevice(
+            platform_user_id=platform_user_id,
+            token_hash=digest,
+            browser=browser,
+            first_seen_at=now,
+            last_seen_at=now,
+        )
+    )
+    return True, raw, browser
+
+
+def _notify(platform_user_id: UUID, kind: str, device: str | None = None) -> None:
+    """E-mail au compte (et à l'équipe), par le worker, après COMMIT."""
+    queue.enqueue(
+        SECURITY_NOTICE_TASK,
+        countdown=0,
+        platform_user_id=str(platform_user_id),
+        kind=kind,
+        device=device,
+    )
+
+
+def confirm_enrollment(
+    raw_token: str,
+    code: str,
+    *,
+    user_agent: str | None,
+    ip_address: str | None,
+    device_token: str | None,
+) -> IssuedPlatformTokens:
+    """Premier code juste : la double authentification devient active, les codes de
+    secours sont tirés (montrés une fois), et la session s'ouvre."""
+    platform_user_id, email = _challenge_owner(raw_token)
+    attempt = rate_limit.begin_attempt(THROTTLE_SCOPE, user_id=platform_user_id, typed=email)
+    accepted = False
+    try:
+        with platform_transaction() as session:
+            challenge, user = _locked_challenge(session, raw_token, "enroll")
+            if user.mfa_enabled_at is not None:
+                raise MfaAlreadyEnabledError()
+            if challenge.pending_secret is None:
+                raise MfaChallengeInvalidError()
+            secret = mfa.decrypt_secret(challenge.pending_secret, user.id)
+            step = totp.matching_step(secret, code, last_step=None)
+            if step is None:
+                raise MfaCodeInvalidError()
+            accepted = True
+            now = datetime.now(UTC)
+            challenge.consumed_at = now
+            user.mfa_secret = challenge.pending_secret
+            user.mfa_enabled_at = now
+            user.mfa_last_step = step
+            user.last_login_at = now
+            codes = _new_recovery_codes(session, user.id, now)
+            _, device, browser = _recognise_device(session, user.id, device_token, user_agent, now)
+            _audit(
+                session,
+                actor_id=user.id,
+                action="update",
+                entity_table="platform_users",
+                entity_id=user.id,
+                diff={"mfa": "enabled", "device": browser},
+                ip_address=ip_address,
+            )
+            _, refresh_token = _issue_session(
+                session,
+                platform_user_id=user.id,
+                family_id=uuid4(),
+                user_agent=user_agent,
+                ip_address=ip_address,
+                authenticated_at=now,
+            )
+            access_token, expires_in = create_platform_access_token(user.id, user.role)
+    except MfaCodeInvalidError:
+        _record_code_failure(attempt, platform_user_id)
+        raise
+    finally:
+        if not accepted:
+            rate_limit.cancel_attempt(attempt)
+    rate_limit.reset_account(attempt)
+    _notify(platform_user_id, "mfa_enabled", browser)
+    return IssuedPlatformTokens(
+        access_token=access_token,
+        expires_in=expires_in,
+        refresh_token=refresh_token,
+        device_token=device,
+        recovery_codes=tuple(codes),
+    )
+
+
+def verify_mfa(
+    raw_token: str,
+    *,
+    code: str | None,
+    recovery_code: str | None,
+    user_agent: str | None,
+    ip_address: str | None,
+    device_token: str | None,
+) -> IssuedPlatformTokens:
+    """Seconde étape de la connexion : le code de l'application, ou un code de secours
+    (usage unique, noté au journal et signalé). Même freinage que le mot de passe."""
+    platform_user_id, email = _challenge_owner(raw_token)
+    attempt = rate_limit.begin_attempt(THROTTLE_SCOPE, user_id=platform_user_id, typed=email)
+    accepted = False
+    try:
+        with platform_transaction() as session:
+            challenge, user = _locked_challenge(session, raw_token, "verify")
+            if user.mfa_secret is None:
+                raise MfaChallengeInvalidError()
+            now = datetime.now(UTC)
+            repository = MfaRepository(session)
+            diff: dict[str, Any]
+            if code is not None:
+                step = totp.matching_step(
+                    mfa.decrypt_secret(user.mfa_secret, user.id),
+                    code,
+                    last_step=user.mfa_last_step,
+                )
+                if step is None:
+                    raise MfaCodeInvalidError()
+                user.mfa_last_step = step
+                diff = {"method": "totp"}
+            else:
+                normalised = mfa.normalise_recovery_code(recovery_code or "")
+                row = (
+                    repository.lock_recovery_code(
+                        user.id, mfa.recovery_code_digest(user.id, normalised)
+                    )
+                    if normalised is not None
+                    else None
+                )
+                if row is None:
+                    raise MfaCodeInvalidError("Code de secours incorrect ou déjà utilisé.")
+                row.used_at = now
+                session.flush()
+                diff = {
+                    "method": "recovery_code",
+                    "recovery_codes_left": repository.recovery_codes_left(user.id),
+                }
+            accepted = True
+            challenge.consumed_at = now
+            user.last_login_at = now
+            new_device, device, browser = _recognise_device(
+                session, user.id, device_token, user_agent, now
+            )
+            if new_device:
+                diff |= {"new_device": True, "device": browser}
+            _audit(
+                session,
+                actor_id=user.id,
+                action="login",
+                entity_table="platform_users",
+                entity_id=user.id,
+                diff=diff,
+                ip_address=ip_address,
+            )
+            _, refresh_token = _issue_session(
+                session,
+                platform_user_id=user.id,
+                family_id=uuid4(),
+                user_agent=user_agent,
+                ip_address=ip_address,
+                authenticated_at=now,
+            )
+            access_token, expires_in = create_platform_access_token(user.id, user.role)
+    except MfaCodeInvalidError:
+        _record_code_failure(attempt, platform_user_id)
+        raise
+    finally:
+        if not accepted:
+            rate_limit.cancel_attempt(attempt)
+    rate_limit.reset_account(attempt)
+    if diff["method"] == "recovery_code":
+        _notify(platform_user_id, "recovery_code_used", browser)
+    if new_device:
+        _notify(platform_user_id, "new_device", browser)
+    return IssuedPlatformTokens(
+        access_token=access_token,
+        expires_in=expires_in,
+        refresh_token=refresh_token,
+        device_token=device,
+    )
+
+
+def regenerate_recovery_codes(
+    admin: PlatformAdmin, code: str, *, ip_address: str | None
+) -> list[str]:
+    """Dix codes neufs ; les anciens ne servent plus. Exige un code de l'application."""
+    with platform_transaction() as session:
+        user = PlatformUserRepository(session).get(admin.platform_user_id)
+        if user is None:
+            raise AuthenticationRequiredError("Session invalide.")
+        email = user.email
+    attempt = rate_limit.begin_attempt(THROTTLE_SCOPE, user_id=admin.platform_user_id, typed=email)
+    accepted = False
+    try:
+        with platform_transaction() as session:
+            user = MfaRepository(session).lock_user(admin.platform_user_id)
+            if user is None or user.mfa_secret is None:
+                raise AuthenticationRequiredError("Session invalide.")
+            step = totp.matching_step(
+                mfa.decrypt_secret(user.mfa_secret, user.id), code, last_step=user.mfa_last_step
+            )
+            if step is None:
+                raise MfaConfirmationInvalidError()
+            accepted = True
+            user.mfa_last_step = step
+            codes = _new_recovery_codes(session, user.id, datetime.now(UTC))
+            _audit(
+                session,
+                actor_id=user.id,
+                action="update",
+                entity_table="platform_users",
+                entity_id=user.id,
+                diff={"mfa": "recovery_codes_regenerated"},
+                ip_address=ip_address,
+            )
+    except MfaCodeInvalidError:
+        _record_code_failure(attempt, admin.platform_user_id)
+        raise
+    finally:
+        if not accepted:
+            rate_limit.cancel_attempt(attempt)
+    rate_limit.reset_account(attempt)
+    return codes
+
+
+def _clear_mfa(session: Session, user: PlatformUser, now: datetime) -> int:
+    """Retire secret et codes de secours ; le trigger de 0033 révoque les sessions."""
+    repository = MfaRepository(session)
+    user.mfa_secret = None
+    user.mfa_enabled_at = None
+    user.mfa_last_step = None
+    repository.revoke_recovery_codes(user.id, now)
+    repository.consume_open_challenges(user.id, now)
+    session.flush()
+    return repository.revoke_sessions(user.id, now)
+
+
+def reset_member_mfa(
+    session: Session,
+    admin: PlatformAdmin,
+    user_id: UUID,
+    *,
+    reason: str,
+    ip_address: str | None,
+) -> TeamMember:
+    """Téléphone perdu : un administrateur réinitialise la double authentification d'un
+    collègue (jamais la sienne). Sessions fermées, réenrôlement à la connexion suivante."""
+    if user_id == admin.platform_user_id:
+        raise CannotResetOwnMfaError()
+    member = TeamRepository(session).lock_member(user_id)
+    if member is None:
+        raise NotFoundError("Compte introuvable.")
+    now = datetime.now(UTC)
+    revoked = _clear_mfa(session, member, now)
+    _audit(
+        session,
+        actor_id=admin.platform_user_id,
+        action="update",
+        entity_table="platform_users",
+        entity_id=member.id,
+        diff={"mfa": "reset", "reason": reason, "revoked_sessions": revoked},
+        ip_address=ip_address,
+    )
+    member_id = member.id
+    on_commit(session, lambda: _notify(member_id, "mfa_reset"))
+    return _member(member, admin)
+
+
+def reset_platform_mfa(*, email: str) -> bool:
+    """Dernier recours sur le serveur (CLI) : même effet, sans acteur. `False` : aucun
+    compte à cette adresse."""
+    with platform_transaction() as session:
+        user = PlatformUserRepository(session).get_by_email(email.strip().lower())
+        if user is None:
+            return False
+        user = MfaRepository(session).lock_user(user.id)
+        assert user is not None
+        revoked = _clear_mfa(session, user, datetime.now(UTC))
+        _audit(
+            session,
+            actor_id=None,
+            action="update",
+            entity_table="platform_users",
+            entity_id=user.id,
+            diff={"mfa": "reset", "reason": "commande sur le serveur", "revoked_sessions": revoked},
+        )
+        user_id = user.id
+    _notify(user_id, "mfa_reset")
+    return True
+
+
+@dataclass(frozen=True, slots=True)
+class SecurityNotice:
+    """Ce que le worker envoie : à qui, et quoi. Aucun secret."""
+
+    email: str
+    display_name: str
+
+
+def security_notice_recipient(platform_user_id: UUID) -> SecurityNotice | None:
+    with platform_transaction() as session:
+        user = PlatformUserRepository(session).get(platform_user_id)
+        if user is None:
+            return None
+        return SecurityNotice(email=user.email, display_name=user.display_name)
 
 
 # ------------------------------------------------------------------ entreprises
@@ -427,8 +941,23 @@ def set_company_status(
 # -------------------------------------------------------------------------- CLI
 
 
-def create_platform_user(*, email: str, display_name: str, role: str, password: str) -> UUID:
-    """Crée un compte de l'équipe. Réservé à la CLI : aucune route d'inscription."""
+class MfaSecretOutsideDevelopmentError(ValueError):
+    """`--mfa-secret` hors `local` et `ci` : un secret connu d'avance n'est pas un facteur."""
+
+
+def create_platform_user(
+    *, email: str, display_name: str, role: str, password: str, mfa_secret: str | None = None
+) -> UUID:
+    """Crée un compte de l'équipe. Réservé à la CLI : aucune route d'inscription.
+
+    Sans `mfa_secret`, le compte enrôle sa double authentification à sa première
+    connexion. `mfa_secret` (parcours e2e) n'est accepté qu'en `local` et `ci`.
+    """
+    if mfa_secret is not None and get_settings().env not in DEVELOPMENT_ENVS:
+        raise MfaSecretOutsideDevelopmentError(
+            "--mfa-secret n'est accepté qu'en local et en CI : un compte réel enrôle sa "
+            "double authentification à sa première connexion."
+        )
     if len(password) < MIN_PASSWORD_LENGTH:
         raise ValueError(f"Le mot de passe doit faire au moins {MIN_PASSWORD_LENGTH} caractères.")
     if role not in ("administrator", "support"):
@@ -442,6 +971,9 @@ def create_platform_user(*, email: str, display_name: str, role: str, password: 
                 role=role,
             )
         )
+        if mfa_secret is not None:
+            user.mfa_secret = mfa.encrypt_secret(mfa_secret, user.id)
+            user.mfa_enabled_at = datetime.now(UTC)
         _audit(
             session,
             actor_id=None,
@@ -1242,6 +1774,7 @@ AUDIT_FIELDS = frozenset(
         "amount_fcfa",
         "before",
         "current_period_end",
+        "device",
         "display_name",
         "duration_minutes",
         "email",
@@ -1251,9 +1784,12 @@ AUDIT_FIELDS = frozenset(
         "issue",
         "justification",
         "method",
+        "mfa",
+        "new_device",
         "paid_at",
         "plan",
         "reason",
+        "recovery_codes_left",
         "revoked_sessions",
         "role",
         "started_at",
@@ -1327,6 +1863,7 @@ def _member(user: PlatformUser, admin: PlatformAdmin) -> TeamMember:
         last_login_at=user.last_login_at,
         created_at=user.created_at,
         is_me=user.id == admin.platform_user_id,
+        mfa_enabled=user.mfa_enabled_at is not None,
     )
 
 
@@ -1558,10 +2095,9 @@ def issue_invitation_token(invitation_id: UUID, issue: int) -> InvitationMail | 
         )
 
 
-def accept_invitation(
-    raw_token: str, password: str, *, user_agent: str | None, ip_address: str | None
-) -> IssuedPlatformTokens:
-    """Crée le compte, consomme le jeton (usage unique) et ouvre une session."""
+def accept_invitation(raw_token: str, password: str, *, ip_address: str | None) -> LoginStep:
+    """Crée le compte et consomme le jeton (usage unique). Aucune session : le collègue
+    enrôle sa double authentification d'abord (ADR 0105)."""
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
     with platform_transaction() as session:
         repository = TeamRepository(session)
@@ -1581,18 +2117,10 @@ def accept_invitation(
                 password_hash=hash_password(password),
                 display_name=invitation.display_name,
                 role=invitation.role,
-                last_login_at=now,
             )
         )
         invitation.accepted_at = now
         invitation.accepted_user_id = user.id
-        _, refresh_token = _issue_session(
-            session,
-            platform_user_id=user.id,
-            family_id=uuid4(),
-            user_agent=user_agent,
-            ip_address=ip_address,
-        )
         _audit(
             session,
             actor_id=user.id,
@@ -1602,9 +2130,11 @@ def accept_invitation(
             diff={"after": {"role": user.role, "email": user.email}},
             ip_address=ip_address,
         )
-        access_token, expires_in = create_platform_access_token(user.id, user.role)
-    return IssuedPlatformTokens(
-        access_token=access_token, expires_in=expires_in, refresh_token=refresh_token
+        raw_challenge = _open_challenge(session, user.id, "enroll")
+    return LoginStep(
+        step="enroll",
+        challenge_token=raw_challenge,
+        expires_in=int(CHALLENGE_TTL.total_seconds()),
     )
 
 
@@ -1820,5 +2350,15 @@ def attention(session: Session) -> AttentionRead:
                 expires_at=invitation.expires_at,
             )
             for invitation in TeamRepository(session).expiring(now, now + INVITATION_SOON)
+        ],
+        security_events=[
+            SecurityEvent(
+                kind=row.kind,
+                platform_user_id=row.platform_user_id,
+                display_name=row.display_name,
+                device=row.device,
+                occurred_at=row.occurred_at,
+            )
+            for row in repository.security_events(now - SECURITY_EVENTS_WINDOW)
         ],
     )

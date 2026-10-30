@@ -41,6 +41,11 @@ OPEN_PATHS = frozenset(
         "/api/v1/platform/auth/logout",
         # Le collègue invité n'a pas encore de compte (ADR 0094) : le jeton du lien suffit.
         "/api/v1/platform/auth/accept-invitation",
+        # Entre le mot de passe et le code (ADR 0105) : le jeton intermédiaire, dans le
+        # corps, suffit ; il n'ouvre que ces routes (`test_platform_mfa.py`).
+        "/api/v1/platform/auth/mfa/enrollment",
+        "/api/v1/platform/auth/mfa/enrollment/confirm",
+        "/api/v1/platform/auth/mfa/verify",
         # Contrôle de Caddy (ADR 0104) : jeton Cloudflare Access seulement, aucun compte,
         # aucune donnée (`test_platform_access_gate.py`).
         "/api/v1/platform/access",

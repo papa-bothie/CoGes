@@ -63,10 +63,16 @@ function rowsOf(team: TeamList, filter: string): Row[] {
 
 function StatusPill({ row }: { row: Row }) {
   if (row.kind === "invitation") return <Pill tone="info">Invité</Pill>;
-  return row.member.is_active ? (
-    <Pill tone="succes">Actif</Pill>
-  ) : (
-    <Pill tone="danger">Suspendu</Pill>
+  return (
+    <span className="inline-flex flex-wrap gap-1">
+      {row.member.is_active ? (
+        <Pill tone="succes">Actif</Pill>
+      ) : (
+        <Pill tone="danger">Suspendu</Pill>
+      )}
+      {/* Enrôlement attendu à la prochaine connexion (ADR 0105). */}
+      {!row.member.mfa_enabled && <Pill tone="attention">Code à activer</Pill>}
+    </span>
   );
 }
 
@@ -182,6 +188,32 @@ export function TeamView() {
     }
   }
 
+  function resetMfa(member: TeamMember) {
+    const name = shortName(member.display_name);
+    setConfirm({
+      title: `Réinitialiser la double authentification de ${name} ?`,
+      consequence: (
+        <p>
+          À faire quand {name} a perdu son téléphone. Ses sessions s&apos;arrêtent tout de suite,
+          ses codes de secours ne servent plus ; à sa prochaine connexion, il enrôle à nouveau son
+          application. Vérifiez d&apos;abord que c&apos;est bien lui qui le demande.
+        </p>
+      ),
+      confirmLabel: `Réinitialiser pour ${name}`,
+      destructive: true,
+      requireReason: true,
+      onConfirm: async (reason) => {
+        await unwrap(
+          api.POST("/api/v1/platform/team/{user_id}/mfa-reset", {
+            params: { path: { user_id: member.id } },
+            body: { reason },
+          }),
+        );
+        done(`La double authentification de ${name} est réinitialisée.`, member.id);
+      },
+    });
+  }
+
   function cancelInvitation(invitation: TeamInvitation) {
     const name = shortName(invitation.display_name);
     setConfirm({
@@ -249,8 +281,8 @@ export function TeamView() {
     if (member.is_me) {
       return (
         <p className="max-w-56 text-sm text-encre-douce">
-          C&apos;est votre compte : un autre administrateur peut changer votre profil ou le
-          suspendre.
+          C&apos;est votre compte : un autre administrateur peut changer votre profil, le suspendre
+          ou réinitialiser votre double authentification.
         </p>
       );
     }
@@ -267,6 +299,12 @@ export function TeamView() {
           {member.is_active ? "Suspendre" : "Réactiver"}
           <span className="sr-only"> {member.display_name}</span>
         </button>
+        {member.mfa_enabled && (
+          <button type="button" onClick={() => resetMfa(member)} className={BUTTON.quiet}>
+            Réinitialiser le code
+            <span className="sr-only"> de double authentification de {member.display_name}</span>
+          </button>
+        )}
       </div>
     );
   }

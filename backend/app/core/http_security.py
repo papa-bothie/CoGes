@@ -46,6 +46,11 @@ LOGIN_PATHS = frozenset(
         LOGIN_PATH,
         f"{API_PREFIX}/platform/auth/login",
         f"{API_PREFIX}/platform/auth/accept-invitation",
+        # Double authentification (ADR 0105) : chaque code essayé compte comme une connexion.
+        f"{API_PREFIX}/platform/auth/mfa/enrollment",
+        f"{API_PREFIX}/platform/auth/mfa/enrollment/confirm",
+        f"{API_PREFIX}/platform/auth/mfa/verify",
+        f"{API_PREFIX}/platform/auth/mfa/recovery-codes",
     }
 )
 DOCS_PATHS = (f"{API_PREFIX}/docs", f"{API_PREFIX}/openapi.json")

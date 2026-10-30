@@ -19,7 +19,11 @@ from app.core.config import get_settings
 from app.main import app
 from tests.conftest import TEST_BASE_URL
 from tests.helpers.access_tokens import AUD, KEY, OTHER_KEY, TEAM, jwk, token
-from tests.integration.platform_harness import PLATFORM_PASSWORD, create_platform_account
+from tests.integration.platform_harness import (
+    PLATFORM_PASSWORD,
+    create_platform_account,
+    platform_login_response,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -89,10 +93,7 @@ def test_a_good_password_without_a_token_is_refused(client: TestClient) -> None:
 
     _refused(client.post("/api/v1/platform/auth/login", json=credentials))
 
-    response = client.post(
-        "/api/v1/platform/auth/login", json=credentials, headers={HEADER: token()}
-    )
-    assert response.status_code == 200, response.text
+    response = platform_login_response(client, account, headers={HEADER: token()})
     bearer = {"Authorization": f"Bearer {response.json()['access_token']}"}
 
     # Le jeton de l'administration ne remplace pas celui de Cloudflare.

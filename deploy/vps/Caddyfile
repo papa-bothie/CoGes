@@ -3,7 +3,8 @@
 #   /api/v1/*  → API FastAPI (un saut de moins que la réécriture de Next)
 #   le reste   → front Next.js
 # L'administration de la plateforme (ADR 0089) a son sous-domaine, admin.<domaine>,
-# derrière Cloudflare Access ou une liste d'adresses (ADR 0104, fin du fichier) :
+# protégé par la double authentification obligatoire (ADR 0105), et au choix par
+# Cloudflare Access ou une liste d'adresses (ADR 0104, fin du fichier) :
 # /api/v1/platform/* n'est servi que là, jamais sur le domaine commerçant.
 # La préproduction (sous-domaine preprod.) passe par le même Caddy ; arrêtée, elle
 # répond 502.
@@ -107,7 +108,8 @@ preprod.{$COGES_DOMAIN} {
 }
 
 # Administration de la plateforme (ADR 0089), pile de production seulement. Sa porte
-# (ADR 0104) se choisit par COGES_ADMIN_GATE dans /etc/coges/coges.env :
+# (ADR 0104, 0105) se choisit par COGES_ADMIN_GATE dans /etc/coges/coges.env :
+#   mfa         admin-mfa.caddy        : 443 sans filtre d'adresse, double authentification ;
 #   cloudflare  admin-cloudflare.caddy : Cloudflare Access par le tunnel, aucun port public ;
 #   ip          admin-ip.caddy         : liste d'adresses sur 443 (retour arrière) ;
 #   ssh         admin-ssh.caddy        : secours, port local du VPS par tunnel SSH.

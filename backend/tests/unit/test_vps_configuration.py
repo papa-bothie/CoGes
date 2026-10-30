@@ -80,7 +80,7 @@ def test_each_gate_has_its_file_and_the_bundle_carries_them() -> None:
     bundle = (VPS / "Dockerfile.bundle").read_text(encoding="utf-8")
     volumes = _services()["caddy"]["volumes"]
     assert "import admin-{$COGES_ADMIN_GATE:ip}.caddy" in caddyfile
-    for gate in ("cloudflare", "ip", "ssh"):
+    for gate in ("mfa", "cloudflare", "ip", "ssh"):
         assert (VPS / f"admin-{gate}.caddy").is_file()
         assert f"deploy/vps/admin-{gate}.caddy" in bundle
         assert f"./admin-{gate}.caddy:/etc/caddy/admin-{gate}.caddy:ro" in volumes
@@ -91,6 +91,7 @@ def test_behind_cloudflare_the_admin_is_on_the_internal_port_only() -> None:
     assert _site_addresses(VPS / "admin-cloudflare.caddy") == ["http://:8081"]
     assert _site_addresses(VPS / "admin-ssh.caddy") == ["http://:8082"]
     assert _site_addresses(VPS / "admin-ip.caddy") == ["admin.{$COGES_DOMAIN}"]
+    assert _site_addresses(VPS / "admin-mfa.caddy") == ["admin.{$COGES_DOMAIN}"]
     ports = _services()["caddy"]["ports"]
     assert not any("8081" in port for port in ports), ports
     assert [port for port in ports if "8082" in port] == ["127.0.0.1:8082:8082"]
@@ -191,6 +192,17 @@ needs_docker = pytest.mark.skipif(shutil.which("docker") is None, reason="docker
             },
         ),
         ("ssh", "", {":443": ["coges.example.sn", "preprod.coges.example.sn"], ":8082": []}),
+        (
+            "mfa",
+            "",
+            {
+                ":443": [
+                    "admin.coges.example.sn",
+                    "coges.example.sn",
+                    "preprod.coges.example.sn",
+                ]
+            },
+        ),
     ],
 )
 def test_the_rendered_caddyfile_serves_the_admin_only_through_its_gate(
@@ -209,3 +221,26 @@ def test_behind_the_tunnel_an_empty_allow_list_lets_access_decide() -> None:
     assert open_ranges == ['["0.0.0.0/0", "::/0"]']
     narrow = json.dumps(_adapt("cloudflare", "196.207.1.10"))
     assert '"client_ip": {"ranges": ["196.207.1.10"]}' in narrow
+
+
+def _admin_routes(config: dict[str, Any]) -> list[Any]:
+    return [
+        route
+        for server in config["apps"]["http"]["servers"].values()
+        for route in server.get("routes", [])
+        if "admin.coges.example.sn" in json.dumps(route.get("match", []))
+    ]
+
+
+@needs_docker
+def test_the_mfa_gate_filters_no_address_but_keeps_the_headers_and_the_body_limit() -> None:
+    """Porte `mfa` (ADR 0105) : 443 public, sans `remote_ip` ; mêmes en-têtes de sécurité,
+    même plafond de corps (1 Mo) et routes commerçantes fermées que le mode `ip`."""
+    routes = json.dumps(_admin_routes(_adapt("mfa", "")))
+    assert "remote_ip" not in routes and "client_ip" not in routes
+    assert "Strict-Transport-Security" in routes and "X-Frame-Options" in routes
+    assert '"max_size": 1000000' in routes
+    assert '"status_code": 404' in routes
+    assert "production-api:8000" in routes and "production-admin:3000" in routes
+    # Le mode `ip` garde, lui, son filtre.
+    assert "remote_ip" in json.dumps(_admin_routes(_adapt("ip", "192.0.2.10")))

@@ -70,8 +70,32 @@ _INVITATION_LIFECYCLE = (
     "revoked_at",
 )
 
+#: Double authentification (ADR 0105) : écrites une fois, puis seul leur sort change
+#: (jeton intermédiaire consommé, code de secours utilisé ou révoqué, appareil revu).
+_MFA_TABLES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
+    "platform_mfa_challenges": (
+        ("id", "platform_user_id", "token_hash", "purpose", "created_at", "expires_at"),
+        ("pending_secret", "consumed_at"),
+    ),
+    "platform_recovery_codes": (
+        ("id", "platform_user_id", "code_hash", "created_at"),
+        ("used_at", "revoked_at"),
+    ),
+    "platform_known_devices": (
+        ("id", "platform_user_id", "token_hash", "browser", "first_seen_at"),
+        ("last_seen_at",),
+    ),
+}
+
 #: Tables d'entreprise : quelques colonnes de métadonnées, rien d'autre.
 COLUMN_GRANTS: dict[str, dict[str, set[str]]] = {
+    **{
+        table: {
+            **{column: {"SELECT", "INSERT"} for column in fixed},
+            **{column: {"SELECT", "INSERT", "UPDATE"} for column in lifecycle},
+        }
+        for table, (fixed, lifecycle) in _MFA_TABLES.items()
+    },
     "platform_invitations": {
         **{column: {"SELECT", "INSERT"} for column in _INVITATION_FIXED},
         **{column: {"SELECT", "INSERT", "UPDATE"} for column in _INVITATION_LIFECYCLE},

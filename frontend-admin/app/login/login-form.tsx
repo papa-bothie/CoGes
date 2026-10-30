@@ -4,9 +4,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useId, useState, type FormEvent } from "react";
 
 import { errorMessage, isApiError } from "@/lib/api/errors";
+import { EnrollStep, RecoveryCodesPanel, VerifyStep } from "@/components/mfa-steps";
 import { PasswordField } from "@/components/password-field";
 import { BUTTON, FIELD, LABEL } from "@/components/ui";
-import { login } from "@/lib/auth/session";
+import { login, type LoginStep } from "@/lib/auth/session";
 
 export const MESSAGES = {
   invalid: "E-mail ou mot de passe incorrect.",
@@ -24,9 +25,39 @@ export function failure(error: unknown): string {
   return errorMessage(error);
 }
 
+/**
+ * Connexion en deux temps (ADR 0105) : le mot de passe, puis le code de l'application
+ * (ou un code de secours). Un compte sans double authentification l'enrôle d'abord, et
+ * reçoit ses codes de secours avant d'entrer.
+ */
 export function LoginForm() {
-  const params = useSearchParams();
   const router = useRouter();
+  const [step, setStep] = useState<LoginStep | null>(null);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+  const enter = () => router.replace("/");
+  const restart = () => {
+    setStep(null);
+    setRecoveryCodes(null);
+  };
+
+  if (recoveryCodes) return <RecoveryCodesPanel codes={recoveryCodes} onContinue={enter} />;
+  if (step?.step === "enroll") {
+    return (
+      <EnrollStep
+        challenge={step.challenge_token}
+        onActivated={setRecoveryCodes}
+        onRestart={restart}
+      />
+    );
+  }
+  if (step?.step === "verify") {
+    return <VerifyStep challenge={step.challenge_token} onDone={enter} onRestart={restart} />;
+  }
+  return <PasswordStep onAccepted={setStep} />;
+}
+
+function PasswordStep({ onAccepted }: { onAccepted: (step: LoginStep) => void }) {
+  const params = useSearchParams();
   const emailId = useId();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,15 +74,15 @@ export function LoginForm() {
     }
     setBusy(true);
     setError(null);
+    let next: LoginStep;
     try {
-      await login(email.trim(), password);
+      next = await login(email.trim(), password);
     } catch (caught) {
       setError(failure(caught));
       setBusy(false);
       return;
     }
-    // `proxy.ts` voit désormais l'indicateur de session posé par `login`.
-    router.replace("/");
+    onAccepted(next);
   }
 
   return (

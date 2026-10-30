@@ -16,6 +16,10 @@ const SESSION_ENDPOINTS = [
   "/api/v1/platform/auth/refresh",
   "/api/v1/platform/auth/logout",
   "/api/v1/platform/auth/accept-invitation",
+  // Entre le mot de passe et le code (ADR 0105) : aucun jeton d'accès à présenter.
+  "/api/v1/platform/auth/mfa/enrollment",
+  "/api/v1/platform/auth/mfa/enrollment/confirm",
+  "/api/v1/platform/auth/mfa/verify",
 ];
 
 export type AuthFetchDeps = {
