@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 import { expect, test, type Page } from "@playwright/test";
 
+import { ADMIN, enterCode } from "./mfa";
+
 /**
  * Captures de l'administration (prompt 27, D0 et D7 ; prompt 31), lancées seulement avec
  * `ADMIN_CAPTURES=avant|apres|theme` : chaque écran en clair et en sombre (et, sauf
@@ -10,7 +12,6 @@ import { expect, test, type Page } from "@playwright/test";
  * Rangées dans docs/design/captures/admin/<étape>/.
  */
 const STAGE = process.env.ADMIN_CAPTURES;
-const ADMIN = { email: "admin@e2e.example.com", password: "admin-coges-e2e-2026" };
 const OUT = join(__dirname, "..", "..", "docs", "design", "captures", "admin", STAGE ?? "x");
 
 test.skip(!STAGE, "captures à la demande : ADMIN_CAPTURES=avant|apres|theme");
@@ -93,6 +94,7 @@ async function signIn(page: Page): Promise<void> {
   await page.getByLabel("E-mail").fill(ADMIN.email);
   await page.getByLabel("Mot de passe", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
+  await enterCode(page);
   await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 }
 

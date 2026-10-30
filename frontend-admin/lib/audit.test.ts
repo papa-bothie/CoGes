@@ -82,6 +82,34 @@ describe("le journal en phrases", () => {
     ).toBe("CoGes (automatique) a mis l'abonnement de Boutique Awa en « Suspendu »");
   });
 
+  it("la double authentification, sans aucun secret (ADR 0105)", () => {
+    expect(
+      describeEntry(
+        entry({
+          action: "login",
+          entity_id: "a",
+          diff: { method: "recovery_code", new_device: true, device: "Firefox · Linux" },
+        }),
+      ),
+    ).toBe(
+      "Aïssatou D. s'est connecté avec un code de secours depuis un nouvel appareil (Firefox · Linux)",
+    );
+    expect(describeEntry(entry({ action: "login", diff: { method: "totp" } }))).toBe(
+      "Aïssatou D. s'est connecté",
+    );
+    expect(describeEntry(entry({ diff: { mfa: "enabled", device: "Edge · Windows" } }))).toBe(
+      "Moussa B. a activé sa double authentification",
+    );
+    expect(describeEntry(entry({ diff: { mfa: "reset", reason: "Téléphone perdu" } }))).toBe(
+      "Aïssatou D. a réinitialisé la double authentification de Moussa B. — « Téléphone perdu »",
+    );
+    expect(
+      describeEntry(entry({ actor_id: null, diff: { mfa: "reset", reason: "commande" } })),
+    ).toBe(
+      "La double authentification de Moussa B. a été réinitialisée en ligne de commande — « commande »",
+    );
+  });
+
   it("jamais de JSON brut, même pour un cas inconnu", () => {
     const text = describeEntry(entry({ entity_table: "autre", diff: { x: 1 } }));
     expect(text).not.toContain("{");

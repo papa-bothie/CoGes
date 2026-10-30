@@ -1,13 +1,14 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
+import { ADMIN, apiToken, enrollOnScreen, enterCode, keepCodesAndEnter } from "./mfa";
+
 /**
  * Les tâches de l'administrateur (prompt 27, D1), chacune avec son nombre d'actions
  * MAXIMUM, compté ici : un clic ou une touche qui déclenche quelque chose. La saisie du
  * texte n'est pas comptée. Les chiffres « avant » sont dans
  * docs/design/captures/admin/avant/README.md.
  */
-const ADMIN = { email: "admin@e2e.example.com", password: "admin-coges-e2e-2026" };
 const API = "http://localhost:8100/api/v1";
 const COLLEAGUE = { password: "demo-coges-2026" };
 
@@ -24,6 +25,7 @@ async function signIn(page: Page): Promise<void> {
   await page.getByLabel("E-mail").fill(ADMIN.email);
   await page.getByLabel("Mot de passe", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
+  await enterCode(page);
   await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
 }
 
@@ -33,9 +35,7 @@ async function axe(page: Page): Promise<void> {
 }
 
 async function adminHeaders(request: APIRequestContext): Promise<Record<string, string>> {
-  const login = await request.post(`${API}/platform/auth/login`, { data: ADMIN });
-  expect(login.ok()).toBeTruthy();
-  return { Authorization: `Bearer ${(await login.json()).access_token}` };
+  return { Authorization: `Bearer ${await apiToken(request)}` };
 }
 
 /** Un collègue créé par le vrai chemin : invitation (lien montré, sans SMTP), acceptation. */
@@ -167,7 +167,8 @@ test("3. inviter un collègue : 4 champs au plus, 1 bouton, puis l'invitation co
   );
   await axe(page);
 
-  // Le collègue ouvre le lien, choisit son mot de passe et arrive au tableau de bord.
+  // Le collègue ouvre le lien, choisit son mot de passe, enrôle sa double authentification
+  // (ADR 0105), garde ses codes de secours et arrive au tableau de bord.
   const context = await browser.newContext({ locale: "fr-FR", timezoneId: "Africa/Dakar" });
   const invitee = await context.newPage();
   await invitee.goto(new URL(link).pathname);
@@ -175,8 +176,9 @@ test("3. inviter un collègue : 4 champs au plus, 1 bouton, puis l'invitation co
   await axe(invitee);
   await invitee.getByLabel("Mot de passe", { exact: true }).fill(COLLEAGUE.password);
   await invitee.getByLabel("Le même, une seconde fois").fill(COLLEAGUE.password);
-  await invitee.getByRole("button", { name: "Activer mon compte" }).click();
-  await expect(invitee.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
+  await invitee.getByRole("button", { name: "Continuer" }).click();
+  await enrollOnScreen(invitee);
+  await keepCodesAndEnter(invitee);
   await expect(invitee.getByText(`Fatou Sow ${suffix} · Administrateur`).first()).toBeVisible();
 
   // Le même lien ne sert plus, avec un seul message.
@@ -185,7 +187,7 @@ test("3. inviter un collègue : 4 champs au plus, 1 bouton, puis l'invitation co
   await again.goto(new URL(link).pathname);
   await again.getByLabel("Mot de passe", { exact: true }).fill(COLLEAGUE.password);
   await again.getByLabel("Le même, une seconde fois").fill(COLLEAGUE.password);
-  await again.getByRole("button", { name: "Activer mon compte" }).click();
+  await again.getByRole("button", { name: "Continuer" }).click();
   await expect(again.locator("form").getByRole("alert")).toHaveText(
     /Ce lien d'invitation n'est plus valable/,
   );

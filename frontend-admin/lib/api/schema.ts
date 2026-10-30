@@ -35,3 +35,5 @@ export type AuditPage = Schemas["AuditPage"];
 export type ProfileRead = Schemas["ProfileRead"];
 export type AttentionRead = Schemas["AttentionRead"];
 export type TeamMemberUpdate = Schemas["TeamMemberUpdate"];
+export type SecurityEvent = Schemas["SecurityEvent"];
+export type RecoveryCodes = Schemas["RecoveryCodes"];

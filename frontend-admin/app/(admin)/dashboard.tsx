@@ -10,6 +10,7 @@ import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import type { AttentionRead, StatsOverview, TeamSummary } from "@/lib/api/schema";
 import { formatDate, formatDateTime } from "@/lib/format";
+import { securityEventText, securityEventTone } from "@/lib/security";
 
 type Tile = { label: string; value: number; href: string };
 
@@ -50,6 +51,14 @@ function ToHandle({ attention }: { attention: AttentionRead }) {
       text: `Le système est en panne (${state.health.problems.length} problème${state.health.problems.length > 1 ? "s" : ""})`,
       href: "/system",
       tone: "danger",
+    });
+  }
+  for (const event of attention.security_events) {
+    items.push({
+      key: `secu-${event.kind}-${event.occurred_at}-${event.platform_user_id ?? ""}`,
+      text: securityEventText(event),
+      href: event.platform_user_id ? `/team?member=${event.platform_user_id}` : "/team",
+      tone: securityEventTone(event),
     });
   }
   for (const invitation of attention.expiring_invitations) {

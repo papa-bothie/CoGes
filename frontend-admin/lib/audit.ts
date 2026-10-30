@@ -44,7 +44,27 @@ export function describeEntry(entry: AuditEntry): string {
 
   switch (entry.entity_table) {
     case "platform_users": {
-      if (entry.action === "login") return `${actor} s'est connecté`;
+      if (entry.action === "login") {
+        // Double authentification (ADR 0105) : comment, et depuis quel appareil nouveau.
+        const how = diff.method === "recovery_code" ? " avec un code de secours" : "";
+        const device =
+          diff.new_device === true
+            ? ` depuis un nouvel appareil (${String(diff.device ?? "")})`
+            : "";
+        return `${actor} s'est connecté${how}${device}`;
+      }
+      if (diff.mfa === "enabled") return `${target} a activé sa double authentification`;
+      if (diff.mfa === "recovery_codes_regenerated") {
+        return `${target} a généré de nouveaux codes de secours`;
+      }
+      if (diff.mfa === "reset") {
+        return withReason(
+          entry.actor_id
+            ? `${actor} a réinitialisé la double authentification de ${target}`
+            : `La double authentification de ${target} a été réinitialisée en ligne de commande`,
+          diff,
+        );
+      }
       if (entry.action === "insert") {
         if (!entry.actor_id)
           return `${target} a été créé en ligne de commande (${role(after.role)})`;

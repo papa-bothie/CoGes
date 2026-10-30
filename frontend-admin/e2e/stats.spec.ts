@@ -1,12 +1,13 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
+import { ADMIN, apiToken, enterCode } from "./mfa";
+
 /**
  * Statistiques (ADR 0093). Le revenu ne bouge qu'avec un paiement enregistré : on en
  * déclare un par l'API sur l'entreprise `support-e2e` (créée par `e2e.sh reset`), puis
  * l'écran le compte après « Actualiser ».
  */
-const ADMIN = { email: "admin@e2e.example.com", password: "admin-coges-e2e-2026" };
 const API = "http://localhost:8100/api/v1";
 
 async function axe(page: Page): Promise<void> {
@@ -15,9 +16,7 @@ async function axe(page: Page): Promise<void> {
 }
 
 async function platformHeaders(request: APIRequestContext): Promise<Record<string, string>> {
-  const login = await request.post(`${API}/platform/auth/login`, { data: ADMIN });
-  expect(login.ok()).toBeTruthy();
-  return { Authorization: `Bearer ${(await login.json()).access_token}` };
+  return { Authorization: `Bearer ${await apiToken(request)}` };
 }
 
 async function paymentCount(request: APIRequestContext, headers: Record<string, string>) {
@@ -41,6 +40,7 @@ test("statistiques : compteurs datés, revenu déclaré, nouvelles entreprises",
   await page.getByLabel("E-mail").fill(ADMIN.email);
   await page.getByLabel("Mot de passe", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
+  await enterCode(page);
   await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
   await page.goto("/companies");
   await page.getByRole("link", { name: "Statistiques" }).click();

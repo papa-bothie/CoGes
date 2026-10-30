@@ -2188,9 +2188,93 @@ export interface paths {
     put?: never;
     /**
      * Login
-     * @description Connexion de l'équipe CoGes : e-mail et mot de passe, aucune entreprise.
+     * @description Connexion de l'équipe CoGes, première étape : e-mail et mot de passe. Aucune
+     *     session : un jeton intermédiaire (5 min, usage unique) mène au code, ou à
+     *     l'enrôlement de la double authentification si le compte n'en a pas (ADR 0105).
      */
     post: operations["login_api_v1_platform_auth_login_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/auth/mfa/enrollment": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start Enrollment
+     * @description QR code et clé texte du secret proposé ; seul le jeton intermédiaire `enroll` y
+     *     mène. Le secret n'est plus jamais rendu après l'activation.
+     */
+    post: operations["start_enrollment_api_v1_platform_auth_mfa_enrollment_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/auth/mfa/enrollment/confirm": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Confirm Enrollment
+     * @description Premier code juste : double authentification active, session ouverte, et les dix
+     *     codes de secours, montrés cette fois seulement.
+     */
+    post: operations["confirm_enrollment_api_v1_platform_auth_mfa_enrollment_confirm_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/auth/mfa/verify": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Verify Mfa
+     * @description Seconde étape : le code de l'application, ou un code de secours.
+     */
+    post: operations["verify_mfa_api_v1_platform_auth_mfa_verify_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/auth/mfa/recovery-codes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Regenerate Recovery Codes
+     * @description Dix codes de secours neufs, montrés une fois ; les anciens ne servent plus.
+     */
+    post: operations["regenerate_recovery_codes_api_v1_platform_auth_mfa_recovery_codes_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -2519,8 +2603,9 @@ export interface paths {
     /**
      * Accept Invitation
      * @description Publique : le collègue invité choisit son mot de passe. Compte créé, jeton consommé,
-     *     session ouverte. Même réponse pour tout lien qui n'est plus valable ; freinée par
-     *     adresse IP comme la connexion.
+     *     puis enrôlement de la double authentification avant toute session (ADR 0105). Même
+     *     réponse pour tout lien qui n'est plus valable ; freinée par adresse IP comme la
+     *     connexion.
      */
     post: operations["accept_invitation_api_v1_platform_auth_accept_invitation_post"];
     delete?: never;
@@ -2644,6 +2729,28 @@ export interface paths {
      *     administrateur actif (409 `last_administrator`).
      */
     patch: operations["update_member_api_v1_platform_team__user_id__patch"];
+    trace?: never;
+  };
+  "/api/v1/platform/team/{user_id}/mfa-reset": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reset Member Mfa
+     * @description Téléphone perdu : réinitialiser la double authentification d'un collègue (raison
+     *     obligatoire). Ses sessions tombent ; il réenrôle à sa prochaine connexion. Jamais la
+     *     sienne (409 `cannot_reset_own_mfa`).
+     */
+    post: operations["reset_member_mfa_api_v1_platform_team__user_id__mfa_reset_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   "/api/v1/platform/users": {
@@ -2909,6 +3016,8 @@ export interface components {
       suspended_total: number;
       /** Expiring Invitations */
       expiring_invitations: components["schemas"]["ExpiringInvitation"][];
+      /** Security Events */
+      security_events: components["schemas"]["SecurityEvent"][];
     };
     /** @enum {string} */
     AuditActionName:
@@ -4635,6 +4744,71 @@ export interface components {
       total: number;
     };
     /**
+     * MfaActivated
+     * @description Double authentification active : la session, et les codes de secours **une fois**.
+     */
+    MfaActivated: {
+      /** Access Token */
+      access_token: string;
+      /**
+       * Token Type
+       * @default bearer
+       */
+      token_type: string;
+      /** Expires In */
+      expires_in: number;
+      /** Recovery Codes */
+      recovery_codes: string[];
+    };
+    /** MfaChallengeRequest */
+    MfaChallengeRequest: {
+      /** Challenge Token */
+      challenge_token: string;
+    };
+    /** MfaCodeRequest */
+    MfaCodeRequest: {
+      /** Challenge Token */
+      challenge_token: string;
+      /** Code */
+      code: string;
+    };
+    /**
+     * MfaEnrollment
+     * @description Le secret proposé, montré pendant l'enrôlement seulement, jamais après.
+     */
+    MfaEnrollment: {
+      /** Secret */
+      secret: string;
+      /** Otpauth Uri */
+      otpauth_uri: string;
+      /** Qr Svg */
+      qr_svg: string;
+      /** Account */
+      account: string;
+      /** Issuer */
+      issuer: string;
+    };
+    /**
+     * MfaReset
+     * @description Réinitialiser la double authentification d'un collègue : la raison est exigée.
+     */
+    MfaReset: {
+      /** Reason */
+      reason: string;
+    };
+    /**
+     * MfaVerifyRequest
+     * @description Le code de l'application, ou un code de secours : l'un des deux exactement.
+     */
+    MfaVerifyRequest: {
+      /** Challenge Token */
+      challenge_token: string;
+      /** Code */
+      code?: string | null;
+      /** Recovery Code */
+      recovery_code?: string | null;
+    };
+    /**
      * MoneyBucket
      * @description Une paire de barres du graphique « Entrées et sorties ».
      *
@@ -5313,6 +5487,25 @@ export interface components {
       /** Password */
       password: string;
     };
+    /**
+     * PlatformLoginStep
+     * @description Mot de passe accepté : la session n'est ouverte qu'après le code (ADR 0105).
+     *
+     *     `challenge_token` est le jeton intermédiaire : 5 minutes, une seule fois, et rien
+     *     d'autre que l'étape annoncée (`enroll` : aucune double authentification encore,
+     *     seul l'enrôlement est ouvert ; `verify` : le code de l'application ou de secours).
+     */
+    PlatformLoginStep: {
+      /**
+       * Step
+       * @enum {string}
+       */
+      step: "enroll" | "verify";
+      /** Challenge Token */
+      challenge_token: string;
+      /** Expires In */
+      expires_in: number;
+    };
     /** PlatformMe */
     PlatformMe: {
       /**
@@ -5329,6 +5522,10 @@ export interface components {
        * @enum {string}
        */
       role: "administrator" | "support";
+      /** Mfa Enabled At */
+      mfa_enabled_at: string | null;
+      /** Recovery Codes Left */
+      recovery_codes_left: number;
     };
     /**
      * PlatformOutbox
@@ -5803,6 +6000,20 @@ export interface components {
       /** Has Returns */
       has_returns: boolean;
       returned_total: components["schemas"]["Amount-Output"];
+    };
+    /** RecoveryCodes */
+    RecoveryCodes: {
+      /** Recovery Codes */
+      recovery_codes: string[];
+    };
+    /**
+     * RecoveryCodesRegenerate
+     * @description Régénérer exige un code de l'application : une session laissée ouverte ne suffit
+     *     pas à s'approprier les codes de secours.
+     */
+    RecoveryCodesRegenerate: {
+      /** Code */
+      code: string;
     };
     RefundAmount: components["schemas"]["Amount-Input"];
     /**
@@ -6362,6 +6573,28 @@ export interface components {
       /** @default xlsx */
       format: components["schemas"]["ExportFormat"];
     };
+    /**
+     * SecurityEvent
+     * @description Un signal de sécurité de l'équipe (ADR 0105), sur 7 jours. Jamais de secret.
+     */
+    SecurityEvent: {
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "new_device" | "recovery_code_used" | "mfa_enabled" | "mfa_reset";
+      /** Platform User Id */
+      platform_user_id: string | null;
+      /** Display Name */
+      display_name: string;
+      /** Device */
+      device: string | null;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at: string;
+    };
     "SellingPrice-Input": components["schemas"]["Amount-Input"];
     "SellingPrice-Output": components["schemas"]["Amount-Output"];
     /** SignupBucket */
@@ -6883,6 +7116,8 @@ export interface components {
       created_at: string;
       /** Is Me */
       is_me: boolean;
+      /** Mfa Enabled */
+      mfa_enabled: boolean;
     };
     /**
      * TeamMemberUpdate
@@ -11223,7 +11458,139 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
+          "application/json": components["schemas"]["PlatformLoginStep"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  start_enrollment_api_v1_platform_auth_mfa_enrollment_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MfaChallengeRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MfaEnrollment"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  confirm_enrollment_api_v1_platform_auth_mfa_enrollment_confirm_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MfaCodeRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MfaActivated"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  verify_mfa_api_v1_platform_auth_mfa_verify_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MfaVerifyRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
           "application/json": components["schemas"]["PlatformTokenResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  regenerate_recovery_codes_api_v1_platform_auth_mfa_recovery_codes_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RecoveryCodesRegenerate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RecoveryCodes"];
         };
       };
       /** @description Validation Error */
@@ -11747,7 +12114,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["PlatformTokenResponse"];
+          "application/json": components["schemas"]["PlatformLoginStep"];
         };
       };
       /** @description Validation Error */
@@ -11908,6 +12275,41 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["TeamMemberUpdate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["TeamMember"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  reset_member_mfa_api_v1_platform_team__user_id__mfa_reset_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MfaReset"];
       };
     };
     responses: {

@@ -9,7 +9,8 @@
  * Écrit `docs/design/captures/admin/apres/lighthouse.md` et échoue sous 95.
  */
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHmac } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,7 +25,41 @@ const API = "http://localhost:8100/api/v1";
 const PORT = 9334;
 const THRESHOLD = 95;
 const OUT = join(HERE, "..", "..", "docs", "design", "captures", "admin", "apres");
-const ADMIN = { email: "admin@e2e.example.com", password: "admin-coges-e2e-2026" };
+const ADMIN = {
+  email: "admin@e2e.example.com",
+  password: "admin-coges-e2e-2026",
+  // Double authentification (ADR 0105) : même secret et même registre des pas servis que
+  // `e2e/mfa.ts` (un code ne sert qu'une fois).
+  secret: "COGESEXADMINQMFAQSECRETQAAAAAAAA",
+};
+const LEDGER = join(HERE, "..", "..", ".e2e-access", "totp-steps.json");
+
+function totp(secret, step) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const bits = [...secret].map((c) => alphabet.indexOf(c).toString(2).padStart(5, "0")).join("");
+  const key = Buffer.from((bits.match(/.{8}/g) ?? []).map((byte) => parseInt(byte, 2)));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(step));
+  const digest = createHmac("sha1", key).update(counter).digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  return String((digest.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, "0");
+}
+
+async function freshCode(secret) {
+  let ledger = {};
+  try {
+    ledger = JSON.parse(readFileSync(LEDGER, "utf-8"));
+  } catch {
+    ledger = {};
+  }
+  const now = Math.floor(Date.now() / 30_000);
+  const step = Math.max(now - 1, (ledger[secret] ?? 0) + 1);
+  const waitMs = (step - 1) * 30_000 - Date.now();
+  if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs + 500));
+  mkdirSync(dirname(LEDGER), { recursive: true });
+  writeFileSync(LEDGER, JSON.stringify({ ...ledger, [secret]: step }));
+  return totp(secret, step);
+}
 const SCREENS = [
   ["Connexion", "/login"],
   ["Tableau de bord", "/"],
@@ -69,6 +104,8 @@ try {
       await page.getByLabel("E-mail").fill(ADMIN.email);
       await page.getByLabel("Mot de passe").fill(ADMIN.password);
       await page.getByRole("button", { name: "Se connecter" }).click();
+      await page.getByLabel("Code à 6 chiffres").fill(await freshCode(ADMIN.secret));
+      await page.getByRole("button", { name: "Valider" }).click();
       await page.getByRole("heading", { name: "Tableau de bord" }).waitFor({ timeout: 60_000 });
     }
     const result = await lighthouse(

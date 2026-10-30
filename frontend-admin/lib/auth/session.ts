@@ -9,7 +9,8 @@ import { networkError, toApiError } from "@/lib/api/errors";
 import { tokenStore } from "./token-store";
 
 export const SESSION_MARKER = "coges_admin_session";
-const MARKER_MAX_AGE_SECONDS = 7 * 24 * 3600;
+/** Une session de l'administration dure 12 h au plus (ADR 0105). */
+const MARKER_MAX_AGE_SECONDS = 12 * 3600;
 const LOCK_NAME = "coges-admin-refresh";
 const CHANNEL_NAME = "coges-admin-auth";
 
@@ -73,39 +74,76 @@ export function refreshSession(): Promise<RefreshOutcome> {
   return inFlight;
 }
 
-export async function login(email: string, password: string): Promise<void> {
+/**
+ * Étape suivante après le mot de passe (ADR 0105) : `verify` (le code de l'application ou
+ * un code de secours), ou `enroll` (aucune double authentification encore). Le jeton
+ * intermédiaire vit 5 minutes, sert une fois, et ne quitte jamais la mémoire de la page.
+ */
+export type LoginStep = { step: "enroll" | "verify"; challenge_token: string; expires_in: number };
+
+export type Enrollment = {
+  secret: string;
+  otpauth_uri: string;
+  qr_svg: string;
+  account: string;
+  issuer: string;
+};
+
+async function post(path: string, payload: unknown): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch("/api/v1/platform/auth/login", {
+    response = await fetch(path, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(payload),
     });
   } catch {
     throw networkError();
   }
   const body = await readJson(response);
   if (!response.ok) throw toApiError(response.status, body);
-  acceptTokens(body as TokenResponse);
+  return body;
 }
 
-/** Le collègue invité choisit son mot de passe ; la session s'ouvre comme une connexion. */
-export async function acceptInvitation(token: string, password: string): Promise<void> {
-  let response: Response;
-  try {
-    response = await fetch("/api/v1/platform/auth/accept-invitation", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, password }),
-    });
-  } catch {
-    throw networkError();
-  }
-  const body = await readJson(response);
-  if (!response.ok) throw toApiError(response.status, body);
-  acceptTokens(body as TokenResponse);
+/** Première étape : le mot de passe. Aucune session n'est ouverte ici. */
+export async function login(email: string, password: string): Promise<LoginStep> {
+  return (await post("/api/v1/platform/auth/login", { email, password })) as LoginStep;
+}
+
+/** Le collègue invité choisit son mot de passe, puis enrôle sa double authentification. */
+export async function acceptInvitation(token: string, password: string): Promise<LoginStep> {
+  return (await post("/api/v1/platform/auth/accept-invitation", { token, password })) as LoginStep;
+}
+
+/** Le secret proposé : QR code et clé texte, actif seulement après le premier code. */
+export async function startEnrollment(challengeToken: string): Promise<Enrollment> {
+  return (await post("/api/v1/platform/auth/mfa/enrollment", {
+    challenge_token: challengeToken,
+  })) as Enrollment;
+}
+
+/** Premier code juste : session ouverte ; rend les codes de secours, montrés une fois. */
+export async function confirmEnrollment(challengeToken: string, code: string): Promise<string[]> {
+  const body = (await post("/api/v1/platform/auth/mfa/enrollment/confirm", {
+    challenge_token: challengeToken,
+    code,
+  })) as TokenResponse & { recovery_codes: string[] };
+  acceptTokens(body);
+  return body.recovery_codes;
+}
+
+/** Seconde étape : le code de l'application, ou un code de secours. */
+export async function verifyMfa(
+  challengeToken: string,
+  proof: { code: string } | { recovery_code: string },
+): Promise<void> {
+  acceptTokens(
+    (await post("/api/v1/platform/auth/mfa/verify", {
+      challenge_token: challengeToken,
+      ...proof,
+    })) as TokenResponse,
+  );
 }
 
 function forgetLocally(): void {

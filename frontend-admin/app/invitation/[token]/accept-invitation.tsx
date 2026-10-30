@@ -3,17 +3,45 @@
 import { useRouter } from "next/navigation";
 import { useId, useState, type FormEvent } from "react";
 
+import { EnrollStep, RecoveryCodesPanel } from "@/components/mfa-steps";
 import { BUTTON, FIELD, LABEL } from "@/components/ui";
 import { isApiError } from "@/lib/api/errors";
-import { acceptInvitation } from "@/lib/auth/session";
+import { acceptInvitation, loginUrl } from "@/lib/auth/session";
 
 export const MIN_PASSWORD = 12;
 const INVALID =
   "Ce lien d'invitation n'est plus valable. Demandez à un administrateur de vous en envoyer un nouveau.";
 
-/** La règle est affichée **avant** toute erreur ; un lien invalide a un seul message. */
+/**
+ * Le mot de passe, puis l'enrôlement de la double authentification (ADR 0105) et les
+ * codes de secours : aucune session avant le premier code juste.
+ */
 export function AcceptInvitation({ token }: { token: string }) {
   const router = useRouter();
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [codes, setCodes] = useState<string[] | null>(null);
+  if (codes) return <RecoveryCodesPanel codes={codes} onContinue={() => router.replace("/")} />;
+  if (challenge) {
+    return (
+      <EnrollStep
+        challenge={challenge}
+        onActivated={setCodes}
+        // Le compte existe désormais : la suite passe par la connexion ordinaire.
+        onRestart={() => router.replace(loginUrl())}
+      />
+    );
+  }
+  return <ChoosePassword token={token} onAccepted={setChallenge} />;
+}
+
+/** La règle est affichée **avant** toute erreur ; un lien invalide a un seul message. */
+function ChoosePassword({
+  token,
+  onAccepted,
+}: {
+  token: string;
+  onAccepted: (challenge: string) => void;
+}) {
   const passwordId = useId();
   const confirmId = useId();
   const ruleId = useId();
@@ -34,8 +62,9 @@ export function AcceptInvitation({ token }: { token: string }) {
     }
     setBusy(true);
     setError(null);
+    let challenge: string;
     try {
-      await acceptInvitation(token, password);
+      challenge = (await acceptInvitation(token, password)).challenge_token;
     } catch (caught) {
       setError(
         isApiError(caught) && caught.code === "invitation_invalid"
@@ -47,7 +76,7 @@ export function AcceptInvitation({ token }: { token: string }) {
       setBusy(false);
       return;
     }
-    router.replace("/");
+    onAccepted(challenge);
   }
 
   return (
@@ -89,7 +118,7 @@ export function AcceptInvitation({ token }: { token: string }) {
         />
       </div>
       <button type="submit" disabled={busy} className={`${BUTTON.primary} w-full`}>
-        {busy ? "Activation…" : "Activer mon compte"}
+        {busy ? "Création…" : "Continuer"}
       </button>
     </form>
   );

@@ -3,12 +3,13 @@ import { execFileSync } from "node:child_process";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
+import { ADMIN, enterCode } from "./mfa";
+
 /**
  * Surveillance web (ADR 0090). L'API des parcours tourne sans worker ni relais :
  * `e2e.sh system healthy` écrit ce qu'ils écriraient, `missing-heartbeat` retire le
  * battement du worker. Seulement sur coges_e2e et un Redis local.
  */
-const ADMIN = { email: "admin@e2e.example.com", password: "admin-coges-e2e-2026" };
 
 function systemState(state: "healthy" | "missing-heartbeat"): void {
   execFileSync("../deploy/scripts/e2e.sh", ["system", state], { stdio: "inherit" });
@@ -19,6 +20,7 @@ async function signIn(page: Page): Promise<void> {
   await page.getByLabel("E-mail").fill(ADMIN.email);
   await page.getByLabel("Mot de passe", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
+  await enterCode(page);
   await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
   await page.goto("/companies");
 }

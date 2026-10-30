@@ -26,6 +26,7 @@ const TEAM: TeamList = {
       last_login_at: null,
       created_at: "2026-10-01T10:00:00Z",
       is_me: true,
+      mfa_enabled: true,
     },
     {
       id: "moussa",
@@ -36,6 +37,7 @@ const TEAM: TeamList = {
       last_login_at: null,
       created_at: "2026-10-02T10:00:00Z",
       is_me: false,
+      mfa_enabled: true,
     },
   ],
   invitations: [
@@ -82,6 +84,8 @@ const ME = (role: string): PlatformMe => ({
   email: "aissatou@coges.example.com",
   display_name: "Aïssatou Diop",
   role: role as PlatformMe["role"],
+  mfa_enabled_at: "2026-10-01T10:00:00Z",
+  recovery_codes_left: 10,
 });
 
 beforeEach(() => {

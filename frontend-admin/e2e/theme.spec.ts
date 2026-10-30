@@ -1,10 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { ADMIN, enterCode } from "./mfa";
+
 /**
  * Thème de l'administration (prompt 31) : clair par défaut même sur un appareil en mode
  * sombre, bascule mémorisée dans le navigateur, posée avant l'affichage.
  */
-const ADMIN = { email: "admin@e2e.example.com", password: "admin-coges-e2e-2026" };
 
 test.use({ colorScheme: "dark" });
 
@@ -42,6 +43,7 @@ test("clair par défaut malgré un système sombre, bascule mémorisée, retour 
   await page.getByLabel("E-mail").fill(ADMIN.email);
   await page.getByLabel("Mot de passe", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
+  await enterCode(page);
   await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
   await expect(html).toHaveAttribute("data-theme", "light");
 
@@ -100,6 +102,7 @@ test("360 px : la bascule reste visible dans l'en-tête", async ({ page }) => {
   await page.getByLabel("E-mail").fill(ADMIN.email);
   await page.getByLabel("Mot de passe", { exact: true }).fill(ADMIN.password);
   await page.getByRole("button", { name: "Se connecter" }).click();
+  await enterCode(page);
   await expect(page.getByRole("heading", { name: "Tableau de bord" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Passer en mode sombre" })).toBeVisible();
 });

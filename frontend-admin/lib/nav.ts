@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   ListChecks,
   ServerCog,
+  ShieldCheck,
   UserCog,
   Users,
   type LucideIcon,
@@ -27,6 +28,8 @@ export const NAV: { title: string; items: NavItem[] }[] = [
       { href: "/users", label: "Utilisateurs", icon: Users },
       { href: "/team", label: "Équipe", icon: UserCog },
       { href: "/audit", label: "Journal", icon: History, roles: ["administrator"] },
+      // Double authentification et codes de secours de la personne connectée (ADR 0105).
+      { href: "/security", label: "Ma sécurité", icon: ShieldCheck },
     ],
   },
   {
