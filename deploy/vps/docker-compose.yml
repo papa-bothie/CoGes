@@ -73,6 +73,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./admin-cloudflare.caddy:/etc/caddy/admin-cloudflare.caddy:ro
+      - ./admin-mfa.caddy:/etc/caddy/admin-mfa.caddy:ro
       - ./admin-ip.caddy:/etc/caddy/admin-ip.caddy:ro
       - ./admin-ssh.caddy:/etc/caddy/admin-ssh.caddy:ro
       - ./maintenance.html:/srv/maintenance/maintenance.html:ro
@@ -165,6 +166,8 @@ services:
       # partir (sinon elle montre le lien une fois) ; c'est le worker qui envoie.
       COGES_SMTP_HOST: ${COGES_SMTP_HOST:-}
       COGES_ADMIN_URL: https://admin.${COGES_DOMAIN:?}
+      # Double authentification de l'administration (ADR 0105) : l'API seule la lit.
+      COGES_MFA_ENCRYPTION_KEY: ${COGES_MFA_ENCRYPTION_KEY:?}
       # Cloudflare Access (ADR 0104) : posés, /api/v1/platform/* exige un jeton valide.
       # Vides en mode `ip` ou `ssh` (check_runtime_env.py l'impose).
       COGES_ACCESS_TEAM_DOMAIN: ${COGES_ACCESS_TEAM_DOMAIN:-}

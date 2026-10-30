@@ -14,8 +14,8 @@ Sources contrôlées :
    `sslmode=require` pour chaque DSN, garder Redis sur le réseau interne (aucune URL
    Redis vers l'extérieur), donner un domaine public servi en HTTPS (nom d'hôte nu,
    jamais `http://`), des secrets assez longs (JWT et Redis, 32 caractères au moins) et
-   une administration protégée (Cloudflare Access, liste d'adresses ou secours SSH,
-   ADR 0104).
+   une administration protégée (double authentification, Cloudflare Access, liste
+   d'adresses ou secours SSH, ADR 0104 et 0105) avec la clé COGES_MFA_ENCRYPTION_KEY.
 
 `deploy.sh` le lance avant chaque démarrage sur le VPS ; la CI, sur les fichiers versionnés.
 
@@ -27,6 +27,8 @@ Bibliothèque standard seulement : le script tourne avant toute installation.
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import re
 import sys
 import ipaddress
@@ -56,8 +58,14 @@ HOSTNAME = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-
 #: Hôtes Redis du réseau Docker interne.
 INTERNAL_REDIS_HOSTS = frozenset({"redis"})
 MIN_SECRET_LENGTH = 32
-#: Porte de l'administration (ADR 0104).
-ADMIN_GATES = frozenset({"cloudflare", "ip", "ssh"})
+#: Porte de l'administration (ADR 0104, 0105).
+ADMIN_GATES = frozenset({"mfa", "cloudflare", "ip", "ssh"})
+#: La version de ce bundle impose la double authentification à tout compte de la
+#: plateforme : une constante du code, comme `app.core.mfa.PLATFORM_MFA_REQUIRED` (test de
+#: concordance), jamais une variable qu'on pourrait éteindre. Un bundle plus ancien ne
+#: connaît pas la porte `mfa` et la refuse : impossible d'ouvrir l'administration sans
+#: filtre avec une version qui ne demande pas de code.
+PLATFORM_MFA_REQUIRED = True
 ACCESS_TEAM_DOMAIN = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com")
 ACCESS_AUD = re.compile(r"[0-9a-f]{64}")
 #: Le jeton d'un tunnel est du JSON en base64 (compte, tunnel, secret) : bien plus long.
@@ -147,7 +155,9 @@ def admin_gate_violations(values: dict[str, str], *, source: str) -> list[str]:
       deviennent un filet facultatif ;
     * `ip` (aussi quand la variable manque, fichiers d'avant ce lot) : liste d'adresses
       obligatoire, comme à l'ADR 0089 ;
-    * `ssh` : secours, servi sur le seul port local du VPS (tunnel SSH).
+    * `ssh` : secours, servi sur le seul port local du VPS (tunnel SSH) ;
+    * `mfa` (ADR 0105) : 443 sans filtre d'adresse ; la double authentification
+      obligatoire de cette version est la barrière (et sa clé, contrôlée à part).
     Hors `cloudflare`, les variables d'Access doivent être vides : l'API exigerait un
     jeton que plus rien n'apporte, et l'administration resterait fermée.
     """
@@ -155,7 +165,12 @@ def admin_gate_violations(values: dict[str, str], *, source: str) -> list[str]:
     gate = values.get("COGES_ADMIN_GATE", "ip")
     allowed = values.get("COGES_ADMIN_ALLOWED_IPS", "").split()
     if gate not in ADMIN_GATES:
-        return [f"{source} : COGES_ADMIN_GATE vaut « {gate} » (cloudflare, ip ou ssh)"]
+        return [f"{source} : COGES_ADMIN_GATE vaut « {gate} » (mfa, cloudflare, ip ou ssh)"]
+    if gate == "mfa" and not PLATFORM_MFA_REQUIRED:
+        return [
+            f"{source} : COGES_ADMIN_GATE=mfa exige une version qui impose la double "
+            "authentification de l'administration"
+        ]
 
     if gate == "cloudflare":
         team = values.get("COGES_ACCESS_TEAM_DOMAIN", "")
@@ -184,6 +199,24 @@ def admin_gate_violations(values: dict[str, str], *, source: str) -> list[str]:
     if gate != "ssh":
         found += _allowed_ips_violations(allowed, source=source)
     return found
+
+
+def mfa_key_violations(values: dict[str, str], *, source: str) -> list[str]:
+    """COGES_MFA_ENCRYPTION_KEY (ADR 0105) : 32 octets en base64url. Sans elle, l'API
+    refuse de démarrer (l'administration exige la double authentification)."""
+    value = values.get("COGES_MFA_ENCRYPTION_KEY", "").strip("\"'")
+    if not value:
+        return [
+            f"{source} : COGES_MFA_ENCRYPTION_KEY est vide "
+            "(openssl rand -base64 32 | tr '+/' '-_', à garder comme la clé age)"
+        ]
+    try:
+        key = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+    except (ValueError, binascii.Error):
+        key = b""
+    if len(key) != 32 or base64.urlsafe_b64encode(key).decode().rstrip("=") != value.rstrip("="):
+        return [f"{source} : COGES_MFA_ENCRYPTION_KEY doit faire 32 octets en base64url"]
+    return []
 
 
 def vps_violations(
@@ -229,6 +262,8 @@ def vps_violations(
     # Seule la production sert l'administration : la préprod n'en a pas besoin.
     if (declared or stack) != "preprod":
         found += admin_gate_violations(values, source=source)
+
+    found += mfa_key_violations(values, source=source)
 
     for key in ("COGES_JWT_SECRET", "COGES_REDIS_PASSWORD"):
         if len(values.get(key, "")) < MIN_SECRET_LENGTH:

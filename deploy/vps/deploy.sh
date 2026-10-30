@@ -17,8 +17,17 @@
 # version), pull, `docker compose up -d`, vérification par Caddy (/api/v1/health/ready
 # puis /login), retour automatique à la version précédente si la vérification échoue.
 # Journal : /var/log/coges/deploy.log.
+#
+# Ce script et check.sh voyagent aussi dans le bundle de chaque version (ADR 0105) : si
+# la version à déployer en porte de plus récents (SCRIPTS_VERSION ci-dessous), rien n'est
+# changé et le journal donne la commande d'installation. Le script reste propriété de
+# root : la clé SSH bridée ne peut jamais le réécrire.
 
 set -euo pipefail
+
+# À augmenter à chaque changement de deploy.sh OU de check.sh qui doit être installé sur
+# le VPS avant de déployer la version qui le porte.
+SCRIPTS_VERSION=2
 
 COGES_ROOT=${COGES_ROOT:-/opt/coges}
 COGES_ETC=${COGES_ETC:-/etc/coges}
@@ -173,6 +182,32 @@ check_env() {
   return 1
 }
 
+scripts_version_of() {
+  # Version des scripts portés par un bundle ; 0 pour un bundle d'avant l'ADR 0105.
+  local file="$RELEASES_DIR/$1/scripts/deploy.sh" found
+  [[ -f "$file" ]] || { echo 0; return; }
+  found=$(sed -n 's/^SCRIPTS_VERSION=\([0-9][0-9]*\)$/\1/p' "$file" | head -n 1)
+  echo "${found:-0}"
+}
+
+check_scripts() {
+  # Le 29/10, cloudflared n'a pas démarré : la version l'attendait de deploy.sh, mais
+  # /opt/coges/deploy.sh n'était installé qu'une fois par bootstrap.sh. Une version qui
+  # porte des scripts plus récents que ceux du VPS est refusée avant tout changement ;
+  # une version plus ancienne (retour arrière) passe.
+  local version=$1 bundled
+  bundled=$(scripts_version_of "$version")
+  if ((bundled <= SCRIPTS_VERSION)); then
+    return 0
+  fi
+  log "$version porte des scripts du VPS plus récents (version $bundled, installée : $SCRIPTS_VERSION)."
+  log "Rien n'a été changé. Sur le VPS, en root, une fois :"
+  log "  sudo install -m 0755 -o root -g root $RELEASES_DIR/$version/scripts/deploy.sh $COGES_ROOT/deploy.sh"
+  log "  sudo install -m 0755 -o root -g root $RELEASES_DIR/$version/scripts/check.sh $COGES_ROOT/check.sh"
+  log "puis relancez : sudo -u deploy $COGES_ROOT/deploy.sh $STACK $version"
+  return 1
+}
+
 accepts_env() {
   # La version $1 démarrerait-elle avec le fichier de secrets actuel ? Sans rien lancer.
   fetch_bundle "$1" && check_env "$1"
@@ -227,9 +262,11 @@ docker_network() {
 start() {
   # Chaque étape rend son échec : appelée dans un `if`, la fonction ne s'arrête plus
   # d'elle-même (`set -e` y est suspendu), et un `up -d` raté doit déclencher le retour.
-  # Code 2 : le fichier de secrets est refusé avant tout changement.
+  # Code 2 : le fichier de secrets est refusé avant tout changement ; code 3 : la version
+  # exige des scripts du VPS plus récents (ADR 0105), avant tout changement aussi.
   local version=$1
   fetch_bundle "$version" || return 1
+  check_scripts "$version" || return 3
   check_env "$version" || return 2
   # Une version est immuable : une image déjà présente n'est pas retéléchargée.
   compose "$version" pull --quiet --policy missing || return 1
@@ -271,6 +308,9 @@ deploy() {
   if start "$version"; then status=0; else status=$?; fi
   if ((status == 2)); then
     die "$ENV_FILE refusé par $version : rien n'a été changé, $previous tourne toujours"
+  fi
+  if ((status == 3)); then
+    die "scripts du VPS à mettre à jour pour $version : rien n'a été changé, ${previous:-rien} tourne toujours"
   fi
   if ((status == 0)) && verify; then
     if [[ -n "$previous" && "$previous" != "$version" ]]; then

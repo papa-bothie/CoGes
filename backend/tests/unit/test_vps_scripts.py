@@ -8,6 +8,7 @@ SSH_ORIGINAL_COMMAND, écrits par n'importe qui détient la clé. Rien de ce tex
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -203,6 +204,7 @@ COGES_DATABASE_URL_PLATFORM=postgresql+psycopg://coges_app_platform:x@ep-1.eu-ce
 COGES_ADMIN_ALLOWED_IPS=192.0.2.10
 COGES_REDIS_PASSWORD=ci-redis-password-00000000000000000000
 COGES_JWT_SECRET=ci-jwt-secret-0000000000000000000000
+COGES_MFA_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 """
 
 
@@ -418,3 +420,62 @@ def test_an_env_file_refused_by_the_new_version_changes_nothing(tmp_path: Path) 
     assert "COGES_ADMIN_ALLOWED_IPS est vide" in out
     assert "rien n'a été changé" in out
     assert not any(" up " in line for line in _compose_lines(tmp_path))
+
+
+# ------------------------------------------- scripts du VPS dans le bundle (ADR 0105)
+
+
+def _bundle_scripts(tmp_path: Path, version: str, scripts_version: int) -> None:
+    scripts = tmp_path / "opt" / "releases" / version / "scripts"
+    scripts.mkdir(parents=True, exist_ok=True)
+    body = DEPLOY.read_text(encoding="utf-8").replace(
+        "\nSCRIPTS_VERSION=", f"\nSCRIPTS_VERSION={scripts_version}\n# était : ", 1
+    )
+    (scripts / "deploy.sh").write_text(body, encoding="utf-8")
+    shutil.copy(VPS / "check.sh", scripts / "check.sh")
+
+
+def _installed_scripts_version() -> int:
+    match = re.search(r"^SCRIPTS_VERSION=(\d+)$", DEPLOY.read_text(encoding="utf-8"), re.M)
+    assert match, "SCRIPTS_VERSION absent de deploy.sh"
+    return int(match.group(1))
+
+
+def test_the_bundle_carries_the_vps_scripts() -> None:
+    bundle = (VPS / "Dockerfile.bundle").read_text(encoding="utf-8")
+    assert "COPY deploy/vps/deploy.sh deploy/vps/check.sh /bundle/scripts/" in bundle
+    assert _installed_scripts_version() >= 2
+
+
+def test_newer_scripts_in_the_bundle_stop_the_deploy_before_any_change(tmp_path: Path) -> None:
+    env = _stage(
+        tmp_path, stack="production", env_stack="production", versions=("v1.0.0", "v1.1.0")
+    )
+    _state(tmp_path, "production", "v1.0.0")
+    _bundle_scripts(tmp_path, "v1.1.0", _installed_scripts_version() + 1)
+
+    result = _run(env, "production", "v1.1.0")
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 1
+    assert "rien n'a été changé" in output
+    release = tmp_path / "opt" / "releases" / "v1.1.0" / "scripts"
+    assert f"sudo install -m 0755 -o root -g root {release}/deploy.sh" in output
+    assert f"{release}/check.sh" in output
+    assert not (tmp_path / "running").exists(), "la pile a été touchée"
+    assert not any(" up " in line for line in _compose_lines(tmp_path) if "docker compose" in line)
+
+
+@pytest.mark.parametrize("offset", [0, -1])
+def test_same_or_older_scripts_deploy_normally(tmp_path: Path, offset: int) -> None:
+    """Un retour arrière vers une version aux scripts plus anciens reste possible."""
+    env = _stage(tmp_path, stack="production", env_stack="production", versions=("v1.0.0",))
+    _bundle_scripts(tmp_path, "v1.0.0", _installed_scripts_version() + offset)
+    result = _run(env, "production", "v1.0.0")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_a_bundle_without_scripts_still_deploys(tmp_path: Path) -> None:
+    """Bundles d'avant l'ADR 0105 : rien à comparer."""
+    env = _stage(tmp_path, stack="production", env_stack="production", versions=("v1.0.0",))
+    assert _run(env, "production", "v1.0.0").returncode == 0

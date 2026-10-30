@@ -254,7 +254,7 @@ avertit seulement en local et en préproduction. Redis Cloud : *Database* → *C
 | Élément | Valeur |
 |---|---|
 | Application | `frontend-admin/` (Next.js à part), image `ghcr.io/…/admin`, service `admin` du compose (192 Mo) |
-| Adresse | `admin.<COGES_DOMAIN>` (pile de production seulement). Porte `COGES_ADMIN_GATE` (ADR 0104) : `cloudflare` = route d'un tunnel Cloudflare (CNAME créé par Cloudflare, aucun port public) ; `ip` = enregistrement A « DNS only » vers le VPS ; `ssh` = secours sur `127.0.0.1:8082` du VPS |
+| Adresse | `admin.<COGES_DOMAIN>` (pile de production seulement). Porte `COGES_ADMIN_GATE` (ADR 0104, 0105) : `mfa` = enregistrement A « DNS only » vers le VPS, 443 sans filtre d'adresse, double authentification obligatoire (défaut du lancement, `COGES_MFA_ENCRYPTION_KEY` exigée) ; `cloudflare` = route d'un tunnel Cloudflare (CNAME créé par Cloudflare, aucun port public) ; `ip` = enregistrement A « DNS only » vers le VPS ; `ssh` = secours sur `127.0.0.1:8082` du VPS |
 | Cloudflare Access (ADR 0104) | Zero Trust Free : application *Self-hosted* `admin.<COGES_DOMAIN>`, règle par e-mail, session 24 h ; `COGES_ACCESS_TEAM_DOMAIN` (`<équipe>.cloudflareaccess.com`) et `COGES_ACCESS_AUD` (API : jeton `Cf-Access-Jwt-Assertion` exigé, 403 `access_required`) ; `COGES_CLOUDFLARE_TUNNEL_TOKEN` (conteneur `cloudflared`, profil `tunnel`, secret). Guide : `deploy/vps/cloudflare-access.md` |
 | Filtre d'adresses | `COGES_ADMIN_ALLOWED_IPS` (IP ou CIDR séparées par des espaces) : obligatoire en mode `ip` (403 sinon) ; filet facultatif en mode `cloudflare`, sur l'adresse réelle (`CF-Connecting-IP`) ; ajout d'une adresse : `docs/runbooks/vps.md` |
 | API | `/api/v1/platform/*`, servi **seulement** sur `admin.` ; 404 sur le domaine commerçant |

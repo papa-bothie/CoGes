@@ -63,6 +63,7 @@ COGES_DATABASE_URL_PLATFORM=postgresql+psycopg://coges_app_platform:x@ep-1.eu-ce
 COGES_ADMIN_ALLOWED_IPS="196.207.1.10 2001:db8::/48"
 COGES_REDIS_PASSWORD=ci-redis-password-00000000000000000000
 COGES_JWT_SECRET=ci-jwt-secret-0000000000000000000000
+COGES_MFA_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 """
 
 
@@ -256,3 +257,73 @@ def test_the_admin_gates_that_are_refused(
 ) -> None:
     assert _module().main(_env(tmp_path, text)) == 1
     assert reason in capsys.readouterr().err
+
+
+# ------------------------------- double authentification de l'administration (ADR 0105)
+
+_MFA_ENV = _GOOD_ENV.replace(
+    'COGES_ADMIN_ALLOWED_IPS="196.207.1.10 2001:db8::/48"', "COGES_ADMIN_GATE=mfa"
+)
+
+
+def test_the_mfa_gate_needs_no_address_list(tmp_path: Path) -> None:
+    assert "COGES_ADMIN_ALLOWED_IPS" not in _MFA_ENV
+    assert _module().main(_env(tmp_path, _MFA_ENV)) == 0
+
+
+@pytest.mark.parametrize("text", [_GOOD_ENV, _MFA_ENV, _CLOUDFLARE_ENV])
+@pytest.mark.parametrize(
+    ("key", "reason"),
+    [
+        ("", "COGES_MFA_ENCRYPTION_KEY est vide"),
+        ("trop-courte", "32 octets en base64url"),
+        ("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "32 octets en base64url"),
+    ],
+)
+def test_every_gate_needs_the_mfa_key(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], text: str, key: str, reason: str
+) -> None:
+    """L'API refuse de démarrer sans elle : la refuser avant de toucher à la pile."""
+    broken = text.replace(
+        "COGES_MFA_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        f"COGES_MFA_ENCRYPTION_KEY={key}",
+    )
+    assert _module().main(_env(tmp_path, broken)) == 1
+    assert reason in capsys.readouterr().err
+
+
+def test_the_preprod_stack_needs_the_mfa_key_too(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    text = _GOOD_ENV.replace("COGES_STACK=production", "COGES_STACK=preprod").replace(
+        "COGES_MFA_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n", ""
+    )
+    assert _module().main([*_env(tmp_path, text), "--stack", "preprod"]) == 1
+    assert "COGES_MFA_ENCRYPTION_KEY" in capsys.readouterr().err
+
+
+def test_the_mfa_gate_needs_a_version_that_imposes_mfa(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Le contrôle lit une constante du code, pas une variable : un bundle qui
+    n'imposerait pas le code ne peut pas ouvrir l'administration sans filtre."""
+    check = _module()
+    check.PLATFORM_MFA_REQUIRED = False
+    assert check.main(_env(tmp_path, _MFA_ENV)) == 1
+    assert "impose la double authentification" in capsys.readouterr().err
+    # Les autres portes gardent leur protection propre.
+    assert check.main(_env(tmp_path, _GOOD_ENV)) == 0
+
+
+def test_the_mfa_gate_refuses_leftover_access_variables(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    text = _MFA_ENV + f"COGES_ACCESS_TEAM_DOMAIN={_TEAM}\nCOGES_ACCESS_AUD={_AUD}\n"
+    assert _module().main(_env(tmp_path, text)) == 1
+    assert "videz COGES_ACCESS_TEAM_DOMAIN" in capsys.readouterr().err
+
+
+def test_the_script_and_the_api_agree_that_mfa_is_required() -> None:
+    from app.core import mfa  # noqa: PLC0415
+
+    assert _module().PLATFORM_MFA_REQUIRED is mfa.PLATFORM_MFA_REQUIRED is True
