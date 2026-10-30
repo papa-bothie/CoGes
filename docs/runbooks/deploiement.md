@@ -29,6 +29,26 @@ l'intervention sur la machine elle-même : `docs/runbooks/vps.md`.
 | Déploiement | VPS, `/opt/coges/deploy.sh` lancé par l'utilisateur `deploy` | secret `DEPLOY_SSH_KEY` (clé bridée) |
 | Test de fumée | GitHub Actions → `https://<domaine>` | compte `SMOKE_*` d'une entreprise dédiée |
 
+## Scripts du VPS à mettre à jour (ADR 0105)
+
+`/opt/coges/deploy.sh` et `/opt/coges/check.sh` appartiennent à root : la clé SSH bridée
+ne peut jamais les réécrire. Ils voyagent pourtant avec chaque version (dans l'image
+`bundle`, `/bundle/scripts/`), et `deploy.sh` compare son `SCRIPTS_VERSION` à celui de la
+version demandée. Plus récent dans la version : **rien n'est changé**, la version en place
+continue de tourner, et le journal (`/var/log/coges/deploy.log`, et la sortie du job GitHub)
+donne les commandes exactes, par exemple :
+
+```bash
+sudo install -m 0755 -o root -g root /opt/coges/releases/v1.4.0/scripts/deploy.sh /opt/coges/deploy.sh
+sudo install -m 0755 -o root -g root /opt/coges/releases/v1.4.0/scripts/check.sh /opt/coges/check.sh
+sudo -u deploy /opt/coges/deploy.sh production v1.4.0
+```
+
+À lancer une fois, en root, sur le VPS ; le déploiement suivant passe. Un retour vers une
+version aux scripts plus anciens n'est jamais bloqué. Qui modifie `deploy.sh` ou `check.sh`
+augmente `SCRIPTS_VERSION` dans `deploy.sh` (le 29/10, `cloudflared` n'avait pas démarré faute
+de cette étape).
+
 ## Lancer un déploiement
 
 - **Préproduction** : pousser un tag, `git tag v1.4.0 && git push origin v1.4.0`. Ou
