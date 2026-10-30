@@ -14,6 +14,8 @@ Quatre DSN distincts, jamais interchangeables :
 Aucun secret n'est journalisé : les valeurs sensibles sont des ``SecretStr``.
 """
 
+import base64
+import binascii
 import json
 import re
 from functools import lru_cache
@@ -35,6 +37,20 @@ DEVELOPMENT_ENVS = ("local", "ci")
 #: Cloudflare Access (ADR 0104) : domaine d'équipe et AUD d'une application.
 ACCESS_TEAM_DOMAIN = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.cloudflareaccess\.com")
 ACCESS_AUD = re.compile(r"[0-9a-f]{64}")
+#: Clé de la double authentification en `local` et `ci` seulement : publique, comme le
+#: secret JWT de développement.
+DEVELOPMENT_MFA_KEY = b"coges-mfa-development-key-000000"
+
+
+def decode_mfa_key(value: str) -> bytes | None:
+    """32 octets en base64url (avec ou sans « = »), sinon `None`."""
+    try:
+        key = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+    except (ValueError, binascii.Error):
+        return None
+    if len(key) != 32 or base64.urlsafe_b64encode(key).decode().rstrip("=") != value.rstrip("="):
+        return None
+    return key
 
 
 class Settings(BaseSettings):
@@ -165,6 +181,13 @@ class Settings(BaseSettings):
     # local) : refusée hors `local` et `ci`. Vide : celle de l'équipe.
     access_certs_url: str | None = None
 
+    # --- Double authentification de l'administration (ADR 0105) ---
+    # Clé maîtresse : 32 octets aléatoires en base64url (`openssl rand -base64 32 | tr
+    # '+/' '-_'`). Elle chiffre les secrets TOTP au repos et signe les codes de secours ;
+    # la perdre oblige chaque membre de l'équipe à réenrôler. Exigée par l'API hors
+    # `local` et `ci` (`require_mfa_encryption_key`), où une clé de développement sert.
+    mfa_encryption_key: SecretStr | None = None
+
     # --- Envoi d'e-mails (ADR 0089) ---
     # Sans hôte, aucun envoi : le message est journalisé (sans destinataire) et sauté.
     smtp_host: str | None = None
@@ -292,6 +315,36 @@ class Settings(BaseSettings):
                 f"(COGES_ENV vaut « {self.env} »)."
             )
         return self
+
+    @field_validator("mfa_encryption_key", mode="before")
+    @classmethod
+    def _empty_key_is_unset(cls, value: Any) -> Any:
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("mfa_encryption_key")
+    @classmethod
+    def _mfa_key_is_32_bytes(cls, value: SecretStr | None) -> SecretStr | None:
+        """Refuse au démarrage une clé qui ne fait pas 32 octets en base64url."""
+        if value is not None and decode_mfa_key(value.get_secret_value()) is None:
+            raise ValueError(
+                "COGES_MFA_ENCRYPTION_KEY : 32 octets aléatoires en base64url "
+                "(openssl rand -base64 32 | tr '+/' '-_')."
+            )
+        return value
+
+    def require_mfa_encryption_key(self) -> bytes:
+        """Clé maîtresse de la double authentification ; refus hors `local` et `ci`
+        quand elle manque (le défaut de développement est public)."""
+        if self.mfa_encryption_key is not None:
+            key = decode_mfa_key(self.mfa_encryption_key.get_secret_value())
+            assert key is not None  # vérifiée au chargement
+            return key
+        if self.env not in DEVELOPMENT_ENVS:
+            raise RuntimeError(
+                "COGES_MFA_ENCRYPTION_KEY manque : l'administration exige la double "
+                f"authentification (COGES_ENV vaut « {self.env} »)."
+            )
+        return DEVELOPMENT_MFA_KEY
 
     @property
     def cors_origin_list(self) -> list[str]:

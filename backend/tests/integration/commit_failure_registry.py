@@ -399,6 +399,29 @@ REGISTRY: dict[tuple[str, str], Critical | Exempt] = {
         "COMMIT refusé prouvé par "
         "test_platform_team::test_a_refused_commit_changes_no_invitation_nor_member"
     ),
+    # Double authentification (ADR 0105) : sous coges_app_platform, hors du harnais
+    # commerçant. Le COMMIT refusé est prouvé par test_platform_mfa.
+    ("POST", "/api/v1/platform/auth/mfa/enrollment"): Exempt(
+        "secret proposé sur le jeton intermédiaire seulement, inactif jusqu'au premier code "
+        "juste (test_platform_mfa::test_a_wrong_first_code_activates_nothing) : un COMMIT "
+        "refusé n'a rien à défaire"
+    ),
+    ("POST", "/api/v1/platform/auth/mfa/enrollment/confirm"): Exempt(
+        "COMMIT refusé prouvé par test_platform_mfa::test_a_refused_commit_keeps_mfa_unchanged "
+        "(rien d'activé, aucune session, aucun code de secours)"
+    ),
+    ("POST", "/api/v1/platform/auth/mfa/verify"): Exempt(
+        "COMMIT refusé prouvé par test_platform_mfa::test_a_refused_commit_keeps_mfa_unchanged "
+        "(code de secours non consommé, aucune session)"
+    ),
+    ("POST", "/api/v1/platform/auth/mfa/recovery-codes"): Exempt(
+        "COMMIT refusé prouvé par test_platform_mfa::test_a_refused_commit_keeps_mfa_unchanged "
+        "(anciens codes toujours valables)"
+    ),
+    ("POST", "/api/v1/platform/team/{user_id}/mfa-reset"): Exempt(
+        "COMMIT refusé prouvé par test_platform_mfa::test_a_refused_commit_keeps_mfa_unchanged "
+        "(secret et sessions intacts, aucun e-mail)"
+    ),
     ("POST", "/api/v1/auth/password"): Exempt(
         "mot de passe de la personne connectée : sa propre session, couverte par "
         "test_temporary_password_expiry ; aucun argent, aucun stock"

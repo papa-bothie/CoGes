@@ -3,14 +3,15 @@
 Jeton à part (audience `coges-platform`), cookie de rafraîchissement à part, limité à
 `/api/v1/platform/auth` : il ne part jamais vers les routes commerçantes, et le cookie
 commerçant ne vient jamais ici. Derrière Caddy, ces routes ne répondent que sur le
-sous-domaine de l'administration, derrière Cloudflare Access (ADR 0104, jeton vérifié par
-`CloudflareAccessMiddleware` avant toute route) ou, en retour arrière, une liste d'adresses.
+sous-domaine de l'administration. Toute session exige la double authentification
+(ADR 0105) ; devant, au choix du VPS : rien de plus (porte `mfa`), Cloudflare Access
+(ADR 0104, jeton vérifié par `CloudflareAccessMiddleware`) ou une liste d'adresses.
 """
 
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated
+from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
@@ -47,11 +48,21 @@ from app.modules.platform.schemas import (
     MerchantUserPage,
     MerchantUserSort,
     MerchantUserStatus,
+    MfaActivated,
+    MfaChallengeRequest,
+    MfaCodeRequest,
+    MfaEnrollment,
+    MfaReset,
+    MfaStep,
+    MfaVerifyRequest,
     PlanRead,
     PlatformLoginRequest,
+    PlatformLoginStep,
     PlatformMe,
     PlatformTokenResponse,
     ProfileRead,
+    RecoveryCodes,
+    RecoveryCodesRegenerate,
     RevenueRead,
     SignupsRead,
     StatsGranularity,
@@ -73,6 +84,9 @@ router = APIRouter(prefix="/platform", tags=["platform-admin"])
 
 REFRESH_COOKIE_NAME = "coges_platform_refresh"
 REFRESH_COOKIE_PATH = "/api/v1/platform/auth"
+#: Jeton d'appareil (ADR 0105) : aléatoire, un an, lu seulement à la connexion.
+DEVICE_COOKIE_NAME = "coges_platform_device"
+DEVICE_COOKIE_MAX_AGE = 365 * 24 * 3600
 
 Administrator = Annotated[
     PlatformSession, Depends(require_platform_role("administrator"), scope="function")
@@ -84,12 +98,35 @@ def _set_refresh_cookie(response: Response, raw_token: str) -> None:
     response.set_cookie(
         key=REFRESH_COOKIE_NAME,
         value=raw_token,
-        max_age=settings.jwt_refresh_ttl_seconds,
+        # 12 h au plus (ADR 0105) : le serveur refuse de toute façon au-delà.
+        max_age=min(settings.jwt_refresh_ttl_seconds, int(service.SESSION_MAX_AGE.total_seconds())),
         path=REFRESH_COOKIE_PATH,
         httponly=True,
         secure=settings.env != "local",
         # `Strict` : l'administration n'est jamais atteinte par un lien venu d'ailleurs.
         samesite="strict",
+    )
+
+
+def _open_session(response: Response, tokens: service.IssuedPlatformTokens) -> None:
+    _set_refresh_cookie(response, tokens.refresh_token)
+    if tokens.device_token is not None:
+        response.set_cookie(
+            key=DEVICE_COOKIE_NAME,
+            value=tokens.device_token,
+            max_age=DEVICE_COOKIE_MAX_AGE,
+            path=REFRESH_COOKIE_PATH,
+            httponly=True,
+            secure=get_settings().env != "local",
+            samesite="strict",
+        )
+
+
+def _login_step(step: service.LoginStep) -> PlatformLoginStep:
+    return PlatformLoginStep(
+        step=cast(MfaStep, step.step),
+        challenge_token=step.challenge_token,
+        expires_in=step.expires_in,
     )
 
 
@@ -102,19 +139,69 @@ def access() -> None:
     """
 
 
-@router.post("/auth/login", response_model=PlatformTokenResponse)
-def login(
-    payload: PlatformLoginRequest, request: Request, response: Response
-) -> PlatformTokenResponse:
-    """Connexion de l'équipe CoGes : e-mail et mot de passe, aucune entreprise."""
-    tokens = service.login(
-        payload.email,
-        payload.password,
+@router.post("/auth/login", response_model=PlatformLoginStep)
+def login(payload: PlatformLoginRequest) -> PlatformLoginStep:
+    """Connexion de l'équipe CoGes, première étape : e-mail et mot de passe. Aucune
+    session : un jeton intermédiaire (5 min, usage unique) mène au code, ou à
+    l'enrôlement de la double authentification si le compte n'en a pas (ADR 0105)."""
+    return _login_step(service.login(payload.email, payload.password))
+
+
+@router.post("/auth/mfa/enrollment", response_model=MfaEnrollment)
+def start_enrollment(payload: MfaChallengeRequest) -> MfaEnrollment:
+    """QR code et clé texte du secret proposé ; seul le jeton intermédiaire `enroll` y
+    mène. Le secret n'est plus jamais rendu après l'activation."""
+    return service.start_enrollment(payload.challenge_token)
+
+
+@router.post("/auth/mfa/enrollment/confirm", response_model=MfaActivated)
+def confirm_enrollment(
+    payload: MfaCodeRequest, request: Request, response: Response
+) -> MfaActivated:
+    """Premier code juste : double authentification active, session ouverte, et les dix
+    codes de secours, montrés cette fois seulement."""
+    tokens = service.confirm_enrollment(
+        payload.challenge_token,
+        payload.code,
         user_agent=request.headers.get("user-agent"),
         ip_address=client_ip(request),
+        device_token=request.cookies.get(DEVICE_COOKIE_NAME),
     )
-    _set_refresh_cookie(response, tokens.refresh_token)
+    _open_session(response, tokens)
+    return MfaActivated(
+        access_token=tokens.access_token,
+        expires_in=tokens.expires_in,
+        recovery_codes=list(tokens.recovery_codes),
+    )
+
+
+@router.post("/auth/mfa/verify", response_model=PlatformTokenResponse)
+def verify_mfa(
+    payload: MfaVerifyRequest, request: Request, response: Response
+) -> PlatformTokenResponse:
+    """Seconde étape : le code de l'application, ou un code de secours."""
+    tokens = service.verify_mfa(
+        payload.challenge_token,
+        code=payload.code,
+        recovery_code=payload.recovery_code,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=client_ip(request),
+        device_token=request.cookies.get(DEVICE_COOKIE_NAME),
+    )
+    _open_session(response, tokens)
     return PlatformTokenResponse(access_token=tokens.access_token, expires_in=tokens.expires_in)
+
+
+@router.post("/auth/mfa/recovery-codes", response_model=RecoveryCodes)
+def regenerate_recovery_codes(
+    payload: RecoveryCodesRegenerate, request: Request, platform: CurrentPlatformAdmin
+) -> RecoveryCodes:
+    """Dix codes de secours neufs, montrés une fois ; les anciens ne servent plus."""
+    return RecoveryCodes(
+        recovery_codes=service.regenerate_recovery_codes(
+            platform.admin, payload.code, ip_address=client_ip(request)
+        )
+    )
 
 
 @router.post("/auth/refresh", response_model=PlatformTokenResponse)
@@ -325,21 +412,15 @@ def close_support_session(
 # ------------------------------------------------------- équipe et accès (ADR 0094)
 
 
-@router.post("/auth/accept-invitation", response_model=PlatformTokenResponse)
-def accept_invitation(
-    payload: InvitationAccept, request: Request, response: Response
-) -> PlatformTokenResponse:
+@router.post("/auth/accept-invitation", response_model=PlatformLoginStep)
+def accept_invitation(payload: InvitationAccept, request: Request) -> PlatformLoginStep:
     """Publique : le collègue invité choisit son mot de passe. Compte créé, jeton consommé,
-    session ouverte. Même réponse pour tout lien qui n'est plus valable ; freinée par
-    adresse IP comme la connexion."""
-    tokens = service.accept_invitation(
-        payload.token,
-        payload.password,
-        user_agent=request.headers.get("user-agent"),
-        ip_address=client_ip(request),
+    puis enrôlement de la double authentification avant toute session (ADR 0105). Même
+    réponse pour tout lien qui n'est plus valable ; freinée par adresse IP comme la
+    connexion."""
+    return _login_step(
+        service.accept_invitation(payload.token, payload.password, ip_address=client_ip(request))
     )
-    _set_refresh_cookie(response, tokens.refresh_token)
-    return PlatformTokenResponse(access_token=tokens.access_token, expires_in=tokens.expires_in)
 
 
 @router.get("/team", response_model=TeamList)
@@ -409,6 +490,22 @@ def update_member(
     administrateur actif (409 `last_administrator`)."""
     return service.update_member(
         platform.session, platform.admin, user_id, payload, ip_address=client_ip(request)
+    )
+
+
+@router.post("/team/{user_id}/mfa-reset", response_model=TeamMember)
+def reset_member_mfa(
+    user_id: UUID, payload: MfaReset, request: Request, platform: Administrator
+) -> TeamMember:
+    """Téléphone perdu : réinitialiser la double authentification d'un collègue (raison
+    obligatoire). Ses sessions tombent ; il réenrôle à sa prochaine connexion. Jamais la
+    sienne (409 `cannot_reset_own_mfa`)."""
+    return service.reset_member_mfa(
+        platform.session,
+        platform.admin,
+        user_id,
+        reason=payload.reason.strip(),
+        ip_address=client_ip(request),
     )
 
 

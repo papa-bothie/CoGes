@@ -12,7 +12,16 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Integer, Numeric, SmallInteger, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Integer,
+    LargeBinary,
+    Numeric,
+    SmallInteger,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import ENUM, INET, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -37,10 +46,72 @@ class PlatformUser(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Secret TOTP chiffré par l'API (ADR 0105), jamais en clair, jamais renvoyé.
+    mfa_secret: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    mfa_enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Dernier pas TOTP accepté : un code ne sert qu'une fois.
+    mfa_last_step: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
     updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+
+
+class PlatformMfaChallenge(Base):
+    """Jeton intermédiaire entre le mot de passe et le code (ADR 0105) : 5 min, une fois."""
+
+    __tablename__ = "platform_mfa_challenges"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    platform_user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    token_hash: Mapped[str] = mapped_column(Text)
+    #: `enroll` : aucun secret actif, seul l'enrôlement est ouvert ; `verify` : le code.
+    purpose: Mapped[str] = mapped_column(Text)
+    #: Secret chiffré proposé à l'enrôlement, actif seulement après un premier code juste.
+    pending_secret: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PlatformRecoveryCode(Base):
+    """Code de secours : empreinte HMAC seulement, usage unique (ADR 0105)."""
+
+    __tablename__ = "platform_recovery_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    platform_user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    code_hash: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PlatformKnownDevice(Base):
+    """Appareil déjà vu : empreinte d'un jeton aléatoire en cookie, et le navigateur."""
+
+    __tablename__ = "platform_known_devices"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    platform_user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    token_hash: Mapped[str] = mapped_column(Text)
+    browser: Mapped[str] = mapped_column(Text)
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
 
@@ -57,6 +128,10 @@ class PlatformAuthSession(Base):
     token_hash: Mapped[str] = mapped_column(Text)
     family_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
     issued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+    #: Début de la session (mot de passe et code), gardé à chaque rotation : 12 h au plus.
+    authenticated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

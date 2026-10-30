@@ -368,6 +368,7 @@ def test_a_refused_commit_records_nothing(
 ) -> None:
     with TestClient(app, base_url=TEST_BASE_URL, raise_server_exceptions=False) as raw:
         headers = auth_headers(platform_login(raw, administrator))
+        enqueued.clear()  # l'alerte « nouvel appareil » de la connexion (ADR 0105)
         with failing_platform_commit(owner_engine):
             paid = _pay(raw, headers, shop.company_id, f"paiement-{uuid4().hex}")
             changed = raw.patch(

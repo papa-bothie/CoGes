@@ -33,6 +33,11 @@ aussi, jamais par une route publique ; le mot de passe est demandé de la même 
 
     python -m app.cli create-platform-user --email equipe@example.test \
         --name "Prénom Nom" --role administrator
+
+Téléphone perdu et aucun autre administrateur pour réinitialiser la double
+authentification (ADR 0105) : dernier recours sur le serveur.
+
+    python -m app.cli reset-platform-mfa --email equipe@example.test
 """
 
 from __future__ import annotations
@@ -247,6 +252,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Parcours e2e seulement : le mot de passe resterait dans l'historique du shell.",
     )
+    platform_user.add_argument(
+        "--mfa-secret",
+        default=None,
+        help="Parcours e2e seulement (refusé hors local et ci) : secret TOTP en base32, "
+        "double authentification active d'emblée.",
+    )
+
+    reset_mfa = subparsers.add_parser(
+        "reset-platform-mfa",
+        help="Réinitialiser la double authentification d'un compte de l'administration "
+        "(sessions fermées, réenrôlement à la connexion suivante)",
+    )
+    reset_mfa.add_argument("--email", required=True)
 
     deactivate = subparsers.add_parser(
         "deactivate-platform-user", help="Couper un compte de l'administration (sessions comprises)"
@@ -306,13 +324,27 @@ def main(argv: list[str] | None = None) -> int:
             )
 
     if args.command == "create-platform-user":
-        platform_user_id = platform_service.create_platform_user(
-            email=args.email,
-            display_name=args.name,
-            role=args.role,
-            password=args.password or _prompt_password("Mot de passe du compte : "),
-        )
+        try:
+            platform_user_id = platform_service.create_platform_user(
+                email=args.email,
+                display_name=args.name,
+                role=args.role,
+                password=args.password or _prompt_password("Mot de passe du compte : "),
+                mfa_secret=args.mfa_secret,
+            )
+        except platform_service.MfaSecretOutsideDevelopmentError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
         print(f"Compte d'administration créé : {platform_user_id} ({args.role})")
+
+    if args.command == "reset-platform-mfa":
+        if not platform_service.reset_platform_mfa(email=args.email):
+            print(f"Aucun compte : {args.email}")
+            return 1
+        print(
+            f"Double authentification réinitialisée, sessions fermées : {args.email}. "
+            "Le compte l'enrôlera à sa prochaine connexion."
+        )
 
     if args.command == "deactivate-platform-user":
         if not platform_service.deactivate_platform_user(email=args.email):

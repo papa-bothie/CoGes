@@ -157,6 +157,14 @@ class PlatformClaims:
     platform_user_id: UUID
     platform_role: str
     token_id: UUID
+    #: Émission (epoch) : un jeton antérieur à l'activation de la double
+    #: authentification du compte est refusé (réinitialisation, ADR 0105).
+    issued_at: int
+
+
+#: Méthodes d'authentification d'un jeton de l'administration (RFC 8176) : mot de passe
+#: **et** code à usage unique. Un jeton sans `otp` n'ouvre rien (ADR 0105).
+PLATFORM_AMR: Final = ("pwd", "otp")
 
 
 def create_platform_access_token(platform_user_id: UUID, platform_role: str) -> tuple[str, int]:
@@ -167,6 +175,7 @@ def create_platform_access_token(platform_user_id: UUID, platform_role: str) -> 
     payload: dict[str, Any] = {
         "sub": str(platform_user_id),
         "platform_role": platform_role,
+        "amr": list(PLATFORM_AMR),
         "typ": PLATFORM_TOKEN_TYPE,
         "aud": PLATFORM_AUDIENCE,
         "jti": str(uuid4()),
@@ -187,18 +196,22 @@ def decode_platform_token(token: str) -> PlatformClaims:
             settings.jwt_secret.get_secret_value(),
             algorithms=[ALGORITHM],
             audience=PLATFORM_AUDIENCE,
-            options={"require": ["exp", "sub", "typ", "aud"]},
+            options={"require": ["exp", "iat", "sub", "typ", "aud"]},
         )
     except jwt.PyJWTError as exc:
         raise AuthenticationRequiredError("Jeton d'accès invalide ou expiré.") from exc
 
     if payload.get("typ") != PLATFORM_TOKEN_TYPE:
         raise AuthenticationRequiredError("Type de jeton inattendu.")
+    amr = payload.get("amr")
+    if not isinstance(amr, list) or "otp" not in amr:
+        raise AuthenticationRequiredError("Double authentification requise.")
     try:
         return PlatformClaims(
             platform_user_id=UUID(payload["sub"]),
             platform_role=str(payload["platform_role"]),
             token_id=UUID(payload["jti"]),
+            issued_at=int(payload["iat"]),
         )
     except (KeyError, ValueError) as exc:
         raise AuthenticationRequiredError("Jeton d'accès malformé.") from exc

@@ -40,6 +40,100 @@ class PlatformTokenResponse(BaseModel):
     expires_in: int
 
 
+MfaStep = Literal["enroll", "verify"]
+
+
+class PlatformLoginStep(BaseModel):
+    """Mot de passe accepté : la session n'est ouverte qu'après le code (ADR 0105).
+
+    `challenge_token` est le jeton intermédiaire : 5 minutes, une seule fois, et rien
+    d'autre que l'étape annoncée (`enroll` : aucune double authentification encore,
+    seul l'enrôlement est ouvert ; `verify` : le code de l'application ou de secours).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    step: MfaStep
+    challenge_token: str
+    expires_in: int
+
+
+class MfaChallengeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    challenge_token: str = Field(min_length=20, max_length=200)
+
+
+class MfaEnrollment(BaseModel):
+    """Le secret proposé, montré pendant l'enrôlement seulement, jamais après."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    secret: str
+    otpauth_uri: str
+    #: QR code du lien `otpauth://`, en SVG autonome (aucune ressource extérieure).
+    qr_svg: str
+    account: str
+    issuer: str
+
+
+class MfaCodeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    challenge_token: str = Field(min_length=20, max_length=200)
+    code: str = Field(min_length=6, max_length=12)
+
+
+class MfaVerifyRequest(BaseModel):
+    """Le code de l'application, ou un code de secours : l'un des deux exactement."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    challenge_token: str = Field(min_length=20, max_length=200)
+    code: str | None = Field(default=None, min_length=6, max_length=12)
+    recovery_code: str | None = Field(default=None, min_length=8, max_length=20)
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> MfaVerifyRequest:
+        if (self.code is None) == (self.recovery_code is None):
+            raise ValueError("Donnez le code de l'application ou un code de secours.")
+        return self
+
+
+class MfaActivated(BaseModel):
+    """Double authentification active : la session, et les codes de secours **une fois**."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    recovery_codes: list[str]
+
+
+class RecoveryCodesRegenerate(BaseModel):
+    """Régénérer exige un code de l'application : une session laissée ouverte ne suffit
+    pas à s'approprier les codes de secours."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=6, max_length=12)
+
+
+class RecoveryCodes(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recovery_codes: list[str]
+
+
+class MfaReset(BaseModel):
+    """Réinitialiser la double authentification d'un collègue : la raison est exigée."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class PlatformMe(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -47,6 +141,9 @@ class PlatformMe(BaseModel):
     email: str
     display_name: str
     role: PlatformRole
+    mfa_enabled_at: datetime | None
+    #: Codes de secours encore utilisables (0 à 10).
+    recovery_codes_left: int
 
 
 class CompanySummary(BaseModel):
@@ -353,6 +450,8 @@ class TeamMember(BaseModel):
     created_at: datetime
     #: Le compte qui regarde : l'écran ne lui propose ni suspension ni changement de profil.
     is_me: bool
+    #: Double authentification active (ADR 0105) ; `False` : enrôlement attendu.
+    mfa_enabled: bool
 
 
 class TeamInvitation(BaseModel):
@@ -542,6 +641,22 @@ class ExpiringInvitation(BaseModel):
     expires_at: datetime
 
 
+SecurityEventKind = Literal["new_device", "recovery_code_used", "mfa_enabled", "mfa_reset"]
+
+
+class SecurityEvent(BaseModel):
+    """Un signal de sécurité de l'équipe (ADR 0105), sur 7 jours. Jamais de secret."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: SecurityEventKind
+    platform_user_id: UUID | None
+    display_name: str
+    #: « Firefox · Linux » pour un nouvel appareil ; sinon `None`.
+    device: str | None
+    occurred_at: datetime
+
+
 class AttentionRead(BaseModel):
     """Ce qui demande une action, dès l'ouverture du tableau de bord."""
 
@@ -555,3 +670,6 @@ class AttentionRead(BaseModel):
     suspended_total: int
     #: Invitations en attente qui échoient dans les 24 h.
     expiring_invitations: list[ExpiringInvitation]
+    #: Nouveaux appareils, codes de secours utilisés, enrôlements et réinitialisations
+    #: de la double authentification des 7 derniers jours (ADR 0105), 20 au plus.
+    security_events: list[SecurityEvent]

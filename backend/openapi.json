@@ -6840,7 +6840,7 @@
           "platform-admin"
         ],
         "summary": "Login",
-        "description": "Connexion de l'équipe CoGes : e-mail et mot de passe, aucune entreprise.",
+        "description": "Connexion de l'équipe CoGes, première étape : e-mail et mot de passe. Aucune\nsession : un jeton intermédiaire (5 min, usage unique) mène au code, ou à\nl'enrôlement de la double authentification si le compte n'en a pas (ADR 0105).",
         "operationId": "login_api_v1_platform_auth_login_post",
         "requestBody": {
           "content": {
@@ -6858,7 +6858,175 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/PlatformLoginStep"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/auth/mfa/enrollment": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Start Enrollment",
+        "description": "QR code et clé texte du secret proposé ; seul le jeton intermédiaire `enroll` y\nmène. Le secret n'est plus jamais rendu après l'activation.",
+        "operationId": "start_enrollment_api_v1_platform_auth_mfa_enrollment_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaChallengeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaEnrollment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/auth/mfa/enrollment/confirm": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Confirm Enrollment",
+        "description": "Premier code juste : double authentification active, session ouverte, et les dix\ncodes de secours, montrés cette fois seulement.",
+        "operationId": "confirm_enrollment_api_v1_platform_auth_mfa_enrollment_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaActivated"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/auth/mfa/verify": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Verify Mfa",
+        "description": "Seconde étape : le code de l'application, ou un code de secours.",
+        "operationId": "verify_mfa_api_v1_platform_auth_mfa_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaVerifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
                   "$ref": "#/components/schemas/PlatformTokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/auth/mfa/recovery-codes": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Regenerate Recovery Codes",
+        "description": "Dix codes de secours neufs, montrés une fois ; les anciens ne servent plus.",
+        "operationId": "regenerate_recovery_codes_api_v1_platform_auth_mfa_recovery_codes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoveryCodesRegenerate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCodes"
                 }
               }
             }
@@ -7653,7 +7821,7 @@
           "platform-admin"
         ],
         "summary": "Accept Invitation",
-        "description": "Publique : le collègue invité choisit son mot de passe. Compte créé, jeton consommé,\nsession ouverte. Même réponse pour tout lien qui n'est plus valable ; freinée par\nadresse IP comme la connexion.",
+        "description": "Publique : le collègue invité choisit son mot de passe. Compte créé, jeton consommé,\npuis enrôlement de la double authentification avant toute session (ADR 0105). Même\nréponse pour tout lien qui n'est plus valable ; freinée par adresse IP comme la\nconnexion.",
         "operationId": "accept_invitation_api_v1_platform_auth_accept_invitation_post",
         "requestBody": {
           "content": {
@@ -7671,7 +7839,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PlatformTokenResponse"
+                  "$ref": "#/components/schemas/PlatformLoginStep"
                 }
               }
             }
@@ -7898,6 +8066,60 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/TeamMemberUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamMember"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/team/{user_id}/mfa-reset": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Reset Member Mfa",
+        "description": "Téléphone perdu : réinitialiser la double authentification d'un collègue (raison\nobligatoire). Ses sessions tombent ; il réenrôle à sa prochaine connexion. Jamais la\nsienne (409 `cannot_reset_own_mfa`).",
+        "operationId": "reset_member_mfa_api_v1_platform_team__user_id__mfa_reset_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaReset"
               }
             }
           }
@@ -8690,6 +8912,13 @@
             },
             "type": "array",
             "title": "Expiring Invitations"
+          },
+          "security_events": {
+            "items": {
+              "$ref": "#/components/schemas/SecurityEvent"
+            },
+            "type": "array",
+            "title": "Security Events"
           }
         },
         "additionalProperties": false,
@@ -8699,7 +8928,8 @@
           "trials_ending",
           "suspended_companies",
           "suspended_total",
-          "expiring_invitations"
+          "expiring_invitations",
+          "security_events"
         ],
         "title": "AttentionRead",
         "description": "Ce qui demande une action, dès l'ouverture du tableau de bord."
@@ -13397,6 +13627,173 @@
         ],
         "title": "MerchantUserPage"
       },
+      "MfaActivated": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          },
+          "recovery_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recovery Codes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "access_token",
+          "expires_in",
+          "recovery_codes"
+        ],
+        "title": "MfaActivated",
+        "description": "Double authentification active : la session, et les codes de secours **une fois**."
+      },
+      "MfaChallengeRequest": {
+        "properties": {
+          "challenge_token": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 20,
+            "title": "Challenge Token"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "challenge_token"
+        ],
+        "title": "MfaChallengeRequest"
+      },
+      "MfaCodeRequest": {
+        "properties": {
+          "challenge_token": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 20,
+            "title": "Challenge Token"
+          },
+          "code": {
+            "type": "string",
+            "maxLength": 12,
+            "minLength": 6,
+            "title": "Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "challenge_token",
+          "code"
+        ],
+        "title": "MfaCodeRequest"
+      },
+      "MfaEnrollment": {
+        "properties": {
+          "secret": {
+            "type": "string",
+            "title": "Secret"
+          },
+          "otpauth_uri": {
+            "type": "string",
+            "title": "Otpauth Uri"
+          },
+          "qr_svg": {
+            "type": "string",
+            "title": "Qr Svg"
+          },
+          "account": {
+            "type": "string",
+            "title": "Account"
+          },
+          "issuer": {
+            "type": "string",
+            "title": "Issuer"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "secret",
+          "otpauth_uri",
+          "qr_svg",
+          "account",
+          "issuer"
+        ],
+        "title": "MfaEnrollment",
+        "description": "Le secret proposé, montré pendant l'enrôlement seulement, jamais après."
+      },
+      "MfaReset": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "MfaReset",
+        "description": "Réinitialiser la double authentification d'un collègue : la raison est exigée."
+      },
+      "MfaVerifyRequest": {
+        "properties": {
+          "challenge_token": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 20,
+            "title": "Challenge Token"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 12,
+                "minLength": 6
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "recovery_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20,
+                "minLength": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "challenge_token"
+        ],
+        "title": "MfaVerifyRequest",
+        "description": "Le code de l'application, ou un code de secours : l'un des deux exactement."
+      },
       "MoneyBucket": {
         "properties": {
           "key": {
@@ -15292,6 +15689,35 @@
         "title": "PlatformLoginRequest",
         "description": "Connexion de l'équipe : e-mail et mot de passe, aucune entreprise."
       },
+      "PlatformLoginStep": {
+        "properties": {
+          "step": {
+            "type": "string",
+            "enum": [
+              "enroll",
+              "verify"
+            ],
+            "title": "Step"
+          },
+          "challenge_token": {
+            "type": "string",
+            "title": "Challenge Token"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "step",
+          "challenge_token",
+          "expires_in"
+        ],
+        "title": "PlatformLoginStep",
+        "description": "Mot de passe accepté : la session n'est ouverte qu'après le code (ADR 0105).\n\n`challenge_token` est le jeton intermédiaire : 5 minutes, une seule fois, et rien\nd'autre que l'étape annoncée (`enroll` : aucune double authentification encore,\nseul l'enrôlement est ouvert ; `verify` : le code de l'application ou de secours)."
+      },
       "PlatformMe": {
         "properties": {
           "id": {
@@ -15314,6 +15740,22 @@
               "support"
             ],
             "title": "Role"
+          },
+          "mfa_enabled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfa Enabled At"
+          },
+          "recovery_codes_left": {
+            "type": "integer",
+            "title": "Recovery Codes Left"
           }
         },
         "additionalProperties": false,
@@ -15322,7 +15764,9 @@
           "id",
           "email",
           "display_name",
-          "role"
+          "role",
+          "mfa_enabled_at",
+          "recovery_codes_left"
         ],
         "title": "PlatformMe"
       },
@@ -16675,6 +17119,40 @@
         ],
         "title": "RecentSale",
         "description": "Une vente récente, réduite à ce qu'une liste d'accueil montre."
+      },
+      "RecoveryCodes": {
+        "properties": {
+          "recovery_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recovery Codes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "recovery_codes"
+        ],
+        "title": "RecoveryCodes"
+      },
+      "RecoveryCodesRegenerate": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 12,
+            "minLength": 6,
+            "title": "Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "RecoveryCodesRegenerate",
+        "description": "Régénérer exige un code de l'application : une session laissée ouverte ne suffit\npas à s'approprier les codes de secours."
       },
       "RefundAmount": {
         "$ref": "#/components/schemas/Amount-Input",
@@ -18103,6 +18581,63 @@
         "title": "SalesExportCreate",
         "description": "Période d'un export de ventes, dans le fuseau de l'entreprise, bornes incluses."
       },
+      "SecurityEvent": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "new_device",
+              "recovery_code_used",
+              "mfa_enabled",
+              "mfa_reset"
+            ],
+            "title": "Kind"
+          },
+          "platform_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "device": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "platform_user_id",
+          "display_name",
+          "device",
+          "occurred_at"
+        ],
+        "title": "SecurityEvent",
+        "description": "Un signal de sécurité de l'équipe (ADR 0105), sur 7 jours. Jamais de secret."
+      },
       "SellingPrice-Input": {
         "$ref": "#/components/schemas/Amount-Input",
         "gt": "0"
@@ -19430,6 +19965,10 @@
           "is_me": {
             "type": "boolean",
             "title": "Is Me"
+          },
+          "mfa_enabled": {
+            "type": "boolean",
+            "title": "Mfa Enabled"
           }
         },
         "additionalProperties": false,
@@ -19442,7 +19981,8 @@
           "is_active",
           "last_login_at",
           "created_at",
-          "is_me"
+          "is_me",
+          "mfa_enabled"
         ],
         "title": "TeamMember"
       },

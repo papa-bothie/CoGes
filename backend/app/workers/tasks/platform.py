@@ -40,6 +40,7 @@ STATUS_CHANGED = "platform.company_status_changed"
 LOGIN_FAILURES = "platform.login_failures"
 SUPPORT_NOTICE = "platform.support_notice"
 SEND_INVITATION = "platform.send_invitation"
+SECURITY_NOTICE = "platform.security_notice"
 
 MANAGER_ROLE = "gerant"
 
@@ -102,6 +103,66 @@ def login_failures(self: Any, platform_user_id: str, failures: int) -> bool:
                 f"{platform_user_id}. La connexion de ce compte est freinée ; si ce n'est "
                 "pas l'un de vous, changez son mot de passe ou désactivez-le."
             ),
+        )
+    except Exception as exc:
+        raise self.retry(exc=exc) from exc
+
+
+# ------------------------------------------- double authentification (ADR 0105)
+
+_SECURITY_SUBJECTS = {
+    "new_device": "CoGes — connexion à l'administration depuis un nouvel appareil",
+    "recovery_code_used": "CoGes — un code de secours a servi à vous connecter",
+    "mfa_enabled": "CoGes — double authentification activée sur votre compte",
+    "mfa_reset": "CoGes — votre double authentification a été réinitialisée",
+}
+_SECURITY_BODIES = {
+    "new_device": (
+        "Bonjour {name},\n\nVotre compte d'administration CoGes vient d'être utilisé depuis "
+        "un appareil que nous ne connaissions pas ({device}), le {when}.\n\nSi c'est vous, "
+        "rien à faire. Sinon, prévenez tout de suite un autre administrateur : il "
+        "réinitialisera votre double authentification et fermera vos sessions."
+    ),
+    "recovery_code_used": (
+        "Bonjour {name},\n\nUn de vos codes de secours vient de servir à vous connecter à "
+        "l'administration CoGes ({device}), le {when}. Il ne servira plus.\n\nSi c'est vous, "
+        "pensez à en générer de nouveaux (Ma sécurité). Sinon, prévenez tout de suite un "
+        "autre administrateur."
+    ),
+    "mfa_enabled": (
+        "Bonjour {name},\n\nLa double authentification de votre compte d'administration "
+        "CoGes a été activée ({device}), le {when}.\n\nSi ce n'est pas vous, prévenez tout "
+        "de suite un autre administrateur."
+    ),
+    "mfa_reset": (
+        "Bonjour {name},\n\nLa double authentification de votre compte d'administration "
+        "CoGes a été réinitialisée le {when} et vos sessions sont fermées. À votre prochaine "
+        "connexion, vous l'enrôlerez à nouveau avec votre application.\n\nSi vous n'avez "
+        "rien demandé, prévenez tout de suite un autre administrateur."
+    ),
+}
+
+
+@celery_app.task(name=SECURITY_NOTICE, bind=True, max_retries=5, default_retry_delay=60)
+def security_notice(self: Any, platform_user_id: str, kind: str, device: str | None) -> bool:
+    """Prévient le compte (et l'équipe) d'un signal de sécurité. Sans SMTP, l'entrée reste
+    visible dans « À traiter » et le journal."""
+    if kind not in _SECURITY_SUBJECTS:
+        return False
+    recipient = platform_service.security_notice_recipient(UUID(platform_user_id))
+    if recipient is None:
+        return False
+    team = get_settings().platform_alert_email
+    when = datetime.now(ZoneInfo("Africa/Dakar")).strftime("%d/%m/%Y à %H h %M")
+    to = [recipient.email] + ([team] if team and team != recipient.email else [])
+    try:
+        return mailer.send_email(
+            to=to,
+            subject=_SECURITY_SUBJECTS[kind],
+            body=_SECURITY_BODIES[kind].format(
+                name=recipient.display_name, device=device or "appareil inconnu", when=when
+            )
+            + "\n\nL'équipe CoGes",
         )
     except Exception as exc:
         raise self.retry(exc=exc) from exc
