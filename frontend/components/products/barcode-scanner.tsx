@@ -190,7 +190,9 @@ export function BarcodeScanButton({
             muted
             playsInline
             aria-label={t.scanTitle}
-            className={cn("w-full rounded-tuile bg-muted", camera !== "on" && "hidden")}
+            // Affichée dès la préparation : Safari ne lance pas une vidéo muette invisible
+            // (`display: none`), et `play()` attendrait sans fin sur l'iPhone.
+            className={cn("w-full rounded-tuile bg-muted", camera === "off" && "hidden")}
           />
           <form
             className="space-y-2"
