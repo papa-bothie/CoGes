@@ -244,3 +244,27 @@ def test_the_mfa_gate_filters_no_address_but_keeps_the_headers_and_the_body_limi
     assert "production-api:8000" in routes and "production-admin:3000" in routes
     # Le mode `ip` garde, lui, son filtre.
     assert "remote_ip" in json.dumps(_admin_routes(_adapt("ip", "192.0.2.10")))
+
+
+def _merchant_routes(config: dict[str, Any]) -> list[Any]:
+    return [
+        route
+        for server in config["apps"]["http"]["servers"].values()
+        for route in server.get("routes", [])
+        if '"coges.example.sn"' in json.dumps(route.get("match", []))
+    ]
+
+
+@needs_docker
+@pytest.mark.parametrize("gate", ["mfa", "ip"])
+def test_only_the_shop_may_open_the_camera(gate: str) -> None:
+    """Scan du code-barres (prompt 33) : Caddy **remplace** l'en-tête du front, et un
+    `camera=()` y refusait la caméra en production. La boutique l'ouvre à sa propre
+    origine ; l'administration, qui ne scanne rien, la garde fermée."""
+    config = _adapt(gate, "192.0.2.10")
+    shop = json.dumps(_merchant_routes(config))
+    assert '"camera=(self), microphone=(), geolocation=()"' in shop
+    assert '"camera=(), microphone=(), geolocation=()"' not in shop
+    admin = json.dumps(_admin_routes(config))
+    assert '"camera=(), microphone=(), geolocation=()"' in admin
+    assert "camera=(self)" not in admin

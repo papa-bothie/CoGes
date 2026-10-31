@@ -5,7 +5,7 @@
 # qu'avec une version qui impose la double authentification et COGES_MFA_ENCRYPTION_KEY.
 # L'enregistrement DNS admin.<domaine> pointe sur le VPS (« DNS only »).
 admin.{$COGES_DOMAIN} {
-	import securite
+	import securite ()
 	header X-Robots-Tag "noindex, nofollow"
 	request_body {
 		max_size 1MB
@@ -20,5 +20,5 @@ admin.{$COGES_DOMAIN} {
 	handle {
 		reverse_proxy production-admin:3000
 	}
-	import maintenance
+	import maintenance ()
 }

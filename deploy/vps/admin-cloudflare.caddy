@@ -11,7 +11,7 @@
 # quand elle est vide : Caddy ne prend pas la valeur par défaut d'une variable vide, et un
 # `client_ip` sans plage ne laisserait passer personne.
 http://:8081 {
-	import securite
+	import securite ()
 	header X-Robots-Tag "noindex, nofollow"
 	request_body {
 		max_size 1MB
@@ -35,5 +35,5 @@ http://:8081 {
 	handle {
 		respond "Accès refusé." 403
 	}
-	import maintenance
+	import maintenance ()
 }

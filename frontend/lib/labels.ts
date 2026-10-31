@@ -870,6 +870,28 @@ export const labels = {
         `Vous devez ${amount} à ${who}, à payer dans ${days} jours`,
       doneStock: "Le stock et le prix d'achat moyen sont mis à jour.",
       seeStock: "Voir le stock",
+      // Entrée de stock par scan (prompt 33, ADR 0106).
+      scan: "Scanner un article",
+      scanNext: "Scanner l'article suivant",
+      left: (qty: string) => `Il en reste ${qty}`,
+      scanAdded: (name: string) => `${name} est ajouté : tapez la quantité reçue.`,
+      scanMerged: (name: string, qty: string) =>
+        `${name} était déjà sur la livraison : une pièce de plus (${qty}).`,
+      scanUntracked: (name: string) =>
+        `${name} n'est pas suivi en stock : on ne reçoit pas de stock pour lui.`,
+      scanDeleted: (code: string) =>
+        `Le code ${code} était celui d'un article supprimé. Il n'est pas recréé ici : voyez avec le gérant.`,
+      scanInvalid: (code: string) =>
+        `Le code ${code} n'est pas valide. Scannez-le de nouveau ou tapez-le.`,
+      scanUnknown: "Cet article n'existe pas encore. Le créer ?",
+      scanUnknownCode: (code: string) => `Code-barres : ${code}`,
+      scanCreate: "Créer l'article",
+      scanAskManager: "Cet article n'existe pas. Demandez au gérant de le créer.",
+      scanCreatedByOther: (name: string) =>
+        `${name} vient d'être créé par quelqu'un d'autre : il est ajouté à la livraison.`,
+      effectsTitle: "Après la livraison",
+      costNote:
+        "Le prix d'achat tapé est celui de cette livraison : le prix moyen se recalcule, la fiche de l'article ne change pas.",
     },
     shelves: {
       title: "Rayons",
@@ -984,6 +1006,15 @@ export const labels = {
       scan: "Scanner le code-barres",
       scanTitle: "Scanner le code-barres",
       scanCamera: "Montrez le code-barres à la caméra.",
+      scanPreparing: "Préparation de la caméra…",
+      // Création courte depuis une livraison (prompt 33, S3) : la quantité passe par la livraison.
+      intakeTitle: "Nouvel article",
+      receiving: "Combien en recevez-vous ?",
+      receivingField: "Quantité reçue",
+      fixCode: "Corriger le code",
+      costForDelivery: "Le prix d'achat sert à la livraison : tapez-le.",
+      intakeSubmit: "Créer et ajouter à la livraison",
+      scanHelp: "Approchez à 10-20 cm, avec de la lumière, ou tapez le code",
       scanTyped: "Code-barres",
       scanUse: "Utiliser ce code",
       scanned: (code: string) => `Code-barres : ${code}`,
