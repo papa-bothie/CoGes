@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.core import clock, money
 from app.core.audit import AuditAction, audit_critical
+from app.core.codes import scanned_code_candidates
 from app.core.errors import (
     BusinessRuleError,
     NotFoundError,
@@ -63,6 +64,7 @@ from app.modules.inventory.schemas import (
     MovementRead,
     NewProductCreate,
     NewProductRead,
+    ScannedProduct,
     StockLine,
     StockRebuildLine,
     StockSummary,
@@ -389,6 +391,64 @@ def get_stock(
         for row, summary, state in shown
     ]
     return lines, len(selected)
+
+
+class InvalidBarcodeError(ValidationFailedError):
+    """Code EAN/UPC dont la clé de contrôle est fausse, ou code vide ou trop long."""
+
+    code = "invalid_barcode"
+    default_message = "Ce code-barres n'est pas valide : vérifiez-le ou scannez-le de nouveau."
+
+
+class ProductNotFoundError(NotFoundError):
+    """Aucun article vivant de l'entreprise ne porte ce code (ADR 0106).
+
+    `deleted_product` dit si un article supprimé le portait : l'écran l'annonce au lieu de
+    proposer de recréer un doublon. Un code d'une autre entreprise répond comme un code
+    inconnu : rien n'en est révélé.
+    """
+
+    code = "product_not_found"
+    default_message = "Aucun article ne porte ce code."
+
+
+def find_by_code(session: Session, ctx: TenantContext, code: str) -> ScannedProduct:
+    """L'article qui porte **exactement** ce code, avec son stock (scan d'une livraison).
+
+    Inventory compose la façade de Products (la fiche) et la sienne (stock, coût moyen,
+    dernière entrée) : Products n'a pas le droit de lire le stock (ADR 0012).
+    """
+    codes = scanned_code_candidates(code)
+    if codes is None:
+        raise InvalidBarcodeError(details={"code": code})
+    summary = products_service.find_by_code(session, ctx, codes)
+    if summary is None:
+        raise ProductNotFoundError(
+            details={
+                "code": codes[0],
+                "deleted_product": products_service.code_was_deleted(session, ctx, codes),
+            }
+        )
+    stock = ProductStockRepository(session, ctx).get(summary.id)
+    names = (
+        {}
+        if summary.category_id is None
+        else categories_service.get_names(session, ctx, [summary.category_id])
+    )
+    return ScannedProduct(
+        product_id=summary.id,
+        sku=summary.sku,
+        barcode=summary.barcode,
+        name=summary.name,
+        unit=summary.unit,
+        category_id=summary.category_id,
+        category_name=None if summary.category_id is None else names.get(summary.category_id),
+        is_stock_tracked=summary.is_stock_tracked,
+        qty_on_hand=Decimal("0") if stock is None else stock.qty_on_hand,
+        avg_cost=Decimal("0") if stock is None else stock.avg_cost,
+        last_purchase_cost=InventoryMovementRepository(session, ctx).last_entry_cost(summary.id),
+        unit_price=products_service.current_unit_prices(session, ctx, [summary.id]).get(summary.id),
+    )
 
 
 def stock_summary(session: Session, ctx: TenantContext) -> StockSummary:

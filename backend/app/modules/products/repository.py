@@ -116,6 +116,13 @@ class ProductRepository(TenantRepository[Product]):
             self._live().where(Product.barcode == barcode)
         ).scalar_one_or_none()
 
+    def by_codes(self, codes: Sequence[str], *, deleted: bool) -> Sequence[Product]:
+        """Articles dont le code-barres ou la référence est **exactement** l'un de ces codes,
+        vivants ou supprimés (scan d'une livraison, ADR 0106)."""
+        state = Product.deleted_at.is_not(None) if deleted else Product.deleted_at.is_(None)
+        stmt = self._select().where(state, or_(Product.barcode.in_(codes), Product.sku.in_(codes)))
+        return self.session.execute(stmt).scalars().all()
+
     def count_live(
         self,
         *,

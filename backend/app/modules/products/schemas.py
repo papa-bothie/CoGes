@@ -108,6 +108,8 @@ class ProductSummary(BaseModel):
 
     id: UUID
     sku: str
+    #: Lu par l'écran de livraison après un scan (ADR 0106).
+    barcode: str | None = None
     name: str
     category_id: UUID | None
     unit: ProductUnit

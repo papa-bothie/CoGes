@@ -197,19 +197,47 @@ def get_summaries(
         if include_deleted
         else repository.live_by_ids(product_ids)
     )
-    return {
-        product_id: ProductSummary(
-            id=product.id,
-            sku=product.sku,
-            name=product.name,
-            category_id=product.category_id,
-            unit=product.unit,
-            is_stock_tracked=product.is_stock_tracked,
-            default_tax_rate=product.default_tax_rate,
-            reorder_point=product.reorder_point,
-        )
-        for product_id, product in products.items()
-    }
+    return {product_id: _summary(product) for product_id, product in products.items()}
+
+
+def _summary(product: Product) -> ProductSummary:
+    return ProductSummary(
+        id=product.id,
+        sku=product.sku,
+        barcode=product.barcode,
+        name=product.name,
+        category_id=product.category_id,
+        unit=product.unit,
+        is_stock_tracked=product.is_stock_tracked,
+        default_tax_rate=product.default_tax_rate,
+        reorder_point=product.reorder_point,
+    )
+
+
+def find_by_code(
+    session: Session, ctx: TenantContext, codes: Sequence[str]
+) -> ProductSummary | None:
+    """L'article vivant qui porte exactement l'un de ces codes (ADR 0106).
+
+    `codes` vient de `scanned_code_candidates`, la forme lue en tête. Le code-barres
+    passe avant la référence, et la forme lue avant ses équivalents (UPC-A, EAN-13) :
+    un code ne désigne jamais « le plus ressemblant ».
+    """
+    matches = ProductRepository(session, ctx).by_codes(codes, deleted=False)
+    if not matches:
+        return None
+
+    def rank(product: Product) -> tuple[int, int]:
+        if product.barcode in codes:
+            return (0, codes.index(product.barcode))
+        return (1, codes.index(product.sku))
+
+    return _summary(min(matches, key=rank))
+
+
+def code_was_deleted(session: Session, ctx: TenantContext, codes: Sequence[str]) -> bool:
+    """Un article supprimé portait-il ce code ? L'écran le dit, au lieu de proposer un doublon."""
+    return bool(ProductRepository(session, ctx).by_codes(codes, deleted=True))
 
 
 def active_summaries(session: Session, ctx: TenantContext) -> dict[UUID, ProductSummary]:

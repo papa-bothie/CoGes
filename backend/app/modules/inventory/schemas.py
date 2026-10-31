@@ -210,6 +210,29 @@ class StockLine(BaseModel):
     is_stock_tracked: bool
 
 
+class ScannedProduct(BaseModel):
+    """L'article retrouvé par son code, tel que l'écran de livraison le montre (ADR 0106).
+
+    `last_purchase_cost` préremplit le prix d'achat de la ligne : c'est le coût de la
+    dernière entrée, pas le « prix d'achat » de la fiche, que la livraison ne change pas.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: UUID
+    sku: str
+    barcode: str | None
+    name: str
+    unit: ProductUnit
+    category_id: UUID | None
+    category_name: str | None
+    is_stock_tracked: bool
+    qty_on_hand: Quantity
+    avg_cost: UnitCost
+    last_purchase_cost: UnitCost | None
+    unit_price: Amount | None
+
+
 class StockPage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
