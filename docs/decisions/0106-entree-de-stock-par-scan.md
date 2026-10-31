@@ -65,17 +65,22 @@ Le chemin jsDelivr par défaut de la bibliothèque n'est jamais demandé (e2e : 
 hors de l'origine). Chrome Android garde son lecteur natif : ni le code de la bibliothèque ni
 le moteur ne sont téléchargés (e2e).
 
-- Poids : moteur 1 093 289 octets (≈ 459 Ko en gzip ; Caddy compresse `application/wasm`),
-  code de la bibliothèque 41,7 Ko (14 Ko en gzip), seulement là où il sert.
-- Temps : premier chargement et compilation du moteur ≈ 0,6 s en local (e2e) ; compter
-  quelques secondes en 3G. « Préparation de la caméra… » s'affiche pendant ce temps.
+- Poids : moteur 1 093 289 octets, **461 632 octets transférés** (compressé ; mesuré sous
+  WebKit, Caddy compresse aussi `application/wasm`), code de la bibliothèque 41,7 Ko (14 Ko
+  en gzip), seulement là où il sert.
+- Temps : chargement et compilation du moteur 0,2 à 0,6 s en local (e2e, Chromium et
+  WebKit) ; compter quelques secondes en 3G. « Préparation de la caméra… » s'affiche
+  pendant ce temps.
 - Service worker (ADR 0102) : le moteur est sous `/_next/static/`, donc gardé comme tout
   fichier statique versionné (aucune donnée) ; le second scan n'attend plus le réseau.
 
 **Bouton de scan** (`components/products/barcode-scanner.tsx`, partagé) : caméra coupée dès
 qu'un code est lu, que la fenêtre se ferme ou que l'onglet est caché ; conseil après 10 s
 sans lecture (« Approchez à 10-20 cm, avec de la lumière, ou tapez le code ») ; le champ de
-saisie (clavier, douchette) reste toujours là.
+saisie (clavier, douchette) reste toujours là. La vidéo est **affichée dès la préparation** :
+l'e2e WebKit a montré que WebKit ne lance pas une vidéo muette en `display: none` (`play()`
+attend sans fin) ; l'ancien bouton la cachait jusqu'au démarrage, ce qui aurait bloqué
+l'iPhone même avec la bibliothèque.
 
 **Recherche exacte.** `scanned_code_candidates` (`app/core/codes.py`) : espaces retirés
 partout ; EAN-8, UPC-A, EAN-13 et GTIN-14 doivent avoir une clé de contrôle juste, sinon 422
@@ -113,5 +118,6 @@ l'article de l'autre et l'ajoute.
 - Registre de fuite : la route entre dans `CROSS_TENANT_ROUTES`, Beta reçoit un code propre
   (les EAN internes `2000…` se répètent d'une entreprise à l'autre).
 - `playwright.pwa.config.ts` joue aussi `scan-library.spec.ts`, sous Chromium et **WebKit**
-  (`libavif16` requis sur le poste pour lancer WebKit).
+  (vert le 2026-10-31). WebKit exige `libavif16` sur le poste
+  (`sudo pnpm exec playwright install-deps webkit`).
 - Non automatisable : un vrai scan sur un iPhone et sur un Android (voir le résumé du lot).

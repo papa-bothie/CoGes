@@ -97,7 +97,7 @@ make front-e2e     # = make e2e-reset, puis la suite complète
   build de production (CSP réelle) : sous **WebKit**, comme l'iPhone, la bibliothèque
   `barcode-detector` lit un EAN-13 montré à un canvas, moteur `.wasm` servi par CoGes,
   aucune requête externe ; sous Chromium avec lecteur natif, elle n'est pas chargée.
-  WebKit demande `sudo apt-get install libavif16` sur le poste.
+  WebKit demande `libavif16` sur le poste (`sudo pnpm exec playwright install-deps webkit`).
 - Cibles tactiles : `e2e/touch-targets.spec.ts` émule une tablette (`hasTouch`, 1024 × 768)
   et mesure toutes les cibles de Nouvelle vente, Stock et Ventes (44 × 44 px au moins).
 
