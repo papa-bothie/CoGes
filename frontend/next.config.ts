@@ -19,9 +19,11 @@ const isDev = process.env.NODE_ENV !== "production";
 
 // Next injecte des scripts en ligne pour l'hydratation : 'unsafe-inline' reste
 // nécessaire sans nonce. Tout le reste est confiné à la même origine.
+// 'wasm-unsafe-eval' : le moteur WebAssembly du lecteur de code-barres (iPhone, Firefox ;
+// ADR 0106) ne compile pas sans lui ; il n'ouvre ni `eval` ni `new Function`.
 const contentSecurityPolicy = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : "'wasm-unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self'",
@@ -62,7 +64,9 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          // Caméra pour le scan du code-barres, à la même origine seulement (prompt 33) ; un
+          // `camera=()` la refusait avant même de demander à la personne.
+          { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
         ],
       },
     ];

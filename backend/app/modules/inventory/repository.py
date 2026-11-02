@@ -125,6 +125,32 @@ class InventoryMovementRepository(TenantRepository[InventoryMovement]):
         stmt = self._select().where(InventoryMovement.reversal_of_movement_id == movement_id)
         return self.session.execute(stmt).scalar_one_or_none()
 
+    def last_entry_cost(self, product_id: UUID) -> Decimal | None:
+        """Coût de la dernière entrée d'achat ou d'ouverture encore valable (ADR 0106).
+
+        Une entrée annulée depuis (son inverse existe) ne compte pas : son prix n'a
+        jamais été payé.
+        """
+        reversed_ids = select(InventoryMovement.reversal_of_movement_id).where(
+            InventoryMovement.company_id == self.ctx.company_id,
+            InventoryMovement.product_id == product_id,
+            InventoryMovement.reversal_of_movement_id.is_not(None),
+        )
+        stmt = (
+            select(InventoryMovement.unit_cost)
+            .where(
+                InventoryMovement.company_id == self.ctx.company_id,
+                InventoryMovement.product_id == product_id,
+                InventoryMovement.type.in_(("purchase_in", "initial")),
+                InventoryMovement.reversal_of_movement_id.is_(None),
+                InventoryMovement.id.not_in(reversed_ids),
+            )
+            .order_by(InventoryMovement.occurred_at.desc(), InventoryMovement.created_at.desc())
+            .limit(1)
+        )
+        cost = self.session.execute(stmt).scalar_one_or_none()
+        return None if cost is None else Decimal(cost)
+
     def for_references(self, ref_type: str, ref_ids: Sequence[UUID]) -> Sequence[InventoryMovement]:
         """Mouvements **directs** rattachés à ces objets métier, les plus anciens d'abord.
 

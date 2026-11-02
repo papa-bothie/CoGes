@@ -91,6 +91,13 @@ make front-e2e     # = make e2e-reset, puis la suite complète
   avant la moindre commande.
 - `pnpm e2e` seul ne recrée pas la base : les données s'accumulent alors d'une suite à
   l'autre. `E2E_BASE_URL=<url>` vise un front déjà déployé (aucun serveur lancé).
+- **Scan du code-barres** (prompt 33, ADR 0106) : `e2e/scan.spec.ts` donne à Chromium une
+  fausse caméra (`--use-fake-device-for-media-stream`) et un `BarcodeDetector` simulé (celui
+  de Chrome Android) ; `make front-pwa-e2e` joue aussi `e2e/scan-library.spec.ts` sur le
+  build de production (CSP réelle) : sous **WebKit**, comme l'iPhone, la bibliothèque
+  `barcode-detector` lit un EAN-13 montré à un canvas, moteur `.wasm` servi par CoGes,
+  aucune requête externe ; sous Chromium avec lecteur natif, elle n'est pas chargée.
+  WebKit demande `libavif16` sur le poste (`sudo pnpm exec playwright install-deps webkit`).
 - Cibles tactiles : `e2e/touch-targets.spec.ts` émule une tablette (`hasTouch`, 1024 × 768)
   et mesure toutes les cibles de Nouvelle vente, Stock et Ventes (44 × 44 px au moins).
 

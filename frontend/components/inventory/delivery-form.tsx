@@ -3,8 +3,9 @@
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Search, X } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { NewProductForm, type Intake } from "@/app/(app)/products/new/new-product-form";
 import { BackLink } from "@/components/back-link";
 import { DraftBanner } from "@/components/draft-banner";
 import { FieldError } from "@/components/field-error";
@@ -14,16 +15,33 @@ import { ProductSquare } from "@/components/kit/list-row";
 import { cleanQuantity } from "@/components/kit/quantity-stepper";
 import { fieldClasses } from "@/components/kit/rubrique";
 import { PersonFormDialog } from "@/components/people/person-form-dialog";
+import { BarcodeScanButton } from "@/components/products/barcode-scanner";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useDraft } from "@/hooks/use-draft";
 import { useCompanyLocale } from "@/hooks/use-me";
+import { usePermission } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
-import { errorMessage } from "@/lib/api/errors";
+import { ApiError, errorMessage } from "@/lib/api/errors";
 import { useIdempotencyKey } from "@/lib/api/idempotency";
 import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
 import { compareDecimal, parseDecimalInput } from "@/lib/decimal";
+import {
+  addScannedLine,
+  cleanScannedCode,
+  stockEffects,
+  type DeliveryLine,
+  type LineProduct,
+} from "@/lib/delivery-scan";
 import { draftOneOf, draftString } from "@/lib/drafts";
 import { formatAmount } from "@/lib/format";
 import { labels } from "@/lib/labels";
@@ -35,7 +53,7 @@ import { cn } from "@/lib/utils";
 type StockLine = Schemas["StockLine"];
 type Mode = "now" | "part" | "later";
 type Method = "cash" | "wave" | "orange_money";
-type Line = { product: StockLine; qty: string; cost: string };
+type Line = DeliveryLine;
 
 const t = labels.stockScreens.delivery;
 const MODES: readonly Mode[] = ["now", "part", "later"];
@@ -56,11 +74,22 @@ const DRAFT = {
 const SAVE_KEY = ["delivery", "save"];
 type DraftLine = { productId: string; qty: string; cost: string };
 
-/** Prix d'achat proposé : le prix d'achat moyen, en francs entiers ; vide s'il n'y en a pas. */
-function suggestedCost(line: StockLine): string {
-  const cost = wholeUnits(line.avg_cost);
+/**
+ * Prix d'achat proposé, en francs entiers : le dernier coût d'achat s'il est connu (scan), sinon
+ * le prix d'achat moyen ; vide s'il n'y en a pas.
+ */
+function suggestedCost(line: { avg_cost: string; last_purchase_cost?: string | null }): string {
+  const cost = wholeUnits(line.last_purchase_cost ?? line.avg_cost);
   return cost > 0n ? cost.toString() : "";
 }
+
+/** Ce qu'une ligne garde de l'article, quelle que soit la lecture qui l'a donné. */
+function lineProduct(item: LineProduct): LineProduct {
+  const { product_id, name, unit, qty_on_hand } = item;
+  return { product_id, name, unit, qty_on_hand };
+}
+
+type Notice = { tone: "info" | "attention"; text: string };
 
 /** Total d'une ligne, en francs entiers (quantité décimale, prix entier). */
 function lineTotal(line: Line): bigint {
@@ -153,17 +182,39 @@ export function DeliveryForm({
       product_id: pendingLines?.map((line) => line.productId),
     }),
     enabled: Boolean(pendingLines && pendingLines.length > 0),
-    queryFn: () =>
-      unwrap(
+    queryFn: async (): Promise<LineProduct[]> => {
+      const ids = pendingLines!.map((line) => line.productId);
+      const stock = await unwrap(
         api.GET("/api/v1/inventory/stock", {
-          params: {
-            query: { product_id: pendingLines!.map((line) => line.productId), page_size: 100 },
-          },
+          params: { query: { product_id: ids, page_size: 100 } },
         }),
-      ),
+      );
+      const items: LineProduct[] = (stock?.items ?? []).map(lineProduct);
+      // Un article encore jamais entré (créé ici par un scan, ADR 0106) n'a pas de ligne de
+      // stock : sa fiche suffit, à zéro. Une fiche supprimée entre-temps reste absente.
+      const missing = ids.filter((id) => !items.some((item) => item.product_id === id));
+      const read = await Promise.all(
+        missing.map((id) =>
+          unwrap(
+            api.GET("/api/v1/products/{product_id}", { params: { path: { product_id: id } } }),
+          ).catch(() => null),
+        ),
+      );
+      for (const product of read) {
+        if (product) {
+          items.push({
+            product_id: product.id,
+            name: product.name,
+            unit: product.unit,
+            qty_on_hand: "0",
+          });
+        }
+      }
+      return items;
+    },
   });
   if (pendingLines && (pendingLines.length === 0 || restoredStock.data)) {
-    const known = new Map((restoredStock.data?.items ?? []).map((item) => [item.product_id, item]));
+    const known = new Map((restoredStock.data ?? []).map((item) => [item.product_id, item]));
     const kept = pendingLines.flatMap((line) => {
       const product = known.get(line.productId);
       return product ? [{ product, qty: line.qty, cost: line.cost }] : [];
@@ -219,14 +270,99 @@ export function DeliveryForm({
   const first = prefill.data?.items[0];
   if (!seeded && first) {
     setSeeded(true);
-    setLines([{ product: first, qty: "", cost: suggestedCost(first) }]);
+    setLines([{ product: lineProduct(first), qty: "", cost: suggestedCost(first) }]);
   }
 
   const add = (product: StockLine) => {
     if (lines.some((line) => line.product.product_id === product.product_id)) return;
-    setLines((current) => [...current, { product, qty: "", cost: suggestedCost(product) }]);
+    setLines((current) => [
+      ...current,
+      { product: lineProduct(product), qty: "", cost: suggestedCost(product) },
+    ]);
     setSearch("");
   };
+
+  // Scan (prompt 33, ADR 0106) : le code identifie l'article, seule la validation fait entrer
+  // le stock. Les lignes lues après une réponse du serveur sont les plus récentes.
+  const canCreate = usePermission({ allOf: ["products:create", "inventory:create"] });
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [unknown, setUnknown] = useState<string | null>(null);
+  const [intakeCode, setIntakeCode] = useState<string | null>(null);
+  const [scannedOnce, setScannedOnce] = useState(false);
+  // Un scan attend le serveur : il part des lignes à jour à son retour, pas de celles du clic.
+  const linesRef = useRef(lines);
+  useEffect(() => {
+    linesRef.current = lines;
+  }, [lines]);
+  // Après un scan, le curseur va sur la quantité reçue de la ligne (clavier numérique).
+  const [focusId, setFocusId] = useState<string | null>(null);
+
+  const place = (product: LineProduct, cost: string) => {
+    const result = addScannedLine(linesRef.current, product, cost);
+    setFocusId(product.product_id);
+    setLines(result.lines);
+    setScannedOnce(true);
+    const qty = result.lines.find((line) => line.product.product_id === product.product_id)?.qty;
+    setNotice({
+      tone: "info",
+      text: result.merged
+        ? t.scanMerged(product.name, qtyWithUnit(qty ?? "1", product.unit))
+        : t.scanAdded(product.name),
+    });
+  };
+
+  const scan = async (raw: string) => {
+    const code = cleanScannedCode(raw);
+    if (!code) return;
+    setNotice(null);
+    setUnknown(null);
+    setError(null);
+    try {
+      const found = await unwrap(
+        api.GET("/api/v1/inventory/products/by-barcode/{code}", { params: { path: { code } } }),
+      );
+      if (!found.is_stock_tracked) {
+        setNotice({ tone: "attention", text: t.scanUntracked(found.name) });
+        return;
+      }
+      place(lineProduct(found), suggestedCost(found));
+    } catch (failure) {
+      if (failure instanceof ApiError && failure.code === "product_not_found") {
+        if (failure.details.deleted_product === true) {
+          setNotice({ tone: "attention", text: t.scanDeleted(code) });
+        } else {
+          setUnknown(code);
+        }
+      } else if (failure instanceof ApiError && failure.code === "invalid_barcode") {
+        setNotice({ tone: "attention", text: t.scanInvalid(code) });
+      } else {
+        setNotice({ tone: "attention", text: errorMessage(failure) });
+      }
+    }
+  };
+
+  const intake: Intake | null = intakeCode
+    ? {
+        barcode: intakeCode,
+        onDone: (product, qty, cost, byOther) => {
+          setFocusId(product.product_id);
+          setLines((current) =>
+            current.some((line) => line.product.product_id === product.product_id)
+              ? current.map((line) =>
+                  line.product.product_id === product.product_id ? { ...line, qty, cost } : line,
+                )
+              : [...current, { product, qty, cost }],
+          );
+          setScannedOnce(true);
+          setIntakeCode(null);
+          setUnknown(null);
+          setNotice({
+            tone: "info",
+            text: byOther ? t.scanCreatedByOther(product.name) : t.scanAdded(product.name),
+          });
+        },
+      }
+    : null;
   const patch = (index: number, change: Partial<Line>) =>
     setLines((current) => current.map((line, i) => (i === index ? { ...line, ...change } : line)));
 
@@ -314,6 +450,8 @@ export function DeliveryForm({
     onError: (failure) => setError(errorMessage(failure)),
   });
 
+  const effects = stockEffects(lines);
+
   const addable = (watched.data ?? []).filter(
     (item) => !lines.some((line) => line.product.product_id === item.product_id),
   );
@@ -398,9 +536,9 @@ export function DeliveryForm({
             {lines.map((line, index) => {
               const name = line.product.name;
               const stockText =
-                line.product.status === "out"
-                  ? t.outOfStock
-                  : qtyWithUnit(line.product.qty_on_hand, line.product.unit);
+                compareDecimal(line.product.qty_on_hand, "0") === 1
+                  ? qtyWithUnit(line.product.qty_on_hand, line.product.unit)
+                  : t.outOfStock;
               return (
                 <div
                   key={line.product.product_id}
@@ -416,6 +554,12 @@ export function DeliveryForm({
                       {t.qty}
                     </span>
                     <input
+                      id={`delivery-qty-${line.product.product_id}`}
+                      // Ligne ajoutée par un scan : la quantité reçue, prête à être tapée.
+                      autoFocus={focusId === line.product.product_id}
+                      onFocus={(event) => {
+                        if (focusId === line.product.product_id) event.target.select();
+                      }}
                       inputMode="decimal"
                       autoComplete="off"
                       aria-label={`${t.qty} : ${name}`}
@@ -458,6 +602,45 @@ export function DeliveryForm({
               );
             })}
             <p className="mt-3 font-bold">{t.add}</p>
+            <BarcodeScanButton
+              onScan={(code) => void scan(code)}
+              label={scannedOnce ? t.scanNext : t.scan}
+              variant="stock"
+              restoreFocus={false}
+              className="mt-2 min-h-[56px] w-full text-lg sm:w-auto"
+            />
+            {notice && (
+              <p
+                role="status"
+                className={cn(
+                  "mt-3 rounded-champ px-4 py-3 font-bold",
+                  notice.tone === "info"
+                    ? "bg-ventes-teinte text-ventes-encre"
+                    : "bg-stock-teinte text-stock-encre",
+                )}
+              >
+                {notice.text}
+              </p>
+            )}
+            {unknown && (
+              <div
+                role="status"
+                className="mt-3 flex flex-col gap-2 rounded-champ bg-stock-teinte px-4 py-3 text-stock-encre"
+              >
+                <p className="font-bold">{canCreate ? t.scanUnknown : t.scanAskManager}</p>
+                <p className="numeric">{t.scanUnknownCode(unknown)}</p>
+                {canCreate && (
+                  <Button
+                    type="button"
+                    variant="stock"
+                    className="self-start"
+                    onClick={() => setIntakeCode(unknown)}
+                  >
+                    {t.scanCreate}
+                  </Button>
+                )}
+              </div>
+            )}
             <div className="mt-2 flex flex-wrap gap-2">
               {addable.map((item) => (
                 <Chip
@@ -482,6 +665,14 @@ export function DeliveryForm({
                 autoComplete="off"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
+                // Douchette : elle tape le code puis Entrée, sans ouvrir la caméra.
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  const typed = search;
+                  setSearch("");
+                  void scan(typed);
+                }}
                 className={cn(fieldClasses("stock"), "min-h-[52px] pr-4 pl-12 text-corps")}
               />
             </div>
@@ -601,6 +792,17 @@ export function DeliveryForm({
                 {t.pickSupplier}
               </p>
             )}
+            {effects.length > 0 && (
+              <div className="rounded-champ border border-filet px-4 py-3">
+                <p className="font-bold">{t.effectsTitle}</p>
+                <ul aria-label={t.effectsTitle} className="mt-1 numeric">
+                  {effects.map((effect) => (
+                    <li key={effect}>{effect}</li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-petit text-muted-foreground">{t.costNote}</p>
+              </div>
+            )}
             <FieldError message={error} />
             <button
               type="button"
@@ -620,6 +822,15 @@ export function DeliveryForm({
           </section>
         </div>
       )}
+      <Dialog open={intake !== null} onOpenChange={(open) => !open && setIntakeCode(null)}>
+        <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{labels.products.newForm.intakeTitle}</DialogTitle>
+            <DialogDescription>{t.scanUnknown}</DialogDescription>
+          </DialogHeader>
+          {intake && <NewProductForm intake={intake} />}
+        </DialogContent>
+      </Dialog>
       <PersonFormDialog
         kind="supplier"
         open={creating}

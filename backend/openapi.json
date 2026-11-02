@@ -2554,6 +2554,50 @@
         }
       }
     },
+    "/api/v1/inventory/products/by-barcode/{code}": {
+      "get": {
+        "tags": [
+          "inventory"
+        ],
+        "summary": "Find Product By Code",
+        "description": "L'article qui porte exactement ce code-barres (ou cette référence), avec son stock.\n\nScan de l'écran « Recevoir une livraison » (ADR 0106). Espaces ignorés ; un UPC-A et\nson EAN-13 sont le même code ; une clé de contrôle fausse répond 422\n`invalid_barcode`. Rien : 404 `product_not_found`, `deleted_product` vrai si un\narticle supprimé le portait.",
+        "operationId": "find_product_by_code_api_v1_inventory_products_by_barcode__code__get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "title": "Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScannedProduct"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/inventory/products": {
       "post": {
         "tags": [
@@ -18580,6 +18624,108 @@
         ],
         "title": "SalesExportCreate",
         "description": "Période d'un export de ventes, dans le fuseau de l'entreprise, bornes incluses."
+      },
+      "ScannedProduct": {
+        "properties": {
+          "product_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Product Id"
+          },
+          "sku": {
+            "type": "string",
+            "title": "Sku"
+          },
+          "barcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/ProductUnit"
+          },
+          "category_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Id"
+          },
+          "category_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category Name"
+          },
+          "is_stock_tracked": {
+            "type": "boolean",
+            "title": "Is Stock Tracked"
+          },
+          "qty_on_hand": {
+            "$ref": "#/components/schemas/Quantity-Output"
+          },
+          "avg_cost": {
+            "$ref": "#/components/schemas/UnitCost-Output"
+          },
+          "last_purchase_cost": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UnitCost-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit_price": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Amount-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "product_id",
+          "sku",
+          "barcode",
+          "name",
+          "unit",
+          "category_id",
+          "category_name",
+          "is_stock_tracked",
+          "qty_on_hand",
+          "avg_cost",
+          "last_purchase_cost",
+          "unit_price"
+        ],
+        "title": "ScannedProduct",
+        "description": "L'article retrouvé par son code, tel que l'écran de livraison le montre (ADR 0106).\n\n`last_purchase_cost` préremplit le prix d'achat de la ligne : c'est le coût de la\ndernière entrée, pas le « prix d'achat » de la fiche, que la livraison ne change pas."
       },
       "SecurityEvent": {
         "properties": {

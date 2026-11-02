@@ -23,6 +23,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import text
 
+from app.core.codes import ean13_check_digit
 from app.core.idempotency import IDEMPOTENCY_HEADER
 from app.core.tenancy import TenantContext, tenant_transaction
 from app.main import app
@@ -97,6 +98,9 @@ class CrossTenantCase:
     parameters: dict[str, str]
     #: Corps minimal pour les méthodes qui en exigent un.
     body: dict[str, Any] | None = None
+    #: Code de la 404. `not_found` partout, sauf la recherche par code-barres (ADR 0106) :
+    #: le code d'une autre entreprise y répond comme un code inconnu, `product_not_found`.
+    not_found_code: str = "not_found"
 
 
 #: Registre des routes paramétrées. À compléter à chaque nouvelle route.
@@ -142,6 +146,9 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
     ),
     "/api/v1/analytics/suppliers/{supplier_id}/payments": CrossTenantCase(
         parameters={"supplier_id": "supplier"}
+    ),
+    "/api/v1/inventory/products/by-barcode/{code}": CrossTenantCase(
+        parameters={"code": "product_barcode"}, not_found_code="product_not_found"
     ),
     "/api/v1/inventory/movements/{movement_id}/reverse": CrossTenantCase(
         parameters={"movement_id": "movement"}
@@ -365,11 +372,20 @@ def _beta_export(client: TestClient, beta_token: str) -> str:
 def _beta_sources(client: TestClient, beta_token: str) -> dict[str, str]:
     """Une ressource de Beta par type d'identifiant manipulé par les routes."""
     marker = uuid4().hex[:8]
+    body = "3" + str(uuid4().int)[:11]
+    barcode = body + ean13_check_digit(body)
     product_id = _beta_owned(
         client,
         beta_token,
         "products",
-        {"sku": f"SKU-{marker}", "name": f"Produit {marker}", "unit_price": "1500.00"},
+        {
+            "sku": f"SKU-{marker}",
+            "name": f"Produit {marker}",
+            "unit_price": "1500.00",
+            # Un code propre à Beta : les EAN internes (`2000…`) se répètent d'une
+            # entreprise à l'autre, Alpha trouverait le sien.
+            "barcode": barcode,
+        },
     )
     sale_id, sale_item_id = _beta_sale(client, beta_token, product_id)
     movement_id = _beta_owned(
@@ -406,6 +422,7 @@ def _beta_sources(client: TestClient, beta_token: str) -> dict[str, str]:
         "sale_item": sale_item_id,
         "category": _beta_owned(client, beta_token, "categories", {"name": f"Cat-{marker}"}),
         "product": product_id,
+        "product_barcode": barcode,
         "customer": _beta_owned(client, beta_token, "customers", {"name": f"Client {marker}"}),
         "supplier": supplier_id,
         "movement": movement_id,
@@ -462,7 +479,7 @@ def test_cross_tenant_access_is_not_found(
             f"{method} {path} a répondu {response.status_code} sur la donnée d'un autre "
             "tenant ; seul 404 est acceptable."
         )
-        assert response.json()["error"]["code"] == "not_found", f"{method} {path}"
+        assert response.json()["error"]["code"] == case.not_found_code, f"{method} {path}"
 
 
 def test_unauthenticated_access_is_refused_on_every_protected_route(

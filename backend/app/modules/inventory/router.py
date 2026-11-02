@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Header, Path, Query, Request, Response, status
 
 from app.core import idempotency
 from app.core.deps import TenantSession, client_ip, require_permission
@@ -26,6 +26,7 @@ from app.modules.inventory.schemas import (
     MovementType,
     NewProductCreate,
     NewProductRead,
+    ScannedProduct,
     StockPage,
     StockStatus,
     StockSummary,
@@ -122,6 +123,21 @@ def record_movement(
         ip_address=client_ip(request),
     )
     return MovementRead.model_validate(movement)
+
+
+@router.get("/products/by-barcode/{code}", response_model=ScannedProduct)
+def find_product_by_code(
+    code: Annotated[str, Path(max_length=200)],
+    tenant: Annotated[TenantSession, Depends(require_permission("inventory:read"))],
+) -> ScannedProduct:
+    """L'article qui porte exactement ce code-barres (ou cette référence), avec son stock.
+
+    Scan de l'écran « Recevoir une livraison » (ADR 0106). Espaces ignorés ; un UPC-A et
+    son EAN-13 sont le même code ; une clé de contrôle fausse répond 422
+    `invalid_barcode`. Rien : 404 `product_not_found`, `deleted_product` vrai si un
+    article supprimé le portait.
+    """
+    return service.find_by_code(tenant.session, tenant.ctx, code)
 
 
 @router.post("/products", response_model=NewProductRead, status_code=status.HTTP_201_CREATED)

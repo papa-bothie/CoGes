@@ -755,6 +755,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/inventory/products/by-barcode/{code}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Find Product By Code
+     * @description L'article qui porte exactement ce code-barres (ou cette référence), avec son stock.
+     *
+     *     Scan de l'écran « Recevoir une livraison » (ADR 0106). Espaces ignorés ; un UPC-A et
+     *     son EAN-13 sont le même code ; une clé de contrôle fausse répond 422
+     *     `invalid_barcode`. Rien : 404 `product_not_found`, `deleted_product` vrai si un
+     *     article supprimé le portait.
+     */
+    get: operations["find_product_by_code_api_v1_inventory_products_by_barcode__code__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/inventory/products": {
     parameters: {
       query?: never;
@@ -6574,6 +6599,37 @@ export interface components {
       format: components["schemas"]["ExportFormat"];
     };
     /**
+     * ScannedProduct
+     * @description L'article retrouvé par son code, tel que l'écran de livraison le montre (ADR 0106).
+     *
+     *     `last_purchase_cost` préremplit le prix d'achat de la ligne : c'est le coût de la
+     *     dernière entrée, pas le « prix d'achat » de la fiche, que la livraison ne change pas.
+     */
+    ScannedProduct: {
+      /**
+       * Product Id
+       * Format: uuid
+       */
+      product_id: string;
+      /** Sku */
+      sku: string;
+      /** Barcode */
+      barcode: string | null;
+      /** Name */
+      name: string;
+      unit: components["schemas"]["ProductUnit"];
+      /** Category Id */
+      category_id: string | null;
+      /** Category Name */
+      category_name: string | null;
+      /** Is Stock Tracked */
+      is_stock_tracked: boolean;
+      qty_on_hand: components["schemas"]["Quantity-Output"];
+      avg_cost: components["schemas"]["UnitCost-Output"];
+      last_purchase_cost: components["schemas"]["UnitCost-Output"] | null;
+      unit_price: components["schemas"]["Amount-Output"] | null;
+    };
+    /**
      * SecurityEvent
      * @description Un signal de sécurité de l'équipe (ADR 0105), sur 7 jours. Jamais de secret.
      */
@@ -9059,6 +9115,37 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["MovementRead"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  find_product_by_code_api_v1_inventory_products_by_barcode__code__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        code: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ScannedProduct"];
         };
       };
       /** @description Validation Error */

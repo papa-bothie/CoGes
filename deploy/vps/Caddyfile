@@ -40,6 +40,8 @@
 	}
 }
 
+# Argument : l'origine permise à la caméra, `(self)` pour la boutique (scan du code-barres,
+# prompt 33), `()` pour l'administration. Caddy remplace l'en-tête envoyé par Next.
 (entetes) {
 	header {
 		# Repris de next.config.ts, plus HSTS (HTTPS imposé, un an).
@@ -47,7 +49,7 @@
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
-		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Permissions-Policy "camera={args[0]}, microphone=(), geolocation=()"
 		-Server
 		-Via
 	}
@@ -55,7 +57,7 @@
 
 (securite) {
 	encode zstd gzip
-	import entetes
+	import entetes {args[0]}
 	log {
 		output stdout
 		format filter {
@@ -73,7 +75,7 @@
 (maintenance) {
 	# Site ou API arrêté : page de maintenance autonome, statut d'origine gardé (ADR 0085).
 	handle_errors 502 503 504 {
-		import entetes
+		import entetes {args[0]}
 		root * /srv/maintenance
 		rewrite * /maintenance.html
 		file_server
@@ -81,7 +83,7 @@
 }
 
 (pile) {
-	import securite
+	import securite (self)
 	# Corps de requête bornés aussi à l'entrée (l'API garde ses propres limites, ADR 0042).
 	request_body {
 		max_size 25MB
@@ -96,7 +98,7 @@
 	handle {
 		reverse_proxy {args[0]}-front:3000
 	}
-	import maintenance
+	import maintenance (self)
 }
 
 {$COGES_DOMAIN} {

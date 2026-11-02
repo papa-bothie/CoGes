@@ -123,3 +123,66 @@ def next_document_number(session: Session, ctx: TenantContext, document_type: st
     session.execute(_ENSURE_COUNTER, parameters)
     number = session.execute(_TAKE_NUMBER, parameters).scalar_one()
     return f"{prefix}-{number:0{DOCUMENT_WIDTH}d}"
+
+
+#: Longueur maximale d'un code-barres (`products.barcode`, ADR 0066).
+SCANNED_CODE_MAX_LENGTH = 64
+
+
+def _gtin_is_valid(digits: str) -> bool:
+    """Clé GS1 d'un EAN-8, UPC-A, EAN-13 ou GTIN-14 : poids 3 et 1 depuis la droite."""
+    body, check = digits[:-1], digits[-1]
+    total = sum(int(digit) * (3 if index % 2 == 0 else 1) for index, digit in enumerate(body[::-1]))
+    return str((10 - total % 10) % 10) == check
+
+
+def _upc_e_to_upc_a(digits: str) -> str | None:
+    """UPC-E (8 chiffres, système 0 ou 1) → UPC-A, ou `None` si ce n'en est pas un."""
+    system, d, check = digits[0], digits[1:7], digits[7]
+    if system not in "01":
+        return None
+    last = d[5]
+    if last in "012":
+        middle = f"{d[0]}{d[1]}{last}0000{d[2]}{d[3]}{d[4]}"
+    elif last == "3":
+        middle = f"{d[0]}{d[1]}{d[2]}00000{d[3]}{d[4]}"
+    elif last == "4":
+        middle = f"{d[0]}{d[1]}{d[2]}{d[3]}00000{d[4]}"
+    else:
+        middle = f"{d[0]}{d[1]}{d[2]}{d[3]}{d[4]}0000{last}"
+    upc_a = f"{system}{middle}{check}"
+    return upc_a if _gtin_is_valid(upc_a) else None
+
+
+def scanned_code_candidates(raw: str) -> tuple[str, ...] | None:
+    """Formes sous lesquelles un code lu peut être enregistré, la forme lue en tête.
+
+    Espaces retirés partout. Un EAN/UPC (8, 12, 13 ou 14 chiffres) doit avoir sa clé de
+    contrôle juste, sinon `None` : mieux vaut « code invalide » qu'un mauvais article.
+    Un UPC-A et l'EAN-13 qui le précède d'un 0 sont le même code (de même un GTIN-14 à
+    zéros de tête, cherché sous ses formes courtes) ; un UPC-E se cherche aussi sous son
+    UPC-A. Tout autre code (Code 128, référence `ART-0001`) se cherche tel quel, et en
+    majuscules pour la référence.
+    """
+    code = "".join(raw.split())
+    if not code or len(code) > SCANNED_CODE_MAX_LENGTH:
+        return None
+    if not code.isdigit():
+        upper = code.upper()
+        return (code,) if upper == code else (code, upper)
+    if len(code) == 8:
+        if _gtin_is_valid(code):
+            return (code,)
+        upc_a = _upc_e_to_upc_a(code)
+        return None if upc_a is None else (code, upc_a, f"0{upc_a}")
+    if len(code) not in (12, 13, 14):
+        return (code,)
+    if not _gtin_is_valid(code):
+        return None
+    padded = code.zfill(14)
+    others = tuple(
+        padded[14 - width :]
+        for width in (13, 12)
+        if width != len(code) and set(padded[: 14 - width]) <= {"0"}
+    )
+    return (code, *others)
