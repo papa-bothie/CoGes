@@ -364,6 +364,8 @@ _INITIAL_COST = Column("Coût unitaire", "unit_cost")
 _PRODUCT_COLUMNS = (
     _SKU,
     _NAME,
+    # Facultative, absente des anciens fichiers (ADR 0108).
+    Column("Description", "description"),
     Column("Prix de vente", "unit_price", required=True, convert=number_text),
     _CATEGORY,
     Column("Unité", "unit", convert=lambda value: _UNITS.get(plain(value), value)),

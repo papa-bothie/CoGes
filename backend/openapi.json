@@ -11629,6 +11629,17 @@
         "title": "DeliveryRead",
         "description": "Ce que la livraison a écrit : la dette qui la porte, ce qui est payé et ce qui reste."
       },
+      "Description": {
+        "anyOf": [
+          {
+            "type": "string",
+            "maxLength": 500
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
       "ExpenseAmount": {
         "$ref": "#/components/schemas/Amount-Input",
         "gt": "0"
@@ -14284,6 +14295,9 @@
           "name": {
             "$ref": "#/components/schemas/ProductName"
           },
+          "description": {
+            "$ref": "#/components/schemas/Description"
+          },
           "unit": {
             "$ref": "#/components/schemas/ProductUnit",
             "default": "piece"
@@ -15884,6 +15898,9 @@
           "name": {
             "$ref": "#/components/schemas/ProductName"
           },
+          "description": {
+            "$ref": "#/components/schemas/Description"
+          },
           "unit": {
             "$ref": "#/components/schemas/ProductUnit",
             "default": "piece"
@@ -16425,6 +16442,17 @@
             "type": "string",
             "title": "Name"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "unit": {
             "$ref": "#/components/schemas/ProductUnit"
           },
@@ -16483,6 +16511,7 @@
           "sku",
           "barcode",
           "name",
+          "description",
           "unit",
           "is_stock_tracked",
           "default_tax_rate",
@@ -16529,6 +16558,9 @@
                 "type": "null"
               }
             ]
+          },
+          "description": {
+            "$ref": "#/components/schemas/Description"
           },
           "unit": {
             "anyOf": [

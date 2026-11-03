@@ -159,6 +159,9 @@ export function ProductDetailView({ productId }: { productId: string }) {
         <div className="flex-[1_1_240px]">
           <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{data.name}</h1>
           <p className="text-lg text-muted-foreground">{t.subtitle(shelf ?? null, unit)}</p>
+          {data.description && (
+            <p className="mt-1 text-corps whitespace-pre-line">{data.description}</p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <Can permission="prices:create">

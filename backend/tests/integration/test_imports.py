@@ -363,7 +363,7 @@ def test_template_lists_the_expected_columns(api_client: TestClient, alpha_token
 
     assert response.status_code == 200
     header = response.content.decode("utf-8-sig").splitlines()[0]
-    assert header.startswith("Référence;Nom;Prix de vente;Catégorie")
+    assert header.startswith("Référence;Nom;Description;Prix de vente;Catégorie")
 
 
 def test_exported_referential_reimports_as_is(

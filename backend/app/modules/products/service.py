@@ -337,6 +337,7 @@ def _add_with_codes(
                 sku=sku,
                 barcode=barcode,
                 name=payload.name,
+                description=payload.description,
                 unit=payload.unit,
                 is_stock_tracked=payload.is_stock_tracked,
                 default_tax_rate=tax_rate,

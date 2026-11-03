@@ -15,7 +15,14 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    model_validator,
+)
 
 from app.core.money import Amount, Quantity, Rate, UnitCost
 from app.core.validation import reject_explicit_nulls
@@ -24,6 +31,7 @@ if TYPE_CHECKING:  # pragma: no cover - uniquement pour le typage
     from app.modules.products.models import Product, ProductPrice
 
 NAME_MAX_LENGTH = 200
+DESCRIPTION_MAX_LENGTH = 500
 SKU_MAX_LENGTH = 64
 BARCODE_MAX_LENGTH = 64
 
@@ -33,6 +41,21 @@ type ProductUnit = Literal["piece", "kg", "litre", "carton", "metre", "paquet", 
 
 type ProductName = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=NAME_MAX_LENGTH)
+]
+
+
+def _blank_to_none(value: object) -> object:
+    """Description vide ou faite d'espaces : rien (ADR 0108)."""
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
+
+#: Espaces de début et de fin retirés ; vide = `None`.
+type Description = Annotated[
+    Annotated[str, StringConstraints(strip_whitespace=True, max_length=DESCRIPTION_MAX_LENGTH)]
+    | None,
+    BeforeValidator(_blank_to_none),
 ]
 #: Le SKU est mis en majuscules : `products_sku_uq` est sensible à la casse, et
 #: « riz-25 » puis « RIZ-25 » désigneraient deux produits pour le même article.
@@ -65,6 +88,7 @@ class ProductRead(BaseModel):
     sku: str
     barcode: str | None
     name: str
+    description: str | None
     unit: ProductUnit
     is_stock_tracked: bool
     default_tax_rate: TaxRate
@@ -85,6 +109,7 @@ class ProductRead(BaseModel):
             sku=product.sku,
             barcode=product.barcode,
             name=product.name,
+            description=product.description,
             unit=product.unit,
             is_stock_tracked=product.is_stock_tracked,
             default_tax_rate=product.default_tax_rate,
@@ -132,6 +157,7 @@ class ProductCreate(BaseModel):
     #: Omis : le serveur attribue `ART-0001`… (ADR 0066).
     sku: Sku | None = None
     name: ProductName
+    description: Description = None
     unit: ProductUnit = "piece"
     barcode: Barcode | None = None
     category_id: UUID | None = None
@@ -152,6 +178,8 @@ class ProductUpdate(BaseModel):
 
     sku: Sku | None = None
     name: ProductName | None = None
+    #: `null` ou vide efface la description.
+    description: Description = None
     unit: ProductUnit | None = None
     barcode: Barcode | None = None
     category_id: UUID | None = None

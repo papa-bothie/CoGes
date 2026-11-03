@@ -51,6 +51,7 @@ def test_product_template_speaks_plain_words(api_client: TestClient, alpha_token
     assert _first_line(response.content) == [
         "Référence",
         "Nom",
+        "Description",
         "Prix de vente",
         "Catégorie",
         "Unité",
