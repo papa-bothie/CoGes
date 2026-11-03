@@ -1,8 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Minus, Plus } from "lucide-react";
+import { ArrowLeft, Minus, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -12,6 +13,15 @@ import { cleanAmount } from "@/components/kit/amount-field";
 import { articleTone } from "@/components/kit/list-row";
 import { fieldClasses } from "@/components/kit/rubrique";
 import { Ean13Barcode } from "@/components/products/ean13-barcode";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { Can, usePermission } from "@/hooks/use-permission";
@@ -90,6 +100,7 @@ export function ProductDetailView({ productId }: { productId: string }) {
   const [editing, setEditing] = useState(false);
   const [labelsCount, setLabelsCount] = useState("10");
   const [more, setMore] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const canSeeHistory = usePermission("inventory:read");
 
   const product = useQuery({
@@ -164,6 +175,12 @@ export function ProductDetailView({ productId }: { productId: string }) {
           )}
         </div>
         <div className="flex flex-wrap gap-2">
+          <Can permission="products:update">
+            <Link href={`/products/${data.id}/edit`} className={cn(SECONDARY, "gap-2")}>
+              <Pencil className="size-5" aria-hidden />
+              {t.edit}
+            </Link>
+          </Can>
           <Can permission="prices:create">
             <button type="button" className={SECONDARY} onClick={() => setEditing((on) => !on)}>
               {t.changePrices}
@@ -185,10 +202,21 @@ export function ProductDetailView({ productId }: { productId: string }) {
               {t.order}
             </Link>
           </Can>
+          <Can permission="products:delete">
+            <button
+              type="button"
+              className={cn(SECONDARY, "gap-2 text-danger-ink")}
+              onClick={() => setDeleting(true)}
+            >
+              <Trash2 className="size-5" aria-hidden />
+              {t.delete}
+            </button>
+          </Can>
         </div>
       </div>
 
       {editing && <PriceEditor product={data} onDone={() => setEditing(false)} />}
+      <DeleteProductDialog product={deleting ? data : null} onClose={() => setDeleting(false)} />
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
         <Tile
@@ -444,5 +472,66 @@ function PriceEditor({ product, onDone }: { product: Product; onDone: () => void
       </button>
       <FieldError message={error} />
     </section>
+  );
+}
+
+/**
+ * Supprimer un article (prompt 34, bloc F, ADR 0110) : suppression logique sous audit. La base
+ * refuse un article qui a encore du stock (`CG004`) ; ses ventes passées restent lisibles.
+ */
+function DeleteProductDialog({
+  product,
+  onClose,
+}: {
+  product: Product | null;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const remove = useMutation({
+    meta: { toastError: false },
+    mutationFn: (id: string) =>
+      unwrap(api.DELETE("/api/v1/products/{product_id}", { params: { path: { product_id: id } } })),
+    onSuccess: (removed) => {
+      for (const key of [queryKeys.products.all, queryKeys.stock.all]) {
+        void queryClient.invalidateQueries({ queryKey: key });
+      }
+      toast.success(t.deleted(removed.name));
+      router.push("/products");
+    },
+    onError: (failure) => setError(errorMessage(failure)),
+  });
+  return (
+    <Dialog
+      open={product !== null}
+      onOpenChange={(open) => {
+        if (!open) {
+          setError(null);
+          onClose();
+        }
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{product && t.deleteTitle(product.name)}</DialogTitle>
+          <DialogDescription>{t.deleteHint}</DialogDescription>
+        </DialogHeader>
+        <FieldError message={error} />
+        <DialogFooter>
+          <Button variant="secondaire" size="standard" onClick={onClose}>
+            {labels.common.cancel}
+          </Button>
+          <Button
+            variant="destructive"
+            size="standard"
+            disabled={remove.isPending || !product}
+            onClick={() => product && remove.mutate(product.id)}
+          >
+            {t.deleteConfirm}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

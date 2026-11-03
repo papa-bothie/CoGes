@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { BackLink, keepFrom } from "@/components/back-link";
 import { ErrorState } from "@/components/error-state";
 import { Chip } from "@/components/kit/chip";
+import { SecondaryAction } from "@/components/kit/secondary-action";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { usePermission } from "@/hooks/use-permission";
@@ -319,13 +320,7 @@ function CashRow({
               {reason}
             </button>
           ))}
-          <button
-            type="button"
-            onClick={() => setAsking(false)}
-            className="min-h-[50px] px-4 text-[15px] font-bold outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
-            {t.keep}
-          </button>
+          <SecondaryAction onClick={() => setAsking(false)}>{t.keep}</SecondaryAction>
           {cancel.isPending && <Loader2 className="size-5 animate-spin" aria-hidden />}
         </div>
       )}

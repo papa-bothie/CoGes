@@ -10,6 +10,7 @@ import { ErrorState } from "@/components/error-state";
 import { DayBars } from "@/components/kit/day-bars";
 import { KitCard } from "@/components/kit/kit-card";
 import { Avatar, ListRow } from "@/components/kit/list-row";
+import { SecondaryLink } from "@/components/kit/secondary-action";
 import { StatTile } from "@/components/kit/stat-tile";
 import { StatusPill } from "@/components/kit/status-pill";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -295,6 +296,9 @@ function WatchRow({
   );
 }
 
+/** Liste Stock filtrée sur les bientôt épuisés et les épuisés. */
+const WATCH_HREF = "/products?filter=watch";
+
 function WatchCard({ data, currency }: { data: Dashboard | undefined; currency: string }) {
   const rows: ReactNode[] = [];
   for (const item of data?.watch_stock ?? []) {
@@ -335,7 +339,16 @@ function WatchCard({ data, currency }: { data: Dashboard | undefined; currency: 
   }
   return (
     <section className="min-w-0 flex-[2_1_320px] rounded-carte border border-border bg-card p-carte">
-      <h2 className="text-[21px] leading-7 font-bold">{t.watch}</h2>
+      {/* Le titre et le lien du bas mènent aux articles à surveiller ; chaque ligne garde le
+          sien vers sa fiche (ADR 0110). */}
+      <h2 className="text-[21px] leading-7 font-bold">
+        <Link
+          href={WATCH_HREF}
+          className="inline-flex min-h-cible items-center rounded-mini outline-none hover:text-stock-encre focus-visible:ring-3 focus-visible:ring-ring/50"
+        >
+          {t.watch}
+        </Link>
+      </h2>
       <div className="mt-3.5 flex flex-col gap-2.5">
         {!data ? (
           <Skeleton className="h-[220px] w-full rounded-champ" />
@@ -345,6 +358,11 @@ function WatchCard({ data, currency }: { data: Dashboard | undefined; currency: 
           <p className="text-muted-foreground">{t.nothingToWatch}</p>
         )}
       </div>
+      {(data?.watch_stock.length ?? 0) > 0 && (
+        <SecondaryLink href={WATCH_HREF} className="mt-3.5">
+          {t.watchAll}
+        </SecondaryLink>
+      )}
     </section>
   );
 }
@@ -367,14 +385,7 @@ function RecentSales({
       <KitCard
         className="hidden md:block"
         title={<span className="text-[21px] leading-7">{t.recentSales}</span>}
-        action={
-          <Link
-            href="/sales"
-            className="font-bold text-ventes underline underline-offset-2 hover:text-ventes-encre"
-          >
-            {t.seeAll}
-          </Link>
-        }
+        action={<SecondaryLink href="/sales">{t.seeAll}</SecondaryLink>}
       >
         <div className="-mt-2">
           {!data ? (

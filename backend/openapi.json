@@ -2281,7 +2281,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/StockStatus"
+                  "$ref": "#/components/schemas/StockFilter"
                 },
                 {
                   "type": "null"
@@ -18990,6 +18990,15 @@
           "without_subscription"
         ],
         "title": "StatsOverview"
+      },
+      "StockFilter": {
+        "type": "string",
+        "enum": [
+          "ok",
+          "low",
+          "out",
+          "watch"
+        ]
       },
       "StockLine": {
         "properties": {

@@ -52,6 +52,9 @@ type MovementType = Literal[
 
 #: Statut d'un article au regard de son seuil de réapprovisionnement.
 type StockStatus = Literal["ok", "low", "out"]
+#: Filtre de l'écran Stock : un statut, ou `watch` = bientôt épuisés **et** épuisés, la
+#: carte « À surveiller » de l'accueil (prompt 34, bloc F, ADR 0110).
+type StockFilter = Literal["ok", "low", "out", "watch"]
 
 type MovementNote = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=NOTE_MAX_LENGTH)

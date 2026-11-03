@@ -11,6 +11,7 @@ import { Chip } from "@/components/kit/chip";
 import { KitCard } from "@/components/kit/kit-card";
 import { Avatar } from "@/components/kit/list-row";
 import { RUBRIQUE_CLASSES } from "@/components/kit/rubrique";
+import { SecondaryAction } from "@/components/kit/secondary-action";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { usePermission } from "@/hooks/use-permission";
@@ -78,14 +79,9 @@ export function MoneyView() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{t.title}</h1>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <button
-            type="button"
-            aria-expanded={choosing}
-            onClick={() => setChoosing((on) => !on)}
-            className="min-h-11 px-2 font-semibold text-argent-encre underline-offset-4 hover:underline pointer-coarse:min-h-12"
-          >
+          <SecondaryAction aria-expanded={choosing} onClick={() => setChoosing((on) => !on)}>
             {t.chooseDates}
-          </button>
+          </SecondaryAction>
           <div role="group" aria-label={t.title} className="flex flex-wrap gap-2">
             {PERIODS.map((item) => (
               <Chip

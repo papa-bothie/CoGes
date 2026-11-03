@@ -19,6 +19,7 @@ import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { Chip } from "@/components/kit/chip";
 import { KitCard } from "@/components/kit/kit-card";
+import { SecondaryAction, SecondaryLink } from "@/components/kit/secondary-action";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { Can, usePermission } from "@/hooks/use-permission";
@@ -73,9 +74,7 @@ export function InsightsView() {
         description={labels.insights.disabledBody}
         action={
           <Can permission="company:update">
-            <Link href="/settings" className="font-semibold underline">
-              {labels.insights.openSettings}
-            </Link>
+            <SecondaryLink href="/settings">{labels.insights.openSettings}</SecondaryLink>
           </Can>
         }
       />
@@ -291,13 +290,7 @@ function AdviceCard({ insight, onExplain }: { insight: Insight; onExplain: () =>
                 </button>
               </>
             )}
-            <button
-              type="button"
-              onClick={onExplain}
-              className="min-h-[50px] px-2 font-semibold text-muted-foreground underline-offset-4 hover:underline"
-            >
-              {t.why}
-            </button>
+            <SecondaryAction onClick={onExplain}>{t.why}</SecondaryAction>
           </div>
         )}
       </div>

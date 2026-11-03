@@ -6722,6 +6722,8 @@ export interface components {
       /** Without Subscription */
       without_subscription: number;
     };
+    /** @enum {string} */
+    StockFilter: "ok" | "low" | "out" | "watch";
     /**
      * StockLine
      * @description Stock valorisé d'un article, joint à sa fiche produit.
@@ -9022,7 +9024,7 @@ export interface operations {
         page?: number;
         page_size?: number;
         product_id?: string[] | null;
-        status?: components["schemas"]["StockStatus"] | null;
+        status?: components["schemas"]["StockFilter"] | null;
         category_id?: string | null;
         search?: string | null;
       };

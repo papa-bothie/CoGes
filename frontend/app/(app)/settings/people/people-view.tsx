@@ -11,6 +11,7 @@ import { FieldError } from "@/components/field-error";
 import { Chip } from "@/components/kit/chip";
 import { initials } from "@/components/kit/list-row";
 import { fieldClasses } from "@/components/kit/rubrique";
+import { SecondaryAction } from "@/components/kit/secondary-action";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDraft } from "@/hooks/use-draft";
 import { useCompanyLocale, useMe } from "@/hooks/use-me";
@@ -174,24 +175,22 @@ export function PeopleView() {
                     />
                   )}
                   {user.is_active && !you && !user.must_change_password && canUpdate && (
-                    <button
-                      type="button"
+                    <SecondaryAction
                       disabled={redraw.isPending}
                       onClick={() => redraw.mutate(user)}
-                      className="mt-1 mr-4 text-sm font-semibold text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+                      className="mt-1 mr-2"
                     >
                       {t.newPassword}
-                    </button>
+                    </SecondaryAction>
                   )}
                   {canEditRoles && !you && user.is_active && (
-                    <button
-                      type="button"
+                    <SecondaryAction
                       aria-expanded={editing === user.id}
                       onClick={() => setEditing(editing === user.id ? null : user.id)}
-                      className="mt-1 text-sm font-semibold text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+                      className="mt-1"
                     >
                       {t.changeRole}
-                    </button>
+                    </SecondaryAction>
                   )}
                 </div>
                 {you ? (
@@ -270,14 +269,9 @@ function TemporaryLine({
         {deadline && ` · ${deadline}`}
       </span>
       {canRedraw && (
-        <button
-          type="button"
-          disabled={pending}
-          onClick={onRedraw}
-          className="font-semibold text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
-        >
+        <SecondaryAction disabled={pending} onClick={onRedraw}>
           {t.newPassword}
-        </button>
+        </SecondaryAction>
       )}
     </div>
   );

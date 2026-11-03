@@ -206,7 +206,10 @@ const STATES: Record<string, (page: Page, request: APIRequestContext) => Promise
   },
   "06": async (page) => {
     await page.getByLabel("Quantité rendue de Huile Dinor 1 L").fill("2");
-    await expect(page.getByText("2 800 F")).toBeVisible();
+    // Le montant du bloc « Valeur rendue » : « 2 800 F » revient aussi dans d'autres phrases.
+    await expect(
+      page.getByText("Valeur rendue", { exact: true }).locator("xpath=.."),
+    ).toContainText(/2\s800\sF/);
   },
   "09": async (page) => {
     await page.getByLabel("Nom de l'article").fill("Riz brisé 25 kg");
