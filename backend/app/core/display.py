@@ -47,3 +47,23 @@ def qty(value: Decimal) -> str:
     rounded = value.quantize(Decimal(1).scaleb(-QTY_DECIMALS), rounding=ROUND_HALF_UP)
     text = number(rounded, QTY_DECIMALS)
     return text.rstrip("0").rstrip(",") if "," in text else text
+
+
+#: Unités au singulier et au pluriel (révision 0015).
+UNITS: dict[str, tuple[str, str]] = {
+    "piece": ("pièce", "pièces"),
+    "kg": ("kg", "kg"),
+    "litre": ("litre", "litres"),
+    "carton": ("carton", "cartons"),
+    "metre": ("mètre", "mètres"),
+    "paquet": ("paquet", "paquets"),
+    "sac": ("sac", "sacs"),
+    "bouteille": ("bouteille", "bouteilles"),
+}
+
+
+def qty_with_unit(value: Decimal, unit: str) -> str:
+    """« 3 sacs », « 1 sac », « 2,5 kg » : la quantité suivie de son unité accordée."""
+    singular, plural = UNITS.get(unit, ("", ""))
+    word = singular if value <= 1 else plural
+    return f"{qty(value)} {word}".rstrip()

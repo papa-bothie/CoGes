@@ -387,13 +387,14 @@ def _beta_sources(client: TestClient, beta_token: str) -> dict[str, str]:
             "barcode": barcode,
         },
     )
-    sale_id, sale_item_id = _beta_sale(client, beta_token, product_id)
+    # Le stock d'abord : le panier refuse un article épuisé (ADR 0109).
     movement_id = _beta_owned(
         client,
         beta_token,
         "inventory/movements",
         {"product_id": product_id, "type": "initial", "qty_delta": "10", "unit_cost": "1000"},
     )
+    sale_id, sale_item_id = _beta_sale(client, beta_token, product_id)
     supplier_id = _beta_owned(client, beta_token, "suppliers", {"name": f"Fournisseur {marker}"})
     expense_category_id = _beta_owned(
         client, beta_token, "expense-categories", {"name": f"Charge {marker}", "kind": "fixed"}

@@ -27,7 +27,7 @@ import { queryKeys } from "@/lib/api/queries/keys";
 import { useStockFor } from "@/lib/api/queries/stock";
 import type { Schemas } from "@/lib/api/schema";
 import { compareDecimal, toInputDecimal } from "@/lib/decimal";
-import { formatAmount, formatFigure, formatQty } from "@/lib/format";
+import { formatAmount, formatFigure } from "@/lib/format";
 import { dayEndIso, dayStartIso } from "@/lib/format/zoned";
 import { labels } from "@/lib/labels";
 import {
@@ -43,8 +43,8 @@ import { PAYMENT_METHODS } from "@/lib/payment-methods";
 import { todayIn } from "@/lib/period";
 import { cn } from "@/lib/utils";
 
-import { ProductGrid } from "./product-grid";
 import { SaleSuccess } from "./sale-success";
+import { capText, ProductGrid } from "./product-grid";
 import { TicketLine, type LineChange } from "./ticket-line";
 
 type SaleDetail = Schemas["SaleDetail"];
@@ -391,13 +391,10 @@ export function SaleEditor({
     onError: (error) => {
       if (isApiError(error) && error.code === "insufficient_stock") {
         const productId = String(error.details.product_id ?? "");
-        const available = formatQty(String(error.details.available ?? ""));
         const item = items.find((line) => line.product_id === productId);
         if (item) {
-          setLineErrors((current) => ({
-            ...current,
-            [item.id]: labels.sales.insufficient(available),
-          }));
+          // Les mots du serveur : « Il n'en reste que 3 sacs. » (ADR 0109).
+          setLineErrors((current) => ({ ...current, [item.id]: error.message }));
           void queryClient.invalidateQueries({ queryKey: queryKeys.stock.all });
           return;
         }
@@ -558,11 +555,11 @@ export function SaleEditor({
                     item={item}
                     currency={currency}
                     disabled={confirm.isPending}
+                    left={line?.is_stock_tracked ? line.qty_on_hand : null}
+                    unit={line?.unit}
                     error={
                       lineErrors[item.id] ??
-                      (short && line
-                        ? labels.sales.insufficient(formatQty(line.qty_on_hand))
-                        : undefined)
+                      (short && line ? capText(line.qty_on_hand, line.unit) : undefined)
                     }
                     onChange={(lineChange) =>
                       updateItem.mutate({ itemId: item.id, change: lineChange })

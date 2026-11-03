@@ -17,7 +17,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.display import fcfa, qty
+from app.core.display import UNITS, fcfa, qty
 from app.core.errors import NotFoundError
 from app.core.tenancy import TenantContext
 from app.modules.audit.schemas import AuditLogRead
@@ -37,18 +37,6 @@ REASONS: dict[str, str] = {
     "count_error": "erreur de comptage",
     "found": "retrouvé",
     "supplier_gift": "cadeau du fournisseur",
-}
-
-#: Unités au singulier et au pluriel (révision 0015).
-UNITS: dict[str, tuple[str, str]] = {
-    "piece": ("pièce", "pièces"),
-    "kg": ("kg", "kg"),
-    "litre": ("litre", "litres"),
-    "carton": ("carton", "cartons"),
-    "metre": ("mètre", "mètres"),
-    "paquet": ("paquet", "paquets"),
-    "sac": ("sac", "sacs"),
-    "bouteille": ("bouteille", "bouteilles"),
 }
 
 #: Ce dont parle une ligne qu'on ne sait pas raconter mieux.

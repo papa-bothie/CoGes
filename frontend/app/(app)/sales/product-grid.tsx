@@ -15,6 +15,7 @@ import { queryKeys } from "@/lib/api/queries/keys";
 import { useStockFor, type StockLine } from "@/lib/api/queries/stock";
 import type { Schemas } from "@/lib/api/schema";
 import { formatAmount } from "@/lib/format";
+import { compareDecimal } from "@/lib/decimal";
 import { labels } from "@/lib/labels";
 import { qtyWithUnit } from "@/lib/units";
 import { cn } from "@/lib/utils";
@@ -35,10 +36,35 @@ function stockText(line: StockLine | undefined): { text: string; low: boolean } 
 }
 
 /**
+ * Reste vendable d'un article suivi, ou `null` sans limite (non suivi, stock pas encore lu).
+ * Un article suivi sans ligne de stock n'est jamais entré : il en reste 0 (ADR 0109).
+ */
+export function sellableLeft(
+  product: Pick<Product, "is_stock_tracked">,
+  line: StockLine | undefined,
+  loaded: boolean,
+): string | null {
+  if (!product.is_stock_tracked || !loaded) return null;
+  return line?.qty_on_hand ?? "0";
+}
+
+/** « Il n'en reste que 3 sacs. », mot pour mot le refus du serveur. */
+export function capText(left: string, unit: string): string {
+  return compareDecimal(left, "0") === 1 ? t.capLeft(qtyWithUnit(left, unit)) : t.capOut;
+}
+
+/** L'article est-il au plafond : plus rien à ajouter au panier ? */
+export function atCap(left: string | null, inCart: string | undefined): boolean {
+  if (left === null) return false;
+  return compareDecimal(inCart ?? "0", left) !== -1;
+}
+
+/**
  * Côté gauche de « Nouvelle vente » (maquette 02) : recherche, puces de rayons et grille de
  * tuiles. Toucher une tuile ajoute 1 ; la pastille dit combien sont déjà dans le panier. Un
  * lecteur de code-barres tape le code puis Entrée : s'il ne reste qu'un article, il est
- * ajouté.
+ * ajouté. Un article suivi épuisé, ou déjà tout entier au panier, ne s'ajoute par aucun de
+ * ces chemins (ADR 0109).
  */
 export function ProductGrid({
   inCart,
@@ -54,6 +80,7 @@ export function ProductGrid({
 }) {
   const [text, setText] = useState("");
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const term = useDebouncedValue(text.trim());
 
   // Le même cache que les autres écrans : une seule forme de données sous cette clé.
@@ -70,6 +97,8 @@ export function ProductGrid({
   });
   const items = useMemo(() => products.data?.items ?? [], [products.data]);
   const stock = useStockFor(useMemo(() => items.map((product) => product.id), [items]));
+  const leftOf = (product: Product) =>
+    sellableLeft(product, stock.data?.get(product.id), Boolean(stock.data));
 
   return (
     <section className="flex min-w-0 flex-col gap-4">
@@ -88,12 +117,20 @@ export function ProductGrid({
           autoComplete="off"
           placeholder={t.search}
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => {
+            setText(event.target.value);
+            setNotice(null);
+          }}
           onKeyDown={(event) => {
             if (event.key !== "Enter") return;
             event.preventDefault();
             const only = items.length === 1 ? items[0] : undefined;
             if (only && term === text.trim()) {
+              const left = leftOf(only);
+              if (atCap(left, inCart.get(only.id))) {
+                setNotice(capText(left ?? "0", stock.data?.get(only.id)?.unit ?? only.unit));
+                return;
+              }
               onAdd(only);
               setText("");
             }
@@ -101,6 +138,12 @@ export function ProductGrid({
           className={cn(fieldClasses("ventes"), "min-h-14 pr-4 pl-12 text-libelle font-normal")}
         />
       </div>
+
+      {notice && (
+        <p role="status" className="font-bold text-stock-encre">
+          {notice}
+        </p>
+      )}
 
       <div role="group" aria-label={t.categories} className="flex flex-wrap gap-2">
         <Chip selected={categoryId === null} onClick={() => setCategoryId(null)}>
@@ -133,13 +176,15 @@ export function ProductGrid({
             const line = stock.data?.get(product.id);
             const status = stockText(line);
             const qty = inCart.get(product.id);
-            const empty = product.is_stock_tracked && line?.status === "out";
+            const left = leftOf(product);
+            const empty = left !== null && compareDecimal(left, "0") !== 1;
+            const full = atCap(left, qty);
             return (
               <li key={product.id} className="flex">
                 <button
                   type="button"
                   aria-label={t.add(product.name)}
-                  disabled={disabled || empty}
+                  disabled={disabled || full}
                   onClick={() => onAdd(product)}
                   className={cn(
                     "relative flex min-h-[150px] w-full flex-col items-start gap-2 rounded-[18px] border-2 border-border bg-card p-3.5 text-left text-foreground",
@@ -152,15 +197,21 @@ export function ProductGrid({
                   <span className="text-lg font-extrabold numeric">
                     {formatAmount(product.unit_price, currency)}
                   </span>
-                  {status && (
-                    <span
-                      className={cn(
-                        "text-sm font-semibold",
-                        status.low ? "text-stock-encre" : "text-muted-foreground",
-                      )}
-                    >
-                      {status.text}
-                    </span>
+                  {empty ? (
+                    <span className="text-sm font-semibold text-stock-encre">{t.out}</span>
+                  ) : full ? (
+                    <span className="text-sm font-semibold text-stock-encre">{t.allInCart}</span>
+                  ) : (
+                    status && (
+                      <span
+                        className={cn(
+                          "text-sm font-semibold",
+                          status.low ? "text-stock-encre" : "text-muted-foreground",
+                        )}
+                      >
+                        {status.text}
+                      </span>
+                    )
                   )}
                   {qty && (
                     <span className="absolute top-2.5 right-2.5 flex h-8 min-w-8 items-center justify-center rounded-full bg-ventes px-1.5 font-extrabold numeric text-primary-foreground">
