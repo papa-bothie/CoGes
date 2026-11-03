@@ -98,6 +98,12 @@ make front-e2e     # = make e2e-reset, puis la suite complète
   `barcode-detector` lit un EAN-13 montré à un canvas, moteur `.wasm` servi par CoGes,
   aucune requête externe ; sous Chromium avec lecteur natif, elle n'est pas chargée.
   WebKit demande `libavif16` sur le poste (`sudo pnpm exec playwright install-deps webkit`).
+- **Groupe 1** (prompt 34, ADR 0107 à 0110) : `e2e/sales.spec.ts` change un prix à la caisse
+  (brouillon rechargé, reçu, fiche inchangée) et refuse un article épuisé par la douchette
+  (le code-barres est cherché à l'identique ; la recherche par nom est floue et ramènerait
+  les articles des suites précédentes), `e2e/products.spec.ts` la description, et
+  `e2e/polish.spec.ts` « Modifier » / « Supprimer », la carte « À surveiller » et les types
+  de dépense.
 - Cibles tactiles : `e2e/touch-targets.spec.ts` émule une tablette (`hasTouch`, 1024 × 768)
   et mesure toutes les cibles de Nouvelle vente, Stock et Ventes (44 × 44 px au moins).
 
@@ -116,3 +122,7 @@ make front-e2e     # = make e2e-reset, puis la suite complète
   Résultats : `docs/design/captures/phase-15/comparaison.md` et une image maquette | front |
   différences par écran. `MAQUETTE_ALL=1` mesure aussi les écrans pas encore refaits, sans
   échouer. Un écran est rendu bloquant en l'ajoutant à `DONE` dans `e2e/maquette.spec.ts`.
+- **Action secondaire** (ADR 0110) : un lien ou un bouton d'action qui n'est pas l'action
+  principale passe par `SecondaryAction` / `SecondaryLink` (`components/kit/secondary-action.tsx`),
+  jamais par un texte souligné. Restent des liens de texte : les retours (`BackLink`), un nom
+  dans une liste, un lien dans une phrase.
