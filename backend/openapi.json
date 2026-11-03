@@ -13328,6 +13328,10 @@
         "$ref": "#/components/schemas/Amount-Input",
         "ge": "0"
       },
+      "LinePrice": {
+        "$ref": "#/components/schemas/Amount-Input",
+        "ge": "0"
+      },
       "LoginRequest": {
         "properties": {
           "company_slug": {
@@ -15861,6 +15865,10 @@
         "$ref": "#/components/schemas/Amount-Input",
         "gt": "0"
       },
+      "PriceReason": {
+        "type": "string",
+        "maxLength": 120
+      },
       "ProductCreate": {
         "properties": {
           "sku": {
@@ -18002,6 +18010,31 @@
           "unit_price": {
             "$ref": "#/components/schemas/Amount-Output"
           },
+          "list_price": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Amount-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "price_changed": {
+            "type": "boolean",
+            "title": "Price Changed"
+          },
+          "price_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Reason"
+          },
           "unit_cost": {
             "$ref": "#/components/schemas/UnitCost-Output"
           },
@@ -18034,6 +18067,9 @@
           "price_id",
           "qty",
           "unit_price",
+          "list_price",
+          "price_changed",
+          "price_reason",
           "unit_cost",
           "discount",
           "tax_rate",
@@ -18061,6 +18097,26 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/LineDiscount"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit_price": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LinePrice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "price_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PriceReason"
               },
               {
                 "type": "null"

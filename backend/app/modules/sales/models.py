@@ -60,7 +60,13 @@ class SaleItem(IdentifiedTenantBase):
     #: rattachable au tarif qui s'appliquait, même après plusieurs changements.
     price_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     qty: Mapped[Decimal] = mapped_column(Numeric(14, 3))
+    #: Prix appliqué : celui que le client paie, d'où viennent montant, taxe et marge.
     unit_price: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    #: Prix de la fiche, refigé à la confirmation (ADR 0107). Différent de `unit_price`
+    #: quand la caisse a changé le prix ; `NULL` sur les lignes d'avant la révision 0034.
+    list_price: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    #: Motif facultatif du prix changé.
+    price_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     #: CMP figé à la sortie de stock : le COGS historique de la ligne (§ 5.1 étape 5).
     unit_cost: Mapped[Decimal] = mapped_column(Numeric(14, 4))
     discount: Mapped[Decimal] = mapped_column(Numeric(14, 2))

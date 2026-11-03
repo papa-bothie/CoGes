@@ -139,6 +139,43 @@ test("une vente au-delà du stock est bloquée avec le bon message", async ({ pa
   await expect(page).toHaveURL(/\/edit$/);
 });
 
+test("le prix changé à la caisse survit au brouillon et à la confirmation", async ({
+  page,
+  request,
+}) => {
+  const client = await managerApi(request);
+  const product = await stockedProduct(client, { stock: "10", price: "2500" });
+  await login(page);
+
+  await page.goto("/sales/new");
+  await addArticle(page, product.name);
+  await page
+    .getByRole("button", { name: new RegExp(`Changer le prix de ${product.name}`) })
+    .click();
+  await expect(page.getByText(/Prix habituel : 2\s500\sF/)).toBeVisible();
+  const field = page.getByLabel("Prix pour cette vente, à l'unité");
+  await field.fill("2000");
+  await page.getByRole("button", { name: "Prix négocié" }).click();
+  await page.getByRole("button", { name: "Appliquer ce prix" }).click();
+  await expect(page.getByText("Prix changé", { exact: true })).toBeVisible();
+  await expect(page.getByText(/2\s000\sF l'unité/)).toBeVisible();
+
+  // Le brouillon (serveur) garde le prix tapé.
+  await page.reload();
+  await expect(page.getByText("Prix changé", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: /^Encaisser 2\s000\sF$/ }).click();
+  await expect(page.getByRole("heading", { name: "Vente enregistrée" })).toBeVisible();
+  await page.getByRole("link", { name: "Imprimer le reçu" }).click();
+  await expect(page.getByRole("article")).toContainText(amount("2 000"));
+  await page.getByRole("link", { name: "Retour à la vente" }).click();
+  await expect(page.getByText(/Prix changé \(habituel : 2\s500\sF\) — Prix négocié/)).toBeVisible();
+
+  // La fiche de l'article n'a pas bougé.
+  const card = (await client.get(`/products/${product.id}`)) as { unit_price: string };
+  expect(card.unit_price).toBe("2500.00");
+});
+
 test("retour partiel rendu en espèces, puis le reste réglé sur la fiche", async ({
   page,
   request,
