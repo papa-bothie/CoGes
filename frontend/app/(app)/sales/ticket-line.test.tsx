@@ -30,18 +30,19 @@ function line(overrides: Partial<Schemas["SaleItemRead"]> = {}): Schemas["SaleIt
   };
 }
 
-function setup(item = line()) {
+function setup(item = line(), hint?: string) {
   const onChange = vi.fn();
-  render(
+  const { container } = render(
     <TicketLine
       item={item}
+      hint={hint}
       currency="XOF"
       disabled={false}
       onChange={onChange}
       onRemove={vi.fn()}
     />,
   );
-  return { onChange, user: userEvent.setup() };
+  return { onChange, container, user: userEvent.setup() };
 }
 
 const usual = (text: string) => text.replace(/[  ]/g, " ");
@@ -90,6 +91,38 @@ describe("prix changé sur une ligne (ADR 0107)", () => {
     await user.click(screen.getByRole("button", { name: /changer le prix/i }));
     expect(screen.queryByRole("button", { name: /revenir au prix habituel/i })).toBeNull();
     expect(screen.queryByText("Prix changé")).toBeNull();
+  });
+
+  it("montre un vrai bouton « Changer le prix », trouvable par son nom", () => {
+    setup();
+    const button = screen.getByRole("button", { name: /^changer le prix de riz 5 kg/i });
+    // Le libellé se lit à l'écran, pas seulement au lecteur d'écran.
+    expect(button).toHaveTextContent("Changer le prix");
+    expect(usual(button.textContent ?? "")).toContain("2 500 F l'unité");
+    expect(button.querySelector("svg")).not.toBeNull();
+  });
+
+  it("garde le prix habituel barré à côté d'un prix changé", () => {
+    setup(line({ unit_price: "2000.00", price_changed: true, price_reason: "Prix négocié" }));
+    const struck = screen.getByText((_, element) => element?.tagName === "S");
+    expect(usual(struck.textContent ?? "")).toContain("2 500");
+    expect(screen.getByText(/prix négocié/i)).toBeInTheDocument();
+  });
+});
+
+describe("ce qui distingue l'article sur le ticket (ADR 0108)", () => {
+  it("montre la description sous le nom, dépliable au toucher", async () => {
+    const { user } = setup(line({ product_name: "Huile" }), "5 litres");
+    const hint = screen.getByRole("button", { name: /lire toute la description de huile/i });
+    expect(hint).toHaveTextContent("5 litres");
+    expect(hint).toHaveAttribute("title", "5 litres");
+    await user.click(hint);
+    expect(hint).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("n'ajoute aucune ligne sans description", () => {
+    const { container } = setup();
+    expect(container.querySelector('[data-slot="product-hint"]')).toBeNull();
   });
 });
 

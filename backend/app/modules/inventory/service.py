@@ -393,6 +393,7 @@ def get_stock(
             product_id=row.product_id,
             sku=summary.sku,
             name=summary.name,
+            description=summary.description,
             unit=summary.unit,
             category_id=summary.category_id,
             category_name=(
@@ -460,6 +461,7 @@ def find_by_code(session: Session, ctx: TenantContext, code: str) -> ScannedProd
         sku=summary.sku,
         barcode=summary.barcode,
         name=summary.name,
+        description=summary.description,
         unit=summary.unit,
         category_id=summary.category_id,
         category_name=None if summary.category_id is None else names.get(summary.category_id),

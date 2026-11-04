@@ -60,6 +60,15 @@ def name_matches(column: InstrumentedAttribute[str], term: str) -> ColumnElement
     )
 
 
+def text_contains(column: InstrumentedAttribute[str | None], term: str) -> ColumnElement[bool]:
+    """Sous-chaîne seule, jokers neutralisés : la description d'un article (ADR 0108).
+
+    Pas d'approximation ici : une description est un texte libre, et la similarité
+    ferait remonter dans la grille de vente des articles qui n'ont rien à voir.
+    """
+    return column.ilike(f"%{_escape_like(term)}%", escape=_LIKE_ESCAPE)
+
+
 #: Assez de chiffres pour désigner un téléphone (« 77 655 » : 5 chiffres).
 MIN_PHONE_DIGITS = 4
 
