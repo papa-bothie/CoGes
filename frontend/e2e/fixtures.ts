@@ -105,12 +105,18 @@ export type ManagerApi = Awaited<ReturnType<typeof managerApi>>;
 /** Un article neuf au prix donné, sans taxe, avec `stock` unités au coût de 600. */
 export async function stockedProduct(
   client: ManagerApi,
-  { stock, price = "1000" }: { stock: string; price?: string },
+  {
+    stock,
+    price = "1000",
+    name,
+    description,
+  }: { stock: string; price?: string; name?: string; description?: string },
 ) {
   const marker = crypto.randomUUID().slice(0, 8);
   const product = await client.post("/products", {
     sku: `E2E-${marker}`,
-    name: `Article E2E ${marker}`,
+    name: name ?? `Article E2E ${marker}`,
+    description,
     unit_price: price,
     default_tax_rate: "0",
     reorder_point: "1",

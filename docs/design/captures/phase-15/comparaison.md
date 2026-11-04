@@ -22,7 +22,7 @@ page HTML). Images : maquette | front | différences.
 | 08 | Fiche article et étiquette | 3b | 5.3 % | 12.3 % | 0 | [1280](comparaison/08-fiche-article.png) [390](comparaison/08-fiche-article-390.png) |
 | 09 | Nouvel article | 3b | 7.9 % | 11.7 % | 0 | [1280](comparaison/09-nouvel-article.png) [390](comparaison/09-nouvel-article-390.png) |
 | 10 | Corriger le stock | 3b | 6.2 % | 16.9 % | 0 | [1280](comparaison/10-corriger-stock.png) [390](comparaison/10-corriger-stock-390.png) |
-| 11 | Recevoir une livraison | 3b | 5.6 % | 10.6 % | 0 | [1280](comparaison/11-recevoir-livraison.png) [390](comparaison/11-recevoir-livraison-390.png) |
+| 11 | Recevoir une livraison | 3b | 12.2 % | 16.9 % | 0 | [1280](comparaison/11-recevoir-livraison.png) [390](comparaison/11-recevoir-livraison-390.png) |
 | 12 | Rayons | 3b | 2.7 % | 15.5 % | 0 | [1280](comparaison/12-rayons.png) [390](comparaison/12-rayons-390.png) |
 | 13 | Clients et fournisseurs | 3c | 4.8 % | 11.4 % | 0 | [1280](comparaison/13-clients-fournisseurs.png) [390](comparaison/13-clients-fournisseurs-390.png) |
 | 14 | Fiche client | 3c | 4.0 % | 16.1 % | 0 | [1280](comparaison/14-fiche-client.png) [390](comparaison/14-fiche-client-390.png) |

@@ -156,6 +156,8 @@ class SaleItemRead(BaseModel):
     #: Libellés relus au référentiel pour l'affichage (ADR 0050) : ni montant ni
     #: règle. `None` quand le produit a été supprimé logiquement depuis.
     product_name: str | None
+    #: Sous le nom sur le ticket, pour distinguer deux articles de même nom (ADR 0108).
+    product_description: str | None = None
     sku: str | None
     price_id: UUID | None
     qty: Quantity

@@ -8,6 +8,7 @@ import { Chip } from "@/components/kit/chip";
 import { cleanQuantity } from "@/components/kit/quantity-stepper";
 import { fieldClasses, RUBRIQUE_CLASSES } from "@/components/kit/rubrique";
 import { FieldError } from "@/components/field-error";
+import { ProductHint } from "@/components/products/product-hint";
 import type { Schemas } from "@/lib/api/schema";
 import { compareDecimal, parseDecimalInput, toInputDecimal } from "@/lib/decimal";
 import { formatAmount, formatFigure } from "@/lib/format";
@@ -40,6 +41,7 @@ const STEP = cn(
  */
 export function TicketLine({
   item,
+  hint,
   currency,
   error,
   disabled,
@@ -47,6 +49,8 @@ export function TicketLine({
   onRemove,
 }: {
   item: Item;
+  /** Description, ou référence d'un homonyme du panier (ADR 0108). */
+  hint?: string;
   currency: string;
   error?: string;
   disabled: boolean;
@@ -93,6 +97,7 @@ export function TicketLine({
       <div className="flex items-center gap-2.5 pt-3 pb-1">
         <div className="min-w-0 flex-1">
           <div className="font-bold">{name}</div>
+          <ProductHint text={hint} name={name} expandable />
         </div>
         <button
           type="button"

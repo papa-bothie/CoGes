@@ -16,6 +16,7 @@ import { cleanQuantity } from "@/components/kit/quantity-stepper";
 import { fieldClasses } from "@/components/kit/rubrique";
 import { PersonFormDialog } from "@/components/people/person-form-dialog";
 import { BarcodeScanButton } from "@/components/products/barcode-scanner";
+import { ProductHint } from "@/components/products/product-hint";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -47,6 +48,7 @@ import { formatAmount } from "@/lib/format";
 import { labels } from "@/lib/labels";
 import { typedAmount, wholeUnits } from "@/lib/payment-amount";
 import { addDays, todayIn } from "@/lib/period";
+import { productHints } from "@/lib/product-hint";
 import { qtyWithUnit } from "@/lib/units";
 import { cn } from "@/lib/utils";
 
@@ -85,11 +87,27 @@ function suggestedCost(line: { avg_cost: string; last_purchase_cost?: string | n
 
 /** Ce qu'une ligne garde de l'article, quelle que soit la lecture qui l'a donné. */
 function lineProduct(item: LineProduct): LineProduct {
-  const { product_id, name, unit, qty_on_hand } = item;
-  return { product_id, name, unit, qty_on_hand };
+  const { product_id, name, description, sku, unit, qty_on_hand } = item;
+  return { product_id, name, description, sku, unit, qty_on_hand };
 }
 
 type Notice = { tone: "info" | "attention"; text: string };
+
+/** Ce qui distingue chaque article d'une liste (ADR 0108), indexé par `product_id`. */
+function hintsOf(items: readonly LineProduct[] | undefined) {
+  return productHints((items ?? []).map((item) => ({ ...item, id: item.product_id })));
+}
+
+/** Nom d'un article proposé, et ce qui le distingue sur une seconde ligne tronquée. */
+function ChoiceName({ name, hint }: { name: string; hint: string | undefined }) {
+  if (!hint) return <>{name}</>;
+  return (
+    <span className="flex max-w-[220px] min-w-0 flex-col items-start">
+      <span>{name}</span>
+      <ProductHint text={hint} name={name} />
+    </span>
+  );
+}
 
 /** Total d'une ligne, en francs entiers (quantité décimale, prix entier). */
 function lineTotal(line: Line): bigint {
@@ -205,6 +223,8 @@ export function DeliveryForm({
           items.push({
             product_id: product.id,
             name: product.name,
+            description: product.description,
+            sku: product.sku,
             unit: product.unit,
             qty_on_hand: "0",
           });
@@ -455,6 +475,9 @@ export function DeliveryForm({
   const addable = (watched.data ?? []).filter(
     (item) => !lines.some((line) => line.product.product_id === item.product_id),
   );
+  const lineHints = hintsOf(lines.map((line) => line.product));
+  const addableHints = hintsOf(addable);
+  const foundHints = hintsOf(found.data?.items);
 
   return (
     <div className="mx-auto flex max-w-page flex-col gap-5">
@@ -547,6 +570,11 @@ export function DeliveryForm({
                   <ProductSquare name={name} />
                   <div className="min-w-0 flex-[1_1_170px] self-center">
                     <p className="font-bold">{name}</p>
+                    <ProductHint
+                      text={lineHints.get(line.product.product_id)}
+                      name={name}
+                      expandable
+                    />
                     <p className="text-muted-foreground">{t.inStock(stockText)}</p>
                   </div>
                   <label className="w-[110px]">
@@ -649,7 +677,7 @@ export function DeliveryForm({
                   className="min-h-[52px]"
                   onClick={() => add(item)}
                 >
-                  {t.addOne(item.name)}
+                  <ChoiceName name={t.addOne(item.name)} hint={addableHints.get(item.product_id)} />
                 </Chip>
               ))}
             </div>
@@ -691,7 +719,10 @@ export function DeliveryForm({
                       className="min-h-[52px]"
                       onClick={() => add(item)}
                     >
-                      {t.addOne(item.name)}
+                      <ChoiceName
+                        name={t.addOne(item.name)}
+                        hint={foundHints.get(item.product_id)}
+                      />
                     </Chip>
                   ))}
               </div>

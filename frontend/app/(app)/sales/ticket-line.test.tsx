@@ -29,18 +29,19 @@ function line(overrides: Partial<Schemas["SaleItemRead"]> = {}): Schemas["SaleIt
   };
 }
 
-function setup(item = line()) {
+function setup(item = line(), hint?: string) {
   const onChange = vi.fn();
-  render(
+  const { container } = render(
     <TicketLine
       item={item}
+      hint={hint}
       currency="XOF"
       disabled={false}
       onChange={onChange}
       onRemove={vi.fn()}
     />,
   );
-  return { onChange, user: userEvent.setup() };
+  return { onChange, container, user: userEvent.setup() };
 }
 
 const usual = (text: string) => text.replace(/[  ]/g, " ");
@@ -105,5 +106,21 @@ describe("prix changé sur une ligne (ADR 0107)", () => {
     const struck = screen.getByText((_, element) => element?.tagName === "S");
     expect(usual(struck.textContent ?? "")).toContain("2 500");
     expect(screen.getByText(/prix négocié/i)).toBeInTheDocument();
+  });
+});
+
+describe("ce qui distingue l'article sur le ticket (ADR 0108)", () => {
+  it("montre la description sous le nom, dépliable au toucher", async () => {
+    const { user } = setup(line({ product_name: "Huile" }), "5 litres");
+    const hint = screen.getByRole("button", { name: /lire toute la description de huile/i });
+    expect(hint).toHaveTextContent("5 litres");
+    expect(hint).toHaveAttribute("title", "5 litres");
+    await user.click(hint);
+    expect(hint).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("n'ajoute aucune ligne sans description", () => {
+    const { container } = setup();
+    expect(container.querySelector('[data-slot="product-hint"]')).toBeNull();
   });
 });

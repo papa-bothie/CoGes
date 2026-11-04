@@ -1020,6 +1020,9 @@ export const labels = {
     description: {
       label: "Description (facultatif)",
       count: (used: number, max: number) => `${used} / ${max} caractères`,
+      /** Homonyme sans description : la référence le distingue. */
+      reference: (sku: string) => `Réf. ${sku}`,
+      showAll: (name: string) => `Lire toute la description de ${name}`,
     },
     /** Nouvel article (lot 1, maquette 09) : mot pour mot. */
     newForm: {

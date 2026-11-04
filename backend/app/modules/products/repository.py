@@ -14,7 +14,7 @@ from sqlalchemy import BigInteger, ColumnElement, Integer, Select, cast, func, o
 
 from app.core.codes import INTERNAL_EAN_PATTERN, number_pattern
 from app.core.repository import TenantRepository
-from app.core.search import code_matches, name_matches, relevance_order
+from app.core.search import code_matches, name_matches, relevance_order, text_contains
 from app.modules.products.models import Product, ProductPrice
 
 
@@ -32,10 +32,12 @@ class ProductRepository(TenantRepository[Product]):
         conditions: list[ColumnElement[bool]] = []
         if search is not None:
             # Le nom par approximation, les codes par égalité stricte : un
-            # code-barres scanné ne doit jamais ramener « le plus ressemblant ».
+            # code-barres scanné ne doit jamais ramener « le plus ressemblant ». La
+            # description par sous-chaîne (« 5 litres », ADR 0108).
             conditions.append(
                 or_(
                     name_matches(Product.name, search),
+                    text_contains(Product.description, search),
                     code_matches((Product.sku, Product.barcode), search),
                 )
             )
