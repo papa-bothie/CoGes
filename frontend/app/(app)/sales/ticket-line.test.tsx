@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Schemas } from "@/lib/api/schema";
 
+import { atCap, capText, sellableLeft } from "./product-grid";
 import { TicketLine } from "./ticket-line";
 
 function line(overrides: Partial<Schemas["SaleItemRead"]> = {}): Schemas["SaleItemRead"] {
@@ -122,5 +123,38 @@ describe("ce qui distingue l'article sur le ticket (ADR 0108)", () => {
   it("n'ajoute aucune ligne sans description", () => {
     const { container } = setup();
     expect(container.querySelector('[data-slot="product-hint"]')).toBeNull();
+  });
+});
+
+describe("plafond du stock (ADR 0109)", () => {
+  it("dit ce qui reste vendable, et rien pour un article non suivi", () => {
+    expect(sellableLeft({ is_stock_tracked: false }, undefined, true)).toBeNull();
+    expect(sellableLeft({ is_stock_tracked: true }, undefined, false)).toBeNull();
+    expect(sellableLeft({ is_stock_tracked: true }, undefined, true)).toBe("0");
+    expect(atCap("3.000", "3")).toBe(true);
+    expect(atCap("3.000", "2")).toBe(false);
+    expect(atCap("0", undefined)).toBe(true);
+    expect(atCap(null, "50")).toBe(false);
+    expect(usual(capText("3.000", "sac"))).toBe("Il n'en reste que 3 sacs.");
+    expect(capText("0", "sac")).toBe("Cet article est épuisé : il n'en reste plus.");
+  });
+
+  it("désactive + au plafond et le dit sur la ligne", () => {
+    render(
+      <TicketLine
+        item={line({ qty: "3.000" })}
+        currency="XOF"
+        disabled={false}
+        left="3.000"
+        unit="sac"
+        onChange={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Ajouter un Riz 5 kg" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Enlever un Riz 5 kg" })).toBeEnabled();
+    expect(usual(screen.getByText(/il n'en reste que/i).textContent ?? "")).toBe(
+      "Il n'en reste que 3 sacs.",
+    );
   });
 });

@@ -34,6 +34,7 @@ from sqlalchemy.orm import Session
 from app.core import clock, money
 from app.core.audit import AuditAction, audit_critical
 from app.core.codes import scanned_code_candidates
+from app.core.display import qty_with_unit
 from app.core.errors import (
     BusinessRuleError,
     NotFoundError,
@@ -79,6 +80,25 @@ from app.modules.products.schemas import ProductRead, ProductSummary
 class InsufficientStockError(BusinessRuleError):
     code = "insufficient_stock"
     default_message = "Stock insuffisant : cette sortie rendrait la quantité négative."
+
+
+def _not_enough(
+    product_id: UUID, unit: str, requested: Decimal, available: Decimal
+) -> InsufficientStockError:
+    """« Il n'en reste que 3 sacs. » : le même refus au panier et à la confirmation."""
+    message = (
+        "Cet article est épuisé : il n'en reste plus."
+        if available <= 0
+        else f"Il n'en reste que {qty_with_unit(available, unit)}."
+    )
+    return InsufficientStockError(
+        message,
+        details={
+            "product_id": str(product_id),
+            "requested": str(requested),
+            "available": str(available),
+        },
+    )
 
 
 class ProductNotStockTrackedError(BusinessRuleError):
@@ -757,6 +777,24 @@ def reverse_movement(
     return reversal
 
 
+def assert_available(
+    session: Session, ctx: TenantContext, *, product_id: UUID, qty: Decimal
+) -> None:
+    """Refuse au panier plus que le stock d'un article suivi (ADR 0109).
+
+    Lecture sans verrou : c'est un confort de saisie. La confirmation reste l'autorité
+    (`record_sale_out`, puis `CG020` en base) quand deux caisses vendent en même temps.
+    Un article non suivi en stock n'a pas de limite.
+    """
+    summary = products_service.get_summaries(session, ctx, [product_id]).get(product_id)
+    if summary is None or not summary.is_stock_tracked:
+        return
+    current = ProductStockRepository(session, ctx).get(product_id)
+    available = Decimal("0") if current is None else current.qty_on_hand
+    if qty > available:
+        raise _not_enough(product_id, summary.unit, qty, available)
+
+
 def record_sale_out(
     session: Session,
     ctx: TenantContext,
@@ -786,10 +824,14 @@ def record_sale_out(
         raise ProductNotStockTrackedError(details={"product_id": str(product_id)})
 
     stock_repository = ProductStockRepository(session, ctx)
-    current = stock_repository.get(product_id)
-    # Capturé avant le `flush` risqué : après un rejet, la transaction est morte
-    # et relire un attribut expiré échouerait à son tour (ADR 0010).
+    # Verrouillée d'abord : le reste lu est exact, même quand une autre caisse vient de
+    # vendre le même article, et le refus le dit en mots (ADR 0109). `CG020` reste
+    # l'autorité si quelqu'un écrit sans passer par ici.
+    current = stock_repository.get_for_update(product_id)
     available = Decimal("0") if current is None else current.qty_on_hand
+    if qty > available:
+        summary = products_service.get_summaries(session, ctx, [product_id]).get(product_id)
+        raise _not_enough(product_id, "" if summary is None else summary.unit, qty, available)
 
     movement = InventoryMovementRepository(session, ctx).add(
         InventoryMovement(

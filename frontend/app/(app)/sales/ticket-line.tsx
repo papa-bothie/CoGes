@@ -16,6 +16,8 @@ import { labels } from "@/lib/labels";
 import { wholeUnits } from "@/lib/payment-amount";
 import { cn } from "@/lib/utils";
 
+import { capText } from "./product-grid";
+
 type Item = Schemas["SaleItemRead"];
 export type LineChange = {
   qty?: string;
@@ -45,6 +47,8 @@ export function TicketLine({
   currency,
   error,
   disabled,
+  left = null,
+  unit = "",
   onChange,
   onRemove,
 }: {
@@ -53,6 +57,9 @@ export function TicketLine({
   hint?: string;
   currency: string;
   error?: string;
+  /** Stock vendable d'un article suivi, `null` sans limite (ADR 0109). */
+  left?: string | null;
+  unit?: string;
   disabled: boolean;
   onChange: (change: LineChange) => void;
   onRemove: () => void;
@@ -81,6 +88,7 @@ export function TicketLine({
     }
     if (compareDecimal(parsed, item.qty) !== 0) onChange({ qty: parsed });
   };
+  const capped = left !== null && compareDecimal(item.qty, left) !== -1;
   const step = (delta: 1 | -1) => {
     const current = parseDecimalInput(qty) ?? item.qty;
     const whole = wholeUnits(current) + BigInt(delta);
@@ -128,7 +136,7 @@ export function TicketLine({
         <button
           type="button"
           className={STEP}
-          disabled={disabled}
+          disabled={disabled || capped}
           onClick={() => step(1)}
           aria-label={t.increase(name)}
         >
@@ -201,6 +209,9 @@ export function TicketLine({
           </label>
         )}
       </div>
+      {capped && !error && (
+        <p className="pb-2 text-sm font-bold text-stock-encre">{capText(left, unit)}</p>
+      )}
       {item.price_changed && (
         <p className="pb-2.5 text-sm">
           <span className="font-bold text-ventes-encre">{t.priceChanged}</span>

@@ -102,7 +102,7 @@ def test_t39_a_confirmation_failing_on_its_last_line_rolls_everything_back(
     marker = uuid4().hex[:8]
 
     products: list[str] = []
-    for index, stock_qty in enumerate(("10", "10", "1")):
+    for index, stock_qty in enumerate(("10", "10", "4")):
         created = api_client.post(
             "/api/v1/products",
             headers=headers,
@@ -138,6 +138,15 @@ def test_t39_a_confirmation_failing_on_its_last_line_rolls_everything_back(
             json={"product_id": product_id, "qty": "4"},
         )
         assert line.status_code == 201, line.text
+
+    # Le panier a été rempli quand il en restait 4 ; trois sont perdus avant l'encaissement
+    # (le panier ne réserve rien, ADR 0109) : la confirmation tombe sur la 3ᵉ ligne.
+    lost = api_client.post(
+        "/api/v1/inventory/movements",
+        headers=headers,
+        json={"product_id": products[2], "reason_code": "damaged", "qty_delta": "-3"},
+    )
+    assert lost.status_code == 201, lost.text
 
     refused = api_client.post(
         f"/api/v1/sales/{sale_id}/confirm",

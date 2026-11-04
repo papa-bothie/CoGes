@@ -507,6 +507,7 @@ def add_item(
     sale = _locked_draft(session, ctx, sale_id)
 
     price = products_service.assert_sellable(session, ctx, payload.product_id)
+    _assert_in_stock(session, ctx, sale, payload.product_id, payload.qty)
     tax_rate = _line_tax_rate(session, ctx, payload.product_id)
 
     item = SaleItemRepository(session, ctx).add(
@@ -551,6 +552,9 @@ def update_item(
     sale = _locked_draft(session, ctx, sale_id)
     item = _get_item(session, ctx, sale, item_id)
 
+    if payload.qty is not None and payload.qty > item.qty:
+        # Baisser reste toujours permis : seul un surplus est confronté au stock.
+        _assert_in_stock(session, ctx, sale, item.product_id, payload.qty, replacing=item.id)
     changes = payload.model_dump(exclude_unset=True, exclude={"price_reason"})
     for field, value in changes.items():
         if value is not None:
@@ -568,6 +572,31 @@ def update_item(
         details={"sale_id": str(sale.id), "item_id": str(item_id)},
     )
     return item
+
+
+def _assert_in_stock(
+    session: Session,
+    ctx: TenantContext,
+    sale: Sale,
+    product_id: UUID,
+    qty: Decimal,
+    *,
+    replacing: UUID | None = None,
+) -> None:
+    """Le panier ne dépasse pas le stock d'un article suivi (ADR 0109).
+
+    Toutes les lignes du même article comptent ensemble ; `replacing` est la ligne dont
+    la quantité change. La confirmation revérifie, verrou posé.
+    """
+    others = sum(
+        (
+            line.qty
+            for line in get_items(session, ctx, sale.id)
+            if line.product_id == product_id and line.id != replacing
+        ),
+        Decimal("0"),
+    )
+    inventory_service.assert_available(session, ctx, product_id=product_id, qty=others + qty)
 
 
 def remove_item(session: Session, ctx: TenantContext, sale_id: UUID, item_id: UUID) -> None:

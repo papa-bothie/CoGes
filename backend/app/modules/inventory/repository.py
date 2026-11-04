@@ -190,6 +190,17 @@ class ProductStockRepository:
         stmt = self._select().where(ProductStock.product_id == product_id)
         return self.session.execute(stmt).scalar_one_or_none()
 
+    def get_for_update(self, product_id: UUID) -> ProductStock | None:
+        """La ligne verrouillée, relue en base : le verrou que `t20_inv_apply` aurait pris
+        un instant plus tard, posé plus tôt pour dire combien il en reste (ADR 0109)."""
+        stmt = (
+            self._select()
+            .where(ProductStock.product_id == product_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return self.session.execute(stmt).scalar_one_or_none()
+
     def many(self, product_ids: Sequence[UUID]) -> dict[UUID, ProductStock]:
         """Une requête pour une page entière, plutôt qu'une par ligne."""
         if not product_ids:

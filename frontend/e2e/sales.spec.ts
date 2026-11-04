@@ -40,6 +40,13 @@ async function addArticle(page: Page, name: string) {
   await expect(page.getByRole("textbox", { name: `Quantité de ${name}` })).toBeVisible();
 }
 
+async function setQtyRefused(page: Page, name: string, qty: string) {
+  const input = page.getByRole("textbox", { name: `Quantité de ${name}` });
+  await input.fill(qty);
+  await input.press("Enter");
+  await page.waitForLoadState("networkidle");
+}
+
 async function setQty(page: Page, name: string, qty: string) {
   const input = page.getByRole("textbox", { name: `Quantité de ${name}` });
   await input.fill(qty);
@@ -116,11 +123,19 @@ test("une vente au-delà du stock est bloquée avec le bon message", async ({ pa
 
   await page.goto("/sales/new");
   await addArticle(page, product.name);
-  await setQty(page, product.name, "5");
-
-  // Confort : l'aperçu du stock bloque la confirmation avant tout envoi.
-  await expect(page.getByText("Stock insuffisant — 2 disponible(s)")).toBeVisible();
+  await setQty(page, product.name, "2");
   const confirm = page.getByRole("button", { name: /^Encaisser/ });
+  await expect(confirm).toBeEnabled();
+
+  // Brouillon retrouvé après une perte : l'aperçu du stock bloque la confirmation.
+  await client.post("/inventory/movements", {
+    product_id: product.id,
+    // Une perte porte sa raison en liste fermée (ADR 0067).
+    reason_code: "damaged",
+    qty_delta: "-1",
+  });
+  await page.reload();
+  await expect(page.getByText("Il n'en reste que 1 pièce.").first()).toBeVisible();
   await expect(confirm).toBeDisabled();
   await page.screenshot({
     path: `${CAPTURES}/stock-insuffisant.png`,
@@ -128,17 +143,18 @@ test("une vente au-delà du stock est bloquée avec le bon message", async ({ pa
     animations: "disabled",
   });
 
-  // Vérité serveur : le stock baisse ailleurs après l'aperçu, et c'est la base qui refuse.
-  await setQty(page, product.name, "2");
+  // Vérité serveur : une autre caisse vend après l'aperçu, et c'est la confirmation qui refuse.
+  await setQty(page, product.name, "1");
   await expect(confirm).toBeEnabled();
   await client.post("/inventory/movements", {
     product_id: product.id,
-    // Une perte porte sa raison en liste fermée (ADR 0067).
     reason_code: "damaged",
     qty_delta: "-1",
   });
   await confirm.click();
-  await expect(page.getByText("Stock insuffisant — 1 disponible(s)")).toBeVisible();
+  await expect(
+    page.getByText("Cet article est épuisé : il n'en reste plus.").first(),
+  ).toBeVisible();
   await expect(page).toHaveURL(/\/edit$/);
 });
 
@@ -177,6 +193,46 @@ test("le prix changé à la caisse survit au brouillon et à la confirmation", a
   // La fiche de l'article n'a pas bougé.
   const card = (await client.get(`/products/${product.id}`)) as { unit_price: string };
   expect(card.unit_price).toBe("2500.00");
+});
+
+test("un article épuisé ne s'ajoute par aucun chemin, + s'arrête au stock", async ({
+  page,
+  request,
+}) => {
+  const client = await managerApi(request);
+  const marker = crypto.randomUUID().slice(0, 8);
+  // Suivi en stock mais jamais reçu : il n'en reste rien.
+  const empty = (await client.post("/products", {
+    name: `Épuisé E2E ${marker}`,
+    unit_price: "500",
+    default_tax_rate: "0",
+  })) as { name: string; barcode: string };
+  const product = await stockedProduct(client, { stock: "2" });
+  await login(page);
+
+  await page.goto("/sales/new");
+  // Douchette ou recherche + Entrée : refusé avant tout envoi, avec les mots du serveur.
+  const search = page.getByRole("searchbox", { name: "Chercher un article" });
+  // La douchette tape le code-barres, cherché à l'identique : un seul article reste.
+  await search.fill(empty.barcode);
+  await expect(page.getByRole("button", { name: /^Ajouter / })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: `Ajouter ${empty.name}` })).toBeDisabled();
+  await search.press("Enter");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Cet article est épuisé" }),
+  ).toBeVisible();
+  await expect(page.getByText("Touchez un article pour l'ajouter")).toBeVisible();
+
+  await addArticle(page, product.name);
+  await page.getByRole("button", { name: `Ajouter un ${product.name}` }).click();
+  await expect(page.getByRole("textbox", { name: `Quantité de ${product.name}` })).toHaveValue("2");
+  await expect(page.getByRole("button", { name: `Ajouter un ${product.name}` })).toBeDisabled();
+  await expect(page.getByText(/Il n'en reste que 2\spièces\./)).toBeVisible();
+  await expect(page.getByRole("button", { name: `Ajouter ${product.name}` })).toBeDisabled();
+
+  // Taper plus que le stock : le serveur refuse, la ligne le dit.
+  await setQtyRefused(page, product.name, "5");
+  await expect(page.getByText(/Il n'en reste que 2\spièces\./).first()).toBeVisible();
 });
 
 test("un vendeur trouve le bouton « Changer le prix » sur la ligne et s'en sert", async ({
