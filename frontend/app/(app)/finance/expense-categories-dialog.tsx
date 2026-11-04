@@ -6,6 +6,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { FieldError } from "@/components/field-error";
+import { ChoiceGroup } from "@/components/kit/choice-group";
+import { fieldClasses } from "@/components/kit/rubrique";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,21 +17,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Can } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
 import { labels } from "@/lib/labels";
+import { cn } from "@/lib/utils";
 
 type Category = Schemas["ExpenseCategoryRead"];
 type Kind = Schemas["ExpenseKind"];
@@ -65,18 +59,21 @@ export function ExpenseCategoriesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{t.categoriesTitle}</DialogTitle>
           <DialogDescription>{t.categoryKindHint}</DialogDescription>
         </DialogHeader>
         {categories.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t.noCategories}</p>
+          <p className="text-corps text-muted-foreground">{t.noCategories}</p>
         ) : (
-          <ul className="max-h-64 divide-y overflow-y-auto rounded-lg border">
+          <ul aria-label={t.categoriesTitle} className="max-h-64 overflow-y-auto">
             {categories.map((category) => (
-              <li key={category.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                <span>{category.name}</span>
+              <li
+                key={category.id}
+                className="flex min-h-cible items-center justify-between gap-3 border-t border-filet py-2 text-corps first:border-t-0"
+              >
+                <span className="font-bold">{category.name}</span>
                 <Badge variant="neutral">{t.kind[category.kind]}</Badge>
               </li>
             ))}
@@ -84,7 +81,7 @@ export function ExpenseCategoriesDialog({
         )}
         <Can permission="expenses:create">
           <form
-            className="grid gap-3 sm:grid-cols-[1fr_8rem_auto] sm:items-end"
+            className="flex flex-col gap-5 border-t border-filet pt-5"
             noValidate
             onSubmit={(event) => {
               event.preventDefault();
@@ -95,35 +92,38 @@ export function ExpenseCategoriesDialog({
               create.mutate({ name: name.trim(), kind });
             }}
           >
-            <div className="space-y-1.5">
-              <Label htmlFor="category-name">{t.categoryName}</Label>
-              <Input
+            <div>
+              <label htmlFor="category-name" className="mb-2 block text-libelle">
+                {t.categoryName}
+              </label>
+              <input
                 id="category-name"
                 value={name}
                 maxLength={120}
+                autoComplete="off"
+                aria-invalid={error ? true : undefined}
                 onChange={(event) => setName(event.target.value)}
-                className="h-9"
+                className={cn(fieldClasses("depenses"), "min-h-[58px] px-4 text-[19px]")}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="category-kind">{t.categoryKind}</Label>
-              <Select value={kind} onValueChange={(v) => setKind(v as Kind)}>
-                <SelectTrigger id="category-kind" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fixed">{t.kind.fixed}</SelectItem>
-                  <SelectItem value="variable">{t.kind.variable}</SelectItem>
-                </SelectContent>
-              </Select>
+            <div>
+              <p className="mb-2 text-libelle">{t.categoryKind}</p>
+              <ChoiceGroup
+                label={t.categoryKind}
+                rubrique="depenses"
+                value={kind}
+                onValueChange={setKind}
+                choices={[
+                  { value: "fixed", label: t.kind.fixed },
+                  { value: "variable", label: t.kind.variable },
+                ]}
+              />
             </div>
-            <Button type="submit" disabled={create.isPending}>
+            <FieldError message={error} />
+            <Button type="submit" variant="depenses" size="standard" disabled={create.isPending}>
               {create.isPending && <Loader2 className="animate-spin" aria-hidden />}
               {t.addCategory}
             </Button>
-            <div className="sm:col-span-3">
-              <FieldError message={error} />
-            </div>
           </form>
         </Can>
       </DialogContent>

@@ -3,6 +3,7 @@
 import { Check, MessageCircle, Printer } from "lucide-react";
 import Link from "next/link";
 
+import { SecondaryLink } from "@/components/kit/secondary-action";
 import { Button } from "@/components/ui/button";
 import type { Schemas } from "@/lib/api/schema";
 import { formatAmount } from "@/lib/format";
@@ -82,12 +83,9 @@ export function SaleSuccess({
             {labels.whatsapp.send}
           </a>
         </div>
-        <Link
-          href="/dashboard"
-          className="mt-1.5 text-libelle text-ventes underline underline-offset-2 hover:text-ventes-encre"
-        >
+        <SecondaryLink href="/dashboard" className="mt-1.5 self-center">
           {t.home}
-        </Link>
+        </SecondaryLink>
       </section>
     </div>
   );

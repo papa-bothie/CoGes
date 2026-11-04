@@ -2,11 +2,11 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Loader2 } from "lucide-react";
-import Link from "next/link";
 import { toast } from "sonner";
 
 import { ForecastMeta } from "@/components/forecast/forecast-meta";
 import { ProductForecast } from "@/components/forecast/product-forecast";
+import { SecondaryLink } from "@/components/kit/secondary-action";
 import { spacedGroups } from "@/components/money";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -171,13 +171,10 @@ export function InsightSheet({
               )}
 
               {href && (
-                <Link
-                  href={href}
-                  className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-                >
+                <SecondaryLink href={href}>
                   {t.seeItem}
                   <ArrowRight className="size-4" aria-hidden />
-                </Link>
+                </SecondaryLink>
               )}
 
               {canUpdate && (

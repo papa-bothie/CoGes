@@ -2,7 +2,6 @@
 
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, CheckCircle2, Loader2 } from "lucide-react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
@@ -13,6 +12,7 @@ import { FieldError } from "@/components/field-error";
 import { PaymentAmount } from "@/components/kit/payment-amount";
 import { PaymentMethodChips } from "@/components/kit/payment-method-chips";
 import { RUBRIQUE_CLASSES } from "@/components/kit/rubrique";
+import { SecondaryLink } from "@/components/kit/secondary-action";
 import { StatusPill } from "@/components/kit/status-pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDraft } from "@/hooks/use-draft";
@@ -240,12 +240,7 @@ export function SettleScreen({ kind }: { kind: Kind }) {
         </div>
       )}
 
-      <Link
-        href="/finance/debts"
-        className="min-h-11 self-start font-semibold text-muted-foreground underline-offset-4 hover:underline pointer-coarse:min-h-12"
-      >
-        {t.allDebts}
-      </Link>
+      <SecondaryLink href="/finance/debts">{t.allDebts}</SecondaryLink>
     </div>
   );
 }

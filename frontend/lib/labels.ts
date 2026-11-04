@@ -197,6 +197,7 @@ export const labels = {
     weekTotal: "Total :",
     today: "Aujourd'hui",
     watch: "À surveiller",
+    watchAll: "Voir les articles à surveiller",
     watchLeft: (qty: string) => `Plus que ${qty}`,
     watchOut: "Épuisé",
     watchDebt: (amount: string, days: number) =>
@@ -779,6 +780,7 @@ export const labels = {
       searchLabel: "Chercher un article",
       filters: "Filtrer les articles",
       all: "Tous",
+      watch: (count: number) => `À surveiller (${count})`,
       low: (count: number) => `Bientôt épuisés (${count})`,
       out: (count: number) => `Épuisés (${count})`,
       sold: (shelf: string | null, price: string) =>
@@ -795,6 +797,13 @@ export const labels = {
       subtitle: (shelf: string | null, unit: string) =>
         shelf ? `${shelf} · vendu par ${unit}` : `vendu par ${unit}`,
       changePrices: "Changer les prix",
+      edit: "Modifier",
+      delete: "Supprimer",
+      deleteTitle: (name: string) => `Supprimer ${name} ?`,
+      deleteHint:
+        "L'article ne sera plus proposé à la vente ni au stock. Ses ventes et ses mouvements passés restent dans l'historique. Un article qui a encore du stock ne se supprime pas : corrigez d'abord son stock à zéro.",
+      deleteConfirm: "Oui, supprimer l'article",
+      deleted: (name: string) => `${name} est supprimé.`,
       adjust: "Corriger le stock",
       order: "Commander",
       salePrice: "Prix de vente (F)",
@@ -1314,14 +1323,14 @@ export const labels = {
       payTitle: (label: string) => `Régler « ${label} »`,
       paySubmit: "Enregistrer le paiement",
       paid: "Paiement enregistré.",
-      categoriesTitle: "Catégories de dépenses",
-      categoryName: "Nom",
-      categoryKind: "Nature",
+      categoriesTitle: "Types de dépense",
+      categoryName: "Nom du type",
+      categoryKind: "Elle revient",
       categoryKindHint:
-        "Fixe (loyer, salaires) ou variable. La nature ne change plus dès que la catégorie porte des dépenses.",
-      addCategory: "Ajouter",
-      categoryCreated: "Catégorie créée.",
-      noCategories: "Aucune catégorie : créez-en une avant de saisir une dépense.",
+        "Fixe : chaque mois (loyer, salaires). Variable : selon les jours. Ce choix ne change plus dès que le type porte des dépenses.",
+      addCategory: "Ajouter ce type",
+      categoryCreated: "Type de dépense ajouté.",
+      noCategories: "Aucun type de dépense : ajoutez-en un avant de saisir une dépense.",
     },
   },
   insights: {

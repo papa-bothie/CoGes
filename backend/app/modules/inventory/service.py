@@ -352,7 +352,10 @@ def get_stock(
             # mais la fiche n'est plus lisible. On ne devine rien, on n'affiche rien.
             continue
         state = _row_status(row, summary)
-        if status is not None and state != status:
+        if status == "watch":
+            if state == "ok":
+                continue
+        elif status is not None and state != status:
             continue
         if category_id is not None and summary.category_id != category_id:
             continue

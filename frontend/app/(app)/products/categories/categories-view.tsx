@@ -142,7 +142,7 @@ function NewShelf() {
   return (
     <form
       noValidate
-      className="flex flex-col gap-3.5 rounded-carte border border-border bg-card p-[22px]"
+      className="flex flex-col gap-3.5 rounded-carte border border-border bg-card p-carte"
       onSubmit={(event) => {
         event.preventDefault();
         if (name.trim()) create.mutate();
@@ -157,7 +157,7 @@ function NewShelf() {
           }}
         />
       )}
-      <label htmlFor="new-shelf" className="text-[17px] font-bold">
+      <label htmlFor="new-shelf" className="text-libelle">
         {t.newLabel}
       </label>
       <div className="flex flex-wrap gap-2.5">
@@ -170,19 +170,21 @@ function NewShelf() {
           aria-invalid={Boolean(error)}
           aria-describedby={error ? "new-shelf-error" : undefined}
           onChange={(event) => setName(event.target.value)}
-          className={cn(fieldClasses("stock"), "min-h-14 flex-[1_1_220px] px-4 text-lg")}
+          className={cn(fieldClasses("stock"), "min-h-[58px] flex-[1_1_220px] px-4 text-[19px]")}
         />
-        <button
+        <Button
           type="submit"
+          variant="stock"
+          size="standard"
+          className="min-h-[58px]"
           disabled={!name.trim() || create.isPending}
-          className={cn(
-            "min-h-14 rounded-bouton bg-stock px-5 text-[17px] font-bold text-blanc outline-none",
-            "hover:bg-stock/90 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:bg-stock/45",
-          )}
         >
           {t.add}
-        </button>
+        </Button>
       </div>
+      <p className="text-libelle" aria-hidden>
+        {t.colors}
+      </p>
       <div role="radiogroup" aria-label={t.colors} className="flex flex-wrap gap-2.5">
         {SHELF_COLORS.map((entry) => (
           <button
@@ -318,10 +320,15 @@ function RenameForm({ shelf, onDone }: { shelf: CategoryNode; onDone: () => void
           onKeyDown={(event) => event.key === "Escape" && onDone()}
           className={cn(fieldClasses("stock"), "min-h-12 flex-[1_1_180px] px-3.5 text-lg")}
         />
-        <Button type="submit" size="standard" disabled={!name.trim() || save.isPending}>
+        <Button
+          type="submit"
+          variant="stock"
+          size="standard"
+          disabled={!name.trim() || save.isPending}
+        >
           {t.save}
         </Button>
-        <Button type="button" size="standard" variant="outline" onClick={onDone}>
+        <Button type="button" size="standard" variant="secondaire" onClick={onDone}>
           {t.cancel}
         </Button>
       </div>
@@ -364,11 +371,12 @@ function DeleteDialog({ shelf, onClose }: { shelf: CategoryNode | null; onClose:
         </DialogHeader>
         <FieldError message={error} />
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="secondaire" size="standard" onClick={onClose}>
             {t.cancel}
           </Button>
           <Button
             variant="destructive"
+            size="standard"
             disabled={remove.isPending || !shelf}
             onClick={() => shelf && remove.mutate(shelf.id)}
           >

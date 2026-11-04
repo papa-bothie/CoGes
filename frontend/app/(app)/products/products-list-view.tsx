@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/error-state";
 import { Chip } from "@/components/kit/chip";
 import { ProductSquare } from "@/components/kit/list-row";
 import { fieldClasses } from "@/components/kit/rubrique";
+import { SecondaryLink } from "@/components/kit/secondary-action";
 import { ProductHint } from "@/components/products/product-hint";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -63,6 +64,9 @@ const SHORTCUT = cn(
  * recherche restent dans l'URL ; le journal de tous les mouvements reste derrière un
  * lien (ADR 0071).
  */
+/** Puces d'état : leur valeur est celle du paramètre `status` de `/inventory/stock`. */
+const STATUS_FILTERS = ["watch", "low", "out"] as const;
+
 export function ProductsListView() {
   const table = useTableParams();
   const { currency } = useCompanyLocale();
@@ -79,9 +83,10 @@ export function ProductsListView() {
     queryKey: [...queryKeys.stock.all, "summary"],
     queryFn: () => unwrap(api.GET("/api/v1/inventory/stock/summary")),
   });
+  const byStatus = STATUS_FILTERS.find((value) => value === filter);
   const filters = {
-    status: filter === "low" || filter === "out" ? (filter as "low" | "out") : undefined,
-    category_id: filter !== "all" && filter !== "low" && filter !== "out" ? filter : undefined,
+    status: byStatus,
+    category_id: filter !== "all" && !byStatus ? filter : undefined,
     search: table.search || undefined,
   };
   const stock = useInfiniteQuery({
@@ -192,6 +197,11 @@ export function ProductsListView() {
       <div role="group" aria-label={t.filters} className="flex flex-wrap gap-2">
         {[
           { value: "all", label: t.all },
+          // La carte « À surveiller » de l'accueil ouvre ce filtre (ADR 0110).
+          {
+            value: "watch",
+            label: t.watch((counts?.low_count ?? 0) + (counts?.out_count ?? 0)),
+          },
           { value: "low", label: t.low(counts?.low_count ?? 0) },
           { value: "out", label: t.out(counts?.out_count ?? 0) },
           ...(categories.data ?? [])
@@ -268,12 +278,7 @@ export function ProductsListView() {
         </p>
       )}
       <Can permission="inventory:read">
-        <Link
-          href="/inventory"
-          className="inline-flex min-h-12 items-center self-start font-bold text-stock-encre underline underline-offset-2 hover:text-foreground"
-        >
-          {t.journal}
-        </Link>
+        <SecondaryLink href="/inventory">{t.journal}</SecondaryLink>
       </Can>
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { SecondaryAction } from "@/components/kit/secondary-action";
 import { PasswordChangeForm } from "@/components/password-change-form";
 import { logout } from "@/lib/auth/session";
 import { labels } from "@/lib/labels";
@@ -18,13 +19,9 @@ export function FirstPasswordForm() {
       // Rechargement complet : l'identité en cache disait encore « à changer ».
       onDone={() => window.location.replace("/dashboard")}
     >
-      <button
-        type="button"
-        onClick={() => void logout().then(() => window.location.replace("/login"))}
-        className="min-h-12 font-semibold text-encre-2 underline-offset-4 hover:underline"
-      >
+      <SecondaryAction onClick={() => void logout().then(() => window.location.replace("/login"))}>
         {t.logout}
-      </button>
+      </SecondaryAction>
     </PasswordChangeForm>
   );
 }

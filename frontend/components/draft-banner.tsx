@@ -1,5 +1,6 @@
 import { History } from "lucide-react";
 
+import { SecondaryAction } from "@/components/kit/secondary-action";
 import { labels } from "@/lib/labels";
 
 const t = labels.draft;
@@ -15,14 +16,9 @@ export function DraftBanner({ onClear }: { onClear: () => void }) {
         <History aria-hidden className="size-5 shrink-0" />
         {t.restored}
       </p>
-      <button
-        type="button"
-        onClick={onClear}
-        aria-label={t.clearLabel}
-        className="min-h-cible rounded-touche px-3 font-bold underline underline-offset-2 outline-none hover:bg-card focus-visible:ring-3 focus-visible:ring-ring/50"
-      >
+      <SecondaryAction onClick={onClear} aria-label={t.clearLabel}>
         {t.clear}
-      </button>
+      </SecondaryAction>
     </div>
   );
 }

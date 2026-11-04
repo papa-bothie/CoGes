@@ -2,10 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, CircleX, Undo2 } from "lucide-react";
-import Link from "next/link";
 import { useId, useState } from "react";
 
 import { Avatar, ListRow } from "@/components/kit/list-row";
+import { SecondaryLink } from "@/components/kit/secondary-action";
 import { StatusPill } from "@/components/kit/status-pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, unwrap } from "@/lib/api/client";
@@ -137,12 +137,9 @@ export function RecentSales({ currency, timeZone }: { currency: string; timeZone
               })}
             </ul>
           )}
-          <Link
-            href="/sales"
-            className="mt-1 inline-flex min-h-cible items-center self-start font-bold text-ventes underline underline-offset-2 hover:text-ventes-encre"
-          >
+          <SecondaryLink href="/sales" className="mt-1">
             {t.seeAll}
-          </Link>
+          </SecondaryLink>
         </div>
       )}
     </section>

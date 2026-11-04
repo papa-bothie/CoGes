@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { ErrorState } from "@/components/error-state";
 import { FieldError } from "@/components/field-error";
 import { ProductSquare } from "@/components/kit/list-row";
+import { SecondaryLink } from "@/components/kit/secondary-action";
 import { StatusPill } from "@/components/kit/status-pill";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -207,12 +208,7 @@ export function SaleDetailView({ saleId }: { saleId: string }) {
               </p>
             </div>
             {customerId && (
-              <Link
-                href={`/customers/${customerId}`}
-                className="font-bold text-ventes underline underline-offset-2 hover:text-ventes-encre"
-              >
-                {t.seeCustomer}
-              </Link>
+              <SecondaryLink href={`/customers/${customerId}`}>{t.seeCustomer}</SecondaryLink>
             )}
           </div>
           {data.items.map((item) => (

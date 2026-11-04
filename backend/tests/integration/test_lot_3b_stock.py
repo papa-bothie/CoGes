@@ -208,6 +208,9 @@ def test_the_stock_list_filters_sorts_and_prices(api_client: TestClient) -> None
     assert [line["product_id"] for line in _stock(api_client, token, status="out")["items"]] == [
         milk
     ]
+    # « À surveiller » de l'accueil : bientôt épuisés et épuisés ensemble (ADR 0110).
+    watched = _stock(api_client, token, status="watch")["items"]
+    assert [line["product_id"] for line in watched] == [milk, rice]
     assert [
         line["product_id"] for line in _stock(api_client, token, category_id=cereals)["items"]
     ] == [rice]

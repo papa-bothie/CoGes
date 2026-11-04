@@ -2,8 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
-import Link from "next/link";
 
+import { SecondaryLink } from "@/components/kit/secondary-action";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { usePermission } from "@/hooks/use-permission";
@@ -45,9 +45,7 @@ export function IntelligenceSummaryCard() {
           {t.dashboardTitle}
         </CardTitle>
         <CardAction>
-          <Link href="/insights" className="text-sm font-medium text-primary hover:underline">
-            {t.dashboardLink}
-          </Link>
+          <SecondaryLink href="/insights">{t.dashboardLink}</SecondaryLink>
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-3">

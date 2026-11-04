@@ -2,7 +2,6 @@
 
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Loader2 } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 
 import { BackLink } from "@/components/back-link";
@@ -13,6 +12,7 @@ import { AmountField, NumericPad } from "@/components/kit/amount-field";
 import { ChoiceTiles } from "@/components/kit/choice-tile";
 import { KitCard } from "@/components/kit/kit-card";
 import { PaymentMethodChips } from "@/components/kit/payment-method-chips";
+import { SecondaryAction, SecondaryLink } from "@/components/kit/secondary-action";
 import { TODAY, WhenChips, whenDay, type When } from "@/components/kit/when-chips";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDraft } from "@/hooks/use-draft";
@@ -254,20 +254,9 @@ export function ExpensesView() {
           </form>
           <div className="mt-4 flex flex-wrap gap-x-5">
             <Can permission="expenses:create">
-              <button
-                type="button"
-                onClick={() => setManaging(true)}
-                className="min-h-11 font-semibold text-muted-foreground underline-offset-4 hover:underline pointer-coarse:min-h-12"
-              >
-                {t.manageTypes}
-              </button>
+              <SecondaryAction onClick={() => setManaging(true)}>{t.manageTypes}</SecondaryAction>
             </Can>
-            <Link
-              href="/finance/expenses/all"
-              className="inline-flex min-h-11 items-center font-semibold text-muted-foreground underline-offset-4 hover:underline pointer-coarse:min-h-12"
-            >
-              {t.allExpenses}
-            </Link>
+            <SecondaryLink href="/finance/expenses/all">{t.allExpenses}</SecondaryLink>
           </div>
         </KitCard>
 

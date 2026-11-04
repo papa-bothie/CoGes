@@ -27,8 +27,8 @@ from app.modules.inventory.schemas import (
     NewProductCreate,
     NewProductRead,
     ScannedProduct,
+    StockFilter,
     StockPage,
-    StockStatus,
     StockSummary,
 )
 
@@ -41,7 +41,7 @@ def list_stock(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = 20,
     product_id: Annotated[list[UUID] | None, Query(max_length=MAX_PAGE_SIZE)] = None,
-    stock_status: Annotated[StockStatus | None, Query(alias="status")] = None,
+    stock_status: Annotated[StockFilter | None, Query(alias="status")] = None,
     category_id: Annotated[UUID | None, Query()] = None,
     search: Annotated[str | None, Query(max_length=120)] = None,
 ) -> StockPage:
