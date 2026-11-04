@@ -200,6 +200,37 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/companies/me/logo": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read Logo
+     * @description Le logo de la boutique (ADR 0111), ou 404 `logo_not_found`.
+     *
+     *     Sans permission : tout utilisateur de l'entreprise imprime des reçus qui le portent.
+     *     Jamais gardé : ni par le navigateur, ni par un intermédiaire.
+     */
+    get: operations["read_logo_api_v1_companies_me_logo_get"];
+    /**
+     * Put Logo
+     * @description Ajoute ou change le logo. L'image est vérifiée, ré-encodée en PNG et réduite.
+     */
+    put: operations["put_logo_api_v1_companies_me_logo_put"];
+    post?: never;
+    /**
+     * Delete Logo
+     * @description Retire le logo. 404 `logo_not_found` s'il n'y en a pas.
+     */
+    delete: operations["delete_logo_api_v1_companies_me_logo_delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/users": {
     parameters: {
       query?: never;
@@ -3165,6 +3196,14 @@ export interface components {
        */
       file: string;
     };
+    /** Body_put_logo_api_v1_companies_me_logo_put */
+    Body_put_logo_api_v1_companies_me_logo_put: {
+      /**
+       * File
+       * @description PNG, JPEG ou WebP, 2 Mo au plus
+       */
+      file: string;
+    };
     CancelReason: string;
     /** Capability */
     Capability: {
@@ -3351,6 +3390,21 @@ export interface components {
       /** Users */
       users: components["schemas"]["CompanyUser"][];
     };
+    /**
+     * CompanyLogoRead
+     * @description Logo enregistré, après ré-encodage (ADR 0111).
+     */
+    CompanyLogoRead: {
+      /** Width */
+      width: number;
+      /** Height */
+      height: number;
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string;
+    };
     /** CompanyPage */
     CompanyPage: {
       /** Items */
@@ -3406,6 +3460,8 @@ export interface components {
        * Format: date-time
        */
       updated_at: string;
+      /** Logo Updated At */
+      logo_updated_at?: string | null;
     };
     /**
      * CompanyStatusCounts
@@ -5907,6 +5963,8 @@ export interface components {
       rc: string | null;
       /** Receipt Footer */
       receipt_footer: string | null;
+      /** Logo Updated At */
+      logo_updated_at: string | null;
     };
     /**
      * ReceiptCustomer
@@ -5939,6 +5997,9 @@ export interface components {
       sku: string;
       /** Name */
       name: string;
+      /** Description */
+      description: string | null;
+      unit: components["schemas"]["ProductUnit"];
       qty: components["schemas"]["Quantity-Output"];
       unit_price: components["schemas"]["Amount-Output"];
       discount: components["schemas"]["Amount-Output"];
@@ -5984,6 +6045,22 @@ export interface components {
       balance: components["schemas"]["Amount-Output"];
       /** Payments */
       payments: components["schemas"]["PaymentRead"][];
+      /** Returns */
+      returns: components["schemas"]["ReceiptReturn"][];
+    };
+    /**
+     * ReceiptReturn
+     * @description Retour lié à la vente, rappelé sur la facture (ADR 0112).
+     */
+    ReceiptReturn: {
+      /** Return No */
+      return_no: string;
+      /**
+       * Returned At
+       * Format: date-time
+       */
+      returned_at: string;
+      total_refund: components["schemas"]["Amount-Output"];
     };
     /** RecentExpense */
     RecentExpense: {
@@ -7778,6 +7855,77 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["SupportAccessRead"];
         };
+      };
+    };
+  };
+  read_logo_api_v1_companies_me_logo_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Le logo, en PNG */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "image/png": unknown;
+        };
+      };
+    };
+  };
+  put_logo_api_v1_companies_me_logo_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "multipart/form-data": components["schemas"]["Body_put_logo_api_v1_companies_me_logo_put"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CompanyLogoRead"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  delete_logo_api_v1_companies_me_logo_delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
