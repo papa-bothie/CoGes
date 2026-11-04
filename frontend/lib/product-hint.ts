@@ -15,13 +15,17 @@ const key = (name: string | null | undefined) => (name ?? "").trim().toLocaleLow
  * trompe jamais d'article ; sinon rien (aucune ligne vide).
  */
 export function productHints<T extends Distinguishable>(items: readonly T[]): Map<string, string> {
-  const counts = new Map<string, number>();
-  for (const item of items) counts.set(key(item.name), (counts.get(key(item.name)) ?? 0) + 1);
+  // Deux lignes du même article (même référence) ne sont pas des homonymes.
+  const articles = new Map<string, Set<string>>();
+  for (const item of items) {
+    const same = articles.get(key(item.name)) ?? new Set<string>();
+    articles.set(key(item.name), same.add(item.sku ?? item.id));
+  }
   const hints = new Map<string, string>();
   for (const item of items) {
     const description = item.description?.trim();
     if (description) hints.set(item.id, description);
-    else if ((counts.get(key(item.name)) ?? 0) > 1 && item.sku)
+    else if ((articles.get(key(item.name))?.size ?? 0) > 1 && item.sku)
       hints.set(item.id, labels.products.description.reference(item.sku));
   }
   return hints;
