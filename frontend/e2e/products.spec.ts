@@ -126,3 +126,32 @@ test("créer un article en moins de 8 touches", async ({ page }) => {
   await expect(page.getByText(/^ART-\d{4,}$/)).toBeVisible();
   await expect(page.getByText(/^2\d{12}$/).first()).toBeVisible();
 });
+
+test("la description d'un article se crée, se lit sur la fiche et se modifie", async ({ page }) => {
+  const name = `Huile ${crypto.randomUUID().slice(0, 6)}`;
+  await login(page);
+
+  await page.goto("/products/new");
+  await page.getByLabel("Nom de l'article").fill(name);
+  await page.getByLabel("Description (facultatif)").fill("Bouteille de 1 L\nconsignée");
+  await expect(page.getByText("26 / 500 caractères")).toBeVisible();
+  await page.getByLabel("Prix de vente (F)").fill("1200");
+  await page.getByRole("button", { name: "Enregistrer l'article" }).click();
+  await expect(page.getByRole("heading", { name: `${name} est ajouté` })).toBeVisible();
+
+  await page.goto("/products");
+  await page.getByRole("searchbox", { name: "Chercher un article" }).fill(name);
+  await expect(page).toHaveURL(/search=/);
+  await page.getByRole("link").filter({ hasText: name }).click();
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+  await expect(page.getByText("Bouteille de 1 L")).toBeVisible();
+
+  const url = page.url();
+  await page.goto(`${url}/edit`);
+  const field = page.getByLabel("Description (facultatif)");
+  await expect(field).toHaveValue("Bouteille de 1 L\nconsignée");
+  await field.fill("Bouteille de 1 L");
+  await page.getByRole("button", { name: "Enregistrer" }).click();
+  await expect(page).toHaveURL(url);
+  await expect(page.getByText("Bouteille de 1 L", { exact: true })).toBeVisible();
+});

@@ -255,6 +255,7 @@ def _product_rows(session: Session, ctx: TenantContext) -> list[list[Any]]:
         [
             product.sku,
             product.name,
+            product.description,
             price.unit_price if price else None,
             category_names.get(product.category_id, "") if product.category_id else "",
             product.unit,

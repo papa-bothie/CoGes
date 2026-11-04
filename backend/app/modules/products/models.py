@@ -27,6 +27,8 @@ class Product(IdentifiedTenantBase):
     sku: Mapped[str] = mapped_column(Text)
     barcode: Mapped[str | None] = mapped_column(Text, nullable=True)
     name: Mapped[str] = mapped_column(Text)
+    #: Texte libre facultatif, 500 caractères au plus (ADR 0108).
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     unit: Mapped[str] = mapped_column(Text)
     is_stock_tracked: Mapped[bool] = mapped_column(Boolean)
     #: Taux appliqué **par défaut** à la saisie d'une vente. Jamais relu ensuite :

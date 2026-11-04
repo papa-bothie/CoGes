@@ -1016,6 +1016,14 @@ export const labels = {
       notEan: "Ce code n'est pas un EAN-13 : il s'imprime en chiffres.",
       barcodeOf: (code: string) => `Code-barres ${code}`,
     },
+    /** Description facultative (ADR 0108). */
+    description: {
+      label: "Description (facultatif)",
+      count: (used: number, max: number) => `${used} / ${max} caractères`,
+      /** Homonyme sans description : la référence le distingue. */
+      reference: (sku: string) => `Réf. ${sku}`,
+      showAll: (name: string) => `Lire toute la description de ${name}`,
+    },
     /** Nouvel article (lot 1, maquette 09) : mot pour mot. */
     newForm: {
       title: "Nouvel article",

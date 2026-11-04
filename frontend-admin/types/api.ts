@@ -3975,6 +3975,7 @@ export interface components {
       /** Lines */
       lines: components["schemas"]["DeliveryLineRead"][];
     };
+    Description: string | null;
     ExpenseAmount: components["schemas"]["Amount-Input"];
     /** ExpenseCategoryCreate */
     ExpenseCategoryCreate: {
@@ -4996,6 +4997,7 @@ export interface components {
     NewProductCreate: {
       sku?: components["schemas"]["Sku"] | null;
       name: components["schemas"]["ProductName"];
+      description?: components["schemas"]["Description"];
       /** @default piece */
       unit: components["schemas"]["ProductUnit"];
       barcode?: components["schemas"]["Barcode"] | null;
@@ -5588,6 +5590,7 @@ export interface components {
     ProductCreate: {
       sku?: components["schemas"]["Sku"] | null;
       name: components["schemas"]["ProductName"];
+      description?: components["schemas"]["Description"];
       /** @default piece */
       unit: components["schemas"]["ProductUnit"];
       barcode?: components["schemas"]["Barcode"] | null;
@@ -5792,6 +5795,8 @@ export interface components {
       barcode: string | null;
       /** Name */
       name: string;
+      /** Description */
+      description: string | null;
       unit: components["schemas"]["ProductUnit"];
       /** Is Stock Tracked */
       is_stock_tracked: boolean;
@@ -5816,6 +5821,7 @@ export interface components {
     ProductUpdate: {
       sku?: components["schemas"]["Sku"] | null;
       name?: components["schemas"]["ProductName"] | null;
+      description?: components["schemas"]["Description"];
       unit?: components["schemas"]["ProductUnit"] | null;
       barcode?: components["schemas"]["Barcode"] | null;
       /** Category Id */
@@ -6354,6 +6360,8 @@ export interface components {
       product_id: string;
       /** Product Name */
       product_name: string | null;
+      /** Product Description */
+      product_description?: string | null;
       /** Sku */
       sku: string | null;
       /** Price Id */
@@ -6626,6 +6634,8 @@ export interface components {
       barcode: string | null;
       /** Name */
       name: string;
+      /** Description */
+      description: string | null;
       unit: components["schemas"]["ProductUnit"];
       /** Category Id */
       category_id: string | null;
@@ -6733,6 +6743,8 @@ export interface components {
       sku: string;
       /** Name */
       name: string;
+      /** Description */
+      description: string | null;
       unit: components["schemas"]["ProductUnit"];
       /** Category Id */
       category_id: string | null;

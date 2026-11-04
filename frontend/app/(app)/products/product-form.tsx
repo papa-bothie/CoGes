@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { DraftBanner } from "@/components/draft-banner";
 import { FieldError } from "@/components/field-error";
+import { DescriptionField } from "@/components/products/description-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -60,6 +61,7 @@ const optionalDecimal = (message: string) =>
 /** Bornes reprises des schémas d'entrée de l'API ; le serveur revalide de toute façon. */
 const schema = z.object({
   name: z.string().trim().min(1, labels.validation.required).max(200),
+  description: z.string().max(500),
   sku: z.string().trim().min(1, labels.validation.required).max(64),
   barcode: z.string().trim().max(64),
   category_id: z.string(),
@@ -78,6 +80,7 @@ type Values = z.infer<typeof schema>;
 /** Brouillon de la modification d'un article (ADR 0101), un par article. */
 const DRAFT_FIELDS = [
   "name",
+  "description",
   "sku",
   "barcode",
   "category_id",
@@ -118,6 +121,7 @@ export function ProductForm({ product }: { product: Product }) {
     resolver: zodResolver(schema),
     defaultValues: {
       name: product.name,
+      description: product.description ?? "",
       sku: product.sku,
       barcode: product.barcode ?? "",
       category_id: product.category_id ?? NONE,
@@ -148,6 +152,7 @@ export function ProductForm({ product }: { product: Product }) {
     mutationFn: async (values: Values) => {
       const common = {
         name: values.name,
+        description: values.description.trim() || null,
         sku: values.sku,
         unit: values.unit,
         barcode: values.barcode || null,
@@ -213,6 +218,20 @@ export function ProductForm({ product }: { product: Product }) {
           <Field id="name" label={labels.products.name} error={errors.name?.message} wide>
             <Input id="name" aria-invalid={Boolean(errors.name)} {...register("name")} />
           </Field>
+          <Controller
+            control={control}
+            name="description"
+            render={({ field }) => (
+              <DescriptionField
+                id="description"
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                aria-invalid={Boolean(errors.description) || undefined}
+                className="sm:col-span-2"
+              />
+            )}
+          />
           <Field id="category" label={labels.products.category}>
             <Controller
               control={control}

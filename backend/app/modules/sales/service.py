@@ -997,6 +997,7 @@ def build_item_reads(
                 id=item.id,
                 product_id=item.product_id,
                 product_name=None if summary is None else summary.name,
+                product_description=None if summary is None else summary.description,
                 sku=None if summary is None else summary.sku,
                 price_id=item.price_id,
                 qty=item.qty,

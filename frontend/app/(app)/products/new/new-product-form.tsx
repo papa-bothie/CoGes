@@ -14,6 +14,7 @@ import { FieldHint } from "@/components/kit/feedback";
 import { QuantityStepper } from "@/components/kit/quantity-stepper";
 import { fieldClasses } from "@/components/kit/rubrique";
 import { BarcodeScanButton } from "@/components/products/barcode-scanner";
+import { DescriptionField } from "@/components/products/description-field";
 import { Button } from "@/components/ui/button";
 import { useDraft } from "@/hooks/use-draft";
 import { useCompanyLocale } from "@/hooks/use-me";
@@ -41,8 +42,18 @@ const UNITS: readonly Unit[] = ["piece", "sac", "kg", "litre", "carton", "paquet
 const DRAFT = {
   formId: "product-new",
   version: 1,
-  fields: ["name", "price", "cost", "unit", "categoryId", "qty", "warnAt", "barcode"],
-  meaningful: ["name", "price", "cost", "qty", "warnAt", "barcode"],
+  fields: [
+    "name",
+    "description",
+    "price",
+    "cost",
+    "unit",
+    "categoryId",
+    "qty",
+    "warnAt",
+    "barcode",
+  ],
+  meaningful: ["name", "description", "price", "cost", "qty", "warnAt", "barcode"],
 } as const;
 
 /** Ligne en direct sous les prix (maquette 09) : ce qu'on gagne, ou ce qu'on perd. */
@@ -95,6 +106,7 @@ export function NewProductForm({ intake }: { intake?: Intake } = {}) {
   const t = labels.products.newForm;
 
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [cost, setCost] = useState("");
   const [unit, setUnit] = useState<Unit>("piece");
@@ -111,6 +123,7 @@ export function NewProductForm({ intake }: { intake?: Intake } = {}) {
     { ...DRAFT, enabled: !intake },
     {
       name,
+      description,
       price,
       cost,
       unit,
@@ -122,6 +135,7 @@ export function NewProductForm({ intake }: { intake?: Intake } = {}) {
     },
     (fields) => {
       setName(draftString(fields.name) ?? "");
+      setDescription(draftString(fields.description) ?? "");
       setPrice(draftString(fields.price) ?? "");
       setCost(draftString(fields.cost) ?? "");
       setUnit(draftOneOf(fields.unit, UNITS) ?? "piece");
@@ -221,6 +235,7 @@ export function NewProductForm({ intake }: { intake?: Intake } = {}) {
   const again = () => {
     setDone(null);
     setName("");
+    setDescription("");
     setPrice("");
     setCost("");
     setQty("0");
@@ -233,6 +248,7 @@ export function NewProductForm({ intake }: { intake?: Intake } = {}) {
     setFormError(null);
     save.mutate({
       name: name.trim(),
+      description: description.trim() || null,
       unit,
       unit_price: price,
       cost_price: typedAmount(cost) > 0n ? cost : null,
@@ -336,6 +352,7 @@ export function NewProductForm({ intake }: { intake?: Intake } = {}) {
           className={field}
         />
       </div>
+      <DescriptionField value={description} onChange={setDescription} />
 
       <div className="space-y-6">
         <div className="flex flex-wrap gap-4">

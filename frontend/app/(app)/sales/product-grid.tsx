@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { Chip } from "@/components/kit/chip";
 import { ProductSquare } from "@/components/kit/list-row";
 import { fieldClasses } from "@/components/kit/rubrique";
+import { ProductHint } from "@/components/products/product-hint";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { api, unwrap } from "@/lib/api/client";
@@ -16,6 +17,7 @@ import { useStockFor, type StockLine } from "@/lib/api/queries/stock";
 import type { Schemas } from "@/lib/api/schema";
 import { formatAmount } from "@/lib/format";
 import { labels } from "@/lib/labels";
+import { nameWithHint, productHints } from "@/lib/product-hint";
 import { qtyWithUnit } from "@/lib/units";
 import { cn } from "@/lib/utils";
 
@@ -69,6 +71,7 @@ export function ProductGrid({
     queryFn: () => unwrap(api.GET("/api/v1/products", { params: { query: params } })),
   });
   const items = useMemo(() => products.data?.items ?? [], [products.data]);
+  const hints = useMemo(() => productHints(items), [items]);
   const stock = useStockFor(useMemo(() => items.map((product) => product.id), [items]));
 
   return (
@@ -138,7 +141,7 @@ export function ProductGrid({
               <li key={product.id} className="flex">
                 <button
                   type="button"
-                  aria-label={t.add(product.name)}
+                  aria-label={t.add(nameWithHint(product.name, hints.get(product.id)))}
                   disabled={disabled || empty}
                   onClick={() => onAdd(product)}
                   className={cn(
@@ -148,7 +151,10 @@ export function ProductGrid({
                   )}
                 >
                   <ProductSquare name={product.name} size="grand" />
-                  <span className="leading-tight font-bold">{product.name}</span>
+                  <span className="flex w-full min-w-0 flex-col">
+                    <span className="leading-tight font-bold">{product.name}</span>
+                    <ProductHint text={hints.get(product.id)} name={product.name} />
+                  </span>
                   <span className="text-lg font-extrabold numeric">
                     {formatAmount(product.unit_price, currency)}
                   </span>

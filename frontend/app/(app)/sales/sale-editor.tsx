@@ -30,6 +30,7 @@ import { compareDecimal, toInputDecimal } from "@/lib/decimal";
 import { formatAmount, formatFigure, formatQty } from "@/lib/format";
 import { dayEndIso, dayStartIso } from "@/lib/format/zoned";
 import { labels } from "@/lib/labels";
+import { productHints } from "@/lib/product-hint";
 import {
   billShortcuts,
   changeDue,
@@ -200,6 +201,18 @@ export function SaleEditor({
   });
   const data = sale.data;
   const items = useMemo(() => data?.items ?? [], [data]);
+  const lineHints = useMemo(
+    () =>
+      productHints(
+        items.map((item) => ({
+          id: item.id,
+          name: item.product_name,
+          description: item.product_description,
+          sku: item.sku,
+        })),
+      ),
+    [items],
+  );
   const productIds = useMemo(() => items.map((item) => item.product_id), [items]);
   const stock = useStockFor(productIds);
   const mutating = useIsMutating({ mutationKey: ["sale-editor"] }) > 0;
@@ -556,6 +569,7 @@ export function SaleEditor({
                   <TicketLine
                     key={item.id}
                     item={item}
+                    hint={lineHints.get(item.id)}
                     currency={currency}
                     disabled={confirm.isPending}
                     error={

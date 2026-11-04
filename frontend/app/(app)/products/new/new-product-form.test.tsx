@@ -74,6 +74,7 @@ describe("Nouvel article", { timeout: 15_000 }, () => {
     expect(api.POST).toHaveBeenCalledWith("/api/v1/inventory/products", {
       body: {
         name: "Riz brisé 25 kg",
+        description: null,
         unit: "sac",
         unit_price: "15500",
         cost_price: "14000",
@@ -96,5 +97,23 @@ describe("Nouvel article", { timeout: 15_000 }, () => {
     await userEvent.type(stock, "10");
     expect(screen.getByRole("button", { name: "Enregistrer l'article" })).toBeDisabled();
     expect(screen.getByText("Indiquez le prix d'achat pour compter ce stock")).toBeInTheDocument();
+  });
+
+  it("envoie la description sans les espaces de bord et compte les caractères", async () => {
+    renderWithClient(<NewProductForm />);
+    await userEvent.type(screen.getByLabelText("Nom de l'article"), "Huile 1 L");
+    const description = screen.getByLabelText("Description (facultatif)");
+    await userEvent.type(description, "  Bouteille{enter}consignée  ");
+    expect(screen.getByText("23 / 500 caractères")).toBeInTheDocument();
+    expect(description).toHaveAttribute("maxlength", "500");
+    await userEvent.type(screen.getByLabelText("Prix de vente (F)"), "1200");
+    await userEvent.click(screen.getByRole("button", { name: "Enregistrer l'article" }));
+
+    expect(api.POST).toHaveBeenCalledWith(
+      "/api/v1/inventory/products",
+      expect.objectContaining({
+        body: expect.objectContaining({ description: "Bouteille\nconsignée" }),
+      }),
+    );
   });
 });
