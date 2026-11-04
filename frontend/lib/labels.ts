@@ -347,6 +347,8 @@ export const labels = {
       discountAria: (name: string) => `Remise sur ${name} en francs`,
       priceAria: (name: string, price: string) => `Changer le prix de ${name} (${price} l'unité)`,
       priceChanged: "Prix changé",
+      priceButton: "Changer le prix",
+      usualBefore: "habituel",
       priceTitle: (name: string) => `Prix de ${name}`,
       priceLabel: "Prix pour cette vente, à l'unité",
       usualPrice: (price: string) => `Prix habituel : ${price}`,

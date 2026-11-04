@@ -232,37 +232,37 @@
     {
       "file": "02-nouvelle-vente.png",
       "width": 1280,
-      "percent": 10.872988973246565,
+      "percent": 7.711977160890029,
       "missing": []
     },
     {
       "file": "02-nouvelle-vente-390.png",
       "width": 390,
-      "percent": 15.768442853605277
+      "percent": 13.231169425149359
     }
   ],
   "02b": [
     {
       "file": "02b-nouvelle-vente-une-partie.png",
       "width": 1280,
-      "percent": 9.250708240067151
+      "percent": 7.05057460780737
     },
     {
       "file": "02b-nouvelle-vente-une-partie-390.png",
       "width": 390,
-      "percent": 15.209081726170167
+      "percent": 13.121937671293896
     }
   ],
   "02c": [
     {
       "file": "02c-nouvelle-vente-rendu-monnaie.png",
       "width": 1280,
-      "percent": 10.542636074862639
+      "percent": 7.444858661825727
     },
     {
       "file": "02c-nouvelle-vente-rendu-monnaie-390.png",
       "width": 390,
-      "percent": 15.747808129579411
+      "percent": 13.162993215647889
     }
   ],
   "02d": [
