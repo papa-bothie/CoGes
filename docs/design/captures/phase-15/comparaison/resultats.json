@@ -319,25 +319,25 @@
     {
       "file": "05-recu-ticket.png",
       "width": 1280,
-      "percent": 5.125607638888889,
+      "percent": 5.457725694444444,
       "missing": []
     },
     {
       "file": "05-recu-ticket-390.png",
       "width": 390,
-      "percent": 16.57753890941664
+      "percent": 12.420333669241966
     }
   ],
   "05b": [
     {
       "file": "05b-recu-facture-a4.png",
       "width": 1280,
-      "percent": 5.48804593373494
+      "percent": 5.7122435052710845
     },
     {
       "file": "05b-recu-facture-a4-390.png",
       "width": 390,
-      "percent": 13.310011263499636
+      "percent": 12.218386491557224
     }
   ],
   "06": [

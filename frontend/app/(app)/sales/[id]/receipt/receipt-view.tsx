@@ -25,8 +25,10 @@ import { labels } from "@/lib/labels";
 import { amountInWords } from "@/lib/number-words";
 import { displayNumber, qtyWithUnit } from "@/lib/units";
 import { cn } from "@/lib/utils";
+import { pdfFromResponse } from "@/lib/pdf-share";
 import { receiptText, whatsappLink } from "@/lib/whatsapp";
 
+import { PdfActions } from "../../pdf-actions";
 import { ReceiptRow, ShopLogo, TicketHeader } from "../../receipt-parts";
 
 type Receipt = Schemas["ReceiptRead"];
@@ -144,6 +146,23 @@ export function ReceiptView({ saleId }: { saleId: string }) {
             <Printer className="size-[22px]" aria-hidden />
             {t.print}
           </button>
+          {data && (
+            <PdfActions
+              load={async () =>
+                pdfFromResponse(
+                  await api.GET("/api/v1/sales/{sale_id}/receipt/pdf", {
+                    params: { path: { sale_id: saleId }, query: { format } },
+                    parseAs: "blob",
+                  }),
+                  `Recu-${displayNumber(data.sale_no)}.pdf`,
+                )
+              }
+              title={t.title(displayNumber(data.sale_no))}
+              shareText={text ?? undefined}
+              fallback={text ? whatsappLink(text, data.customer?.phone) : undefined}
+              className={SECONDARY}
+            />
+          )}
           {text && (
             <a
               href={whatsappLink(text, data?.customer?.phone)}

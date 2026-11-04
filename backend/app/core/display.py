@@ -67,3 +67,111 @@ def qty_with_unit(value: Decimal, unit: str) -> str:
     singular, plural = UNITS.get(unit, ("", ""))
     word = singular if value <= 1 else plural
     return f"{qty(value)} {word}".rstrip()
+
+
+# --------------------------------------------------------------- pièces imprimées
+# Formats du reçu à l'écran (`frontend/lib/format/money.ts`), repris par les PDF du
+# serveur (ADR 0113) : « 87 500 F », espace insécable pleine entre les milliers.
+
+#: Libellé court de la devise, comme la maquette v2 (« 87 500 F »).
+SHORT_CURRENCY = {"XOF": "F"}
+
+
+def figure(value: Decimal) -> str:
+    """Montant sans unité, arrondi à l'unité : « 15 500 » (colonne du ticket)."""
+    rounded = int(value.quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    return number(rounded).replace(THIN_NBSP, NBSP)
+
+
+def amount(value: Decimal, currency: str = "XOF") -> str:
+    """Montant du reçu : « 87 500 F »."""
+    return f"{figure(value)}{NBSP}{SHORT_CURRENCY.get(currency, currency)}"
+
+
+_WORDS = [
+    "zéro",
+    "un",
+    "deux",
+    "trois",
+    "quatre",
+    "cinq",
+    "six",
+    "sept",
+    "huit",
+    "neuf",
+    "dix",
+    "onze",
+    "douze",
+    "treize",
+    "quatorze",
+    "quinze",
+    "seize",
+]
+_TENS = ("", "dix", "vingt", "trente", "quarante", "cinquante", "soixante")
+
+
+def _below_hundred(value: int, final: bool) -> str:
+    if value <= 16:
+        return _WORDS[value]
+    if value < 20:
+        return f"dix-{_WORDS[value - 10]}"
+    if value < 70:
+        tens, unit = divmod(value, 10)
+        if unit == 0:
+            return _TENS[tens]
+        return f"{_TENS[tens]} et un" if unit == 1 else f"{_TENS[tens]}-{_WORDS[unit]}"
+    if value < 80:
+        return (
+            "soixante et onze" if value == 71 else f"soixante-{_below_hundred(value - 60, final)}"
+        )
+    if value == 80:
+        return "quatre-vingts" if final else "quatre-vingt"
+    return f"quatre-vingt-{_below_hundred(value - 80, final)}"
+
+
+def _below_thousand(value: int, final: bool) -> str:
+    hundreds, rest = divmod(value, 100)
+    parts: list[str] = []
+    if hundreds > 0:
+        plural = hundreds > 1 and rest == 0 and final
+        parts.append("cent" if hundreds == 1 else f"{_WORDS[hundreds]} cent{'s' if plural else ''}")
+    if rest > 0 or hundreds == 0:
+        parts.append(_below_hundred(rest, final))
+    return " ".join(parts)
+
+
+def number_in_words(value: int) -> str:
+    """Entier positif en toutes lettres, orthographe traditionnelle, comme le front."""
+    if value == 0:
+        return _WORDS[0]
+    parts: list[str] = []
+    rest = value
+    for scale, name in ((1_000_000_000, "milliard"), (1_000_000, "million")):
+        count, rest = divmod(rest, scale)
+        if count > 0:
+            parts.append(f"{number_in_words(count)} {name}{'s' if count > 1 else ''}")
+    thousands, units = divmod(rest, 1000)
+    if thousands > 0:
+        parts.append("mille" if thousands == 1 else f"{_below_thousand(thousands, False)} mille")
+    if units > 0:
+        parts.append(_below_thousand(units, True))
+    return " ".join(parts)
+
+
+def amount_in_words(value: Decimal) -> str:
+    """« vingt-cinq mille francs CFA » : la partie entière, comme la facture à l'écran."""
+    whole = int(value)
+    return f"{number_in_words(whole)} franc{'s' if whole > 1 else ''} CFA"
+
+
+#: Moyens de paiement en mots, comme `labels.paymentMethods` du front.
+PAYMENT_METHODS = {
+    "cash": "Espèces",
+    "wave": "Wave",
+    "orange_money": "Orange Money",
+    "mobile_money": "Mobile money",
+    "bank_transfer": "Virement",
+    "card": "Carte",
+    "cheque": "Chèque",
+    "offset": "Compensation de dette",
+}

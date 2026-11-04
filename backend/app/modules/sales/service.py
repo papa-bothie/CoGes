@@ -22,9 +22,10 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any, NamedTuple
+from typing import Any, Literal, NamedTuple
 from uuid import UUID
 
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -50,6 +51,7 @@ from app.modules.finance.schemas import (
 from app.modules.inventory import service as inventory_service
 from app.modules.products import service as products_service
 from app.modules.products.schemas import ProductSummary
+from app.modules.sales import documents
 from app.modules.sales.events import (
     AGGREGATE_TYPE,
     RETURN_AGGREGATE_TYPE,
@@ -1146,6 +1148,63 @@ def build_receipt(session: Session, ctx: TenantContext, sale_id: UUID) -> Receip
             )
             for row in reversed(SaleReturnRepository(session, ctx).for_sale(sale.id))
         ],
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class PdfDocument:
+    """Un PDF prêt à rendre : son nom de fichier et ses octets (ADR 0113)."""
+
+    filename: str
+    content: bytes
+
+
+def receipt_pdf(
+    session: Session, ctx: TenantContext, sale_id: UUID, fmt: Literal["ticket", "a4"]
+) -> PdfDocument:
+    """Ticket ou facture en PDF, depuis la même lecture que l'écran (`build_receipt`)."""
+    receipt = build_receipt(session, ctx, sale_id)
+    logo = companies_service.logo_png(session, ctx)
+    tz = companies_service.get_timezone(session, ctx)
+    if fmt == "a4":
+        content = documents.render_invoice(receipt, logo_png=logo, tz=tz)
+        kind = "Facture"
+    else:
+        content = documents.render_ticket(receipt, logo_png=logo, tz=tz)
+        kind = "Ticket"
+    return PdfDocument(documents.filename(kind, receipt.sale_no, receipt.company.name), content)
+
+
+def return_slip_pdf(session: Session, ctx: TenantContext, return_id: UUID) -> PdfDocument:
+    """Bon de retour en PDF : le retour, la vente d'origine et ses libellés figés."""
+    sale_return = get_return(session, ctx, return_id)
+    detail = build_return_detail(session, ctx, sale_return)
+    receipt = build_receipt(session, ctx, sale_return.sale_id)
+    items = {item.id: item for item in get_items(session, ctx, sale_return.sale_id)}
+    summaries = products_service.get_summaries(
+        session, ctx, [item.product_id for item in items.values()]
+    )
+    lines = []
+    for line in detail.items:
+        item = items[line.sale_item_id]
+        summary = summaries.get(item.product_id)
+        lines.append(
+            documents.SlipLine(
+                name="Produit supprimé" if summary is None else summary.name,
+                qty=line.qty,
+                unit_price=item.unit_price,
+                refund_amount=line.refund_amount,
+            )
+        )
+    content = documents.render_return_slip(
+        detail,
+        receipt,
+        lines,
+        logo_png=companies_service.logo_png(session, ctx),
+        tz=companies_service.get_timezone(session, ctx),
+    )
+    return PdfDocument(
+        documents.filename("Retour", detail.return_no, receipt.company.name), content
     )
 
 

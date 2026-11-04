@@ -6,6 +6,7 @@ import { E2E, loginThroughUi, managerApi, managerToken, stockedProduct } from ".
 /**
  * Ticket et facture refaits (prompt 35, bloc F, ADR 0112) : le logo et l'adresse en tête,
  * la description sous la désignation de la facture, axe en clair et en sombre, 360 px.
+ * Bloc T (ADR 0113) : « Télécharger le PDF » et « Partager » (Web Share simulé).
  */
 test.describe.configure({ timeout: 120_000, mode: "serial" });
 
@@ -40,6 +41,7 @@ async function noViolation(page: Page) {
 }
 
 let saleId = "";
+let returnId = "";
 let shop = "";
 let address = "";
 
@@ -61,6 +63,12 @@ test.beforeAll(async ({ request }) => {
   await client.post(`/sales/${sale.id}/items`, { product_id: product.id, qty: "2" });
   await client.post(`/sales/${sale.id}/confirm`, { paid_amount: "3000", method: "cash" });
   saleId = sale.id;
+  const detail = await client.get(`/sales/${sale.id}`);
+  const created = await client.post(`/sales/${sale.id}/returns`, {
+    lines: [{ sale_item_id: detail.items[0].id, qty: "1" }],
+    reason: "Abîmé",
+  });
+  returnId = created.id;
   await logo(request, true);
 });
 
@@ -100,4 +108,64 @@ test("à 360 px, la page du reçu ne défile pas en largeur", async ({ page }) =
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+async function downloaded(page: Page, button: string): Promise<{ name: string; head: string }> {
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: button }).click(),
+  ]);
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  return {
+    name: download.suggestedFilename(),
+    head: Buffer.concat(chunks).subarray(0, 5).toString(),
+  };
+}
+
+test("« Télécharger le PDF » donne la facture nommée, en PDF", async ({ page }) => {
+  await open(page, "a4");
+  const file = await downloaded(page, "Télécharger le PDF");
+  expect(file.name).toMatch(/^Facture-\d{4,}-[A-Za-z0-9-]+\.pdf$/);
+  expect(file.head).toBe("%PDF-");
+});
+
+test("« Partager » passe le PDF du ticket au partage du téléphone", async ({ page }) => {
+  await page.addInitScript(() => {
+    const shared: { name: string; type: string; size: number }[] = [];
+    Object.assign(window, { __shared: shared });
+    Object.defineProperty(navigator, "canShare", { value: () => true });
+    Object.defineProperty(navigator, "share", {
+      value: async (data: ShareData) => {
+        for (const file of data.files ?? []) {
+          shared.push({ name: file.name, type: file.type, size: file.size });
+        }
+      },
+    });
+  });
+  await open(page, "ticket");
+  await page.getByRole("button", { name: "Partager" }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __shared: unknown[] }).__shared.length))
+    .toBe(1);
+  const [file] = await page.evaluate(
+    () =>
+      (window as unknown as { __shared: { name: string; type: string; size: number }[] }).__shared,
+  );
+  expect(file!.name).toMatch(/^Ticket-\d{4,}-.+\.pdf$/);
+  expect(file!.type).toBe("application/pdf");
+  expect(file!.size).toBeGreaterThan(1000);
+});
+
+test("le bon de retour se télécharge en PDF", async ({ page }) => {
+  await page.goto("/login");
+  await loginThroughUi(page, E2E);
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
+  await page.goto(`/sales/returns/${returnId}/receipt`);
+  await expect(page.getByRole("img", { name: `Logo de ${shop}` })).toBeVisible();
+  const file = await downloaded(page, "Télécharger le PDF");
+  expect(file.name).toMatch(/^Retour-\d{4,}-.+\.pdf$/);
+  expect(file.head).toBe("%PDF-");
+  await noViolation(page);
 });

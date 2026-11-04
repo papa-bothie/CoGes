@@ -31,6 +31,8 @@ cffi==2.1.1
     # via
     #   argon2-cffi-bindings
     #   cryptography
+charset-normalizer==3.5.2
+    # via reportlab
 click==8.5.0
     # via
     #   celery
@@ -90,7 +92,9 @@ openpyxl==3.1.5
 packaging==26.3
     # via kombu
 pillow==13.0.0
-    # via coges-backend
+    # via
+    #   coges-backend
+    #   reportlab
 prompt-toolkit==3.0.53
     # via click-repl
 psycopg==3.3.6
@@ -124,6 +128,8 @@ redis==6.4.0
     # via
     #   coges-backend
     #   kombu
+reportlab==5.1.0
+    # via coges-backend
 segno==1.6.6
     # via coges-backend
 sentry-sdk==2.70.0

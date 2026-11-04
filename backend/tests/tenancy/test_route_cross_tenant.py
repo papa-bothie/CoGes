@@ -155,6 +155,8 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
     ),
     "/api/v1/sales/{sale_id}": CrossTenantCase(parameters={"sale_id": "sale"}),
     "/api/v1/sales/{sale_id}/receipt": CrossTenantCase(parameters={"sale_id": "sale"}),
+    # PDF du reçu et du bon de retour (ADR 0113) : même 404 que leur lecture JSON.
+    "/api/v1/sales/{sale_id}/receipt/pdf": CrossTenantCase(parameters={"sale_id": "sale"}),
     "/api/v1/sales/{sale_id}/items": CrossTenantCase(
         parameters={"sale_id": "sale"}, body={"product_id": "product", "qty": "1"}
     ),
@@ -170,6 +172,9 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
         body={"lines": [{"sale_item_id": "sale_item", "qty": "1"}]},
     ),
     "/api/v1/sale-returns/{return_id}": CrossTenantCase(parameters={"return_id": "sale_return"}),
+    "/api/v1/sale-returns/{return_id}/slip/pdf": CrossTenantCase(
+        parameters={"return_id": "sale_return"}
+    ),
     "/api/v1/sale-returns/{return_id}/refunds": CrossTenantCase(
         parameters={"return_id": "sale_return"}, body={"amount": "100.00", "method": "cash"}
     ),

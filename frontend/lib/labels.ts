@@ -547,6 +547,11 @@ export const labels = {
     returnLine: (no: string, day: string) => `Retour n° ${no} du ${day}`,
     page: "Page",
     logoAlt: (shop: string) => `Logo de ${shop}`,
+    pdf: {
+      download: "Télécharger le PDF",
+      share: "Partager",
+      downloaded: "PDF enregistré dans vos téléchargements.",
+    },
     invoiceTotal: "Total",
     alreadyPaid: "Déjà payé",
     invoiceRemaining: "Reste à payer",
