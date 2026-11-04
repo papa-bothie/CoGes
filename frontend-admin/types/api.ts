@@ -6360,6 +6360,8 @@ export interface components {
       product_id: string;
       /** Product Name */
       product_name: string | null;
+      /** Product Description */
+      product_description?: string | null;
       /** Sku */
       sku: string | null;
       /** Price Id */
@@ -6632,6 +6634,8 @@ export interface components {
       barcode: string | null;
       /** Name */
       name: string;
+      /** Description */
+      description: string | null;
       unit: components["schemas"]["ProductUnit"];
       /** Category Id */
       category_id: string | null;
@@ -6739,6 +6743,8 @@ export interface components {
       sku: string;
       /** Name */
       name: string;
+      /** Description */
+      description: string | null;
       unit: components["schemas"]["ProductUnit"];
       /** Category Id */
       category_id: string | null;
