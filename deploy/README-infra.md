@@ -390,8 +390,11 @@ absents ou mal formés ; en mode `ip`, une liste `COGES_ADMIN_ALLOWED_IPS` vide 
 
 ### Registre d'images (ADR 0083, 0087)
 
-Une version pèse ≈ 460 Mo compressés (worker ≈ 295 Mo). Le quota gratuit d'un dépôt privé
-est de 500 Mo : le registre ne garde donc, par paquet, que trois versions au plus.
+Une version pèse ≈ 490 Mo compressés (worker ≈ 320 Mo, API ≈ 95 Mo). Le groupe 2 (ADR 0111,
+0113) y a ajouté ≈ 31 Mo : Pillow et ReportLab, dans l'API **et** dans le worker, qui produit les
+PDF longs (mesuré par `docker save | gzip`, de 83 à 94 Mo pour l'API, de 302 à 322 Mo pour le
+worker). Le quota gratuit d'un dépôt privé est de 500 Mo : le registre ne garde donc, par
+paquet, que trois versions au plus.
 
 | Gardée | Comment on la reconnaît |
 |---|---|
