@@ -10,11 +10,11 @@ page HTML). Images : maquette | front | différences.
 | 01 | Accueil | 3a | 3.4 % | 9.2 % | 0 | [1280](comparaison/01-accueil.png) [390](comparaison/01-accueil-390.png) |
 | 02 | Nouvelle vente | 3a | 7.6 % | 12.9 % | 0 | [1280](comparaison/02-nouvelle-vente.png) [390](comparaison/02-nouvelle-vente-390.png) |
 | 02b | paiement d'une partie (montant tapé + pavé) | 3a | 6.9 % | 12.9 % | — | [1280](comparaison/02b-nouvelle-vente-une-partie.png) [390](comparaison/02b-nouvelle-vente-une-partie-390.png) |
-| 02c | rendu de monnaie | 3a | 7.4 % | 12.9 % | — | [1280](comparaison/02c-nouvelle-vente-rendu-monnaie.png) [390](comparaison/02c-nouvelle-vente-rendu-monnaie-390.png) |
+| 02c | rendu de monnaie | 3a | 7.4 % | 12.8 % | — | [1280](comparaison/02c-nouvelle-vente-rendu-monnaie.png) [390](comparaison/02c-nouvelle-vente-rendu-monnaie-390.png) |
 | 02d | écran de succès | 3a | 3.0 % | 16.9 % | — | [1280](comparaison/02d-nouvelle-vente-succes.png) [390](comparaison/02d-nouvelle-vente-succes-390.png) |
 | 03 | Liste des ventes | 3a | 2.4 % | 4.5 % | 0 | [1280](comparaison/03-liste-des-ventes.png) [390](comparaison/03-liste-des-ventes-390.png) |
 | 04 | Détail d'une vente | 3a | 4.4 % | 8.7 % | 0 | [1280](comparaison/04-detail-vente.png) [390](comparaison/04-detail-vente-390.png) |
-| 04b | annulation (raison) | 3a | 4.3 % | 14.1 % | — | [1280](comparaison/04b-detail-vente-annulation.png) [390](comparaison/04b-detail-vente-annulation-390.png) |
+| 04b | annulation (raison) | 3a | 4.4 % | 14.1 % | — | [1280](comparaison/04b-detail-vente-annulation.png) [390](comparaison/04b-detail-vente-annulation-390.png) |
 | 05 | Reçu, petit ticket 80 mm | 3a | 5.1 % | 16.5 % | 0 | [1280](comparaison/05-recu-ticket.png) [390](comparaison/05-recu-ticket-390.png) |
 | 05b | Reçu, facture A4 | 3a | 4.0 % | 13.8 % | — | [1280](comparaison/05b-recu-facture-a4.png) [390](comparaison/05b-recu-facture-a4-390.png) |
 | 06 | Retour d'articles | 3a | 5.8 % | 11.0 % | 0 | [1280](comparaison/06-retour-articles.png) [390](comparaison/06-retour-articles-390.png) |
