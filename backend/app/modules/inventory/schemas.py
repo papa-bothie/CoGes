@@ -195,6 +195,8 @@ class StockLine(BaseModel):
     product_id: UUID
     sku: str
     name: str
+    #: Sous le nom, pour distinguer deux articles de même nom (ADR 0108).
+    description: str | None
     #: L'unité de l'article (« Plus que 2 sacs », phase 15 lot 1) : ajout de lecture.
     unit: ProductUnit
     category_id: UUID | None
@@ -226,6 +228,7 @@ class ScannedProduct(BaseModel):
     sku: str
     barcode: str | None
     name: str
+    description: str | None
     unit: ProductUnit
     category_id: UUID | None
     category_name: str | None

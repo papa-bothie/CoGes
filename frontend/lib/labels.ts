@@ -351,6 +351,8 @@ export const labels = {
       discountAria: (name: string) => `Remise sur ${name} en francs`,
       priceAria: (name: string, price: string) => `Changer le prix de ${name} (${price} l'unité)`,
       priceChanged: "Prix changé",
+      priceButton: "Changer le prix",
+      usualBefore: "habituel",
       priceTitle: (name: string) => `Prix de ${name}`,
       priceLabel: "Prix pour cette vente, à l'unité",
       usualPrice: (price: string) => `Prix habituel : ${price}`,
@@ -1029,6 +1031,9 @@ export const labels = {
     description: {
       label: "Description (facultatif)",
       count: (used: number, max: number) => `${used} / ${max} caractères`,
+      /** Homonyme sans description : la référence le distingue. */
+      reference: (sku: string) => `Réf. ${sku}`,
+      showAll: (name: string) => `Lire toute la description de ${name}`,
     },
     /** Nouvel article (lot 1, maquette 09) : mot pour mot. */
     newForm: {

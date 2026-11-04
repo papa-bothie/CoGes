@@ -11,6 +11,9 @@ import type { Schemas } from "@/lib/api/schema";
 export type LineProduct = {
   product_id: string;
   name: string;
+  /** Ce qui le distingue d'un homonyme (ADR 0108). */
+  description?: string | null;
+  sku?: string;
   unit: Schemas["ProductUnit"];
   qty_on_hand: string;
 };
