@@ -58,7 +58,11 @@ THINGS: dict[str, str] = {
     "roles": "un rôle",
     "companies": "les réglages de la boutique",
     "support_sessions": "un accès support",
+    "company_logos": "le logo de la boutique",
 }
+
+#: Le logo de la boutique (ADR 0111) : ajouté, changé ou retiré.
+_LOGO_VERBS = {"insert": "a ajouté", "update": "a changé", "delete": "a retiré"}
 
 GENERIC_VERBS: dict[str, str] = {
     "insert": "a ajouté",
@@ -377,6 +381,7 @@ def sentence(names: _Names, log: AuditLogRead) -> str:
             f"{who} a retiré l’article {_product(names, log)}" if log.action == "delete" else None
         ),
         "companies": lambda: f"{who} a modifié les réglages de la boutique",
+        "company_logos": lambda: f"{who} {_LOGO_VERBS.get(log.action, 'a changé')} le logo",
         "support_sessions": lambda: _support(log),
     }
     if log.action == "export":

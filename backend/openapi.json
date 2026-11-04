@@ -283,6 +283,77 @@
         }
       }
     },
+    "/api/v1/companies/me/logo": {
+      "get": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Read Logo",
+        "description": "Le logo de la boutique (ADR 0110), ou 404 `logo_not_found`.\n\nSans permission : tout utilisateur de l'entreprise imprime des reçus qui le portent.\nJamais gardé : ni par le navigateur, ni par un intermédiaire.",
+        "operationId": "read_logo_api_v1_companies_me_logo_get",
+        "responses": {
+          "200": {
+            "description": "Le logo, en PNG",
+            "content": {
+              "image/png": {}
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Put Logo",
+        "description": "Ajoute ou change le logo. L'image est vérifiée, ré-encodée en PNG et réduite.",
+        "operationId": "put_logo_api_v1_companies_me_logo_put",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_put_logo_api_v1_companies_me_logo_put"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyLogoRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "companies"
+        ],
+        "summary": "Delete Logo",
+        "description": "Retire le logo. 404 `logo_not_found` s'il n'y en a pas.",
+        "operationId": "delete_logo_api_v1_companies_me_logo_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
     "/api/v1/users": {
       "get": {
         "tags": [
@@ -9327,6 +9398,21 @@
         ],
         "title": "Body_import_file_api_v1_imports__kind__post"
       },
+      "Body_put_logo_api_v1_companies_me_logo_put": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "PNG, JPEG ou WebP, 2 Mo au plus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_put_logo_api_v1_companies_me_logo_put"
+      },
       "CancelReason": {
         "type": "string",
         "maxLength": 500,
@@ -9834,6 +9920,32 @@
         ],
         "title": "CompanyDetail"
       },
+      "CompanyLogoRead": {
+        "properties": {
+          "width": {
+            "type": "integer",
+            "title": "Width"
+          },
+          "height": {
+            "type": "integer",
+            "title": "Height"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "width",
+          "height",
+          "updated_at"
+        ],
+        "title": "CompanyLogoRead",
+        "description": "Logo enregistré, après ré-encodage (ADR 0110)."
+      },
       "CompanyPage": {
         "properties": {
           "items": {
@@ -9969,6 +10081,18 @@
             "type": "string",
             "format": "date-time",
             "title": "Updated At"
+          },
+          "logo_updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Updated At"
           }
         },
         "additionalProperties": false,

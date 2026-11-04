@@ -13,13 +13,16 @@ from sqlalchemy.orm import Session
 from app.core.audit import AuditAction, audit_critical
 from app.core.errors import NotFoundError
 from app.core.tenancy import TenantContext
-from app.modules.companies.models import Company
+from app.modules.companies.logo import normalize_logo
+from app.modules.companies.models import Company, CompanyLogo
 from app.modules.companies.repository import CompanyRepository
 from app.modules.companies.schemas import (
     DEFAULT_REORDER_POINT,
     DEFAULT_TAX_RATE,
     RECEIPT_FORMAT,
     SHOP_FIELDS,
+    CompanyLogoRead,
+    CompanyRead,
     CompanyUpdate,
     SupportAccessRead,
     SupportAccessWindow,
@@ -123,6 +126,89 @@ def get_timezone(session: Session, ctx: TenantContext) -> str:
     lendemain sur le graphique du gérant.
     """
     return get_current_company(session, ctx).timezone
+
+
+def describe(session: Session, ctx: TenantContext, company: Company) -> CompanyRead:
+    """`CompanyRead`, avec la date du logo (sans charger l'image)."""
+    logo_at = CompanyRepository(session, ctx).logo_updated_at()
+    return CompanyRead.model_validate(company).model_copy(update={"logo_updated_at": logo_at})
+
+
+class LogoNotFoundError(NotFoundError):
+    code = "logo_not_found"
+    default_message = "Aucun logo pour cette boutique."
+
+
+def _logo_state(logo: CompanyLogo) -> dict[str, Any] | None:
+    """Ce que l'audit garde d'un logo : son empreinte et ses dimensions, jamais les octets."""
+    if logo.png is None:
+        return None
+    return {
+        "sha256": logo.sha256,
+        "width": logo.width,
+        "height": logo.height,
+        "byte_size": logo.byte_size,
+    }
+
+
+def get_logo_png(session: Session, ctx: TenantContext) -> bytes:
+    """Le PNG du logo de l'entreprise, ou 404 `logo_not_found`."""
+    logo = CompanyRepository(session, ctx).get_logo()
+    if logo is None or logo.png is None:
+        raise LogoNotFoundError()
+    return logo.png
+
+
+def set_logo(
+    session: Session, ctx: TenantContext, content: bytes, *, ip_address: str | None = None
+) -> CompanyLogoRead:
+    """Ajoute ou change le logo : image vérifiée et ré-encodée, audit critique (ADR 0111)."""
+    normalized = normalize_logo(content)
+    logo = CompanyRepository(session, ctx).lock_logo()
+    before = _logo_state(logo)
+    logo.png = normalized.png
+    logo.sha256 = normalized.sha256
+    logo.width = normalized.width
+    logo.height = normalized.height
+    logo.byte_size = normalized.byte_size
+    logo.updated_by = ctx.user_id
+    session.flush()
+    session.refresh(logo)
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.INSERT if before is None else AuditAction.UPDATE,
+        entity_table="company_logos",
+        entity_id=ctx.company_id,
+        before=before,
+        after=_logo_state(logo),
+        ip_address=ip_address,
+    )
+    return CompanyLogoRead(
+        width=normalized.width, height=normalized.height, updated_at=logo.updated_at
+    )
+
+
+def remove_logo(session: Session, ctx: TenantContext, *, ip_address: str | None = None) -> None:
+    """Retire le logo : les octets sont effacés, la ligne reste (pas de DELETE)."""
+    logo = CompanyRepository(session, ctx).get_logo(for_update=True)
+    before = None if logo is None else _logo_state(logo)
+    if logo is None or before is None:
+        raise LogoNotFoundError()
+    logo.png = logo.sha256 = None
+    logo.width = logo.height = logo.byte_size = None
+    logo.updated_by = ctx.user_id
+    session.flush()
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.DELETE,
+        entity_table="company_logos",
+        entity_id=ctx.company_id,
+        before=before,
+        after=None,
+        ip_address=ip_address,
+    )
 
 
 def update_current_company(

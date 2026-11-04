@@ -37,6 +37,10 @@ from app.core.errors import (
 
 API_PREFIX = "/api/v1"
 IMPORTS_PREFIX = f"{API_PREFIX}/imports"
+#: Logo de l'entreprise (ADR 0111) : 2 Mo d'image et l'enveloppe multipart. Le service
+#: refuse lui-même au-delà de 2 Mo exactement, avec le message « Image trop lourde ».
+LOGO_PATH = f"{API_PREFIX}/companies/me/logo"
+LOGO_BODY_BYTES = 2 * 1024 * 1024 + 64 * 1024
 LOGIN_PATH = f"{API_PREFIX}/auth/login"
 #: Les deux connexions, commerçante et administration (ADR 0089), partagent le plafond
 #: bas par adresse IP.
@@ -82,11 +86,12 @@ class BodySizeLimitMiddleware:
             return
         settings = get_settings()
         path: str = scope["path"]
-        limit = (
-            settings.max_import_bytes
-            if path.startswith(IMPORTS_PREFIX)
-            else settings.max_body_bytes
-        )
+        if path.startswith(IMPORTS_PREFIX):
+            limit = settings.max_import_bytes
+        elif path == LOGO_PATH:
+            limit = max(LOGO_BODY_BYTES, settings.max_body_bytes)
+        else:
+            limit = settings.max_body_bytes
         declared = Headers(scope=scope).get("content-length")
         if declared is not None and declared.isdigit() and int(declared) > limit:
             await _send_error(send, _too_large(limit))

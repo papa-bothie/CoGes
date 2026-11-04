@@ -59,6 +59,9 @@ OPS = "ops"
 #: Administration de la plateforme (ADR 0089) : jeton à part, prouvé par
 #: `test_platform_token_separation.py` et `test_platform_sees_companies.py`.
 PLATFORM = "platform"
+#: Lecture binaire d'une entreprise (logo, ADR 0111) : pas de JSON à fouiller, les
+#: octets de A et de B sont comparés par `test_a_binary_read_is_the_company_s_own`.
+IMAGE = "image"
 READ_ROUTES: dict[str, tuple[str, dict[str, str]]] = {
     "/api/v1/platform/auth/me": (PLATFORM, {}),
     "/api/v1/platform/companies": (PLATFORM, {}),
@@ -103,6 +106,7 @@ READ_ROUTES: dict[str, tuple[str, dict[str, str]]] = {
     "/api/v1/auth/me": (TENANT, {}),
     "/api/v1/categories": (TENANT, {}),
     "/api/v1/companies/me": (TENANT, {}),
+    "/api/v1/companies/me/logo": (IMAGE, {}),
     # Le bandeau d'accès support (ADR 0092) : début et fin, de sa seule entreprise.
     "/api/v1/companies/me/support-access": (TENANT, {}),
     "/api/v1/customers": (TENANT, {}),
@@ -327,6 +331,33 @@ def test_a_read_shows_nothing_of_the_other_company(
     response = client.get(path, headers=auth_headers(a.token), params=READ_ROUTES[path][1])
     assert response.status_code == 200, f"{path} : {response.status_code} {response.text}"
     assert _leaks(response.json(), _b_markers(b)) == []
+
+
+def _logo(color: tuple[int, int, int]) -> bytes:
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (40, 20), color).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def test_a_binary_read_is_the_company_s_own(client: TestClient, shops: tuple[Shop, Shop]) -> None:
+    """Chacune son logo : A relit le sien, jamais celui de B, et inversement."""
+    path = "/api/v1/companies/me/logo"
+    a, b = shops
+    for shop, color in ((a, (200, 0, 0)), (b, (0, 0, 200))):
+        put = client.put(
+            path,
+            headers=auth_headers(shop.token),
+            files={"file": ("logo.png", _logo(color), "image/png")},
+        )
+        assert put.status_code == 200, put.text
+    seen_by_a = client.get(path, headers=auth_headers(a.token))
+    seen_by_b = client.get(path, headers=auth_headers(b.token))
+    assert seen_by_a.status_code == seen_by_b.status_code == 200
+    assert seen_by_a.content != seen_by_b.content
 
 
 @pytest.fixture(scope="module")

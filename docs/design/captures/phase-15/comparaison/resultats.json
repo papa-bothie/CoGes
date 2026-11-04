@@ -55,13 +55,13 @@
     {
       "file": "14-fiche-client.png",
       "width": 1280,
-      "percent": 3.9349287974683547,
+      "percent": 3.9400382383966246,
       "missing": []
     },
     {
       "file": "14-fiche-client-390.png",
       "width": 390,
-      "percent": 16.092849881396138
+      "percent": 16.086919688241274
     }
   ],
   "15": [
@@ -107,13 +107,13 @@
     {
       "file": "18-encaisser-dette.png",
       "width": 1280,
-      "percent": 8.959449945494185,
+      "percent": 8.958257630813954,
       "missing": []
     },
     {
       "file": "18-encaisser-dette-390.png",
       "width": 390,
-      "percent": 15.204990417496525
+      "percent": 15.20549146342991
     }
   ],
   "19": [
@@ -159,13 +159,13 @@
     {
       "file": "22-conseils.png",
       "width": 1280,
-      "percent": 7.649943033854166,
+      "percent": 7.645331488715278,
       "missing": []
     },
     {
       "file": "22-conseils-390.png",
       "width": 390,
-      "percent": 15.516495665749396
+      "percent": 15.503252965939533
     }
   ],
   "23": [
@@ -178,20 +178,20 @@
     {
       "file": "23-alertes-390.png",
       "width": 390,
-      "percent": 12.347237381167055
+      "percent": 12.349030091164575
     }
   ],
   "24": [
     {
       "file": "24-reglages-boutique.png",
       "width": 1280,
-      "percent": 5.207052991651206,
+      "percent": 5.515598936613845,
       "missing": []
     },
     {
       "file": "24-reglages-boutique-390.png",
       "width": 390,
-      "percent": 14.516028749782386
+      "percent": 13.795781135958457
     }
   ],
   "25": [
@@ -245,7 +245,7 @@
     {
       "file": "02b-nouvelle-vente-une-partie.png",
       "width": 1280,
-      "percent": 6.8627638939011195
+      "percent": 6.9198563244316125
     },
     {
       "file": "02b-nouvelle-vente-une-partie-390.png",
@@ -281,76 +281,76 @@
     {
       "file": "03-liste-des-ventes.png",
       "width": 1280,
-      "percent": 2.389631012412723,
+      "percent": 2.3895704034134986,
       "missing": []
     },
     {
       "file": "03-liste-des-ventes-390.png",
       "width": 390,
-      "percent": 4.511722137260158
+      "percent": 4.511485644914626
     }
   ],
   "04": [
     {
       "file": "04-detail-vente.png",
       "width": 1280,
-      "percent": 4.4085069444444445,
+      "percent": 4.330729166666666,
       "missing": []
     },
     {
       "file": "04-detail-vente-390.png",
       "width": 390,
-      "percent": 8.708148668217122
+      "percent": 8.710196439802829
     }
   ],
   "04b": [
     {
       "file": "04b-detail-vente-annulation.png",
       "width": 1280,
-      "percent": 4.397916666666666
+      "percent": 4.242013888888889
     },
     {
       "file": "04b-detail-vente-annulation-390.png",
       "width": 390,
-      "percent": 14.093609145995641
+      "percent": 14.096594131518462
     }
   ],
   "05": [
     {
       "file": "05-recu-ticket.png",
       "width": 1280,
-      "percent": 5.1194444444444445,
+      "percent": 5.1188368055555555,
       "missing": []
     },
     {
       "file": "05-recu-ticket-390.png",
       "width": 390,
-      "percent": 16.539693203448664
+      "percent": 16.545739558839994
     }
   ],
   "05b": [
     {
       "file": "05b-recu-facture-a4.png",
       "width": 1280,
-      "percent": 3.981565710616438
+      "percent": 3.979893514554794
     },
     {
       "file": "05b-recu-facture-a4-390.png",
       "width": 390,
-      "percent": 13.777115218975682
+      "percent": 13.773934936725635
     }
   ],
   "06": [
     {
       "file": "06-retour-articles.png",
       "width": 1280,
-      "percent": 5.840137569279493,
+      "percent": 5.686361836896279,
       "missing": []
     },
     {
       "file": "06-retour-articles-390.png",
       "width": 390,
-      "percent": 11.001945181255527
+      "percent": 10.973533745947538
     }
   ],
   "07": [
@@ -396,12 +396,12 @@
     {
       "file": "14b-fiche-client-rappel.png",
       "width": 1280,
-      "percent": 5.227639000805802
+      "percent": 5.230220084609186
     },
     {
       "file": "14b-fiche-client-rappel-390.png",
       "width": 390,
-      "percent": 18.460005894488653
+      "percent": 18.463306808134394
     }
   ],
   "17b": [
@@ -420,12 +420,12 @@
     {
       "file": "18b-encaisser-dette-montant-libre.png",
       "width": 1280,
-      "percent": 9.056935864825581
+      "percent": 9.055743550145348
     },
     {
       "file": "18b-encaisser-dette-montant-libre-390.png",
       "width": 390,
-      "percent": 15.37676092023918
+      "percent": 15.377267659876356
     }
   ],
   "21b": [

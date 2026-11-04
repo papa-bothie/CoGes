@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import CHAR, DateTime, Integer, LargeBinary, String, Text
 from sqlalchemy.dialects.postgresql import ENUM, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -49,3 +49,27 @@ class Company(Base):
         DateTime(timezone=True), server_default=text("now()")
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CompanyLogo(Base):
+    """Logo de l'entreprise, ré-encodé en PNG (révision 0036, ADR 0111).
+
+    Une ligne par entreprise ; « retiré » = `png` et ses colonnes à `NULL` (`coges_app`
+    n'a pas de DELETE). Jamais chargé avec `companies` : table à part.
+    """
+
+    __tablename__ = "company_logos"
+
+    company_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    png: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    sha256: Mapped[str | None] = mapped_column(CHAR(64), nullable=True)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    byte_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_by: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
