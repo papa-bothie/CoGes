@@ -14,6 +14,14 @@ describe("ce qui distingue un article (ADR 0108)", () => {
     expect(hints.has("c")).toBe(false);
   });
 
+  it("ne prend pas deux lignes du même article pour des homonymes", () => {
+    const hints = productHints([
+      { id: "line-1", name: "Huile", sku: "ART-0001" },
+      { id: "line-2", name: "Huile", sku: "ART-0001" },
+    ]);
+    expect(hints.size).toBe(0);
+  });
+
   it("nomme l'article avec ce qui le distingue", () => {
     expect(nameWithHint("Huile", "5 litres")).toBe("Huile, 5 litres");
     expect(nameWithHint("Riz", undefined)).toBe("Riz");
