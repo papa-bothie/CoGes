@@ -10,6 +10,7 @@ import { Chip } from "@/components/kit/chip";
 import { ProductSquare } from "@/components/kit/list-row";
 import { fieldClasses } from "@/components/kit/rubrique";
 import { SecondaryLink } from "@/components/kit/secondary-action";
+import { ProductHint } from "@/components/products/product-hint";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useCompanyLocale } from "@/hooks/use-me";
@@ -21,6 +22,7 @@ import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
 import { formatAmount } from "@/lib/format";
 import { labels } from "@/lib/labels";
+import { productHints } from "@/lib/product-hint";
 import { qtyWithUnit } from "@/lib/units";
 import { cn } from "@/lib/utils";
 
@@ -120,6 +122,7 @@ export function ProductsListView() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const lines = stock.data?.pages.flatMap((page) => page.items) ?? [];
+  const hints = productHints(lines.map((line) => ({ ...line, id: line.product_id })));
   const counts = summary.data;
   const [countText, prefix, value, suffix] = counts
     ? t.summary(t.count(counts.product_count), formatAmount(counts.stock_value, currency))
@@ -241,6 +244,7 @@ export function ProductsListView() {
               <ProductSquare name={line.name} size="moyen" />
               <span className="min-w-0 flex-[1_1_220px]">
                 <span className="block text-libelle">{line.name}</span>
+                <ProductHint text={hints.get(line.product_id)} name={line.name} />
                 <span className="block text-muted-foreground">
                   {t.sold(line.category_name, formatAmount(line.unit_price, currency))}
                 </span>

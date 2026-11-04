@@ -136,6 +136,8 @@ class ProductSummary(BaseModel):
     #: Lu par l'écran de livraison après un scan (ADR 0106).
     barcode: str | None = None
     name: str
+    #: Ce qui distingue deux articles de même nom, à l'écran (ADR 0108).
+    description: str | None = None
     category_id: UUID | None
     unit: ProductUnit
     is_stock_tracked: bool

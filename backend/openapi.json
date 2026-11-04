@@ -18013,6 +18013,17 @@
             ],
             "title": "Product Name"
           },
+          "product_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Description"
+          },
           "sku": {
             "anyOf": [
               {
@@ -18739,6 +18750,17 @@
             "type": "string",
             "title": "Name"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "unit": {
             "$ref": "#/components/schemas/ProductUnit"
           },
@@ -18803,6 +18825,7 @@
           "sku",
           "barcode",
           "name",
+          "description",
           "unit",
           "category_id",
           "category_name",
@@ -19015,6 +19038,17 @@
             "type": "string",
             "title": "Name"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "unit": {
             "$ref": "#/components/schemas/ProductUnit"
           },
@@ -19101,6 +19135,7 @@
           "product_id",
           "sku",
           "name",
+          "description",
           "unit",
           "category_id",
           "category_name",

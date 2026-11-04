@@ -1,8 +1,11 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
 import {
+  createSalesperson,
   customerWithCredit,
   E2E,
+  type Credentials,
   emptyMyDrafts,
   loginThroughUi,
   managerApi,
@@ -22,9 +25,9 @@ test.beforeEach(async ({ request }) => {
 /** Montant tel que la maquette v2 l'affiche (« 3 000 F »), séparateurs compris. */
 const amount = (digits: string) => new RegExp(`${digits.replace(/ /g, "\\s")}\\sF`);
 
-async function login(page: Page) {
+async function login(page: Page, credentials: Credentials = E2E) {
   await page.goto("/login");
-  await loginThroughUi(page, E2E);
+  await loginThroughUi(page, credentials);
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
 }
 
@@ -230,6 +233,55 @@ test("un article épuisé ne s'ajoute par aucun chemin, + s'arrête au stock", a
   // Taper plus que le stock : le serveur refuse, la ligne le dit.
   await setQtyRefused(page, product.name, "5");
   await expect(page.getByText(/Il n'en reste que 2\spièces\./).first()).toBeVisible();
+});
+
+test("un vendeur trouve le bouton « Changer le prix » sur la ligne et s'en sert", async ({
+  page,
+  request,
+}) => {
+  const client = await managerApi(request);
+  const product = await stockedProduct(client, { stock: "10", price: "1500" });
+  await login(page, await createSalesperson(request));
+
+  await page.goto("/sales/new");
+  await addArticle(page, product.name);
+  // Un vrai bouton, nommé et visible, avec son libellé écrit à l'écran.
+  const button = page.getByRole("button", {
+    name: new RegExp(`^Changer le prix de ${product.name}`),
+  });
+  await expect(button).toBeVisible();
+  await expect(button).toContainText("Changer le prix");
+  const box = await button.boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+
+  await button.click();
+  await page.getByLabel("Prix pour cette vente, à l'unité").fill("1200");
+  await page.getByRole("button", { name: "Client fidèle" }).click();
+  await page.getByRole("button", { name: "Appliquer ce prix" }).click();
+  await expect(page.getByText("Prix changé", { exact: true })).toBeVisible();
+  await expect(page.locator("s").filter({ hasText: amount("1 500") })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Encaisser 1\s200\sF$/ })).toBeVisible();
+
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    expect(results.violations, scheme).toEqual([]);
+  }
+
+  // À 360 px : le prix, la quantité et l'encaissement restent à portée, sans défilement.
+  await page.setViewportSize({ width: 360, height: 780 });
+  await expect(button).toBeVisible();
+  await expect(page.getByRole("button", { name: `Ajouter un ${product.name}` })).toBeVisible();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+  await page.getByRole("button", { name: `Ajouter un ${product.name}` }).click();
+  await expect(page.getByRole("textbox", { name: `Quantité de ${product.name}` })).toHaveValue("2");
+  await page.getByRole("button", { name: /^Encaisser 2\s400\sF$/ }).click();
+  await expect(page.getByRole("heading", { name: "Vente enregistrée" })).toBeVisible();
 });
 
 test("retour partiel rendu en espèces, puis le reste réglé sur la fiche", async ({
