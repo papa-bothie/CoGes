@@ -289,7 +289,7 @@
           "companies"
         ],
         "summary": "Read Logo",
-        "description": "Le logo de la boutique (ADR 0110), ou 404 `logo_not_found`.\n\nSans permission : tout utilisateur de l'entreprise imprime des reçus qui le portent.\nJamais gardé : ni par le navigateur, ni par un intermédiaire.",
+        "description": "Le logo de la boutique (ADR 0111), ou 404 `logo_not_found`.\n\nSans permission : tout utilisateur de l'entreprise imprime des reçus qui le portent.\nJamais gardé : ni par le navigateur, ni par un intermédiaire.",
         "operationId": "read_logo_api_v1_companies_me_logo_get",
         "responses": {
           "200": {
@@ -9944,7 +9944,7 @@
           "updated_at"
         ],
         "title": "CompanyLogoRead",
-        "description": "Logo enregistré, après ré-encodage (ADR 0110)."
+        "description": "Logo enregistré, après ré-encodage (ADR 0111)."
       },
       "CompanyPage": {
         "properties": {

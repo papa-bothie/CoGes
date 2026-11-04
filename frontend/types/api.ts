@@ -209,7 +209,7 @@ export interface paths {
     };
     /**
      * Read Logo
-     * @description Le logo de la boutique (ADR 0110), ou 404 `logo_not_found`.
+     * @description Le logo de la boutique (ADR 0111), ou 404 `logo_not_found`.
      *
      *     Sans permission : tout utilisateur de l'entreprise imprime des reçus qui le portent.
      *     Jamais gardé : ni par le navigateur, ni par un intermédiaire.
@@ -3392,7 +3392,7 @@ export interface components {
     };
     /**
      * CompanyLogoRead
-     * @description Logo enregistré, après ré-encodage (ADR 0110).
+     * @description Logo enregistré, après ré-encodage (ADR 0111).
      */
     CompanyLogoRead: {
       /** Width */
