@@ -5,6 +5,7 @@ Les autres modules passent **par ici**, jamais par le repository ni les modèles
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -128,9 +129,14 @@ def get_timezone(session: Session, ctx: TenantContext) -> str:
     return get_current_company(session, ctx).timezone
 
 
+def logo_updated_at(session: Session, ctx: TenantContext) -> datetime | None:
+    """Date du logo présent, ou `None` (ADR 0111) ; façade pour le reçu (ADR 0112)."""
+    return CompanyRepository(session, ctx).logo_updated_at()
+
+
 def describe(session: Session, ctx: TenantContext, company: Company) -> CompanyRead:
     """`CompanyRead`, avec la date du logo (sans charger l'image)."""
-    logo_at = CompanyRepository(session, ctx).logo_updated_at()
+    logo_at = logo_updated_at(session, ctx)
     return CompanyRead.model_validate(company).model_copy(update={"logo_updated_at": logo_at})
 
 

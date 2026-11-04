@@ -76,6 +76,7 @@ from app.modules.sales.schemas import (
     ReceiptCustomer,
     ReceiptLine,
     ReceiptRead,
+    ReceiptReturn,
     RefundCreate,
     SaleCancel,
     SaleConfirm,
@@ -1101,6 +1102,8 @@ def build_receipt(session: Session, ctx: TenantContext, sale_id: UUID) -> Receip
                 product_id=item.product_id,
                 sku="" if summary is None else summary.sku,
                 name="Produit supprimé" if summary is None else summary.name,
+                description=None if summary is None else summary.description,
+                unit="piece" if summary is None else summary.unit,
                 qty=item.qty,
                 unit_price=item.unit_price,
                 discount=item.discount,
@@ -1125,6 +1128,7 @@ def build_receipt(session: Session, ctx: TenantContext, sale_id: UUID) -> Receip
             ninea=company.ninea,
             rc=company.rc,
             receipt_footer=company.receipt_footer,
+            logo_updated_at=companies_service.logo_updated_at(session, ctx),
         ),
         customer=customer,
         seller_name=seller_name(session, ctx, sale),
@@ -1136,6 +1140,12 @@ def build_receipt(session: Session, ctx: TenantContext, sale_id: UUID) -> Receip
         paid_total=sale.paid_total,
         balance=sale.total - sale.paid_total,
         payments=finance_service.payment_reads_for_sale(session, ctx, sale.id),
+        returns=[
+            ReceiptReturn(
+                return_no=row.return_no, returned_at=row.returned_at, total_refund=row.total_refund
+            )
+            for row in reversed(SaleReturnRepository(session, ctx).for_sale(sale.id))
+        ],
     )
 
 

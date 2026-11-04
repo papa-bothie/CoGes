@@ -13,11 +13,11 @@ page HTML). Images : maquette | front | différences.
 | 02c | rendu de monnaie | 3a | 7.4 % | 12.8 % | — | [1280](comparaison/02c-nouvelle-vente-rendu-monnaie.png) [390](comparaison/02c-nouvelle-vente-rendu-monnaie-390.png) |
 | 02d | écran de succès | 3a | 3.0 % | 16.9 % | — | [1280](comparaison/02d-nouvelle-vente-succes.png) [390](comparaison/02d-nouvelle-vente-succes-390.png) |
 | 03 | Liste des ventes | 3a | 2.4 % | 4.5 % | 0 | [1280](comparaison/03-liste-des-ventes.png) [390](comparaison/03-liste-des-ventes-390.png) |
-| 04 | Détail d'une vente | 3a | 4.3 % | 8.7 % | 0 | [1280](comparaison/04-detail-vente.png) [390](comparaison/04-detail-vente-390.png) |
-| 04b | annulation (raison) | 3a | 4.2 % | 14.1 % | — | [1280](comparaison/04b-detail-vente-annulation.png) [390](comparaison/04b-detail-vente-annulation-390.png) |
-| 05 | Reçu, petit ticket 80 mm | 3a | 5.1 % | 16.5 % | 0 | [1280](comparaison/05-recu-ticket.png) [390](comparaison/05-recu-ticket-390.png) |
-| 05b | Reçu, facture A4 | 3a | 4.0 % | 13.8 % | — | [1280](comparaison/05b-recu-facture-a4.png) [390](comparaison/05b-recu-facture-a4-390.png) |
-| 06 | Retour d'articles | 3a | 5.7 % | 11.0 % | 0 | [1280](comparaison/06-retour-articles.png) [390](comparaison/06-retour-articles-390.png) |
+| 04 | Détail d'une vente | 3a | 4.4 % | 8.7 % | 0 | [1280](comparaison/04-detail-vente.png) [390](comparaison/04-detail-vente-390.png) |
+| 04b | annulation (raison) | 3a | 4.4 % | 14.1 % | — | [1280](comparaison/04b-detail-vente-annulation.png) [390](comparaison/04b-detail-vente-annulation-390.png) |
+| 05 | Reçu, petit ticket 80 mm | 3a | 5.1 % | 16.6 % | 0 | [1280](comparaison/05-recu-ticket.png) [390](comparaison/05-recu-ticket-390.png) |
+| 05b | Reçu, facture A4 | 3a | 5.5 % | 13.3 % | — | [1280](comparaison/05b-recu-facture-a4.png) [390](comparaison/05b-recu-facture-a4-390.png) |
+| 06 | Retour d'articles | 3a | 5.8 % | 10.9 % | 0 | [1280](comparaison/06-retour-articles.png) [390](comparaison/06-retour-articles-390.png) |
 | 07 | Liste des articles (Stock) | 3b | 5.0 % | 12.5 % | 0 | [1280](comparaison/07-liste-articles.png) [390](comparaison/07-liste-articles-390.png) |
 | 08 | Fiche article et étiquette | 3b | 8.5 % | 12.5 % | 0 | [1280](comparaison/08-fiche-article.png) [390](comparaison/08-fiche-article-390.png) |
 | 09 | Nouvel article | 3b | 7.9 % | 12.3 % | 0 | [1280](comparaison/09-nouvel-article.png) [390](comparaison/09-nouvel-article-390.png) |
@@ -37,7 +37,7 @@ page HTML). Images : maquette | front | différences.
 | 20 | Dépenses | 3d | 9.1 % | 10.7 % | 0 | [1280](comparaison/20-depenses.png) [390](comparaison/20-depenses-390.png) |
 | 21 | Entrées et sorties de caisse | 3d | 5.0 % | 9.1 % | 0 | [1280](comparaison/21-entrees-sorties.png) [390](comparaison/21-entrees-sorties-390.png) |
 | 21b | annulation d'une ligne | 3d | 5.1 % | 9.3 % | — | [1280](comparaison/21b-entrees-sorties-annulation.png) [390](comparaison/21b-entrees-sorties-annulation-390.png) |
-| 22 | Conseils | 3e | 7.6 % | 15.5 % | 0 | [1280](comparaison/22-conseils.png) [390](comparaison/22-conseils-390.png) |
+| 22 | Conseils | 3e | 7.7 % | 15.5 % | 0 | [1280](comparaison/22-conseils.png) [390](comparaison/22-conseils-390.png) |
 | 22b | meilleurs articles | 3e | 10.0 % | 18.3 % | — | [1280](comparaison/22b-meilleurs-articles.png) [390](comparaison/22b-meilleurs-articles-390.png) |
 | 22c | prévisions | 3e | 5.3 % | 10.1 % | — | [1280](comparaison/22c-previsions.png) [390](comparaison/22c-previsions-390.png) |
 | 23 | Alertes | 3e | 6.1 % | 12.3 % | 0 | [1280](comparaison/23-alertes.png) [390](comparaison/23-alertes-390.png) |

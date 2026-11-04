@@ -289,7 +289,7 @@
           "companies"
         ],
         "summary": "Read Logo",
-        "description": "Le logo de la boutique (ADR 0110), ou 404 `logo_not_found`.\n\nSans permission : tout utilisateur de l'entreprise imprime des reçus qui le portent.\nJamais gardé : ni par le navigateur, ni par un intermédiaire.",
+        "description": "Le logo de la boutique (ADR 0111), ou 404 `logo_not_found`.\n\nSans permission : tout utilisateur de l'entreprise imprime des reçus qui le portent.\nJamais gardé : ni par le navigateur, ni par un intermédiaire.",
         "operationId": "read_logo_api_v1_companies_me_logo_get",
         "responses": {
           "200": {
@@ -9944,7 +9944,7 @@
           "updated_at"
         ],
         "title": "CompanyLogoRead",
-        "description": "Logo enregistré, après ré-encodage (ADR 0110)."
+        "description": "Logo enregistré, après ré-encodage (ADR 0111)."
       },
       "CompanyPage": {
         "properties": {
@@ -16982,6 +16982,18 @@
               }
             ],
             "title": "Receipt Footer"
+          },
+          "logo_updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Updated At"
           }
         },
         "additionalProperties": false,
@@ -16994,7 +17006,8 @@
           "wave_number",
           "ninea",
           "rc",
-          "receipt_footer"
+          "receipt_footer",
+          "logo_updated_at"
         ],
         "title": "ReceiptCompany",
         "description": "En-tête du reçu : qui vend."
@@ -17059,6 +17072,20 @@
             "type": "string",
             "title": "Name"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/ProductUnit"
+          },
           "qty": {
             "$ref": "#/components/schemas/Quantity-Output"
           },
@@ -17084,6 +17111,8 @@
           "product_id",
           "sku",
           "name",
+          "description",
+          "unit",
           "qty",
           "unit_price",
           "discount",
@@ -17180,6 +17209,13 @@
             },
             "type": "array",
             "title": "Payments"
+          },
+          "returns": {
+            "items": {
+              "$ref": "#/components/schemas/ReceiptReturn"
+            },
+            "type": "array",
+            "title": "Returns"
           }
         },
         "additionalProperties": false,
@@ -17200,10 +17236,36 @@
           "total",
           "paid_total",
           "balance",
-          "payments"
+          "payments",
+          "returns"
         ],
         "title": "ReceiptRead",
         "description": "Reçu simple d'une vente confirmée.\n\nUn JSON complet, que le frontend met en page : l'API ne rend ni PDF ni HTML\n(ADR 0022). Tout y est figé — le reçu d'une vente de l'an dernier reste exact\nmême si les prix, les taux et les noms ont changé depuis."
+      },
+      "ReceiptReturn": {
+        "properties": {
+          "return_no": {
+            "type": "string",
+            "title": "Return No"
+          },
+          "returned_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Returned At"
+          },
+          "total_refund": {
+            "$ref": "#/components/schemas/Amount-Output"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "return_no",
+          "returned_at",
+          "total_refund"
+        ],
+        "title": "ReceiptReturn",
+        "description": "Retour lié à la vente, rappelé sur la facture (ADR 0112)."
       },
       "RecentExpense": {
         "properties": {

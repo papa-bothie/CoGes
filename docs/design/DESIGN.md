@@ -204,6 +204,11 @@ de marque éclairci. Contraste AA vérifié par axe, en clair et en sombre.
   dans `app/` et `components/`.
 - **Le vert éclat n'écrit jamais.** Il colore les barres et les icônes, pas le texte.
 - **Une rubrique, une couleur.** Un élément prend la couleur de la rubrique où il vit.
+- **Pièces imprimées : palette d'impression seule** (ADR 0112). Ticket, facture et bon de
+  retour n'emploient que `recu-papier` (fond), `recu-encre` (texte, filets forts, tampon
+  « VENTE ANNULÉE »), `recu-gris` (mentions secondaires), `recu-filet` (séparations) et
+  `recu-entete` (fond de l'en-tête du tableau) : lisibles en noir et blanc, jamais une
+  couleur de rubrique. Le logo du ticket passe en niveaux de gris (imprimante thermique).
 
 ## Typography
 

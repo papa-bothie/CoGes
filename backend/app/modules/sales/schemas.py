@@ -29,6 +29,7 @@ from app.modules.finance.schemas import (
     RefundLinkRead,
     RefundMethod,
 )
+from app.modules.products.schemas import ProductUnit
 
 CANCEL_REASON_MAX_LENGTH = 500
 RETURN_REASON_MAX_LENGTH = 500
@@ -300,6 +301,8 @@ class ReceiptCompany(BaseModel):
     ninea: str | None
     rc: str | None
     receipt_footer: str | None
+    #: Date du logo présent, ou `None` (ADR 0111) : le front lit l'image s'il y en a une.
+    logo_updated_at: datetime | None
 
 
 class ReceiptCustomer(BaseModel):
@@ -322,12 +325,28 @@ class ReceiptLine(BaseModel):
     product_id: UUID
     sku: str
     name: str
+    #: Sous la désignation de la facture (ADR 0108, 0112) ; relue comme le nom.
+    description: str | None
+    #: Unité de l'article, pour « 2,5 kg » (ADR 0112) ; relue comme le nom.
+    unit: ProductUnit
     qty: Quantity
+    #: Prix **appliqué** : le prix de la fiche et la raison d'un prix changé ne sont
+    #: jamais montrés au client (ADR 0107, 0112).
     unit_price: Amount
     discount: Amount
     tax_rate: Rate
     tax_amount: Amount
     line_total: Amount
+
+
+class ReceiptReturn(BaseModel):
+    """Retour lié à la vente, rappelé sur la facture (ADR 0112)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    return_no: str
+    returned_at: datetime
+    total_refund: Amount
 
 
 class ReceiptRead(BaseModel):
@@ -357,6 +376,8 @@ class ReceiptRead(BaseModel):
     paid_total: Amount
     balance: Amount
     payments: list[PaymentRead]
+    #: Du plus ancien au plus récent.
+    returns: list[ReceiptReturn]
 
 
 # --------------------------------------------------------- retours et remboursements

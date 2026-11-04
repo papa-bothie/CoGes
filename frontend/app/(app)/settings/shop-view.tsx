@@ -178,6 +178,11 @@ function ShopForm({ company }: { company: Company }) {
     >
       <h2 className="text-titre-carte">{t.title}</h2>
       <LogoField version={company.logo_updated_at} canEdit={canEdit} />
+      {canEdit && !company.address?.trim() && (
+        <p role="status" className="rounded-champ border border-filet bg-voile px-4 py-3 font-bold">
+          {t.addressMissing}
+        </p>
+      )}
       <fieldset disabled={!canEdit} className="contents">
         <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3.5">
           {FIELDS.map(([key, label, max]) => (
