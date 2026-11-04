@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, func, or_, select, update
 
 from app.core.repository import TenantRepository
 from app.modules.importexport.models import ExportFile
@@ -38,8 +38,19 @@ class ExportFileRepository(TenantRepository[ExportFile]):
         export = self.session.execute(stmt).scalar_one_or_none()
         return None if export is None else export.content
 
-    def recent(self, *, limit: int) -> Sequence[ExportFile]:
-        stmt = self._select().order_by(ExportFile.created_at.desc()).limit(limit)
+    def recent(
+        self, *, limit: int, visible: Sequence[tuple[str, Sequence[str]]]
+    ) -> Sequence[ExportFile]:
+        """Derniers exports dont le couple (type, format) est dans `visible` (ADR 0114)."""
+        if not visible:
+            return []
+        allowed = or_(
+            *(
+                and_(ExportFile.kind == kind, ExportFile.format.in_(list(formats)))
+                for kind, formats in visible
+            )
+        )
+        stmt = self._select().where(allowed).order_by(ExportFile.created_at.desc()).limit(limit)
         return self.session.execute(stmt).scalars().all()
 
     def expire_before(self, moment: datetime) -> int:

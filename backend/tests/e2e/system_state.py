@@ -2,6 +2,7 @@
 
     deploy/scripts/e2e.sh system healthy            # tout va bien
     deploy/scripts/e2e.sh system missing-heartbeat  # le worker ne bat plus
+    deploy/scripts/e2e.sh system build-exports      # produit les exports en attente
 
 L'API des parcours tourne sans worker, sans beat ni relais : laissée telle quelle, elle
 est toujours en panne. `healthy` écrit ce que ces processus écriraient (battements, tic
@@ -74,8 +75,34 @@ def missing_heartbeat() -> None:
     heartbeat.redis_client().delete(heartbeat.heartbeat_key("worker", HOST))
 
 
+def build_exports() -> None:
+    """Produit les exports en attente, comme le worker (ADR 0114) : les parcours tournent
+    sans worker, et l'export PDF des ventes doit arriver dans Réglages → Fichiers."""
+    from app.core.tenancy import TenantContext, tenant_transaction
+    from app.modules.importexport import service as importexport_service
+    from app.workers.tasks import exports as export_tasks
+    from app.workers.tenants import each_company
+
+    _engine_url()
+    for company_id in each_company():
+        ctx = TenantContext.bootstrap(company_id)
+        with tenant_transaction(ctx) as session:
+            pending = importexport_service.pending_export_ids(session, ctx)
+            requested_by = importexport_service.requesters(session, ctx, pending)
+        for export_id in pending:
+            export_tasks.build_sales(
+                company_id=str(company_id),
+                user_id=str(requested_by[export_id]),
+                export_id=str(export_id),
+            )
+
+
 if __name__ == "__main__":
-    actions = {"healthy": healthy, "missing-heartbeat": missing_heartbeat}
+    actions = {
+        "healthy": healthy,
+        "missing-heartbeat": missing_heartbeat,
+        "build-exports": build_exports,
+    }
     if len(sys.argv) != 2 or sys.argv[1] not in actions:
         sys.exit(f"usage : system_state {'|'.join(actions)}")
     actions[sys.argv[1]]()

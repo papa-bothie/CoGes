@@ -46,3 +46,16 @@ describe("registre des écrans (ADR 0099)", () => {
     }
   });
 });
+
+describe("exports PDF (prompt 35, bloc X, ADR 0114)", () => {
+  it("chaque PDF exige la lecture de son écran et un droit d'export, comme le serveur", async () => {
+    const { PDF_EXPORTS } = await import("./access");
+    expect(PDF_EXPORTS).toEqual({
+      sales: { allOf: ["sales:read", "sales:export"] },
+      cash: { allOf: ["analytics:read", "analytics:export"] },
+      stock: { allOf: ["inventory:read", "analytics:export"] },
+      expenses: { allOf: ["expenses:read", "analytics:export"] },
+      debts: { allOf: ["debts:read", "analytics:export"] },
+    });
+  });
+});

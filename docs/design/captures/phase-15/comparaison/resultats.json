@@ -22,7 +22,7 @@
     {
       "file": "11-recevoir-livraison-390.png",
       "width": 390,
-      "percent": 16.921294749270423
+      "percent": 16.921183363407515
     }
   ],
   "12": [
@@ -55,13 +55,13 @@
     {
       "file": "14-fiche-client.png",
       "width": 1280,
-      "percent": 3.9378955696202533,
+      "percent": 3.9373186972573837,
       "missing": []
     },
     {
       "file": "14-fiche-client-390.png",
       "width": 390,
-      "percent": 16.118688580142322
+      "percent": 16.109652095334916
     }
   ],
   "15": [
@@ -94,26 +94,26 @@
     {
       "file": "17-argent.png",
       "width": 1280,
-      "percent": 14.220781859557869,
+      "percent": 13.11886259598346,
       "missing": []
     },
     {
       "file": "17-argent-390.png",
       "width": 390,
-      "percent": 18.78883595691798
+      "percent": 17.89613692909188
     }
   ],
   "18": [
     {
       "file": "18-encaisser-dette.png",
       "width": 1280,
-      "percent": 8.957122093023257,
+      "percent": 8.958257630813954,
       "missing": []
     },
     {
       "file": "18-encaisser-dette-390.png",
       "width": 390,
-      "percent": 15.205115678979869
+      "percent": 15.205366201946562
     }
   ],
   "19": [
@@ -133,39 +133,39 @@
     {
       "file": "20-depenses.png",
       "width": 1280,
-      "percent": 9.10258288680509,
+      "percent": 8.369993932038836,
       "missing": []
     },
     {
       "file": "20-depenses-390.png",
       "width": 390,
-      "percent": 10.678083137688164
+      "percent": 10.342490842490843
     }
   ],
   "21": [
     {
       "file": "21-entrees-sorties.png",
       "width": 1280,
-      "percent": 4.9506134080370945,
+      "percent": 4.678703482824428,
       "missing": []
     },
     {
       "file": "21-entrees-sorties-390.png",
       "width": 390,
-      "percent": 9.090739940459041
+      "percent": 8.91892987668908
     }
   ],
   "22": [
     {
       "file": "22-conseils.png",
       "width": 1280,
-      "percent": 7.65045166015625,
+      "percent": 7.6458740234375,
       "missing": []
     },
     {
       "file": "22-conseils-390.png",
       "width": 390,
-      "percent": 15.505075355821624
+      "percent": 15.505136102151026
     }
   ],
   "23": [
@@ -238,7 +238,7 @@
     {
       "file": "02-nouvelle-vente-390.png",
       "width": 390,
-      "percent": 12.918476871965245
+      "percent": 12.887071584746005
     }
   ],
   "02b": [
@@ -281,89 +281,89 @@
     {
       "file": "03-liste-des-ventes.png",
       "width": 1280,
-      "percent": 2.389631012412723,
+      "percent": 2.3895704034134986,
       "missing": []
     },
     {
       "file": "03-liste-des-ventes-390.png",
       "width": 390,
-      "percent": 4.511722137260158
+      "percent": 4.511485644914626
     }
   ],
   "04": [
     {
       "file": "04-detail-vente.png",
       "width": 1280,
-      "percent": 4.407725694444444,
+      "percent": 4.4085069444444445,
       "missing": []
     },
     {
       "file": "04-detail-vente-390.png",
       "width": 390,
-      "percent": 8.70566208843448
+      "percent": 8.708148668217122
     }
   ],
   "04b": [
     {
       "file": "04b-detail-vente-annulation.png",
       "width": 1280,
-      "percent": 4.381770833333333
+      "percent": 4.397916666666666
     },
     {
       "file": "04b-detail-vente-annulation-390.png",
       "width": 390,
-      "percent": 14.09465389092863
+      "percent": 14.093609145995641
     }
   ],
   "05": [
     {
       "file": "05-recu-ticket.png",
       "width": 1280,
-      "percent": 5.457725694444444,
+      "percent": 5.4578125,
       "missing": []
     },
     {
       "file": "05-recu-ticket-390.png",
       "width": 390,
-      "percent": 12.420333669241966
+      "percent": 12.422796999216214
     }
   ],
   "05b": [
     {
       "file": "05b-recu-facture-a4.png",
       "width": 1280,
-      "percent": 5.7122435052710845
+      "percent": 5.712008189006024
     },
     {
       "file": "05b-recu-facture-a4-390.png",
       "width": 390,
-      "percent": 12.218386491557224
+      "percent": 12.21225766103815
     }
   ],
   "06": [
     {
       "file": "06-retour-articles.png",
       "width": 1280,
-      "percent": 5.796837885985749,
+      "percent": 5.840137569279493,
       "missing": []
     },
     {
       "file": "06-retour-articles-390.png",
       "width": 390,
-      "percent": 10.946183318597113
+      "percent": 11.001945181255527
     }
   ],
   "07": [
     {
       "file": "07-liste-articles.png",
       "width": 1280,
-      "percent": 5.001318565400844,
+      "percent": 4.720867869332033,
       "missing": []
     },
     {
       "file": "07-liste-articles-390.png",
       "width": 390,
-      "percent": 12.518689809526462
+      "percent": 12.078716893531709
     }
   ],
   "08": [
@@ -396,48 +396,48 @@
     {
       "file": "14b-fiche-client-rappel.png",
       "width": 1280,
-      "percent": 5.2311643835616435
+      "percent": 5.229968271555197
     },
     {
       "file": "14b-fiche-client-rappel-390.png",
       "width": 390,
-      "percent": 18.458001768346595
+      "percent": 18.45918066607722
     }
   ],
   "17b": [
     {
       "file": "17b-argent-journee-en-perte.png",
       "width": 1280,
-      "percent": 5.860340133289987
+      "percent": 5.523848198464265
     },
     {
       "file": "17b-argent-journee-en-perte-390.png",
       "width": 390,
-      "percent": 23.35260441864215
+      "percent": 22.681927337516463
     }
   ],
   "18b": [
     {
       "file": "18b-encaisser-dette-montant-libre.png",
       "width": 1280,
-      "percent": 9.05460801235465
+      "percent": 9.055743550145348
     },
     {
       "file": "18b-encaisser-dette-montant-libre-390.png",
       "width": 390,
-      "percent": 15.376887605148475
+      "percent": 15.377140974967062
     }
   ],
   "21b": [
     {
       "file": "21b-entrees-sorties-annulation.png",
       "width": 1280,
-      "percent": 5.050103176588294
+      "percent": 4.778391945218199
     },
     {
       "file": "21b-entrees-sorties-annulation-390.png",
       "width": 390,
-      "percent": 9.336762349170437
+      "percent": 9.159540998901992
     }
   ],
   "22b": [
@@ -504,12 +504,12 @@
     {
       "file": "24e-reglages-fichiers-excel.png",
       "width": 1280,
-      "percent": 3.588020833333333
+      "percent": 3.9024161668484187
     },
     {
       "file": "24e-reglages-fichiers-excel-390.png",
       "width": 390,
-      "percent": 19.293075896849484
+      "percent": 18.35107028689354
     }
   ]
 }

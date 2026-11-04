@@ -11,6 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 type ImportKind = Literal["categories", "products", "customers", "suppliers"]
 type ReferentialKind = Literal["categories", "products", "customers", "suppliers"]
 type ExportFormat = Literal["csv", "xlsx"]
+#: Format d'un fichier de la file : les tableurs, et les PDF du comptable (ADR 0114).
+type StoredExportFormat = Literal["csv", "xlsx", "pdf"]
+#: Documents PDF assez longs pour passer par le worker (ADR 0114).
+type PdfExportKind = Literal["sales", "cash"]
 type ExportStatus = Literal["pending", "ready", "failed", "expired"]
 
 #: Une période d'export de ventes ne dépasse pas un an : au-delà, le fichier
@@ -78,12 +82,35 @@ class SalesExportCreate(BaseModel):
         return self
 
 
+class PdfExportCreate(BaseModel):
+    """Document PDF demandé au worker : ventes ou journal de caisse d'une période (ADR 0114).
+
+    Période dans le fuseau de l'entreprise, bornes incluses, 366 jours au plus.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: PdfExportKind
+    date_from: date
+    date_to: date
+
+    @model_validator(mode="after")
+    def _check_period(self) -> PdfExportCreate:
+        if self.date_to < self.date_from:
+            raise ValueError("date_to : la fin de période précède son début.")
+        if (self.date_to - self.date_from).days >= MAX_EXPORT_DAYS:
+            raise ValueError(
+                f"date_to : une période d'export ne dépasse pas {MAX_EXPORT_DAYS} jours."
+            )
+        return self
+
+
 class ExportRead(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="forbid")
 
     id: UUID
     kind: str
-    format: ExportFormat
+    format: StoredExportFormat
     status: ExportStatus
     #: Période demandée (`date_from`, `date_to`) : l'écran 24e nomme le fichier avant
     #: qu'il soit prêt (« Ventes de septembre 2026 »).

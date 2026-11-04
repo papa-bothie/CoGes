@@ -25,6 +25,7 @@ import { labels } from "@/lib/labels";
 import { productHints } from "@/lib/product-hint";
 import { qtyWithUnit } from "@/lib/units";
 import { cn } from "@/lib/utils";
+import { AccountantExports } from "@/components/pdf-export";
 
 type StockLine = Schemas["StockLine"];
 
@@ -280,6 +281,7 @@ export function ProductsListView() {
       <Can permission="inventory:read">
         <SecondaryLink href="/inventory">{t.journal}</SecondaryLink>
       </Can>
+      <AccountantExports kinds={["stock"]} rubrique="stock" />
     </div>
   );
 }

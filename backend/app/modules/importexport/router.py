@@ -16,8 +16,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile, status
 
-from app.core import idempotency, queue
-from app.core.deps import TenantSession, client_ip, require_permission
+from app.core import idempotency, pdf, queue
+from app.core.deps import CurrentTenant, TenantSession, client_ip, require_permission
 from app.core.idempotency import IdempotencyKey
 from app.core.tenancy import TenantContext
 from app.modules.importexport import service
@@ -28,6 +28,7 @@ from app.modules.importexport.schemas import (
     ImportFingerprint,
     ImportKind,
     ImportReport,
+    PdfExportCreate,
     ReferentialKind,
     SalesExportCreate,
 )
@@ -39,6 +40,7 @@ exports_router = APIRouter(prefix="/exports", tags=["exports"])
 #: la ressource. L'empreinte, elle, porte le condensat du fichier.
 IMPORT_ENDPOINT = "POST /api/v1/imports/{kind}"
 SALES_EXPORT_ENDPOINT = "POST /api/v1/exports/sales"
+PDF_EXPORT_ENDPOINT = "POST /api/v1/exports/pdf"
 
 #: Tâche worker qui produit un export de ventes, désignée par son nom.
 BUILD_SALES_EXPORT_TASK = "exports.build_sales"
@@ -50,7 +52,11 @@ def _attachment(file: service.ExportedFile) -> Response:
     return Response(
         content=file.content,
         media_type=file.media_type,
-        headers={"Content-Disposition": f'attachment; filename="{file.filename}"'},
+        headers={
+            "Content-Disposition": pdf.attachment(file.filename),
+            # Un fichier d'export n'est gardé ni par le navigateur ni en chemin (ADR 0114).
+            "Cache-Control": "no-store",
+        },
     )
 
 
@@ -193,12 +199,51 @@ def request_sales_export(
     )
 
 
+@exports_router.post("/pdf", response_model=ExportRead, status_code=status.HTTP_202_ACCEPTED)
+def request_pdf_export(
+    payload: PdfExportCreate,
+    tenant: CurrentTenant,
+    idempotency_key: IdempotencyKey,
+) -> Response:
+    """Ventes ou journal de caisse d'une période en PDF, produit par le worker (ADR 0114).
+
+    Droit de lecture de l'écran **et** droit d'export du document, vérifiés par le
+    service selon `kind`. Le fichier arrive dans Réglages → Fichiers.
+    """
+    replay = idempotency.reserve(
+        tenant.session,
+        tenant.ctx,
+        key=idempotency_key,
+        endpoint=PDF_EXPORT_ENDPOINT,
+        payload=payload,
+    )
+    if replay is not None:
+        return idempotency.replay_response(replay)
+    export = service.request_pdf_export(tenant.session, tenant.ctx, payload)
+    queue.enqueue(
+        BUILD_SALES_EXPORT_TASK,
+        company_id=str(tenant.ctx.company_id),
+        user_id=str(tenant.ctx.user_id),
+        export_id=str(export.id),
+    )
+    return idempotency.completed(
+        tenant.session,
+        tenant.ctx,
+        key=idempotency_key,
+        status_code=status.HTTP_202_ACCEPTED,
+        model=ExportRead.model_validate(export),
+    )
+
+
 @exports_router.get("", response_model=ExportList)
 def list_exports(
-    tenant: Annotated[TenantSession, Depends(require_permission("importexport:export"))],
+    tenant: CurrentTenant,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> ExportList:
-    """Derniers exports demandés, du plus récent au plus ancien."""
+    """Derniers exports que cette personne peut voir, du plus récent au plus ancien.
+
+    Tableurs : `importexport:export` ; PDF : les droits de leur document (ADR 0114).
+    """
     exports = service.list_exports(tenant.session, tenant.ctx, limit=limit)
     return ExportList(items=[ExportRead.model_validate(export) for export in exports])
 
@@ -206,7 +251,7 @@ def list_exports(
 @exports_router.get("/{export_id}", response_model=ExportRead)
 def get_export(
     export_id: UUID,
-    tenant: Annotated[TenantSession, Depends(require_permission("importexport:export"))],
+    tenant: CurrentTenant,
 ) -> ExportRead:
     """État d'un export : `pending`, `ready`, `failed` ou `expired`."""
     return ExportRead.model_validate(service.get_export(tenant.session, tenant.ctx, export_id))
@@ -216,7 +261,7 @@ def get_export(
 def download_export(
     export_id: UUID,
     request: Request,
-    tenant: Annotated[TenantSession, Depends(require_permission("importexport:export"))],
+    tenant: CurrentTenant,
 ) -> Response:
     """Le fichier d'un export prêt. 409 `export_not_ready` sinon ; 404 chez un autre tenant."""
     exported = service.export_content(tenant.session, tenant.ctx, export_id)

@@ -62,6 +62,9 @@ PLATFORM = "platform"
 #: Lecture binaire d'une entreprise (logo, ADR 0111) : pas de JSON à fouiller, les
 #: octets de A et de B sont comparés par `test_a_binary_read_is_the_company_s_own`.
 IMAGE = "image"
+#: PDF du comptable (ADR 0114) : un document, pas du JSON ; les textes de A et de B sont
+#: comparés par `test_a_pdf_holds_nothing_of_the_other_company`.
+PDF = "pdf"
 READ_ROUTES: dict[str, tuple[str, dict[str, str]]] = {
     "/api/v1/platform/auth/me": (PLATFORM, {}),
     "/api/v1/platform/companies": (PLATFORM, {}),
@@ -96,6 +99,9 @@ READ_ROUTES: dict[str, tuple[str, dict[str, str]]] = {
     "/api/v1/analytics/customers": (TENANT, {}),
     "/api/v1/analytics/expenses-summary": (TENANT, {}),
     "/api/v1/analytics/history": (TENANT, {}),
+    "/api/v1/analytics/debts/pdf": (PDF, {}),
+    "/api/v1/analytics/expenses/pdf": (PDF, PERIOD),
+    "/api/v1/analytics/stock/pdf": (PDF, {}),
     "/api/v1/analytics/money": (TENANT, {"period": "month"}),
     "/api/v1/analytics/next-week": (TENANT, {}),
     "/api/v1/analytics/overview": (TENANT, PERIOD),
@@ -358,6 +364,26 @@ def test_a_binary_read_is_the_company_s_own(client: TestClient, shops: tuple[Sho
     seen_by_b = client.get(path, headers=auth_headers(b.token))
     assert seen_by_a.status_code == seen_by_b.status_code == 200
     assert seen_by_a.content != seen_by_b.content
+
+
+PDF_READS = sorted(path for path, (kind, _) in READ_ROUTES.items() if kind == PDF)
+
+
+@pytest.mark.parametrize("path", PDF_READS)
+def test_a_pdf_holds_nothing_of_the_other_company(
+    path: str, client: TestClient, shops: tuple[Shop, Shop]
+) -> None:
+    """Le texte du PDF de A, relu par pypdf, ne porte aucun nom ni montant propre à B."""
+    import io
+
+    from pypdf import PdfReader
+
+    a, b = shops
+    response = client.get(path, headers=auth_headers(a.token), params=READ_ROUTES[path][1])
+    assert response.status_code == 200, f"{path} : {response.status_code} {response.text}"
+    reader = PdfReader(io.BytesIO(response.content))
+    text = "\n".join(page.extract_text() for page in reader.pages)
+    assert _leaks(text, _b_markers(b)) == []
 
 
 @pytest.fixture(scope="module")

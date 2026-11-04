@@ -1453,6 +1453,43 @@ def cash_summary(
     return PaymentRepository(session, ctx).cash_totals(period_from=period_from, period_to=period_to)
 
 
+def paid_by_sales(
+    session: Session, ctx: TenantContext, sale_ids: Sequence[UUID]
+) -> dict[UUID, dict[str, Decimal]]:
+    """Encaissé à la vente, par vente puis par moyen (export des ventes, ADR 0114)."""
+    paid: dict[UUID, dict[str, Decimal]] = {}
+    for sale_id, method, total in PaymentRepository(session, ctx).paid_by_sales(sale_ids):
+        paid.setdefault(sale_id, {})[method] = total
+    return paid
+
+
+class OpenDebt(NamedTuple):
+    """Une dette encore ouverte, pour l'ancienneté de l'export des dettes (ADR 0114)."""
+
+    party_type: str
+    party_id: UUID
+    principal: Decimal
+    balance: Decimal
+    opened_at: datetime
+    due_date: date | None
+
+
+def open_debts(session: Session, ctx: TenantContext) -> list[OpenDebt]:
+    """Toutes les dettes ouvertes (clients et fournisseurs), la plus ancienne d'abord."""
+    return [
+        OpenDebt(
+            party_type=debt.party_type,
+            party_id=debt.customer_id or debt.supplier_id,  # type: ignore[arg-type]
+            principal=debt.principal,
+            balance=debt.balance,
+            opened_at=debt.created_at,
+            due_date=debt.due_date,
+        )
+        for debt in DebtRepository(session, ctx).open_debts()
+        if (debt.customer_id or debt.supplier_id) is not None
+    ]
+
+
 def daily_cash(
     session: Session,
     ctx: TenantContext,

@@ -6016,6 +6016,92 @@
         }
       }
     },
+    "/api/v1/analytics/stock/pdf": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Stock Pdf",
+        "description": "État du stock à l'instant, en PDF (ADR 0114).",
+        "operationId": "stock_pdf_api_v1_analytics_stock_pdf_get",
+        "responses": {
+          "200": {
+            "description": "Le document, en PDF",
+            "content": {
+              "application/pdf": {}
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/expenses/pdf": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Expenses Pdf",
+        "description": "Dépenses par type sur une période (366 jours au plus), en PDF (ADR 0114).",
+        "operationId": "expenses_pdf_api_v1_analytics_expenses_pdf_get",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Le document, en PDF",
+            "content": {
+              "application/pdf": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/debts/pdf": {
+      "get": {
+        "tags": [
+          "analytics"
+        ],
+        "summary": "Debts Pdf",
+        "description": "Dettes clients et fournisseurs à ce jour, par ancienneté, en PDF (ADR 0114).",
+        "operationId": "debts_pdf_api_v1_analytics_debts_pdf_get",
+        "responses": {
+          "200": {
+            "description": "Le document, en PDF",
+            "content": {
+              "application/pdf": {}
+            }
+          }
+        }
+      }
+    },
     "/api/v1/notifications": {
       "get": {
         "tags": [
@@ -6688,13 +6774,55 @@
         }
       }
     },
+    "/api/v1/exports/pdf": {
+      "post": {
+        "tags": [
+          "exports"
+        ],
+        "summary": "Request Pdf Export",
+        "description": "Ventes ou journal de caisse d'une période en PDF, produit par le worker (ADR 0114).\n\nDroit de lecture de l'écran **et** droit d'export du document, vérifiés par le\nservice selon `kind`. Le fichier arrive dans Réglages → Fichiers.",
+        "operationId": "request_pdf_export_api_v1_exports_pdf_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PdfExportCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/exports": {
       "get": {
         "tags": [
           "exports"
         ],
         "summary": "List Exports",
-        "description": "Derniers exports demandés, du plus récent au plus ancien.",
+        "description": "Derniers exports que cette personne peut voir, du plus récent au plus ancien.\n\nTableurs : `importexport:export` ; PDF : les droits de leur document (ADR 0114).",
         "operationId": "list_exports_api_v1_exports_get",
         "parameters": [
           {
@@ -12373,7 +12501,7 @@
             "title": "Kind"
           },
           "format": {
-            "$ref": "#/components/schemas/ExportFormat"
+            "$ref": "#/components/schemas/StoredExportFormat"
           },
           "status": {
             "$ref": "#/components/schemas/ExportStatus"
@@ -15540,6 +15668,39 @@
         "type": "integer",
         "maximum": 365.0,
         "minimum": 0.0
+      },
+      "PdfExportCreate": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/PdfExportKind"
+          },
+          "date_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Date From"
+          },
+          "date_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Date To"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "date_from",
+          "date_to"
+        ],
+        "title": "PdfExportCreate",
+        "description": "Document PDF demandé au worker : ventes ou journal de caisse d'une période (ADR 0114).\n\nPériode dans le fuseau de l'entreprise, bornes incluses, 366 jours au plus."
+      },
+      "PdfExportKind": {
+        "type": "string",
+        "enum": [
+          "sales",
+          "cash"
+        ]
       },
       "PeoplePage": {
         "properties": {
@@ -19512,6 +19673,14 @@
         ],
         "title": "StockSummary",
         "description": "En tête de l'écran Stock (maquette v2, écran 07, ADR 0071)."
+      },
+      "StoredExportFormat": {
+        "type": "string",
+        "enum": [
+          "csv",
+          "xlsx",
+          "pdf"
+        ]
       },
       "StoredPaymentMethod": {
         "anyOf": [

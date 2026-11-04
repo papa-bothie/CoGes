@@ -385,6 +385,9 @@ def sentence(names: _Names, log: AuditLogRead) -> str:
         "support_sessions": lambda: _support(log),
     }
     if log.action == "export":
+        # Les PDF du comptable passent par le même journal (ADR 0114).
+        if _side(log, "after").get("format") == "pdf":
+            return f"{who} a préparé un document PDF"
         return f"{who} a préparé un fichier Excel"
     built = special[table]() if table in special else None
     if built:

@@ -33,6 +33,7 @@ import { draftOneOf, draftString, draftWhen } from "@/lib/drafts";
 import { PAYMENT_METHODS } from "@/lib/payment-methods";
 import { addDays, todayIn } from "@/lib/period";
 import { cn } from "@/lib/utils";
+import { AccountantExports } from "@/components/pdf-export";
 
 import { ExpenseCategoriesDialog } from "../expense-categories-dialog";
 
@@ -272,6 +273,7 @@ export function ExpensesView() {
       </div>
 
       <ExpenseCategoriesDialog open={managing} onOpenChange={setManaging} categories={items} />
+      <AccountantExports kinds={["expenses"]} rubrique="depenses" />
     </div>
   );
 }

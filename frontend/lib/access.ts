@@ -60,8 +60,23 @@ export const ROUTE_ACCESS: Readonly<Record<string, PermissionRule | null>> = {
   "/settings/rights": "roles:read",
   "/settings/history": "audit:read",
   // Un seul écran pour les deux gestes : exporter, et importer des articles (ADR 0099).
-  "/settings/files": { anyOf: ["importexport:export", "importexport:create"] },
+  // Les PDF du comptable y arrivent aussi (ADR 0114) : leurs droits d'export l'ouvrent.
+  "/settings/files": {
+    anyOf: ["importexport:export", "importexport:create", "sales:export", "analytics:export"],
+  },
 };
+
+/**
+ * Exports PDF pour le comptable (prompt 35, bloc X, ADR 0114) : le droit de lecture de
+ * l'écran **et** un droit d'export existant, les mêmes que `PDF_RIGHTS` côté serveur.
+ */
+export const PDF_EXPORTS = {
+  sales: { allOf: ["sales:read", "sales:export"] },
+  cash: { allOf: ["analytics:read", "analytics:export"] },
+  stock: { allOf: ["inventory:read", "analytics:export"] },
+  expenses: { allOf: ["expenses:read", "analytics:export"] },
+  debts: { allOf: ["debts:read", "analytics:export"] },
+} as const satisfies Record<string, PermissionRule>;
 
 const PATTERNS = Object.keys(ROUTE_ACCESS).map((pattern) => ({
   pattern,

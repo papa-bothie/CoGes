@@ -30,7 +30,9 @@ MISSING_ROW_RETRIES = 5
 
 @celery_app.task(name="exports.build_sales", bind=True, max_retries=MISSING_ROW_RETRIES)
 def build_sales(self: Any, *, company_id: str, user_id: str, export_id: str) -> str:
-    """Produit le fichier d'un export de ventes, puis trace l'export (audit secondaire)."""
+    """Produit le fichier d'un export (ventes en tableur, ventes ou caisse en PDF, ADR
+    0114), puis trace l'export (audit secondaire). Le nom de la tâche reste celui de la
+    phase 10 : les demandes déjà enfilées et le balayage de nuit le connaissent."""
     ctx = TenantContext(user_id=UUID(user_id), company_id=UUID(company_id))
     try:
         with tenant_transaction(ctx) as session:
@@ -42,7 +44,7 @@ def build_sales(self: Any, *, company_id: str, user_id: str, export_id: str) -> 
                     action=AuditAction.EXPORT,
                     entity_table="export_files",
                     entity_id=UUID(export_id),
-                    context={"kind": "sales"},
+                    context=importexport_service.export_nature(session, ctx, UUID(export_id)),
                 )
     except NotFoundError as exc:
         raise self.retry(countdown=2**self.request.retries, exc=exc) from exc

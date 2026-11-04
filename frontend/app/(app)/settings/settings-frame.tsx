@@ -20,7 +20,9 @@ export const SECTIONS = [
   {
     href: "/settings/files",
     label: t.nav.files,
-    permission: { anyOf: ["importexport:export", "importexport:create"] },
+    permission: {
+      anyOf: ["importexport:export", "importexport:create", "sales:export", "analytics:export"],
+    },
   },
 ] as const satisfies readonly { href: string; label: string; permission: PermissionRule }[];
 
