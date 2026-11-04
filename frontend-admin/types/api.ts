@@ -4627,6 +4627,7 @@ export interface components {
       total: number;
     };
     LineDiscount: components["schemas"]["Amount-Input"];
+    LinePrice: components["schemas"]["Amount-Input"];
     /**
      * LoginRequest
      * @description L'identifiant de connexion est le **couple** (slug d'entreprise, e-mail ou
@@ -5576,6 +5577,7 @@ export interface components {
       expires_in: number;
     };
     PositiveAmount: components["schemas"]["Amount-Input"];
+    PriceReason: string;
     /**
      * ProductCreate
      * @description Création d'un produit **et** de son premier intervalle de prix.
@@ -6358,6 +6360,11 @@ export interface components {
       price_id: string | null;
       qty: components["schemas"]["Quantity-Output"];
       unit_price: components["schemas"]["Amount-Output"];
+      list_price: components["schemas"]["Amount-Output"] | null;
+      /** Price Changed */
+      price_changed: boolean;
+      /** Price Reason */
+      price_reason: string | null;
       unit_cost: components["schemas"]["UnitCost-Output"];
       discount: components["schemas"]["Amount-Output"];
       tax_rate: components["schemas"]["Rate-Output"];
@@ -6373,6 +6380,8 @@ export interface components {
     SaleItemUpdate: {
       qty?: components["schemas"]["SaleQty"] | null;
       discount?: components["schemas"]["LineDiscount"] | null;
+      unit_price?: components["schemas"]["LinePrice"] | null;
+      price_reason?: components["schemas"]["PriceReason"] | null;
     };
     /** SalePage */
     SalePage: {

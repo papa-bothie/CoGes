@@ -158,7 +158,7 @@ def _gather(session: Session, ctx: TenantContext, logs: Sequence[AuditLogRead]) 
     category_ids: set[UUID] = set()
     for log in logs:
         after, before = _side(log, "after"), _side(log, "before")
-        if log.entity_table in ("product_prices", "inventory_movements"):
+        if log.entity_table in ("product_prices", "inventory_movements", "sale_items"):
             product_id = _uuid(after.get("product_id") or before.get("product_id"))
             if product_id:
                 product_ids.add(product_id)
@@ -265,6 +265,18 @@ def _price(names: _Names, log: AuditLogRead, who: str) -> str:
     )
 
 
+def _sale_price(names: _Names, log: AuditLogRead, who: str) -> str:
+    """Prix changé à la caisse, écrit à la confirmation de la vente (ADR 0107)."""
+    after = _side(log, "after")
+    reason = str(after.get("price_reason") or "").strip()
+    sentence = (
+        f"{who} a changé le prix {of(_product(names, log))} sur la vente "
+        f"n° {short_no(after.get('sale_no'))} : "
+        f"{_money(after.get('list_price'))} → {_money(after.get('unit_price'))}"
+    )
+    return sentence + (f" ({reason[:1].lower()}{reason[1:]})" if reason else "")
+
+
 def _user(names: _Names, log: AuditLogRead, who: str) -> str:
     target = _person(names, log)
     after = _side(log, "after")
@@ -359,6 +371,7 @@ def sentence(names: _Names, log: AuditLogRead) -> str:
     special: dict[str, Callable[[], str | None]] = {
         "sales": lambda: _sale(log, who),
         "product_prices": lambda: _price(names, log, who),
+        "sale_items": lambda: _sale_price(names, log, who),
         "inventory_movements": lambda: _stock(names, log, who),
         "users": lambda: _user(names, log, who),
         "user_roles": lambda: (

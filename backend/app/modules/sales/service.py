@@ -501,7 +501,8 @@ def add_item(
     Le prix et le taux inscrits ici sont **provisoires** : la confirmation les
     relira et les figera (§ 5.1 étape 3). Les écrire dès maintenant n'est pas une
     anticipation inutile — sans eux, le brouillon afficherait un total à zéro, et
-    le caissier ne saurait pas ce qu'il doit encaisser.
+    le caissier ne saurait pas ce qu'il doit encaisser. `list_price` est posé au même
+    prix : la ligne part au prix de la fiche (ADR 0107).
     """
     sale = _locked_draft(session, ctx, sale_id)
 
@@ -516,6 +517,7 @@ def add_item(
             price_id=price.price_id,
             qty=payload.qty,
             unit_price=price.unit_price,
+            list_price=price.unit_price,
             unit_cost=Decimal("0"),
             discount=payload.discount,
             tax_rate=tax_rate,
@@ -540,14 +542,26 @@ def update_item(
     item_id: UUID,
     payload: SaleItemUpdate,
 ) -> SaleItem:
-    """Corrige la quantité ou la remise d'une ligne de brouillon."""
+    """Corrige la quantité, la remise ou le prix d'une ligne de brouillon.
+
+    Le prix se change sans limite ni droit de plus que celui de vendre (ADR 0107) ;
+    le prix de la fiche, lui, reste sur la ligne. Revenir au prix de la fiche efface
+    le motif. L'audit n'est écrit qu'à la confirmation : un brouillon n'a aucun effet.
+    """
     sale = _locked_draft(session, ctx, sale_id)
     item = _get_item(session, ctx, sale, item_id)
 
-    changes = payload.model_dump(exclude_unset=True)
+    changes = payload.model_dump(exclude_unset=True, exclude={"price_reason"})
     for field, value in changes.items():
         if value is not None:
             setattr(item, field, value)
+    if payload.unit_price is not None:
+        if item.list_price is None:
+            item.list_price = products_service.assert_sellable(
+                session, ctx, item.product_id
+            ).unit_price
+        changed = payload.unit_price != item.list_price
+        item.price_reason = (payload.price_reason or None) if changed else None
     _flush(
         session,
         item,
@@ -611,11 +625,19 @@ def confirm_sale(
     tax_enabled = companies_service.is_tax_enabled(session, ctx)
 
     lines: list[dict[str, str]] = []
+    changed_prices: list[SaleItem] = []
     for item in items:
-        # 3. Snapshots : prix et intervalle ouverts, taux figé.
+        # 3. Snapshots : prix et intervalle ouverts, taux figé. Un prix changé à la
+        #    caisse est gardé ; sinon la ligne suit la fiche du moment (ADR 0107).
         price = products_service.assert_sellable(session, ctx, item.product_id)
+        typed = item.list_price is not None and item.unit_price != item.list_price
         item.price_id = price.price_id
-        item.unit_price = price.unit_price
+        item.list_price = price.unit_price
+        if typed:
+            changed_prices.append(item)
+        else:
+            item.unit_price = price.unit_price
+            item.price_reason = None
         item.tax_rate = _tax_rate_for(summaries.get(item.product_id), tax_enabled=tax_enabled)
 
         # 4-5. Sortie de stock au CMP, puis recopie du coût dans la ligne.
@@ -692,6 +714,24 @@ def confirm_sale(
         after=_audited(sale),
         ip_address=ip_address,
     )
+    for item in changed_prices:
+        audit_critical(
+            session,
+            ctx,
+            action=AuditAction.UPDATE,
+            entity_table="sale_items",
+            entity_id=item.id,
+            before={"unit_price": str(item.list_price)},
+            after={
+                "unit_price": str(item.unit_price),
+                "list_price": str(item.list_price),
+                "price_reason": item.price_reason,
+                "product_id": str(item.product_id),
+                "sale_id": str(sale.id),
+                "sale_no": sale.sale_no,
+            },
+            ip_address=ip_address,
+        )
     emit(
         session,
         ctx,
@@ -961,6 +1001,9 @@ def build_item_reads(
                 price_id=item.price_id,
                 qty=item.qty,
                 unit_price=item.unit_price,
+                list_price=item.list_price,
+                price_changed=item.list_price is not None and item.unit_price != item.list_price,
+                price_reason=item.price_reason,
                 unit_cost=item.unit_cost,
                 discount=item.discount,
                 tax_rate=item.tax_rate,

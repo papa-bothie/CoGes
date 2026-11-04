@@ -3,10 +3,11 @@
 Montants, quantités et taux sont des `Decimal` en Python et des **chaînes** en JSON
 (types annotés de `app/core/money.py`). Aucun flottant ne traverse l'API.
 
-Ce que le client n'envoie **jamais** : le prix unitaire, le taux de taxe, le coût
-unitaire, les totaux. Le prix vient de `product_prices`, le taux de `products` ou de
-la TVA de l'entreprise, le coût du CMP, et les totaux sont produits par la base
-(§ 4.4 et § 4.5). Un client qui pourrait fixer son prix ne serait pas un client.
+Ce que le client n'envoie **jamais** : le taux de taxe, le coût unitaire, les totaux.
+Le taux vient de `products` ou de la TVA de l'entreprise, le coût du CMP, et les
+totaux sont produits par la base (§ 4.4 et § 4.5). Le prix vient de `product_prices`,
+sauf quand la caisse le change sur une ligne de brouillon (ADR 0107) : la ligne garde
+alors le prix de la fiche (`list_price`) à côté du prix appliqué.
 """
 
 from __future__ import annotations
@@ -45,6 +46,14 @@ type SalePaymentState = Literal["paid", "unpaid", "returned", "cancelled"]
 type SaleQty = Annotated[Quantity, Field(gt=Decimal("0"))]
 type LineDiscount = Annotated[Amount, Field(ge=Decimal("0"))]
 type PaidAmount = Annotated[Amount, Field(ge=Decimal("0"))]
+#: Prix appliqué à une ligne (ADR 0107) : jamais négatif, 0 accepté (cadeau), aucun plafond.
+type LinePrice = Annotated[Amount, Field(ge=Decimal("0"))]
+
+PRICE_REASON_MAX_LENGTH = 120
+#: Motif facultatif d'un prix changé ; vide = aucun motif.
+type PriceReason = Annotated[
+    str, StringConstraints(strip_whitespace=True, max_length=PRICE_REASON_MAX_LENGTH)
+]
 
 type CancelReason = Annotated[
     str,
@@ -105,6 +114,10 @@ class SaleItemUpdate(BaseModel):
 
     qty: SaleQty | None = None
     discount: LineDiscount | None = None
+    #: Prix changé à la caisse (ADR 0107). Le prix de la fiche le remet « habituel ».
+    unit_price: LinePrice | None = None
+    #: Lu seulement avec `unit_price` ; effacé quand le prix redevient celui de la fiche.
+    price_reason: PriceReason | None = None
 
 
 class SaleConfirm(BaseModel):
@@ -146,7 +159,13 @@ class SaleItemRead(BaseModel):
     sku: str | None
     price_id: UUID | None
     qty: Quantity
+    #: Prix appliqué : celui que le client paie (ADR 0107).
     unit_price: Amount
+    #: Prix de la fiche ; `None` sur une ligne d'avant la révision 0034.
+    list_price: Amount | None
+    #: `unit_price` différent du prix de la fiche : la caisse l'a changé.
+    price_changed: bool
+    price_reason: str | None
     #: `numeric(14,4)` : le CMP a besoin de quatre décimales.
     unit_cost: UnitCost
     discount: Amount

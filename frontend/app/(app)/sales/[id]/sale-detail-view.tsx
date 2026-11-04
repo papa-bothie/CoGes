@@ -223,6 +223,11 @@ export function SaleDetailView({ saleId }: { saleId: string }) {
                 <p className="numeric text-muted-foreground">
                   {t.lineQty(formatQty(item.qty), formatAmount(item.unit_price, currency))}
                 </p>
+                {item.price_changed && item.list_price && (
+                  <p className="text-sm font-bold text-ventes-encre">
+                    {t.priceChanged(formatAmount(item.list_price, currency), item.price_reason)}
+                  </p>
+                )}
               </div>
               <span className="text-lg font-extrabold numeric">
                 {formatAmount(item.line_total, currency)}
