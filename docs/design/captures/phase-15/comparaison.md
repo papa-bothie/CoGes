@@ -8,9 +8,9 @@ page HTML). Images : maquette | front | différences.
 | N° | Écran | Lot | 1280 px | 390 px | Textes manquants | Images |
 |---|---|---|---|---|---|---|
 | 01 | Accueil | 3a | 3.0 % | 9.2 % | 0 | [1280](comparaison/01-accueil.png) [390](comparaison/01-accueil-390.png) |
-| 02 | Nouvelle vente | 3a | 10.9 % | 15.8 % | 0 | [1280](comparaison/02-nouvelle-vente.png) [390](comparaison/02-nouvelle-vente-390.png) |
-| 02b | paiement d'une partie (montant tapé + pavé) | 3a | 9.3 % | 15.2 % | — | [1280](comparaison/02b-nouvelle-vente-une-partie.png) [390](comparaison/02b-nouvelle-vente-une-partie-390.png) |
-| 02c | rendu de monnaie | 3a | 10.5 % | 15.7 % | — | [1280](comparaison/02c-nouvelle-vente-rendu-monnaie.png) [390](comparaison/02c-nouvelle-vente-rendu-monnaie-390.png) |
+| 02 | Nouvelle vente | 3a | 7.7 % | 13.2 % | 0 | [1280](comparaison/02-nouvelle-vente.png) [390](comparaison/02-nouvelle-vente-390.png) |
+| 02b | paiement d'une partie (montant tapé + pavé) | 3a | 7.1 % | 13.1 % | — | [1280](comparaison/02b-nouvelle-vente-une-partie.png) [390](comparaison/02b-nouvelle-vente-une-partie-390.png) |
+| 02c | rendu de monnaie | 3a | 7.4 % | 13.2 % | — | [1280](comparaison/02c-nouvelle-vente-rendu-monnaie.png) [390](comparaison/02c-nouvelle-vente-rendu-monnaie-390.png) |
 | 02d | écran de succès | 3a | 2.9 % | 16.3 % | — | [1280](comparaison/02d-nouvelle-vente-succes.png) [390](comparaison/02d-nouvelle-vente-succes-390.png) |
 | 03 | Liste des ventes | 3a | 1.9 % | 5.8 % | 0 | [1280](comparaison/03-liste-des-ventes.png) [390](comparaison/03-liste-des-ventes-390.png) |
 | 04 | Détail d'une vente | 3a | 4.3 % | 8.6 % | 0 | [1280](comparaison/04-detail-vente.png) [390](comparaison/04-detail-vente-390.png) |

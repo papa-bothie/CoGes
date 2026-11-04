@@ -34,8 +34,9 @@ const STEP = cn(
  * Une ligne du ticket (maquette 02) : nom et prix unitaire, − quantité +, total de la ligne,
  * puis « Faire une remise » qui ouvre un champ en francs (`discount` de la ligne). La
  * quantité se tape librement ; elle part au serveur quand on quitte le champ. Retirer le
- * dernier article enlève la ligne. Toucher le prix unitaire ouvre le changement de prix
- * (ADR 0107) : montant libre, motif facultatif, « Revenir au prix habituel ».
+ * dernier article enlève la ligne. Le prix unitaire est un bouton bordé, crayon et
+ * « Changer le prix » écrits, à côté de la remise (ADR 0107) : montant libre, motif
+ * facultatif, « Revenir au prix habituel ». Un prix changé garde l'habituel barré dessous.
  */
 export function TicketLine({
   item,
@@ -92,20 +93,6 @@ export function TicketLine({
       <div className="flex items-center gap-2.5 pt-3 pb-1">
         <div className="min-w-0 flex-1">
           <div className="font-bold">{name}</div>
-          <button
-            type="button"
-            onClick={() => setPriceOpen((open) => !open)}
-            aria-expanded={priceOpen}
-            aria-label={t.priceAria(name, formatAmount(item.unit_price, currency))}
-            disabled={disabled}
-            className="-mx-1 inline-flex min-h-cible items-center gap-1.5 px-1 text-left numeric text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
-            {t.unitPrice(formatAmount(item.unit_price, currency))}
-            <Pencil className="size-4" aria-hidden />
-          </button>
-          {item.price_changed && (
-            <div className="text-sm font-bold text-ventes-encre">{t.priceChanged}</div>
-          )}
         </div>
         <button
           type="button"
@@ -162,6 +149,22 @@ export function TicketLine({
       <div className="flex flex-wrap items-center gap-2.5 pb-2.5">
         <button
           type="button"
+          onClick={() => setPriceOpen((open) => !open)}
+          aria-expanded={priceOpen}
+          aria-label={t.priceAria(name, formatAmount(item.unit_price, currency))}
+          disabled={disabled}
+          className={cn(
+            "inline-flex min-h-cible items-center gap-2 rounded-touche border-2 px-3 text-left font-semibold numeric",
+            "outline-none hover:bg-voile focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
+            item.price_changed ? RUBRIQUE_CLASSES.ventes.picked : "border-input bg-card",
+          )}
+        >
+          <Pencil className="size-5 shrink-0 text-ventes-encre" strokeWidth={2.5} aria-hidden />
+          <span>{t.unitPrice(formatAmount(item.unit_price, currency))}</span>
+          <span className="font-bold text-ventes-encre">{t.priceButton}</span>
+        </button>
+        <button
+          type="button"
           onClick={() => setDiscountOpen((open) => !open)}
           aria-expanded={discountOpen}
           className="min-h-12 px-1 font-bold text-ventes-encre outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -193,6 +196,15 @@ export function TicketLine({
           </label>
         )}
       </div>
+      {item.price_changed && (
+        <p className="pb-2.5 text-sm">
+          <span className="font-bold text-ventes-encre">{t.priceChanged}</span>
+          {" · "}
+          {t.usualBefore}{" "}
+          <s className="numeric">{formatAmount(item.list_price ?? "0", currency)}</s>
+          {item.price_reason ? ` · ${item.price_reason}` : null}
+        </p>
+      )}
       <FieldError message={error} />
     </div>
   );

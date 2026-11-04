@@ -54,6 +54,14 @@ ne permettrait pas un prix plus haut.
   (« Client fidèle », « Prix négocié », « Article abîmé », « Cadeau ») et un texte libre,
   jamais obligatoires ; à 0, une seconde confirmation (« Oui, l'offrir ») ; la ligne porte
   « Prix changé » ; le détail de la vente « Prix changé (habituel : 2 500 F) — motif ».
+- **Bouton visible (correction avant fusion, 2026-11-04)** : le petit crayon gris sous le
+  nom passait inaperçu. Le prix unitaire devient un bouton bordé de 48 px, sur la ligne de
+  « Faire une remise » (sous la quantité, qui garde sa place) : crayon net, « 2 500 F
+  l'unité » et « Changer le prix » écrits, nom accessible « Changer le prix de Riz 5 kg
+  (2 500 F l'unité) » (le libellé visible y est en tête). Un prix changé : bouton teinté
+  de la rubrique, puis « Prix changé · habituel ~~2 500 F~~ · motif » sous la ligne.
+  Vitest (nom accessible, libellé écrit, prix barré) et e2e (un vendeur trouve le bouton,
+  l'utilise et encaisse, axe clair et sombre, 360 px sans défilement).
 - **Reçu et facture** : ils montraient déjà `unit_price` de la ligne, donc le prix
   appliqué ; rien d'autre dans ce lot (groupe 2).
 
