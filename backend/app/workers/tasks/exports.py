@@ -13,7 +13,6 @@ from typing import Any
 from uuid import UUID
 
 from app.core.audit import AuditAction, audit_secondary
-from app.core.errors import NotFoundError
 from app.core.tenancy import TenantContext, tenant_transaction
 from app.modules.importexport import service as importexport_service
 from app.workers.beat import SWEEP_EXPORTS
@@ -24,8 +23,10 @@ from app.workers.tenants import each_company
 logger = logging.getLogger(__name__)
 
 #: La demande est enfilée par l'API avant le COMMIT de sa transaction : si la ligne
-#: n'est pas encore visible, on réessaie un peu plus tard plutôt que d'échouer.
+#: n'est pas encore visible, on réessaie un peu plus tard plutôt que d'échouer. C'est le
+#: seul cas réessayé (`ExportNotVisibleError`) ; toute autre erreur met l'export en échec.
 MISSING_ROW_RETRIES = 5
+EXPORT_CRASHED = "Le fichier n'a pas pu être préparé : redemandez-le."
 
 
 @celery_app.task(name="exports.build_sales", bind=True, max_retries=MISSING_ROW_RETRIES)
@@ -35,9 +36,13 @@ def build_sales(self: Any, *, company_id: str, user_id: str, export_id: str) -> 
     phase 10 : les demandes déjà enfilées et le balayage de nuit le connaissent."""
     ctx = TenantContext(user_id=UUID(user_id), company_id=UUID(company_id))
     try:
+        # 1. Le fichier, lu dans un instantané unique (REPEATABLE READ, READ ONLY).
+        with tenant_transaction(ctx, snapshot=True) as session:
+            built = importexport_service.render_export(session, ctx, UUID(export_id))
+        # 2. Rangé dans une transaction courte, ligne verrouillée, puis tracé.
         with tenant_transaction(ctx) as session:
-            status = importexport_service.build_sales_export(session, ctx, UUID(export_id))
-            if status == "ready":
+            status, stored = importexport_service.store_export(session, ctx, UUID(export_id), built)
+            if stored and status == "ready":
                 audit_secondary(
                     session,
                     ctx,
@@ -46,14 +51,14 @@ def build_sales(self: Any, *, company_id: str, user_id: str, export_id: str) -> 
                     entity_id=UUID(export_id),
                     context=importexport_service.export_nature(session, ctx, UUID(export_id)),
                 )
-    except NotFoundError as exc:
+    except importexport_service.ExportNotVisibleError as exc:
         raise self.retry(countdown=2**self.request.retries, exc=exc) from exc
-    except Exception as exc:
+    except Exception:
         logger.error("Export en échec", extra={"export_id": export_id}, exc_info=True)
         with tenant_transaction(ctx) as session:
-            importexport_service.mark_export_failed(
-                session, ctx, UUID(export_id), f"{type(exc).__name__}"
-            )
+            # Montré dans Réglages → Fichiers : une phrase, jamais le nom de l'erreur
+            # (qui reste dans le journal ci-dessus).
+            importexport_service.mark_export_failed(session, ctx, UUID(export_id), EXPORT_CRASHED)
         return "failed"
     return status
 

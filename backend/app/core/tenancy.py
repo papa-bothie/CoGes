@@ -77,18 +77,37 @@ class TenantContext:
         return cls(user_id=NIL_USER_ID, company_id=company_id)
 
 
+#: Premières instructions d'une transaction de document (ADR 0114) : `REPEATABLE READ,
+#: READ ONLY`, écrit en `SET LOCAL` comme tout réglage de transaction.
+SNAPSHOT_TRANSACTION_SQL = (
+    text("SET LOCAL transaction_isolation = 'repeatable read'"),
+    text("SET LOCAL transaction_read_only = on"),
+)
+
+
 @contextmanager
 def tenant_transaction(
-    ctx: TenantContext, *, session_factory: sessionmaker[Any] | None = None
+    ctx: TenantContext,
+    *,
+    session_factory: sessionmaker[Any] | None = None,
+    snapshot: bool = False,
 ) -> Iterator[Session]:
     """Ouvre une transaction, y pose le contexte tenant, puis commit ou rollback.
 
     Aucune requête métier ne doit s'exécuter hors de ce gestionnaire.
+
+    `snapshot` : transaction `REPEATABLE READ, READ ONLY`, pour un document long fait
+    par le worker (ADR 0114) : toutes ses lectures voient la base au même instant, et
+    PostgreSQL refuse toute écriture. Déclarée **avant** la première requête, sans quoi
+    l'instantané serait déjà pris.
     """
     factory = session_factory or get_session_factory()
     session: Session = factory()
     try:
         with session.begin():
+            if snapshot:
+                for statement in SNAPSHOT_TRANSACTION_SQL:
+                    session.execute(statement)
             session.execute(SET_TENANT_CONTEXT_SQL, {"company_id": str(ctx.company_id)})
             observed = session.execute(READ_TENANT_CONTEXT_SQL).scalar_one()
             if observed != str(ctx.company_id):

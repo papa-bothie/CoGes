@@ -2,10 +2,12 @@
 
 La file d'exports existante (révision 0013, ADR 0041) produit aussi des PDF : les ventes
 d'une période et le journal de caisse, qui peuvent être longs, passent par le worker et
-arrivent dans Réglages → Fichiers comme l'export Excel des ventes.
+arrivent dans Réglages → Fichiers comme l'export Excel des ventes. Le stock, les dépenses
+et les dettes y passent aussi au-delà de 1 000 lignes (corrections avant fusion, la
+révision n'était pas encore déployée).
 
 - `export_format` gagne `pdf` ;
-- `export_files.kind` admet `cash` (journal de caisse) en plus de `sales`.
+- `export_files.kind` admet `cash`, `stock`, `expenses` et `debts` en plus de `sales`.
 
 Ajout seul, rétrocompatible (ADR 0083). `downgrade` : les lignes PDF ou de caisse sont
 retirées (elles n'existaient pas avant), puis le type est recréé sans `pdf`.
@@ -30,7 +32,7 @@ def upgrade() -> None:
     op.execute(f"ALTER TABLE {TABLE} DROP CONSTRAINT export_files_kind_check")
     op.execute(
         f"ALTER TABLE {TABLE} ADD CONSTRAINT export_files_kind_check "
-        "CHECK (kind IN ('sales', 'cash'))"
+        "CHECK (kind IN ('sales', 'cash', 'stock', 'expenses', 'debts'))"
     )
 
 

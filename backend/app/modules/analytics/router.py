@@ -333,7 +333,9 @@ def history(
 
 def _pdf(tenant: TenantSession, request: Request, kind: str, **period: date | None) -> Response:
     """Le PDF dans le corps, `no-store`, et l'export tracé (audit secondaire, ADR 0041)."""
-    report = reports.pdf_report(tenant.session, tenant.ctx, reports.report_kind(kind), **period)
+    report = reports.pdf_report(
+        tenant.session, tenant.ctx, reports.report_kind(kind), immediate=True, **period
+    )
     queue.enqueue(
         AUDIT_TASK,
         countdown=0,

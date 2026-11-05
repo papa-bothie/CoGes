@@ -14,13 +14,14 @@ import { usePermission } from "@/hooks/use-permission";
 import { PDF_EXPORTS } from "@/lib/access";
 import { api } from "@/lib/api/client";
 import { useIdempotencyKey } from "@/lib/api/idempotency";
-import { errorMessage, toApiError } from "@/lib/api/errors";
+import { ApiError, errorMessage, toApiError } from "@/lib/api/errors";
 import { attachmentName, saveBlob } from "@/lib/files";
 import { labels } from "@/lib/labels";
 import { can } from "@/lib/permissions";
 import {
   pdfPeriod,
   QUEUED_PDFS,
+  TOO_LARGE,
   UNDATED_PDFS,
   type PdfKind,
   type PdfPeriod,
@@ -48,13 +49,13 @@ async function downloadNow(kind: PdfKind, period: PdfPeriod | null): Promise<voi
 }
 
 async function requestQueued(
-  kind: "sales" | "cash",
-  period: PdfPeriod,
+  kind: PdfKind,
+  period: PdfPeriod | null,
   headers: Record<string, string>,
 ): Promise<void> {
   const { error, response } = await api.POST("/api/v1/exports/pdf", {
     headers,
-    body: { kind, date_from: period.from, date_to: period.to },
+    body: period ? { kind, date_from: period.from, date_to: period.to } : { kind },
   });
   if (!response.ok) throw toApiError(response.status, error);
 }
@@ -63,7 +64,8 @@ async function requestQueued(
  * « Exporter en PDF » (prompt 35, bloc X, ADR 0114) : masqué sans le droit de lecture de
  * l'écran **et** le droit d'export du document (le serveur revérifie). Les documents
  * datés demandent leur période (aujourd'hui, cette semaine, ce mois, des dates) ; les
- * longs partent au worker et arrivent dans Réglages → Fichiers.
+ * longs partent au worker et arrivent dans Réglages → Fichiers. Un document immédiat que
+ * le serveur juge trop long (`report_too_large`) se prépare de la même façon.
  */
 export function PdfExport({ kind, rubrique = "argent" }: { kind: PdfKind; rubrique?: Rubrique }) {
   const allowed = usePermission(PDF_EXPORTS[kind]);
@@ -74,48 +76,78 @@ export function PdfExport({ kind, rubrique = "argent" }: { kind: PdfKind; rubriq
   const [custom, setCustom] = useState({ from: "", to: "" });
   const [error, setError] = useState<string | null>(null);
   const [queued, setQueued] = useState(false);
+  // Nombre de lignes d'un document immédiat refusé comme trop long : il passe par la file.
+  const [tooLarge, setTooLarge] = useState<number | null>(null);
+  const viaQueue = QUEUED_PDFS.includes(kind) || tooLarge !== null;
   const undated = UNDATED_PDFS.includes(kind);
   // Gardée jusqu'au succès : une demande relancée après une coupure n'en fait pas deux.
   const idempotency = useIdempotencyKey();
 
   const run = useMutation({
     meta: { toastError: false },
-    mutationFn: async (period: PdfPeriod | null) => {
-      if (kind === "sales" || kind === "cash")
-        await requestQueued(kind, period!, idempotency.headers);
+    mutationFn: async ({ period, queue }: { period: PdfPeriod | null; queue: boolean }) => {
+      if (queue) await requestQueued(kind, period, idempotency.headers);
       else await downloadNow(kind, period);
+      return queue;
     },
-    onSuccess: () => {
+    onSuccess: (queue) => {
       setError(null);
-      idempotency.renew();
-      if (QUEUED_PDFS.includes(kind)) setQueued(true);
-      else setOpen(false);
+      if (queue) {
+        idempotency.renew();
+        setQueued(true);
+      } else setOpen(false);
     },
-    onError: (failure) => setError(errorMessage(failure)),
+    onError: (failure) => {
+      if (failure instanceof ApiError && failure.code === TOO_LARGE) {
+        setError(null);
+        setTooLarge(Number(failure.details.rows) || 0);
+      } else setError(errorMessage(failure));
+    },
   });
 
   if (!allowed) return null;
 
-  const submit = () => {
-    if (undated) return run.mutate(null);
+  const submit = (queue = viaQueue) => {
+    if (undated) return run.mutate({ period: null, queue });
     const period = pdfPeriod(choice, todayIn(timeZone), custom);
     if (!period) return setError(t.invalidPeriod);
     setQueued(false);
-    run.mutate(period);
+    run.mutate({ period, queue });
   };
+
+  const queueNotice = (
+    <>
+      {tooLarge !== null && !queued && <p className="text-encre-2">{t.tooLarge(tooLarge)}</p>}
+      {queued && (
+        <p role="status" className="text-encre-2">
+          {t.queued}{" "}
+          <Link href="/settings/files" className="font-bold underline underline-offset-4">
+            {t.files}
+          </Link>
+        </p>
+      )}
+    </>
+  );
 
   if (undated) {
     return (
       <div className="flex flex-col gap-1.5">
-        <SecondaryAction onClick={submit} disabled={run.isPending}>
-          {run.isPending ? (
+        <SecondaryAction onClick={() => submit(false)} disabled={run.isPending}>
+          {run.isPending && !viaQueue ? (
             <Loader2 className="size-5 animate-spin" aria-hidden />
           ) : (
             <FileDown className="size-5" aria-hidden />
           )}
           {t.button}
         </SecondaryAction>
+        {tooLarge !== null && !queued && (
+          <SecondaryAction onClick={() => submit(true)} disabled={run.isPending}>
+            {run.isPending && <Loader2 className="size-5 animate-spin" aria-hidden />}
+            {t.prepare}
+          </SecondaryAction>
+        )}
         <FieldError message={error ?? undefined} />
+        {queueNotice}
       </div>
     );
   }
@@ -169,19 +201,12 @@ export function PdfExport({ kind, rubrique = "argent" }: { kind: PdfKind; rubriq
               ))}
             </div>
           )}
-          <SecondaryAction onClick={submit} disabled={run.isPending}>
+          <SecondaryAction onClick={() => submit()} disabled={run.isPending}>
             {run.isPending && <Loader2 className="size-5 animate-spin" aria-hidden />}
-            {QUEUED_PDFS.includes(kind) ? t.prepare : t.download}
+            {viaQueue ? t.prepare : t.download}
           </SecondaryAction>
           <FieldError message={error ?? undefined} />
-          {queued && (
-            <p role="status" className="text-encre-2">
-              {t.queued}{" "}
-              <Link href="/settings/files" className="font-bold underline underline-offset-4">
-                {t.files}
-              </Link>
-            </p>
-          )}
+          {queueNotice}
         </div>
       )}
     </div>

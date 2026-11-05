@@ -15,7 +15,13 @@ import { errorMessage, toApiError } from "@/lib/api/errors";
 import { useIdempotencyKey } from "@/lib/api/idempotency";
 import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
-import { attachmentName, periodName, salesPeriod, saveBlob, type SalesPeriod } from "@/lib/files";
+import {
+  attachmentName,
+  preparedTitle,
+  salesPeriod,
+  saveBlob,
+  type SalesPeriod,
+} from "@/lib/files";
 import { formatDayMonth } from "@/lib/format";
 import { labels } from "@/lib/labels";
 import { todayIn } from "@/lib/period";
@@ -298,11 +304,9 @@ function PreparedFiles() {
   });
 
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
-  // Ventes en tableur ou en PDF, journal de caisse en PDF (ADR 0114) ; le serveur ne
-  // rend que ce que les droits de la personne lui laissent voir.
-  const files = (query.data?.items ?? []).filter(
-    (file) => file.kind === "sales" || file.kind === "cash",
-  );
+  // Ventes en tableur ou en PDF, et les documents PDF de la file (ADR 0114) ; le
+  // serveur ne rend que ce que les droits de la personne lui laissent voir.
+  const files = query.data?.items ?? [];
   return (
     <>
       <h3 className="mt-1.5 text-lg font-bold">{t.preparedTitle}</h3>
@@ -313,16 +317,11 @@ function PreparedFiles() {
       ) : (
         <ul>
           {files.map((file) => {
-            const params = file.params as { date_from?: string; date_to?: string };
-            const period =
-              params.date_from && params.date_to
-                ? periodName(params.date_from, params.date_to)
-                : null;
-            const title = period
-              ? file.kind === "cash"
-                ? t.cashOf(period)
-                : t.salesOf(period)
-              : (file.filename ?? t.sales);
+            const title = preparedTitle(
+              file.kind,
+              file.params as { date_from?: string; date_to?: string },
+              file.filename,
+            );
             const name = `${title} · ${file.format === "pdf" ? t.pdfTag : t.excelTag}`;
             const expired = isExpired(file);
             const when =
@@ -341,7 +340,7 @@ function PreparedFiles() {
                 {file.status === "pending" ? (
                   <span className="font-bold text-depenses-encre">{t.pending}</span>
                 ) : file.status === "failed" ? (
-                  <span className="font-bold text-destructive">{t.failed}</span>
+                  <span className="font-bold text-destructive">{file.error ?? t.failed}</span>
                 ) : expired ? (
                   <span className="text-muted-foreground">{t.expired}</span>
                 ) : (

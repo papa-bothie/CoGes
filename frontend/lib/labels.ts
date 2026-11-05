@@ -511,6 +511,8 @@ export const labels = {
     invalidPeriod: "Choisissez deux dates dans l'ordre, 366 jours au plus.",
     queued: "Le PDF est en préparation. Vous le trouverez dans",
     files: "Réglages → Fichiers",
+    tooLarge: (rows: number) =>
+      `Ce document compte ${rows.toLocaleString("fr-FR")} lignes : il est trop long pour arriver tout de suite. Préparez-le, il arrivera dans Réglages → Fichiers.`,
     section: "Pour votre comptable",
     titles: {
       sales: "Ventes sur une période",
@@ -1737,6 +1739,10 @@ export const labels = {
         /^[aeiouy]/i.test(period)
           ? `Journal de caisse d’${period}`
           : `Journal de caisse de ${period}`,
+      expensesOf: (period: string) =>
+        /^[aeiouy]/i.test(period) ? `Dépenses d’${period}` : `Dépenses de ${period}`,
+      stock: "État du stock à ce jour",
+      debts: "Dettes clients et fournisseurs",
       pdfTag: "PDF",
       excelTag: "Excel",
       preparedOn: (day: string) => `Préparé le ${day}`,

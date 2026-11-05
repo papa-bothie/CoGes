@@ -3,6 +3,8 @@
  * l'écran, en jours de l'entreprise, et les deux façons d'obtenir le document.
  *
  * - **immédiat** (état du stock, dépenses, dettes) : le PDF arrive dans la réponse ;
+ *   au-delà de 1 000 lignes, le serveur répond `report_too_large` et l'écran propose de
+ *   le préparer par la file ;
  * - **en tâche de fond** (ventes, journal de caisse, potentiellement longs) : la demande est
  *   enregistrée, le fichier arrive dans Réglages → Fichiers comme l'export Excel.
  */
@@ -16,6 +18,8 @@ export const MAX_PDF_DAYS = 366;
 
 /** Les documents longs, produits par le worker. */
 export const QUEUED_PDFS: readonly PdfKind[] = ["sales", "cash"];
+/** Réponse d'un document immédiat trop long : il passe alors par la file. */
+export const TOO_LARGE = "report_too_large";
 /** Les documents datés « à aujourd'hui », sans période à choisir. */
 export const UNDATED_PDFS: readonly PdfKind[] = ["stock", "debts"];
 
