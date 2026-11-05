@@ -69,3 +69,31 @@ doit suivre la même mise en page et la même source de données.
   (logo, adresse en gras, tableau à colonnes, totaux détaillés) ; les écarts sont notés
   dans `docs/design/captures/phase-15/comparaison.md`.
 - Le bloc T rendra ces deux pièces en PDF côté serveur à partir de la même lecture.
+
+## Amendement du 2026-11-05 : facture au vert CoGes
+Demande du propriétaire avant fusion, d'après le modèle `docs/design/references/modele-facture.jpg`
+(disposition et remise choisies par AskUserQuestion le 2026-11-05). **Remplace la palette
+noir et blanc pour la facture A4 seulement** ; le ticket et le bon de retour restent en
+noir et blanc (imprimantes thermiques).
+- **En-tête** : logo à gauche (sinon initiales dans une pastille `vert-marque`) et nom ; à
+  droite téléphone et adresse, chacun avec une pastille ronde `vert-action` ; filet vert
+  dessous.
+- **« De »** (nom, adresse, téléphone, NINEA, RC) à gauche, grand titre **« FACTURE »**
+  en `vert-marque` à droite, « Facture n° F-1044 », la date et le vendeur dessous.
+- **« Facturé à »** dans un cadre `ventes-teinte` : le client, ou « Client de passage ».
+- **Tableau** : bandeau `vert-marque` à texte blanc (N°, Désignation, Prix unitaire, Qté,
+  Total), en-tête répété sur chaque page ; description puis « Remise : -200 F » en petit
+  sous la désignation (plus de colonne Remise) ; lignes alternées `recu-entete` ;
+  montants alignés à droite. Sur un téléphone, le tableau défile dans son cadre.
+- **Totaux** : sous-total, remises, TVA s'il y en a, bandeau `vert-marque` « Total », puis
+  « Déjà payé » et « Reste à payer » — jamais pour une vente annulée.
+- **Bas de page** : « Merci pour votre confiance », moyens de paiement utilisés avec leur
+  montant, pied de reçu, puis un cadre « Signature et cachet » à droite ; « Page n/N ».
+  Pas de coins décoratifs.
+- **Couleurs** : jetons de la maquette v2 seulement. `.papier` reprend le bloc clair de
+  `globals.css` (la facture reste claire en sombre) ; `print-color-adjust: exact`. Blanc
+  sur `vert-marque` 11:1, sur `vert-action` 5,4:1 (AA), vérifiés par
+  `receipt-contrast.test.ts`, y compris le bandeau converti en gris.
+- **Captures** : `docs/design/captures/groupe-2/facture-verte/` (`avant-*`, `apres-*`, à
+  1280 et 390 px) ; écart à la maquette v2 noté dans `docs/design/maquette-v2/ecarts.md`.
+- Le PDF du serveur (bloc T, ADR 0113) suit la même mise en page.
