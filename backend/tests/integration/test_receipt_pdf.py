@@ -335,3 +335,88 @@ def test_the_support_access_downloads(
         f"/api/v1/sales/{sale_id}/receipt/pdf", headers=auth_headers(support)
     )
     assert response.status_code == 200, response.text
+
+
+# ---------------------------------------------------- corrections avant fusion (ADR 0113)
+
+
+def _credit_sale(client: TestClient, token: str) -> str:
+    """Vente confirmée à crédit (rien payé) : le reste dû serait le total."""
+    sale_id = _post(client, token, "/api/v1/sales", {})["id"]
+    _post(
+        client,
+        token,
+        f"/api/v1/sales/{sale_id}/items",
+        {"product_id": _product(client, token), "qty": "2"},
+    )
+    customer = _post(client, token, "/api/v1/customers", {"name": "Awa Ndiaye"})["id"]
+    patched = client.patch(
+        f"/api/v1/sales/{sale_id}", headers=auth_headers(token), json={"customer_id": customer}
+    )
+    assert patched.status_code == 200, patched.text
+    _post(client, token, f"/api/v1/sales/{sale_id}/confirm", {"paid_amount": "0", "method": "cash"})
+    return sale_id
+
+
+def test_a_cancelled_sale_neither_asks_for_the_rest_nor_states_the_sum(
+    api_client: TestClient, manager: str
+) -> None:
+    """Une vente annulée ne réclame rien : ni « Reste à payer », ni « Arrêtée la présente
+    facture à la somme de… », sur la facture comme sur le ticket."""
+    sale_id = _credit_sale(api_client, manager)
+    _post(api_client, manager, f"/api/v1/sales/{sale_id}/cancel", {"reason": "Erreur de saisie"})
+    for fmt in ("a4", "ticket"):
+        response = _pdf(api_client, manager, f"/api/v1/sales/{sale_id}/receipt/pdf", format=fmt)
+        assert response.status_code == 200, response.text
+        _, text = _read(response.content)
+        assert "VENTE ANNULÉE" in text, fmt
+        assert "reste à payer" not in text.casefold(), (fmt, text)
+        assert "Arrêtée la présente facture" not in text, (fmt, text)
+
+
+def test_a_shop_name_with_markup_and_no_logo_is_printed_as_typed(
+    api_client: TestClient, manager: str
+) -> None:
+    """Les initiales qui remplacent le logo sont échappées : « <Keur> » n'est pas une
+    balise pour ReportLab (500 avant la correction)."""
+    patched = api_client.patch(
+        "/api/v1/companies/me",
+        headers=auth_headers(manager),
+        json={"name": "Diop & Fils <Keur>"},
+    )
+    assert patched.status_code == 200, patched.text
+    sale_id, _ = _sale(api_client, manager)
+    for fmt in ("a4", "ticket"):
+        response = _pdf(api_client, manager, f"/api/v1/sales/{sale_id}/receipt/pdf", format=fmt)
+        assert response.status_code == 200, (fmt, response.text)
+        reader, text = _read(response.content)
+        assert ("Diop & Fils <Keur>" if fmt == "a4" else "DIOP & FILS <KEUR>") in text
+        assert _images(reader) == 0
+    _, invoice = _read(
+        _pdf(api_client, manager, f"/api/v1/sales/{sale_id}/receipt/pdf", format="a4").content
+    )
+    assert "FK" in invoice, "initiales : premières lettres des deux derniers mots"
+    disposition = _pdf(api_client, manager, f"/api/v1/sales/{sale_id}/receipt/pdf").headers[
+        "content-disposition"
+    ]
+    assert 'filename="Facture-0001-Diop-Fils-Keur.pdf"' in disposition
+
+
+@pytest.mark.parametrize("name", ["", "   ", None])
+def test_a_blank_seller_name_prints_no_seller(
+    api_client: TestClient, manager: str, name: str | None
+) -> None:
+    """Un nom de vendeur vide ou fait d'espaces : ni 500, ni « Servi par : » orphelin.
+
+    La base refuse un tel nom (`users_full_name_check`) ; le rendu ne s'y fie pas pour
+    autant, il reçoit un reçu et ne doit jamais tomber dessus.
+    """
+    from app.modules.sales.documents import render_invoice, render_ticket
+    from app.modules.sales.schemas import ReceiptRead
+
+    sale_id, _ = _sale(api_client, manager)
+    body = api_client.get(f"/api/v1/sales/{sale_id}/receipt", headers=auth_headers(manager))
+    receipt = ReceiptRead.model_validate(body.json()).model_copy(update={"seller_name": name})
+    for render in (render_invoice, render_ticket):
+        _, content = _read(render(receipt, logo_png=None, tz="Africa/Dakar"))
+        assert "Servi par" not in content, (render.__name__, content)

@@ -87,3 +87,17 @@ reste en place. Le PDF doit suivre la même mise en page et la même source de d
     retour téléchargé, axe.
 - La pagination « Page n/N » de la facture marche dans tous les lecteurs PDF, ce que
   l'impression de Firefox ne fait pas (ADR 0112).
+
+## Corrections avant fusion (2026-11-05)
+Relecture du propriétaire, chaque point reproduit par un test rouge puis corrigé :
+- **Vente annulée** : ni « Reste à payer » ni « Arrêtée la présente facture à la somme
+  de… », sur le ticket et la facture, en PDF comme à l'écran (le tampon « VENTE
+  ANNULÉE » reste). La mention de TVA reste.
+- **Initiales du logo absent** : premières lettres ou chiffres des deux derniers mots
+  (« Diop & Fils <Keur> » → « FK »), puis échappées par `pdf.text` comme tout texte saisi.
+- **Nom du vendeur vide ou fait d'espaces** : aucune ligne « Servi par », aucune 500
+  (le ticket coupait le nom sans vérifier qu'il en restait un mot). La base refuse déjà
+  un tel nom (`users_full_name_check`) ; le rendu ne s'y fie pas.
+- **`pdf.attachment`** : guillemet, `\` et caractères de contrôle retirés du nom avant
+  les deux formes de l'en-tête ; accents ramenés à l'ASCII dans `filename` ; nom vide
+  ⇒ `document.pdf`.
