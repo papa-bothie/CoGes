@@ -45,3 +45,15 @@ def test_amount_in_words() -> None:
 def test_receipt_amounts_use_a_full_non_breaking_space() -> None:
     assert amount(Decimal("87500.00")) == "87 500 F"
     assert figure(Decimal("1234567.49")) == "1 234 567"
+
+
+def test_the_attachment_name_drops_quotes_backslashes_and_control_characters() -> None:
+    """`Content-Disposition` : un nom de fichier ne casse jamais l'en-tête (ADR 0113)."""
+    from app.core.pdf import attachment
+
+    header = attachment('Re"çu\\ n°\r\n1\x00\t2.pdf')
+    ascii_part = header.split("filename=", 1)[1].split(";", 1)[0]
+    assert ascii_part == '"Recu n12.pdf"', header
+    assert "\r" not in header and "\n" not in header and "\x00" not in header
+    assert "%22" not in header and "%5C" not in header, "ni guillemet ni barre en UTF-8 non plus"
+    assert attachment('""').startswith('attachment; filename="document.pdf"')

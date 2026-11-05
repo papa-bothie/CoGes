@@ -102,7 +102,19 @@ def _ids(receipt: ReceiptRead) -> str:
 
 
 def _initials(name: str) -> str:
-    return "".join(word[0].upper() for word in name.split()[-2:])
+    """Premières lettres des deux derniers mots, signes ignorés : « Diop & Fils <Keur> »
+    → « FK ». Le résultat passe encore par `pdf.text` avant ReportLab."""
+    letters = [
+        next(c for c in word if c.isalnum())
+        for word in name.split()
+        if any(c.isalnum() for c in word)
+    ]
+    return "".join(letters[-2:]).upper()
+
+
+def _seller(receipt: ReceiptRead) -> str:
+    """Nom du vendeur sans espaces autour ; vide s'il n'y en a pas."""
+    return (receipt.seller_name or "").strip()
 
 
 def _city(address: str | None) -> str | None:
@@ -139,7 +151,7 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
         [
             [
                 pdf.para(
-                    _initials(company.name),
+                    pdf.text(_initials(company.name)),
                     pdf.style("initials", size=16, bold=True, align="center"),
                 )
             ]
@@ -163,8 +175,8 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
             _date_time(sold, tz), pdf.style("grey-right", size=9, color=pdf.GREY, align="right")
         ),
     ]
-    if receipt.seller_name:
-        meta.append(pdf.para(pdf.text(f"Servi par : {receipt.seller_name}"), right))
+    if seller := _seller(receipt):
+        meta.append(pdf.para(pdf.text(f"Servi par : {seller}"), right))
 
     width = pdf.A4_CONTENT_WIDTH
     header = Table(
@@ -275,7 +287,8 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
     for method, paid in _paid_by_method(receipt):
         total_row(f"Payé ({method.lower()})", amount(paid, cur))
     total_row("Déjà payé", amount(receipt.paid_total, cur))
-    if receipt.balance > 0:
+    cancelled = receipt.status == "cancelled"
+    if receipt.balance > 0 and not cancelled:
         total_row("Reste à payer", amount(receipt.balance, cur), strong=True)
     story += [
         Spacer(1, 4 * mm),
@@ -314,16 +327,17 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
         if receipt.tax_total > 0
         else "TVA non applicable."
     )
-    story += [
-        Spacer(1, 5 * mm),
-        pdf.para(
-            "Arrêtée la présente facture à la somme de : "
-            f"<b>{pdf.text(amount_in_words(receipt.total))}</b>.",
-            base,
-        ),
-        pdf.para(pdf.text(vat), grey),
-        Spacer(1, 10 * mm),
-    ]
+    # Une vente annulée ne réclame rien : ni reste à payer, ni somme arrêtée.
+    story.append(Spacer(1, 5 * mm))
+    if not cancelled:
+        story.append(
+            pdf.para(
+                "Arrêtée la présente facture à la somme de : "
+                f"<b>{pdf.text(amount_in_words(receipt.total))}</b>.",
+                base,
+            )
+        )
+    story += [pdf.para(pdf.text(vat), grey), Spacer(1, 10 * mm)]
     footer = company.receipt_footer or "Merci de votre confiance."
     story.append(
         KeepTogether(
@@ -439,8 +453,8 @@ def render_ticket(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> b
     ]
     if receipt.customer:
         story.append(pdf.para(pdf.text(f"Client : {receipt.customer.name}"), plain))
-    if receipt.seller_name:
-        story.append(pdf.para(pdf.text(f"Servi par : {receipt.seller_name.split()[0]}"), plain))
+    if seller := _seller(receipt):
+        story.append(pdf.para(pdf.text(f"Servi par : {seller.split()[0]}"), plain))
     story.append(_dash())
     for line in receipt.lines:
         story.append(pdf.para(pdf.text(line.name), plain))
@@ -466,7 +480,7 @@ def render_ticket(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> b
         story += [_row(f"Payé ({method.lower()})", amount(paid, cur)) for method, paid in methods]
     else:
         story.append(_row("Payé", amount(receipt.paid_total, cur)))
-    if receipt.balance > 0:
+    if receipt.balance > 0 and receipt.status != "cancelled":
         story.append(_row("RESTE À PAYER", amount(receipt.balance, cur), strong=True))
     if receipt.returns:
         story.append(_dash())

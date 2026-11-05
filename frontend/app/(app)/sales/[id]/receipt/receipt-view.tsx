@@ -237,7 +237,10 @@ function Ticket({
   timeZone: string;
 }) {
   const currency = receipt.company.currency;
-  const owing = positive(receipt.balance);
+  // Une vente annulée ne réclame rien : ni reste à payer, ni somme arrêtée.
+  const cancelled = receipt.status === "cancelled";
+  const owing = positive(receipt.balance) && !cancelled;
+  const seller = receipt.seller_name?.trim();
   const dash = <div className="my-2 border-t border-dashed border-recu-encre/70" />;
   const methods = paidByMethod(receipt);
   return (
@@ -252,9 +255,7 @@ function Ticket({
         right={formatDateTime(receipt.confirmed_at ?? receipt.sold_at, timeZone)}
       />
       {receipt.customer && <div>{t.customer(receipt.customer.name)}</div>}
-      {receipt.seller_name && (
-        <div>{t.seller(receipt.seller_name.trim().split(/\s+/)[0] ?? "")}</div>
-      )}
+      {seller && <div>{t.seller(seller.split(/\s+/)[0] ?? "")}</div>}
       {dash}
       {receipt.lines.map((line) => (
         <div key={line.product_id} data-testid="ticket-line">
@@ -322,7 +323,7 @@ function Ticket({
         <div className="text-center whitespace-pre-line">{receipt.company.receipt_footer}</div>
       )}
       <div className="mt-2 text-center text-[11px]">{t.madeWith}</div>
-      {receipt.status === "cancelled" && <Stamp />}
+      {cancelled && <Stamp />}
     </article>
   );
 }
@@ -386,7 +387,10 @@ function Invoice({
   timeZone: string;
 }) {
   const currency = receipt.company.currency;
-  const owing = positive(receipt.balance);
+  // Une vente annulée ne réclame rien : ni reste à payer, ni somme arrêtée.
+  const cancelled = receipt.status === "cancelled";
+  const owing = positive(receipt.balance) && !cancelled;
+  const seller = receipt.seller_name?.trim();
   const ids = t.ids(receipt.company.ninea, receipt.company.rc);
   const withDiscount = receipt.lines.some((line) => positive(line.discount));
   const methods = paidByMethod(receipt);
@@ -432,7 +436,7 @@ function Invoice({
           <div className="text-recu-gris">
             {formatDateTime(receipt.confirmed_at ?? receipt.sold_at, timeZone)}
           </div>
-          {receipt.seller_name && <div>{t.seller(receipt.seller_name)}</div>}
+          {seller && <div>{t.seller(seller)}</div>}
         </div>
       </header>
 
@@ -540,11 +544,13 @@ function Invoice({
         </section>
       )}
 
-      <p className="mt-6 break-inside-avoid">
-        {t.inWords}
-        <strong>{amountInWords(receipt.total)}</strong>.
-      </p>
-      <p className="mt-1.5 text-recu-gris">
+      {!cancelled && (
+        <p className="mt-6 break-inside-avoid">
+          {t.inWords}
+          <strong>{amountInWords(receipt.total)}</strong>.
+        </p>
+      )}
+      <p className={cn(cancelled ? "mt-6" : "mt-1.5", "text-recu-gris")}>
         {positive(receipt.tax_total)
           ? t.vatIncluded(formatAmount(receipt.tax_total, currency))
           : t.noVat}
@@ -575,7 +581,7 @@ function Invoice({
           <div className="h-16" />
         </div>
       </footer>
-      {receipt.status === "cancelled" && <Stamp big />}
+      {cancelled && <Stamp big />}
     </article>
   );
 }
