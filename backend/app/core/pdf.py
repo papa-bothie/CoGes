@@ -40,12 +40,40 @@ SANS_BOLD = "Figtree-Bold"
 MONO = "JetBrainsMono"
 MONO_BOLD = "JetBrainsMono-Bold"
 
-# Palette d'impression : les jetons `recu-*` du front (DESIGN.md, ADR 0112), lisibles en
-# noir et blanc. Aucune couleur de rubrique sur une pièce imprimée.
-INK = HexColor("#111111")
-GREY = HexColor("#444444")
-RULE = HexColor("#e5e5e5")
-HEAD_FILL = HexColor("#f5f5f5")
+#: **Seule** palette des PDF : les jetons du bloc clair de `frontend/app/globals.css`,
+#: valeur pour valeur (`tests/unit/test_pdf_palette.py` le vérifie ; aucune couleur n'est
+#: écrite ailleurs). Le papier est toujours clair. Le ticket et les exports n'emploient que
+#: les `recu-*` (noir et blanc) ; la facture A4 prend aussi les verts (ADR 0112 amendé).
+PALETTE: dict[str, str] = {
+    "coges-recu-papier": "#ffffff",
+    "coges-recu-encre": "#111111",
+    "coges-recu-gris": "#444444",
+    "coges-recu-filet": "#e5e5e5",
+    "coges-recu-entete": "#f5f5f5",
+    "coges-vert-marque": "#024a2c",
+    "coges-vert-action": "#117a3c",
+    "coges-ventes-teinte": "#e6f4ec",
+    "coges-sur-action": "#ffffff",
+}
+
+
+def color(token: str) -> Color:
+    """La couleur d'un jeton de la palette."""
+    return HexColor(PALETTE[token])
+
+
+PAPER = color("coges-recu-papier")
+INK = color("coges-recu-encre")
+GREY = color("coges-recu-gris")
+RULE = color("coges-recu-filet")
+HEAD_FILL = color("coges-recu-entete")
+#: Titre, bandeaux du tableau et du total de la facture ; texte `ON_GREEN` dessus (11:1).
+BRAND = color("coges-vert-marque")
+#: Filet de l'en-tête, pastilles et intitulés de la facture (5,4:1 sous le blanc).
+ACTION = color("coges-vert-action")
+#: Fond léger du cadre « Facturé à ».
+TINT = color("coges-ventes-teinte")
+ON_GREEN = color("coges-sur-action")
 
 A4_MARGIN = 14 * mm
 #: ReportLab attend les constantes `TA_*` (0, 1, 2) ; une chaîne casse le dessin.
@@ -129,6 +157,61 @@ def logo(
         width, height = source.size
     ratio = min(max_width / width, max_height / height)
     return Image(io.BytesIO(png), width=width * ratio, height=height * ratio)
+
+
+class Pastille(Flowable):
+    """Pastille ronde verte à icône blanche, devant une coordonnée de l'en-tête de la
+    facture : `phone` (combiné) ou `pin` (repère d'adresse), dessinés au trait."""
+
+    def __init__(self, icon: Literal["phone", "pin"], size: float = 5.5 * mm) -> None:
+        super().__init__()
+        self.icon = icon
+        self.size = size
+
+    def wrap(self, *_: float) -> tuple[float, float]:
+        return self.size, self.size
+
+    def draw(self) -> None:
+        c = self.canv
+        r = self.size / 2
+        c.setFillColor(ACTION)
+        c.circle(r, r, r, stroke=0, fill=1)
+        c.setStrokeColor(ON_GREEN)
+        c.setFillColor(ON_GREEN)
+        c.setLineWidth(0.9)
+        if self.icon == "phone":
+            # Un téléphone : boîtier arrondi et sa touche.
+            c.roundRect(r - 0.32 * r, r - 0.5 * r, 0.64 * r, r, 0.12 * r, stroke=1, fill=0)
+            c.circle(r, r - 0.32 * r, 0.06 * r, stroke=0, fill=1)
+        else:
+            # Un repère : cercle et pointe.
+            c.circle(r, r + 0.12 * r, 0.3 * r, stroke=1, fill=0)
+            c.line(r - 0.22 * r, r - 0.08 * r, r, r - 0.55 * r)
+            c.line(r + 0.22 * r, r - 0.08 * r, r, r - 0.55 * r)
+
+
+class Initials(Flowable):
+    """Initiales de la boutique dans un rond `vert-marque`, quand il n'y a pas de logo.
+
+    Dessinées par `drawCentredString` : jamais lues comme balise."""
+
+    def __init__(self, letters: str, size: float = 15 * mm) -> None:
+        super().__init__()
+        self.letters = letters
+        self.size = size
+
+    def wrap(self, *_: float) -> tuple[float, float]:
+        return self.size, self.size
+
+    def draw(self) -> None:
+        c = self.canv
+        r = self.size / 2
+        c.setFillColor(BRAND)
+        c.circle(r, r, r, stroke=0, fill=1)
+        c.setFillColor(ON_GREEN)
+        font = 0.42 * self.size
+        c.setFont(SANS_BOLD, font)
+        c.drawCentredString(r, r - 0.36 * font, self.letters)
 
 
 class _NumberedCanvas(canvas.Canvas):

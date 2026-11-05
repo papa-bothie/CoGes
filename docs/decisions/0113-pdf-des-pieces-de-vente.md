@@ -101,3 +101,19 @@ Relecture du propriétaire, chaque point reproduit par un test rouge puis corrig
 - **`pdf.attachment`** : guillemet, `\` et caractères de contrôle retirés du nom avant
   les deux formes de l'en-tête ; accents ramenés à l'ASCII dans `filename` ; nom vide
   ⇒ `document.pdf`.
+
+## Facture au vert CoGes (2026-11-05)
+Le PDF de la facture suit la mise en page de l'écran (ADR 0112, amendement du même jour) :
+en-tête à logo ou initiales dans un rond vert, téléphone et adresse à pastilles vertes
+dessinées au trait (`pdf.Pastille`), filet vert ; « De » et grand titre « FACTURE » ;
+« Facturé à » sur fond `ventes-teinte` (« Client de passage ») ; tableau à bandeau
+`vert-marque` répété sur chaque page (`repeatRows`), N° de ligne, description et remise en
+petit, lignes alternées ; totaux à bandeau « Total » ; bas de page avec les moyens de
+paiement et le cadre « Signature et cachet ».
+- **Palette unique** : `app/core/pdf.py` porte `PALETTE`, nommée par jeton et égale au bloc
+  clair de `frontend/app/globals.css` (`tests/unit/test_pdf_palette.py`) ; aucune couleur
+  n'est écrite ailleurs dans les modules PDF (même test), contraste du blanc vérifié.
+- Le ticket et le bon de retour restent en noir et blanc (test : aucune couleur sur le
+  ticket). Les exports du comptable (ADR 0114) gardent les `recu-*`.
+- 40 lignes simples tiennent en 2 pages ; des descriptions sur beaucoup de lignes peuvent
+  en demander une troisième, le bas de page restant groupé.

@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from reportlab.lib.units import mm
@@ -117,161 +118,204 @@ def _seller(receipt: ReceiptRead) -> str:
     return (receipt.seller_name or "").strip()
 
 
-def _city(address: str | None) -> str | None:
-    city = (address or "").split(",")[-1].strip()
-    return city or None
+def _line_no(index: int) -> str:
+    """« 01 », « 02 »… : le numéro d'une ligne de la facture."""
+    return f"{index + 1:02d}"
 
 
 # --------------------------------------------------------------------- facture A4
 
 
 def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> bytes:
-    """Facture A4 (ADR 0112) : en-tête à logo, client, tableau, totaux, lettres, pied."""
+    """Facture A4 au vert CoGes, même mise en page que l'écran (ADR 0112 amendé) : en-tête
+    à logo et pastilles, filet vert ; « De » et titre ; « Facturé à » ; tableau à bandeau
+    répété sur chaque page et lignes alternées ; totaux à bandeau ; bas de page avec les
+    moyens de paiement et le cadre de signature. Couleurs : `pdf.PALETTE` seulement."""
     company = receipt.company
     cur = company.currency
     sold = receipt.confirmed_at or receipt.sold_at
+    cancelled = receipt.status == "cancelled"
+    width = pdf.A4_CONTENT_WIDTH
+    grey_hex = pdf.PALETTE["coges-recu-gris"]
     base = pdf.style("base", size=10)
     grey = pdf.style("grey", size=9, color=pdf.GREY)
     bold = pdf.style("bold", size=10, bold=True)
     right = pdf.style("right", size=10, align="right")
     right_bold = pdf.style("right-bold", size=10, bold=True, align="right")
-    head = pdf.style("head", size=8, bold=True, color=pdf.GREY)
-    head_right = pdf.style("head-right", size=8, bold=True, color=pdf.GREY, align="right")
+    label = pdf.style("label", size=8, bold=True, color=pdf.ACTION)
+    band = pdf.style("band", size=8, bold=True, color=pdf.ON_GREEN)
+    band_right = pdf.style("band-right", size=8, bold=True, color=pdf.ON_GREEN, align="right")
+    flat = [
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]
 
-    shop: list[Flowable] = [pdf.para(pdf.text(company.name), pdf.style("shop", size=15, bold=True))]
+    # En-tête : logo (ou initiales) et nom à gauche, coordonnées à pastilles à droite.
+    image = pdf.logo(logo_png, max_width=34 * mm, max_height=16 * mm)
+    mark: Flowable = image or pdf.Initials(_initials(company.name))
+    name = pdf.para(pdf.text(company.name), pdf.style("shop", size=14, bold=True, color=pdf.BRAND))
+    brand = Table(
+        [[mark, name]],
+        colWidths=[(image.drawWidth if image else 15 * mm) + 4 * mm, None],
+        style=TableStyle(flat),
+        hAlign="LEFT",
+    )
+    contacts: list[Flowable] = []
+    widths: list[float] = []
+    coordinates: list[tuple[Literal["phone", "pin"], str | None, float]] = [
+        ("phone", company.phone, 30 * mm),
+        ("pin", company.address, 52 * mm),
+    ]
+    for icon, value, room in coordinates:
+        if value:
+            contacts += [
+                pdf.Pastille(icon),
+                pdf.para(pdf.text(value), pdf.style("contact", size=8.5)),
+            ]
+            widths += [7.5 * mm, room]
+    right_room = sum(widths)
+    header = Table(
+        [[brand, Table([contacts], colWidths=widths, style=TableStyle(flat)) if contacts else ""]],
+        colWidths=[width - right_room, right_room],
+        style=TableStyle(
+            [
+                *flat,
+                ("LINEBELOW", (0, 0), (-1, 0), 1.5, pdf.ACTION),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4 * mm),
+            ]
+        ),
+    )
+
+    # « De » à gauche, grand titre « FACTURE », numéro, date et vendeur à droite.
+    sender: list[Flowable] = [
+        pdf.para("DE", label),
+        pdf.para(pdf.text(company.name), pdf.style("from", size=12, bold=True)),
+    ]
     if company.address:
-        shop.append(pdf.para(pdf.text(company.address), pdf.style("address", size=11, bold=True)))
+        sender.append(pdf.para(pdf.text(company.address), base))
     if company.phone:
-        shop.append(pdf.para(pdf.text(f"Tél. {company.phone}"), base))
+        sender.append(pdf.para(pdf.text(f"Tél. {company.phone}"), base))
     if ids := _ids(receipt):
-        shop.append(pdf.para(pdf.text(ids), grey))
-
-    image = pdf.logo(logo_png, max_width=24 * mm, max_height=24 * mm)
-    badge: Flowable = image or Table(
+        sender.append(pdf.para(pdf.text(ids), grey))
+    facts = Table(
         [
             [
-                pdf.para(
-                    pdf.text(_initials(company.name)),
-                    pdf.style("initials", size=16, bold=True, align="center"),
-                )
-            ]
+                pdf.para("Facture n°", right_bold),
+                pdf.para(f"F-{_short_no(receipt.sale_no)}", right),
+            ],
+            [pdf.para("Date", right_bold), pdf.para(pdf.text(_date_long(sold, tz)), right)],
         ],
-        colWidths=[17 * mm],
-        rowHeights=[17 * mm],
-        style=TableStyle(
-            [
-                ("BOX", (0, 0), (-1, -1), 1.5, pdf.INK),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ]
-        ),
+        colWidths=[28 * mm, 34 * mm],
+        hAlign="RIGHT",
+        style=TableStyle([*flat, ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]),
     )
-    city = _city(company.address)
-    when = f"{city}, le {_date_long(sold, tz)}" if city else f"Le {_date_long(sold, tz)}"
-    meta: list[Flowable] = [
-        pdf.para("FACTURE", pdf.style("title", size=18, bold=True, align="right")),
-        pdf.para(f"N° F-{_short_no(receipt.sale_no)}", right_bold),
-        pdf.para(pdf.text(when), right),
-        pdf.para(
-            _date_time(sold, tz), pdf.style("grey-right", size=9, color=pdf.GREY, align="right")
-        ),
+    title: list[Flowable] = [
+        pdf.para("FACTURE", pdf.style("title", size=30, bold=True, color=pdf.BRAND, align="right")),
+        Spacer(1, 2.5 * mm),
+        facts,
     ]
     if seller := _seller(receipt):
-        meta.append(pdf.para(pdf.text(f"Servi par : {seller}"), right))
+        title.append(
+            pdf.para(
+                pdf.text(f"Servi par : {seller}"),
+                pdf.style("seller", size=9, color=pdf.GREY, align="right"),
+            )
+        )
+    parties = Table(
+        [[sender, title]],
+        colWidths=[width - 70 * mm, 70 * mm],
+        style=TableStyle([*flat, ("VALIGN", (0, 0), (-1, -1), "TOP")]),
+    )
 
-    width = pdf.A4_CONTENT_WIDTH
-    header = Table(
-        [[badge, shop, meta]],
-        colWidths=[27 * mm, width - 27 * mm - 62 * mm, 62 * mm],
+    # « Facturé à » : le client, ou « Client de passage ».
+    billed: list[Flowable] = [
+        pdf.para("FACTURÉ À", label),
+        pdf.para(
+            pdf.text(receipt.customer.name if receipt.customer else "Client de passage"),
+            pdf.style("client", size=11, bold=True),
+        ),
+    ]
+    if receipt.customer and receipt.customer.phone:
+        billed.append(pdf.para(pdf.text(f"Tél. {receipt.customer.phone}"), base))
+    billed_to = Table(
+        [[billed]],
+        colWidths=[90 * mm],
+        hAlign="LEFT",
         style=TableStyle(
             [
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                ("LINEBELOW", (0, 0), (-1, 0), 1.5, pdf.INK),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+                ("BACKGROUND", (0, 0), (-1, -1), pdf.TINT),
+                ("ROUNDEDCORNERS", [6, 6, 6, 6]),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
             ]
         ),
     )
+
     story: list[Flowable] = []
-    if receipt.status == "cancelled":
+    if cancelled:
         story.append(
             pdf.para("VENTE ANNULÉE", pdf.style("cancelled", size=16, bold=True, align="center"))
         )
-    story += [header, Spacer(1, 6 * mm)]
+    story += [header, Spacer(1, 6 * mm), parties, Spacer(1, 4 * mm), billed_to, Spacer(1, 5 * mm)]
 
-    if receipt.customer:
-        client = [
-            pdf.para("CLIENT", head),
-            pdf.para(pdf.text(receipt.customer.name), pdf.style("client", size=11, bold=True)),
-        ]
-        if receipt.customer.phone:
-            client.append(pdf.para(pdf.text(f"Tél. {receipt.customer.phone}"), base))
-        story += [
-            Table(
-                [[client]],
-                colWidths=[80 * mm],
-                hAlign="LEFT",
-                style=TableStyle([("BOX", (0, 0), (-1, -1), 0.75, pdf.RULE)]),
-            ),
-            Spacer(1, 5 * mm),
-        ]
-
-    with_discount = any(line.discount > 0 for line in receipt.lines)
-    columns = [
-        "Désignation",
-        "Quantité",
-        "Prix unitaire",
-        *(["Remise"] if with_discount else []),
-        "Montant",
-    ]
+    # Tableau : bandeau vert répété, N°, désignation (description et remise en petit).
     rows: list[list[Flowable | str]] = [
         [
-            pdf.para(columns[0].upper(), head),
-            *[pdf.para(c.upper(), head_right) for c in columns[1:]],
+            pdf.para("N°", band),
+            pdf.para("DÉSIGNATION", band),
+            pdf.para("PRIX UNITAIRE", band_right),
+            pdf.para("QTÉ", band_right),
+            pdf.para("TOTAL", band_right),
         ]
     ]
-    for line in receipt.lines:
-        label = f"<b>{pdf.text(line.name)}</b>"
-        if line.description:
-            label += f'<br/><font size="8" color="#444444">{pdf.text(line.description)}</font>'
-        row: list[Flowable | str] = [
-            pdf.para(label, base),
-            pdf.para(pdf.text(qty_with_unit(line.qty, line.unit)), right),
-            pdf.para(pdf.text(amount(line.unit_price, cur)), right),
-        ]
-        if with_discount:
-            row.append(
-                pdf.para(
-                    pdf.text(f"-{amount(line.discount, cur)}") if line.discount > 0 else "", right
-                )
-            )
-        row.append(pdf.para(pdf.text(amount(line.line_total, cur)), right))
-        rows.append(row)
-    numbers = 4 if with_discount else 3
-    number_width = 27 * mm
+    for index, line in enumerate(receipt.lines):
+        designation = f"<b>{pdf.text(line.name)}</b>"
+        for small in (
+            line.description,
+            f"Remise : -{amount(line.discount, cur)}" if line.discount > 0 else None,
+        ):
+            if small:
+                designation += f'<br/><font size="8" color="{grey_hex}">{pdf.text(small)}</font>'
+        rows.append(
+            [
+                pdf.para(_line_no(index), grey),
+                pdf.para(designation, base),
+                pdf.para(pdf.text(amount(line.unit_price, cur)), right),
+                pdf.para(pdf.text(qty_with_unit(line.qty, line.unit)), right),
+                pdf.para(pdf.text(amount(line.line_total, cur)), right),
+            ]
+        )
     story.append(
         Table(
             rows,
-            colWidths=[width - numbers * number_width, *([number_width] * numbers)],
+            colWidths=[12 * mm, width - 12 * mm - 3 * 28 * mm, 28 * mm, 28 * mm, 28 * mm],
             repeatRows=1,
             style=TableStyle(
                 [
-                    ("BACKGROUND", (0, 0), (-1, 0), pdf.HEAD_FILL),
-                    ("LINEBELOW", (0, 0), (-1, 0), 1.5, pdf.INK),
+                    ("BACKGROUND", (0, 0), (-1, 0), pdf.BRAND),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [pdf.PAPER, pdf.HEAD_FILL]),
                     ("LINEBELOW", (0, 1), (-1, -1), 0.5, pdf.RULE),
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("TOPPADDING", (0, 0), (-1, -1), 5),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ("TOPPADDING", (0, 0), (-1, 0), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
                 ]
             ),
         )
     )
 
+    # Totaux à droite : détail, bandeau « Total », puis payé et reste (jamais si annulée).
     totals: list[list[Flowable]] = []
 
-    def total_row(label: str, value: str, strong: bool = False) -> None:
+    def total_row(text: str, value: str, *, strong: bool = False) -> None:
         totals.append(
             [
-                pdf.para(pdf.text(label), bold if strong else base),
+                pdf.para(pdf.text(text), bold if strong else base),
                 pdf.para(pdf.text(value), right_bold if strong else right),
             ]
         )
@@ -283,13 +327,19 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
         if receipt.tax_total > 0:
             total_row("TVA", amount(receipt.tax_total, cur))
     total_index = len(totals)
-    total_row("Total", amount(receipt.total, cur), strong=True)
-    for method, paid in _paid_by_method(receipt):
-        total_row(f"Payé ({method.lower()})", amount(paid, cur))
-    total_row("Déjà payé", amount(receipt.paid_total, cur))
-    cancelled = receipt.status == "cancelled"
-    if receipt.balance > 0 and not cancelled:
-        total_row("Reste à payer", amount(receipt.balance, cur), strong=True)
+    totals.append(
+        [
+            pdf.para("Total", pdf.style("total", size=12, bold=True, color=pdf.ON_GREEN)),
+            pdf.para(
+                pdf.text(amount(receipt.total, cur)),
+                pdf.style("total-right", size=12, bold=True, color=pdf.ON_GREEN, align="right"),
+            ),
+        ]
+    )
+    if not cancelled:
+        total_row("Déjà payé", amount(receipt.paid_total, cur))
+        if receipt.balance > 0:
+            total_row("Reste à payer", amount(receipt.balance, cur), strong=True)
     story += [
         Spacer(1, 4 * mm),
         Table(
@@ -298,22 +348,23 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
             hAlign="RIGHT",
             style=TableStyle(
                 [
-                    ("LINEABOVE", (0, total_index), (-1, total_index), 1.5, pdf.INK),
-                    ("LINEBELOW", (0, total_index), (-1, total_index), 1.5, pdf.INK),
+                    ("BACKGROUND", (0, total_index), (-1, total_index), pdf.BRAND),
+                    ("TOPPADDING", (0, total_index), (-1, total_index), 7),
+                    ("BOTTOMPADDING", (0, total_index), (-1, total_index), 7),
                 ]
             ),
         ),
     ]
 
     if receipt.returns:
-        returned: list[Flowable] = [pdf.para("RETOURS SUR CETTE VENTE", head)]
+        returned: list[Flowable] = [pdf.para("RETOURS SUR CETTE VENTE", label)]
         for item in receipt.returns:
-            label = f"Retour n° {_short_no(item.return_no)} du {_date_long(item.returned_at, tz)}"
+            text = f"Retour n° {_short_no(item.return_no)} du {_date_long(item.returned_at, tz)}"
             returned.append(
                 Table(
                     [
                         [
-                            pdf.para(pdf.text(label), base),
+                            pdf.para(pdf.text(text), base),
                             pdf.para(pdf.text(f"-{amount(item.total_refund, cur)}"), right),
                         ]
                     ],
@@ -337,30 +388,56 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
                 base,
             )
         )
-    story += [pdf.para(pdf.text(vat), grey), Spacer(1, 10 * mm)]
-    footer = company.receipt_footer or "Merci de votre confiance."
+    story += [pdf.para(pdf.text(vat), grey), Spacer(1, 6 * mm)]
+
+    # Bas de page : merci, moyens de paiement, pied de reçu ; cadre de signature à droite.
+    thanks: list[Flowable] = [
+        pdf.para("Merci pour votre confiance", pdf.style("thanks", size=12, bold=True)),
+    ]
+    methods = _paid_by_method(receipt)
+    if methods:
+        thanks += [Spacer(1, 2.5 * mm), pdf.para("MOYENS DE PAIEMENT", label)]
+        thanks += [
+            pdf.para(pdf.text(f"{method} : {amount(paid, cur)}"), base) for method, paid in methods
+        ]
+    if company.receipt_footer:
+        thanks += [Spacer(1, 2.5 * mm), pdf.para(pdf.text(company.receipt_footer), grey)]
+    thanks += [
+        Spacer(1, 2 * mm),
+        pdf.para("Facture éditée avec CoGes", pdf.style("small", size=7.5, color=pdf.GREY)),
+    ]
+    signature = Table(
+        [
+            [
+                pdf.para(
+                    "Signature et cachet", pdf.style("sign", size=9, color=pdf.GREY, align="center")
+                )
+            ]
+        ],
+        colWidths=[58 * mm],
+        rowHeights=[24 * mm],
+        style=TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 1.5, pdf.RULE),
+                ("ROUNDEDCORNERS", [6, 6, 6, 6]),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ]
+        ),
+    )
     story.append(
         KeepTogether(
             [
                 Table(
-                    [
+                    [[thanks, signature]],
+                    colWidths=[width - 64 * mm, 64 * mm],
+                    style=TableStyle(
                         [
-                            [
-                                pdf.para(pdf.text(footer), grey),
-                                pdf.para(
-                                    "Facture éditée avec CoGes",
-                                    pdf.style("small", size=8, color=pdf.GREY),
-                                ),
-                            ],
-                            pdf.para(
-                                "Signature et cachet",
-                                pdf.style("sign", size=9, color=pdf.GREY, align="center"),
-                            ),
+                            *flat,
+                            ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+                            ("ALIGN", (1, 0), (1, 0), "RIGHT"),
                         ]
-                    ],
-                    colWidths=[width - 60 * mm, 60 * mm],
-                    rowHeights=[22 * mm],
-                    style=TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]),
+                    ),
                 )
             ]
         )
