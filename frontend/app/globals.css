@@ -16,8 +16,12 @@
  *
  * Le sombre n'est pas dans la maquette : il est dérivé des mêmes jetons (fond vert-noir chaud,
  * teintes de rubrique assombries, encres éclaircies) et soumis à l'accord du propriétaire.
+ *
+ * `.papier` reprend ce bloc clair tel quel : une pièce imprimée (la facture A4) reste du
+ * papier blanc au vert de la marque, même quand l'écran est en sombre (ADR 0112).
  */
-:root {
+:root,
+.papier {
   /* Marque (logo) */
   --coges-vert-marque: #024a2c;
   --coges-vert-action: #117a3c;

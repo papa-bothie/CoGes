@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, MessageCircle, Printer } from "lucide-react";
+import { ArrowLeft, MapPin, MessageCircle, Phone, Printer } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -346,16 +346,32 @@ function logoInitials(name: string): string {
     .join("");
 }
 
-/** Dernier morceau de l'adresse, après la dernière virgule : la ville (« Dakar »). */
-function cityOf(address: string | null): string | null {
-  const city = address?.split(",").at(-1)?.trim();
-  return city || null;
+/** Pastille ronde verte d'une coordonnée de l'en-tête (modèle de facture). */
+function Pastille({ icon: Icon }: { icon: typeof Phone }) {
+  return (
+    <span
+      aria-hidden
+      data-pastille
+      className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+    >
+      <Icon className="size-4" />
+    </span>
+  );
+}
+
+/** « 01 », « 02 »… : le numéro d'une ligne de la facture. */
+function lineNo(index: number): string {
+  return String(index + 1).padStart(2, "0");
 }
 
 /**
- * Facture A4 (maquette 05b, refaite au bloc F) : en-tête à logo, client, tableau des lignes
- * (l'en-tête se répète et une ligne ne se coupe jamais d'une page à l'autre), totaux,
- * paiements par moyen, retours liés, montant en lettres, pied de reçu.
+ * Facture A4 au vert CoGes, d'après `docs/design/references/modele-facture.jpg` (ADR 0112,
+ * amendé) : en-tête à logo et coordonnées à pastilles, filet vert ; « De » et grand titre
+ * « FACTURE » ; « Facturé à » ; tableau à bandeau vert (l'en-tête se répète, une ligne ne
+ * se coupe jamais d'une page à l'autre), lignes alternées ; totaux à bandeau vert ; bas de
+ * page avec les moyens de paiement et le cadre de signature. `papier` garde les jetons
+ * clairs en sombre ; `print-color-adjust` garde les bandeaux à l'impression. Le PDF du
+ * serveur suit la même mise en page (bloc T).
  */
 function Invoice({
   receipt,
@@ -366,132 +382,162 @@ function Invoice({
   extras: Extras;
   timeZone: string;
 }) {
-  const currency = receipt.company.currency;
-  const owing = positive(receipt.balance);
-  const ids = t.ids(receipt.company.ninea, receipt.company.rc);
-  const withDiscount = receipt.lines.some((line) => positive(line.discount));
+  const { company } = receipt;
+  const currency = company.currency;
+  // Une vente annulée ne réclame rien : ni payé, ni reste dû, ni somme arrêtée.
+  const cancelled = receipt.status === "cancelled";
+  const owing = positive(receipt.balance) && !cancelled;
+  const seller = receipt.seller_name?.trim();
+  const ids = t.ids(company.ninea, company.rc);
   const methods = paidByMethod(receipt);
-  const cell = "border-b border-recu-filet px-3 py-2.5 align-top";
+  const label = "text-[13px] font-bold tracking-[0.04em] text-primary uppercase";
+  const cell = "px-2 py-3 align-top sm:px-3";
   const amount = cn(cell, "numeric text-right whitespace-nowrap");
-  const head = cn(
-    "border-b-2 border-recu-encre bg-recu-entete px-3 py-2 text-[13px] font-bold tracking-[0.04em] text-recu-gris uppercase",
-  );
+  const head = "px-2 py-3 text-[13px] font-bold tracking-[0.04em] uppercase sm:px-3";
+  const row = "flex justify-between px-3 py-1.5";
   return (
     <article
       aria-label={t.title(displayNumber(receipt.sale_no))}
-      className="relative box-border w-[794px] max-w-full bg-recu-papier px-14 pt-14 pb-12 text-[15px] leading-normal text-recu-encre shadow-[0_2px_10px_var(--color-recu-ombre)] print:w-auto print:p-0 print:shadow-none"
+      className="papier relative box-border w-[794px] max-w-full bg-recu-papier px-5 pt-8 pb-10 text-[15px] leading-normal text-recu-encre shadow-[0_2px_10px_var(--color-recu-ombre)] [print-color-adjust:exact] sm:px-14 sm:pt-12 sm:pb-12 print:w-auto print:p-0 print:shadow-none"
     >
-      <header className="flex flex-wrap justify-between gap-6 border-b-2 border-recu-encre pb-5">
-        <div className="flex min-w-0 gap-4">
-          <ShopLogo company={receipt.company} className="size-20 shrink-0" />
-          {!receipt.company.logo_updated_at && (
+      <header className="flex flex-wrap items-center justify-between gap-6 border-b-2 border-primary pb-4">
+        <div className="flex min-w-0 items-center gap-3.5">
+          <ShopLogo company={company} className="max-h-16 max-w-44 shrink-0" />
+          {!company.logo_updated_at && (
             <div
               aria-hidden
-              className="flex size-16 shrink-0 items-center justify-center rounded-touche border-2 border-recu-encre text-2xl font-extrabold"
+              className="flex size-14 shrink-0 items-center justify-center rounded-full bg-marque text-xl font-extrabold text-primary-foreground"
             >
-              {logoInitials(receipt.company.name)}
+              {logoInitials(company.name)}
             </div>
           )}
-          <div className="min-w-0">
-            <div className="text-xl font-extrabold">{receipt.company.name}</div>
-            {receipt.company.address && (
-              <div className="text-[17px] font-bold">{receipt.company.address}</div>
-            )}
-            {receipt.company.phone && <div>{t.phone(receipt.company.phone)}</div>}
-            {ids && <div className="text-[13px] text-recu-gris">{ids}</div>}
-          </div>
+          <div className="text-xl font-extrabold text-marque">{company.name}</div>
         </div>
-        <div className="text-right">
-          <div className="text-[26px] font-extrabold tracking-[0.04em]">{t.invoice}</div>
-          <div className="font-bold">{t.invoiceNo(displayNumber(receipt.sale_no))}</div>
-          <div>
-            {t.invoiceDate(
-              cityOf(receipt.company.address),
-              formatDateLong(receipt.confirmed_at ?? receipt.sold_at, timeZone),
+        {(company.phone || company.address) && (
+          <ul aria-label={t.contacts} className="flex flex-wrap gap-x-7 gap-y-2 text-[14px]">
+            {company.phone && (
+              <li className="flex items-center gap-2">
+                <Pastille icon={Phone} />
+                {company.phone}
+              </li>
             )}
-          </div>
-          <div className="text-recu-gris">
-            {formatDateTime(receipt.confirmed_at ?? receipt.sold_at, timeZone)}
-          </div>
-          {receipt.seller_name && <div>{t.seller(receipt.seller_name)}</div>}
-        </div>
+            {company.address && (
+              <li className="flex max-w-64 items-center gap-2">
+                <Pastille icon={MapPin} />
+                {company.address}
+              </li>
+            )}
+          </ul>
+        )}
       </header>
 
-      {receipt.customer && (
-        <div className="mt-6 mb-5 max-w-80 rounded-[10px] border border-recu-filet px-4 py-3.5">
-          <div className="text-[13px] tracking-[0.04em] text-recu-gris uppercase">
-            {t.customerTitle}
+      <div className="mt-7 flex flex-wrap items-start justify-between gap-6">
+        <section aria-labelledby="facture-de" className="min-w-0">
+          <h2 id="facture-de" className={label}>
+            {t.from}
+          </h2>
+          <div className="text-lg font-extrabold">{company.name}</div>
+          {company.address && <div>{company.address}</div>}
+          {company.phone && <div>{t.phone(company.phone)}</div>}
+          {ids && <div className="text-[13px] text-recu-gris">{ids}</div>}
+        </section>
+        <div className="text-right">
+          <div className="text-[44px] leading-none font-extrabold tracking-[0.04em] text-marque">
+            {t.invoice}
           </div>
-          <div className="text-[17px] font-bold">{receipt.customer.name}</div>
-          {receipt.customer.phone && <div>{t.phone(receipt.customer.phone)}</div>}
+          <dl className="mt-3 grid grid-cols-[auto_auto] justify-end gap-x-5 gap-y-0.5">
+            <dt className="font-bold">{t.invoiceNoLabel}</dt>
+            <dd>{t.invoiceNo(displayNumber(receipt.sale_no))}</dd>
+            <dt className="font-bold">{t.invoiceDateLabel}</dt>
+            <dd>{formatDateLong(receipt.confirmed_at ?? receipt.sold_at, timeZone)}</dd>
+          </dl>
+          {seller && <div className="mt-1 text-recu-gris">{t.seller(seller)}</div>}
         </div>
-      )}
+      </div>
 
-      <table className="mt-5 w-full border-collapse">
-        <thead className="table-header-group">
-          <tr>
-            <th scope="col" className={cn(head, "text-left")}>
-              {t.columns.article}
-            </th>
-            <th scope="col" className={cn(head, "text-right")}>
-              {t.columns.qty}
-            </th>
-            <th scope="col" className={cn(head, "text-right")}>
-              {t.columns.price}
-            </th>
-            {withDiscount && (
-              <th scope="col" className={cn(head, "text-right")}>
-                {t.columns.discount}
+      <section
+        aria-labelledby="facture-a"
+        className="mt-5 max-w-96 rounded-[10px] bg-ventes-teinte px-4 py-3"
+      >
+        <h2 id="facture-a" className={label}>
+          {t.billedTo}
+        </h2>
+        <div className="text-[17px] font-bold">{receipt.customer?.name ?? t.walkIn}</div>
+        {receipt.customer?.phone && <div>{t.phone(receipt.customer.phone)}</div>}
+      </section>
+
+      {/* Sur un téléphone, le tableau défile dans son cadre ; imprimé, il tient sur l'A4. */}
+      <div
+        role="region"
+        aria-label={t.linesRegion}
+        tabIndex={0}
+        className="mt-6 overflow-x-auto outline-none focus-visible:ring-3 focus-visible:ring-ring/50 print:overflow-visible"
+      >
+        <table className="w-full min-w-[560px] border-collapse print:min-w-0">
+          <thead className="table-header-group">
+            <tr className="bg-marque text-primary-foreground">
+              <th scope="col" className={cn(head, "w-12 text-left")}>
+                {t.columns.no}
               </th>
-            )}
-            <th scope="col" className={cn(head, "text-right")}>
-              {t.columns.amount}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {receipt.lines.map((line) => (
-            <tr key={line.product_id} className="break-inside-avoid" data-testid="invoice-line">
-              <td className={cell}>
-                <div className="font-bold">{line.name}</div>
-                {line.description && (
-                  <div className="text-[13px] whitespace-pre-line text-recu-gris">
-                    {line.description}
-                  </div>
-                )}
-              </td>
-              <td className={amount}>{qtyWithUnit(line.qty, line.unit)}</td>
-              <td className={amount}>{formatAmount(line.unit_price, currency)}</td>
-              {withDiscount && (
-                <td className={amount}>
-                  {positive(line.discount) ? `-${formatAmount(line.discount, currency)}` : ""}
-                </td>
-              )}
-              <td className={amount}>{formatAmount(line.line_total, currency)}</td>
+              <th scope="col" className={cn(head, "text-left")}>
+                {t.columns.article}
+              </th>
+              <th scope="col" className={cn(head, "text-right")}>
+                {t.columns.price}
+              </th>
+              <th scope="col" className={cn(head, "text-right")}>
+                {t.columns.qty}
+              </th>
+              <th scope="col" className={cn(head, "text-right")}>
+                {t.columns.total}
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {receipt.lines.map((line, index) => (
+              <tr
+                key={line.product_id}
+                className="break-inside-avoid border-b border-recu-filet even:bg-recu-entete"
+                data-testid="invoice-line"
+              >
+                <td className={cn(cell, "numeric text-recu-gris")}>{lineNo(index)}</td>
+                <td className={cell}>
+                  <div className="font-bold">{line.name}</div>
+                  {line.description && (
+                    <div className="text-[13px] whitespace-pre-line text-recu-gris">
+                      {line.description}
+                    </div>
+                  )}
+                  {positive(line.discount) && (
+                    <div className="text-[13px] text-recu-gris">
+                      {t.lineDiscountOn(formatAmount(line.discount, currency))}
+                    </div>
+                  )}
+                </td>
+                <td className={amount}>{formatAmount(line.unit_price, currency)}</td>
+                <td className={amount}>{qtyWithUnit(line.qty, line.unit)}</td>
+                <td className={amount}>{formatAmount(line.line_total, currency)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       <div className="mt-4 flex break-inside-avoid justify-end">
         <div className="w-[320px]">
           <Totals receipt={receipt} invoice />
-          <div className="flex justify-between border-y-2 border-recu-encre py-2 text-lg font-extrabold">
+          <div className="mt-1 flex justify-between bg-marque px-3 py-2.5 text-lg font-extrabold text-primary-foreground">
             <span>{t.invoiceTotal}</span>
             <span className="numeric">{formatAmount(receipt.total, currency)}</span>
           </div>
-          {methods.map((row) => (
-            <div key={row.method} className="flex justify-between py-1.5">
-              <span>{t.paidWith(row.method)}</span>
-              <span className="numeric">{formatAmount(row.amount, currency)}</span>
+          {!cancelled && (
+            <div className={row}>
+              <span>{t.alreadyPaid}</span>
+              <span className="numeric">{formatAmount(receipt.paid_total, currency)}</span>
             </div>
-          ))}
-          <div className="flex justify-between py-1.5">
-            <span>{t.alreadyPaid}</span>
-            <span className="numeric">{formatAmount(receipt.paid_total, currency)}</span>
-          </div>
+          )}
           {owing && (
-            <div className="flex justify-between py-1.5 font-bold">
+            <div className={cn(row, "font-bold")}>
               <span>{t.invoiceRemaining}</span>
               <span className="numeric">{formatAmount(receipt.balance, currency)}</span>
             </div>
@@ -501,43 +547,56 @@ function Invoice({
 
       {receipt.returns.length > 0 && (
         <section className="mt-6 break-inside-avoid">
-          <h2 className="text-[13px] font-bold tracking-[0.04em] text-recu-gris uppercase">
-            {t.returnsTitle}
-          </h2>
-          {receipt.returns.map((row) => (
+          <h2 className={label}>{t.returnsTitle}</h2>
+          {receipt.returns.map((item) => (
             <div
-              key={row.return_no}
+              key={item.return_no}
               className="flex justify-between border-b border-recu-filet py-1.5"
             >
               <span>
                 {t.returnLine(
-                  displayNumber(row.return_no),
-                  formatDateLong(row.returned_at, timeZone),
+                  displayNumber(item.return_no),
+                  formatDateLong(item.returned_at, timeZone),
                 )}
               </span>
-              <span className="numeric">-{formatAmount(row.total_refund, currency)}</span>
+              <span className="numeric">-{formatAmount(item.total_refund, currency)}</span>
             </div>
           ))}
         </section>
       )}
 
-      <p className="mt-6 break-inside-avoid">
-        {t.inWords}
-        <strong>{amountInWords(receipt.total)}</strong>.
-      </p>
-      <p className="mt-1.5 text-recu-gris">
+      {!cancelled && (
+        <p className="mt-6 break-inside-avoid">
+          {t.inWords}
+          <strong>{amountInWords(receipt.total)}</strong>.
+        </p>
+      )}
+      <p className={cn(cancelled ? "mt-6" : "mt-1.5", "text-recu-gris")}>
         {positive(receipt.tax_total)
           ? t.vatIncluded(formatAmount(receipt.tax_total, currency))
           : t.noVat}
         {owing && extras.dueDate && ` ${t.remainingBefore(formatDateLong(extras.dueDate))}`}
       </p>
 
-      <footer className="mt-12 flex break-inside-avoid flex-wrap justify-between gap-6">
-        <div className="text-recu-gris">
-          {receipt.company.receipt_footer ? (
-            <div className="whitespace-pre-line">{receipt.company.receipt_footer}</div>
-          ) : (
-            t.thanks
+      <footer className="mt-10 flex break-inside-avoid flex-wrap items-end justify-between gap-6">
+        <div className="min-w-0 flex-[1_1_280px]">
+          <div className="text-lg font-extrabold">{t.thanks}</div>
+          {methods.length > 0 && (
+            <>
+              <h2 id="facture-moyens" className={cn(label, "mt-3")}>
+                {t.paymentMethods}
+              </h2>
+              <ul aria-labelledby="facture-moyens">
+                {methods.map((item) => (
+                  <li key={item.method}>
+                    {item.method} : {formatAmount(item.amount, currency)}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {company.receipt_footer && (
+            <div className="mt-3 whitespace-pre-line text-recu-gris">{company.receipt_footer}</div>
           )}
           <div className="mt-2.5 flex items-center gap-1.5 text-xs text-recu-gris">
             {t.invoiceMadeWith}
@@ -551,12 +610,11 @@ function Invoice({
             />
           </div>
         </div>
-        <div className="min-w-[200px] text-center text-recu-gris">
-          {t.signature}
-          <div className="h-16" />
+        <div className="flex h-28 min-w-[220px] items-start justify-center rounded-[10px] border-2 border-recu-filet pt-2 text-recu-gris">
+          <span>{t.signature}</span>
         </div>
       </footer>
-      {receipt.status === "cancelled" && <Stamp big />}
+      {cancelled && <Stamp big />}
     </article>
   );
 }

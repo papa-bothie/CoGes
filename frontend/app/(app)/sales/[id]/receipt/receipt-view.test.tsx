@@ -118,8 +118,15 @@ beforeEach(() => {
   vi.mocked(api.GET).mockReset();
 });
 
-describe("Facture A4 refaite (prompt 35, bloc F)", () => {
-  it("en-tête : logo, adresse en évidence, identifiants, vendeur ; aucune initiale", async () => {
+describe("Facture A4 au vert CoGes (modèle docs/design/references/modele-facture.jpg)", () => {
+  it("papier : jetons clairs même en sombre, couleurs gardées à l'impression", async () => {
+    serve(receipt());
+    renderWithClient(<ReceiptView saleId="s1" />);
+    const invoice = await screen.findByRole("article", { name: t.title("1044") });
+    expect(invoice).toHaveClass("papier", "[print-color-adjust:exact]");
+  });
+
+  it("en-tête : logo à gauche, téléphone et adresse à pastille verte, filet vert", async () => {
     serve(receipt({}, { logo_updated_at: "2026-11-04T09:00:00Z" }));
     renderWithClient(<ReceiptView saleId="s1" />);
     const logo = await screen.findByRole(
@@ -128,50 +135,90 @@ describe("Facture A4 refaite (prompt 35, bloc F)", () => {
       { timeout: 5000 },
     );
     expect(logo.getAttribute("src")).toMatch(/^data:image\/png/);
-    expect(screen.getByText("Rue 10, Médina, Dakar")).toHaveClass("font-bold");
-    expect(screen.getByText("NINEA 0012345 · RC SN-DKR-2020-B-1")).toBeInTheDocument();
-    expect(screen.getByText(t.seller("Fatou Diop"))).toBeInTheDocument();
+    const header = screen.getByRole("banner");
+    expect(header).toHaveClass("border-primary");
+    const contacts = within(header).getAllByRole("listitem");
+    expect(contacts.map((item) => item.textContent)).toEqual([
+      "77 123 45 67",
+      "Rue 10, Médina, Dakar",
+    ]);
+    for (const item of contacts) {
+      expect(item.querySelector("[data-pastille]")).toHaveClass("rounded-full", "bg-primary");
+    }
     expect(screen.queryByText("KF")).toBeNull();
   });
 
-  it("sans logo : les initiales, et rien n'est lu ; sans adresse : aucune ligne vide", async () => {
+  it("titre « FACTURE » en vert, numéro et date dessous, à droite", async () => {
+    serve(receipt());
+    renderWithClient(<ReceiptView saleId="s1" />);
+    const title = await screen.findByText(t.invoice, { exact: true });
+    expect(title).toHaveClass("text-marque");
+    const block = title.parentElement!;
+    expect(block).toHaveClass("text-right");
+    expect(within(block).getByText(t.invoiceNoLabel)).toBeInTheDocument();
+    expect(within(block).getByText("F-1044")).toBeInTheDocument();
+    expect(within(block).getByText("4 novembre 2026")).toBeInTheDocument();
+    expect(within(block).getByText(t.seller("Fatou Diop"))).toBeInTheDocument();
+  });
+
+  it("« De » : nom, adresse, téléphone, NINEA et RC de la boutique", async () => {
+    serve(receipt());
+    renderWithClient(<ReceiptView saleId="s1" />);
+    const from = await screen.findByRole("region", { name: t.from });
+    expect(within(from).getByText("Boutique Keur Fatou")).toBeInTheDocument();
+    expect(within(from).getByText("Rue 10, Médina, Dakar")).toBeInTheDocument();
+    expect(within(from).getByText(t.phone("77 123 45 67"))).toBeInTheDocument();
+    expect(within(from).getByText("NINEA 0012345 · RC SN-DKR-2020-B-1")).toBeInTheDocument();
+  });
+
+  it("« Facturé à » : le client, ou « Client de passage » sans client", async () => {
+    serve(receipt());
+    const { unmount } = renderWithClient(<ReceiptView saleId="s1" />);
+    const billed = await screen.findByRole("region", { name: t.billedTo });
+    expect(billed).toHaveClass("bg-ventes-teinte");
+    expect(within(billed).getByText("Awa Ndiaye")).toBeInTheDocument();
+    expect(within(billed).getByText(t.phone("77 000 00 00"))).toBeInTheDocument();
+    unmount();
+    serve(receipt({ customer: null }));
+    renderWithClient(<ReceiptView saleId="s1" />);
+    const passing = await screen.findByRole("region", { name: t.billedTo });
+    expect(within(passing).getByText(t.walkIn)).toBeInTheDocument();
+  });
+
+  it("sans logo : les initiales en pastille verte, rien n'est lu ; sans adresse : rien de vide", async () => {
     serve(receipt({}, { address: null }));
     renderWithClient(<ReceiptView saleId="s1" />);
-    expect(await screen.findByText("KF")).toBeInTheDocument();
+    expect(await screen.findByText("KF")).toHaveClass("bg-marque", "text-primary-foreground");
     expect(screen.queryByRole("img", { name: /Logo de/ })).toBeNull();
     const calls = vi.mocked(api.GET).mock.calls as unknown as [string][];
     expect(calls.some(([path]) => path.endsWith("/logo"))).toBe(false);
-    expect(screen.getByText(/^Le /)).toBeInTheDocument();
+    expect(within(screen.getByRole("banner")).getAllByRole("listitem")).toHaveLength(1);
   });
 
-  it("lignes : description sous le nom, quantité et unité, remise seulement si elle existe", async () => {
+  it("tableau : bandeau vert, N°, description et remise en petit, lignes alternées, montants à droite", async () => {
     serve(receipt());
     renderWithClient(<ReceiptView saleId="s1" />);
     const rows = await screen.findAllByTestId("invoice-line");
+    const headers = screen.getAllByRole("columnheader");
+    expect(headers.map((cell) => cell.textContent)).toEqual([
+      t.columns.no,
+      t.columns.article,
+      t.columns.price,
+      t.columns.qty,
+      t.columns.total,
+    ]);
+    expect(headers[0]!.closest("tr")).toHaveClass("bg-marque", "text-primary-foreground");
+    expect(within(rows[0]!).getByText("01")).toBeInTheDocument();
     expect(within(rows[0]!).getByText("Riz parfumé de la vallée")).toBeInTheDocument();
     expect(within(rows[0]!).getByText(/2,5\s?kg/)).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: t.columns.discount })).toBeInTheDocument();
-    for (const cell of within(rows[1]!).getAllByRole("cell").slice(1)) {
+    expect(within(rows[1]!).getByText(/Remise : -200\sF/)).toBeInTheDocument();
+    expect(rows[0]).toHaveClass("even:bg-recu-entete");
+    for (const cell of within(rows[1]!).getAllByRole("cell").slice(2)) {
       expect(cell).toHaveClass("numeric", "text-right");
     }
   });
 
-  it("sans remise : pas de colonne Remise ni de ligne Remises", async () => {
-    serve(
-      receipt({
-        lines: [line(1)],
-        subtotal: "3000.00",
-        discount_total: "0.00",
-        total: "3000.00",
-      }),
-    );
-    renderWithClient(<ReceiptView saleId="s1" />);
-    await screen.findAllByTestId("invoice-line");
-    expect(screen.queryByRole("columnheader", { name: t.columns.discount })).toBeNull();
-    expect(screen.queryByText(t.discounts)).toBeNull();
-  });
-
-  it("totaux : sous-total, remises, payé par moyen (annulé exclu), reste dû ; retours liés", async () => {
+  it("totaux : sous-total, remises, bandeau vert « Total », puis payé et reste dû", async () => {
     serve(
       receipt({
         returns: [
@@ -183,20 +230,47 @@ describe("Facture A4 refaite (prompt 35, bloc F)", () => {
     await screen.findAllByTestId("invoice-line");
     expect(screen.getByText(t.subtotal)).toBeInTheDocument();
     expect(screen.getByText(t.discounts)).toBeInTheDocument();
-    expect(screen.getByText(t.paidWith("Espèces"))).toBeInTheDocument();
-    expect(screen.getByText(t.paidWith("Wave"))).toBeInTheDocument();
-    expect(screen.queryByText(/Orange Money/)).toBeNull();
+    expect(screen.queryByText(t.vat)).toBeNull();
+    // « Total » nomme aussi la dernière colonne du tableau : on prend celui des totaux.
+    const total = screen
+      .getAllByText(t.invoiceTotal)
+      .find((element) => element.tagName === "SPAN")!.parentElement!;
+    expect(total).toHaveClass("bg-marque", "text-primary-foreground");
+    expect(screen.getByText(t.alreadyPaid)).toBeInTheDocument();
     expect(screen.getByText(t.invoiceRemaining)).toBeInTheDocument();
-    expect(screen.getByText(t.returnsTitle)).toBeInTheDocument();
     expect(screen.getByText(/Retour n° 7 du/)).toBeInTheDocument();
-    expect(screen.getByText("Merci et à bientôt")).toBeInTheDocument();
   });
 
-  it("facture longue : l'en-tête du tableau se répète, une ligne ne se coupe pas, pages numérotées", async () => {
+  it("bas de page : merci, moyens de paiement utilisés (annulé exclu), pied de reçu, signature", async () => {
+    serve(receipt());
+    renderWithClient(<ReceiptView saleId="s1" />);
+    await screen.findAllByTestId("invoice-line");
+    const footer = screen.getByRole("contentinfo");
+    expect(within(footer).getByText(t.thanks)).toBeInTheDocument();
+    const methods = within(footer).getByRole("list", { name: t.paymentMethods });
+    expect(within(methods).getByText(/Espèces/)).toBeInTheDocument();
+    expect(within(methods).getByText(/Wave/)).toBeInTheDocument();
+    expect(within(footer).queryByText(/Orange Money/)).toBeNull();
+    expect(within(footer).getByText("Merci et à bientôt")).toBeInTheDocument();
+    expect(within(footer).getByText(t.signature).parentElement).toHaveClass("border-2");
+  });
+
+  it("vente annulée : ni payé, ni reste dû, ni somme arrêtée ; le tampon reste", async () => {
+    serve(receipt({ status: "cancelled" }));
+    renderWithClient(<ReceiptView saleId="s1" />);
+    await screen.findAllByTestId("invoice-line");
+    expect(screen.getAllByText(t.cancelled).length).toBeGreaterThan(0);
+    expect(screen.queryByText(t.alreadyPaid)).toBeNull();
+    expect(screen.queryByText(t.invoiceRemaining)).toBeNull();
+    expect(screen.queryByText(/Arrêtée la présente facture/)).toBeNull();
+  });
+
+  it("40 lignes : l'en-tête du tableau se répète, une ligne ne se coupe pas, pages numérotées", async () => {
     serve(receipt({ lines: Array.from({ length: 40 }, (_, index) => line(index)) }));
     const { container } = renderWithClient(<ReceiptView saleId="s1" />);
     const rows = await screen.findAllByTestId("invoice-line");
     expect(rows).toHaveLength(40);
+    expect(within(rows[39]!).getByText("40")).toBeInTheDocument();
     expect(rows.every((row) => row.classList.contains("break-inside-avoid"))).toBe(true);
     expect(container.querySelector("thead")).toHaveClass("table-header-group");
     const style = container.querySelector("style")?.textContent ?? "";
