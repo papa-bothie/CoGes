@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import re
 import time
 from collections.abc import Iterator
 from typing import Any
@@ -420,3 +421,110 @@ def test_a_blank_seller_name_prints_no_seller(
     for render in (render_invoice, render_ticket):
         _, content = _read(render(receipt, logo_png=None, tz="Africa/Dakar"))
         assert "Servi par" not in content, (render.__name__, content)
+
+
+# ------------------------------------------- facture au vert CoGes (ADR 0112 amendé)
+
+
+def _fills(reader: PdfReader) -> list[tuple[float, float, float]]:
+    """Couleurs de remplissage (`r g b rg`) des pages : le vert des bandeaux s'y lit."""
+    found: list[tuple[float, float, float]] = []
+    for page in reader.pages:
+        data = page.get_contents().get_data().decode("latin-1")  # type: ignore[union-attr]
+        for r, g, b in re.findall(r"([\d.]+) ([\d.]+) ([\d.]+) rg", data):
+            found.append((float(r), float(g), float(b)))
+    return found
+
+
+def _has_fill(reader: PdfReader, token: str) -> bool:
+    from app.core.pdf import PALETTE
+
+    value = PALETTE[token]
+    want = tuple(int(value[i : i + 2], 16) / 255 for i in (1, 3, 5))
+    return any(
+        all(abs(a - b) < 0.003 for a, b in zip(fill, want, strict=True)) for fill in _fills(reader)
+    )
+
+
+def test_the_green_invoice_follows_the_model(api_client: TestClient, manager: str) -> None:
+    api_client.patch(
+        "/api/v1/companies/me", headers=auth_headers(manager), json={"phone": "77 123 45 67"}
+    )
+    sale_id, _ = _sale(api_client, manager, lines=2, description="Sac cousu, 25 kg")
+    reader, text = _read(
+        _pdf(api_client, manager, f"/api/v1/sales/{sale_id}/receipt/pdf", format="a4").content
+    )
+    # En-tête et blocs : coordonnées, « De », titre, numéro, date, « Facturé à ».
+    for expected in (
+        "77 123 45 67",
+        "Rue 10, Médina, Dakar",
+        "DE",
+        "FACTURE",
+        "Facture n°",
+        "F-1",
+        "Date",
+        "FACTURÉ À",
+        "Client de passage",
+        "NINEA 0012345",
+    ):
+        assert expected in text, (expected, text)
+    # Tableau à bandeau : colonnes du modèle, numéro de ligne, description en petit.
+    flat = " ".join(text.split())
+    assert "N° DÉSIGNATION PRIX UNITAIRE QTÉ TOTAL" in flat, flat
+    assert "01" in text and "Sac cousu, 25 kg" in text
+    # Totaux puis bas de page.
+    for expected in ("Total", "Déjà payé", "Merci pour votre confiance", "MOYENS DE PAIEMENT"):
+        assert expected in text, (expected, text)
+    assert "Espèces : 6 000 F" in text, text
+    assert "Signature et cachet" in text
+    # Les verts de la marque et la teinte claire, jamais une couleur hors palette.
+    assert _has_fill(reader, "coges-vert-marque"), "bandeaux et titre"
+    assert _has_fill(reader, "coges-vert-action"), "pastilles"
+    assert _has_fill(reader, "coges-ventes-teinte"), "cadre « Facturé à »"
+    assert _has_fill(reader, "coges-recu-entete"), "lignes alternées"
+
+
+def test_the_invoice_names_its_customer(api_client: TestClient, manager: str) -> None:
+    sale_id = _credit_sale(api_client, manager)
+    _, text = _read(
+        _pdf(api_client, manager, f"/api/v1/sales/{sale_id}/receipt/pdf", format="a4").content
+    )
+    assert "Awa Ndiaye" in text and "Client de passage" not in text
+    assert "Reste à payer" in text
+
+
+def test_40_lines_make_two_pages_with_the_band_repeated(
+    api_client: TestClient, manager: str
+) -> None:
+    sale_id, _ = _sale(api_client, manager, lines=40)
+    reader, text = _read(
+        _pdf(api_client, manager, f"/api/v1/sales/{sale_id}/receipt/pdf", format="a4").content
+    )
+    assert len(reader.pages) == 2, len(reader.pages)
+    assert "Page 1/2" in text and "Page 2/2" in text
+    for page in reader.pages:
+        assert "DÉSIGNATION" in page.extract_text(), "bandeau répété"
+    assert "40" in text
+
+
+def test_a_cancelled_invoice_shows_neither_paid_nor_due(
+    api_client: TestClient, manager: str
+) -> None:
+    sale_id = _credit_sale(api_client, manager)
+    _post(api_client, manager, f"/api/v1/sales/{sale_id}/cancel", {"reason": "Erreur de saisie"})
+    _, text = _read(
+        _pdf(api_client, manager, f"/api/v1/sales/{sale_id}/receipt/pdf", format="a4").content
+    )
+    assert "VENTE ANNULÉE" in text
+    assert "Déjà payé" not in text and "Reste à payer" not in text
+
+
+def test_the_ticket_stays_black_and_white(
+    api_client: TestClient, manager: str, with_logo: None
+) -> None:
+    sale_id, _ = _sale(api_client, manager)
+    reader, _ = _read(
+        _pdf(api_client, manager, f"/api/v1/sales/{sale_id}/receipt/pdf", format="ticket").content
+    )
+    for r, g, b in _fills(reader):
+        assert r == g == b, ("couleur sur le ticket", r, g, b)

@@ -16,7 +16,7 @@ page HTML). Images : maquette | front | différences.
 | 04 | Détail d'une vente | 3a | 4.4 % | 8.7 % | 0 | [1280](comparaison/04-detail-vente.png) [390](comparaison/04-detail-vente-390.png) |
 | 04b | annulation (raison) | 3a | 4.4 % | 14.1 % | — | [1280](comparaison/04b-detail-vente-annulation.png) [390](comparaison/04b-detail-vente-annulation-390.png) |
 | 05 | Reçu, petit ticket 80 mm | 3a | 5.5 % | 12.4 % | 0 | [1280](comparaison/05-recu-ticket.png) [390](comparaison/05-recu-ticket-390.png) |
-| 05b | Reçu, facture A4 | 3a | 5.7 % | 12.2 % | — | [1280](comparaison/05b-recu-facture-a4.png) [390](comparaison/05b-recu-facture-a4-390.png) |
+| 05b | Reçu, facture A4 | 3a | 7.7 % | 16.6 % | — | [1280](comparaison/05b-recu-facture-a4.png) [390](comparaison/05b-recu-facture-a4-390.png) |
 | 06 | Retour d'articles | 3a | 5.8 % | 11.0 % | 0 | [1280](comparaison/06-retour-articles.png) [390](comparaison/06-retour-articles-390.png) |
 | 07 | Liste des articles (Stock) | 3b | 4.7 % | 12.1 % | 0 | [1280](comparaison/07-liste-articles.png) [390](comparaison/07-liste-articles-390.png) |
 | 08 | Fiche article et étiquette | 3b | 8.5 % | 12.5 % | 0 | [1280](comparaison/08-fiche-article.png) [390](comparaison/08-fiche-article-390.png) |
