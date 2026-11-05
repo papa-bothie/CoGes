@@ -22,7 +22,7 @@
     {
       "file": "11-recevoir-livraison-390.png",
       "width": 390,
-      "percent": 16.921183363407515
+      "percent": 16.921294749270423
     }
   ],
   "12": [
@@ -55,13 +55,13 @@
     {
       "file": "14-fiche-client.png",
       "width": 1280,
-      "percent": 3.9373186972573837,
+      "percent": 3.9383076213080166,
       "missing": []
     },
     {
       "file": "14-fiche-client-390.png",
       "width": 390,
-      "percent": 16.109652095334916
+      "percent": 16.09736812379984
     }
   ],
   "15": [
@@ -107,13 +107,13 @@
     {
       "file": "18-encaisser-dette.png",
       "width": 1280,
-      "percent": 8.958257630813954,
+      "percent": 8.963140443313954,
       "missing": []
     },
     {
       "file": "18-encaisser-dette-390.png",
       "width": 390,
-      "percent": 15.205366201946562
+      "percent": 15.209499830896997
     }
   ],
   "19": [
@@ -159,13 +159,13 @@
     {
       "file": "22-conseils.png",
       "width": 1280,
-      "percent": 7.6458740234375,
+      "percent": 7.650044759114584,
       "missing": []
     },
     {
       "file": "22-conseils-390.png",
       "width": 390,
-      "percent": 15.505136102151026
+      "percent": 15.49900072288132
     }
   ],
   "23": [
@@ -178,7 +178,7 @@
     {
       "file": "23-alertes-390.png",
       "width": 390,
-      "percent": 12.349504632046274
+      "percent": 12.348502823518247
     }
   ],
   "24": [
@@ -281,76 +281,76 @@
     {
       "file": "03-liste-des-ventes.png",
       "width": 1280,
-      "percent": 2.3895704034134986,
+      "percent": 2.389631012412723,
       "missing": []
     },
     {
       "file": "03-liste-des-ventes-390.png",
       "width": 390,
-      "percent": 4.511485644914626
+      "percent": 4.511722137260158
     }
   ],
   "04": [
     {
       "file": "04-detail-vente.png",
       "width": 1280,
-      "percent": 4.4085069444444445,
+      "percent": 4.408333333333333,
       "missing": []
     },
     {
       "file": "04-detail-vente-390.png",
       "width": 390,
-      "percent": 8.708148668217122
+      "percent": 8.680650021209063
     }
   ],
   "04b": [
     {
       "file": "04b-detail-vente-annulation.png",
       "width": 1280,
-      "percent": 4.397916666666666
+      "percent": 4.3532118055555555
     },
     {
       "file": "04b-detail-vente-annulation-390.png",
       "width": 390,
-      "percent": 14.093609145995641
+      "percent": 14.016895018059161
     }
   ],
   "05": [
     {
       "file": "05-recu-ticket.png",
       "width": 1280,
-      "percent": 5.4578125,
+      "percent": 5.4592881944444445,
       "missing": []
     },
     {
       "file": "05-recu-ticket-390.png",
       "width": 390,
-      "percent": 12.422796999216214
+      "percent": 12.430186989138955
     }
   ],
   "05b": [
     {
       "file": "05b-recu-facture-a4.png",
       "width": 1280,
-      "percent": 5.712008189006024
+      "percent": 7.921535326086956
     },
     {
       "file": "05b-recu-facture-a4-390.png",
       "width": 390,
-      "percent": 12.21225766103815
+      "percent": 15.245891495891495
     }
   ],
   "06": [
     {
       "file": "06-retour-articles.png",
       "width": 1280,
-      "percent": 5.840137569279493,
+      "percent": 5.824178543151228,
       "missing": []
     },
     {
       "file": "06-retour-articles-390.png",
       "width": 390,
-      "percent": 11.001945181255527
+      "percent": 11.006071323312701
     }
   ],
   "07": [
@@ -396,12 +396,12 @@
     {
       "file": "14b-fiche-client-rappel.png",
       "width": 1280,
-      "percent": 5.229968271555197
+      "percent": 5.23147914987913
     },
     {
       "file": "14b-fiche-client-rappel-390.png",
       "width": 390,
-      "percent": 18.45918066607722
+      "percent": 18.463896256999703
     }
   ],
   "17b": [
@@ -420,12 +420,12 @@
     {
       "file": "18b-encaisser-dette-montant-libre.png",
       "width": 1280,
-      "percent": 9.055743550145348
+      "percent": 9.06062636264535
     },
     {
       "file": "18b-encaisser-dette-montant-libre-390.png",
       "width": 390,
-      "percent": 15.377140974967062
+      "percent": 15.38132157697375
     }
   ],
   "21b": [
