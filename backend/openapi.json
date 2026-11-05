@@ -15675,31 +15675,46 @@
             "$ref": "#/components/schemas/PdfExportKind"
           },
           "date_from": {
-            "type": "string",
-            "format": "date",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Date From"
           },
           "date_to": {
-            "type": "string",
-            "format": "date",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Date To"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "kind",
-          "date_from",
-          "date_to"
+          "kind"
         ],
         "title": "PdfExportCreate",
-        "description": "Document PDF demandé au worker : ventes ou journal de caisse d'une période (ADR 0114).\n\nPériode dans le fuseau de l'entreprise, bornes incluses, 366 jours au plus."
+        "description": "Document PDF demandé au worker (ADR 0114) : ventes ou caisse, et stock, dépenses ou\ndettes trop longs pour un téléchargement immédiat.\n\nPériode dans le fuseau de l'entreprise, bornes incluses, 366 jours au plus ; exigée\npour les ventes, la caisse et les dépenses, refusée pour le stock et les dettes."
       },
       "PdfExportKind": {
         "type": "string",
         "enum": [
           "sales",
-          "cash"
+          "cash",
+          "stock",
+          "expenses",
+          "debts"
         ]
       },
       "PeoplePage": {

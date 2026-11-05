@@ -325,7 +325,7 @@ MEDIA_TYPES = {
 #: (`analytics_service.can_export_pdf`, ADR 0114).
 SPREADSHEET_PERMISSION = "importexport:export"
 SPREADSHEET_FORMATS = ("csv", "xlsx")
-PDF_KINDS = ("sales", "cash")
+PDF_KINDS = ("sales", "cash", "stock", "expenses", "debts")
 
 
 def visible_exports(ctx: TenantContext) -> list[tuple[str, tuple[str, ...]]]:
@@ -408,9 +408,10 @@ class TooManyPendingExportsError(BusinessRuleError):
 def request_pdf_export(
     session: Session, ctx: TenantContext, payload: PdfExportCreate
 ) -> ExportFile:
-    """Ventes ou journal de caisse en PDF : demande enregistrée, fichier fait par le worker.
+    """Un document PDF demandé à la file : ventes ou caisse toujours, stock, dépenses ou
+    dettes quand ils sont trop longs pour être faits tout de suite (ADR 0114).
 
-    Le droit de lecture de l'écran **et** le droit d'export du document (ADR 0114).
+    Le droit de lecture de l'écran **et** le droit d'export du document.
     """
     if not analytics_service.can_export_pdf(ctx, payload.kind):
         raise PermissionDeniedError(
@@ -426,8 +427,9 @@ def request_pdf_export(
             kind=payload.kind,
             format="pdf",
             params={
-                "date_from": payload.date_from.isoformat(),
-                "date_to": payload.date_to.isoformat(),
+                key: day.isoformat()
+                for key, day in (("date_from", payload.date_from), ("date_to", payload.date_to))
+                if day is not None
             },
             requested_by=ctx.user_id,
         )
@@ -507,60 +509,100 @@ def _sales_rows(
     return rows
 
 
-def build_sales_export(session: Session, ctx: TenantContext, export_id: UUID) -> str:
-    """Produit le fichier d'un export en attente (worker). Renvoie le statut final.
+class ExportNotVisibleError(Exception):
+    """La demande n'est pas (encore) visible : l'API l'enfile avant son COMMIT.
 
-    Verrouille la ligne : deux livraisons de la même tâche ne produisent pas deux
-    fois le fichier. Un export déjà traité est laissé tel quel.
+    Seule erreur que le worker réessaie ; toute autre, `NotFoundError` comprise, met
+    l'export en échec (ADR 0114).
     """
-    repository = ExportFileRepository(session, ctx)
-    export = repository.get_for_update(export_id)
-    if export is None:
-        raise NotFoundError("Export introuvable.")
-    if export.status != "pending":
-        return export.status
 
+
+@dataclass(frozen=True, slots=True)
+class BuiltExport:
+    """Le fichier produit, ou la raison claire de son refus (`error`)."""
+
+    content: bytes | None
+    filename: str | None
+    row_count: int
+    error: str | None = None
+
+
+def render_export(session: Session, ctx: TenantContext, export_id: UUID) -> BuiltExport | None:
+    """Produit le fichier d'un export en attente **sans rien écrire** ; `None` s'il est
+    déjà traité.
+
+    Le worker l'appelle dans une transaction `REPEATABLE READ, READ ONLY`
+    (`tenant_transaction(snapshot=True)`) : chaque lecture du document voit la base au
+    même instant, une vente confirmée pendant la génération n'entre ni dans le détail
+    ni dans les totaux (ADR 0114).
+    """
+    export = ExportFileRepository(session, ctx).get(export_id)
+    if export is None:
+        raise ExportNotVisibleError(str(export_id))
+    if export.status != "pending":
+        return None
     if export.format == "pdf":
-        return _build_pdf(session, ctx, export)
+        return _render_pdf(session, ctx, export)
     rows = _sales_rows(session, ctx, export.params["date_from"], export.params["date_to"])
     fmt: ExportFormat = "csv" if export.format == "csv" else "xlsx"
     content = _render(SALES_HEADERS, rows, fmt, "ventes")
-    export.completed_at = datetime.now(UTC)
-    export.row_count = len(rows)
     if len(content) > MAX_EXPORT_BYTES:
-        export.status = "failed"
-        export.error = "Fichier trop volumineux : réduisez la période."
-        return export.status
-    export.content = content
-    export.filename = (
-        f"ventes-{export.params['date_from']}-au-{export.params['date_to']}.{export.format}"
-    )
-    export.status = "ready"
-    return export.status
+        return BuiltExport(None, None, len(rows), "Fichier trop volumineux : réduisez la période.")
+    filename = f"ventes-{export.params['date_from']}-au-{export.params['date_to']}.{export.format}"
+    return BuiltExport(content, filename, len(rows))
 
 
-def _build_pdf(session: Session, ctx: TenantContext, export: ExportFile) -> str:
-    """Ventes ou caisse en PDF, depuis les lectures de l'écran (façade Analytics)."""
+def store_export(
+    session: Session, ctx: TenantContext, export_id: UUID, built: BuiltExport | None
+) -> tuple[str, bool]:
+    """Range le fichier produit : (statut final, rangé par cet appel).
+
+    Verrouille la ligne : deux livraisons de la même tâche ne rangent pas deux fois le
+    fichier. Un export déjà traité est laissé tel quel.
+    """
+    export = ExportFileRepository(session, ctx).get_for_update(export_id)
+    if export is None:
+        raise ExportNotVisibleError(str(export_id))
+    if export.status != "pending" or built is None:
+        return export.status, False
     export.completed_at = datetime.now(UTC)
+    export.row_count = built.row_count
+    if built.error is not None or built.content is None:
+        export.status = "failed"
+        export.error = built.error or "Le fichier n'a pas pu être produit."
+        return export.status, True
+    export.content = built.content
+    export.filename = built.filename
+    export.status = "ready"
+    return export.status, True
+
+
+def build_sales_export(session: Session, ctx: TenantContext, export_id: UUID) -> str:
+    """Les deux temps dans une même transaction (démo, seed) ; le worker les sépare pour
+    lire dans un instantané. Renvoie le statut final."""
+    status, _ = store_export(session, ctx, export_id, render_export(session, ctx, export_id))
+    return status
+
+
+def _day(value: Any) -> date | None:
+    return date.fromisoformat(value) if isinstance(value, str) else None
+
+
+def _render_pdf(session: Session, ctx: TenantContext, export: ExportFile) -> BuiltExport:
+    """Un document PDF, depuis les lectures de l'écran (façade Analytics)."""
     try:
         filename, content = analytics_service.pdf_report(
             session,
             ctx,
             export.kind,
-            period_from=date.fromisoformat(export.params["date_from"]),
-            period_to=date.fromisoformat(export.params["date_to"]),
+            period_from=_day(export.params.get("date_from")),
+            period_to=_day(export.params.get("date_to")),
         )
-    except analytics_service.CashPeriodTooBusyError:
-        filename, content = "", b""
-    if not content or len(content) > MAX_EXPORT_BYTES:
-        export.status = "failed"
-        export.error = "Document trop volumineux : réduisez la période."
-        return export.status
-    export.content = content
-    export.filename = filename
-    export.row_count = 0
-    export.status = "ready"
-    return export.status
+    except analytics_service.DocumentTooLongError as refused:
+        return BuiltExport(None, None, 0, refused.message)
+    if len(content) > MAX_EXPORT_BYTES:
+        return BuiltExport(None, None, 0, "Document trop volumineux : réduisez la période.")
+    return BuiltExport(content, filename, 0)
 
 
 def export_nature(session: Session, ctx: TenantContext, export_id: UUID) -> dict[str, str]:

@@ -12,6 +12,7 @@ from decimal import Decimal
 from typing import Any
 
 from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
 from reportlab.platypus import Flowable, KeepTogether, Spacer, Table, TableStyle
 
 from app.core import pdf
@@ -102,6 +103,16 @@ def _heading(text: str) -> Flowable:
     )
 
 
+#: Lignes par tableau : un seul tableau de 10 000 lignes coûte à ReportLab un temps qui
+#: croît plus vite que le nombre de lignes (chaque coupure de page le redécoupe). Des
+#: paquets de 500 lignes, à l'en-tête répété, gardent un coût proportionnel.
+TABLE_CHUNK = 500
+#: Corps des cellules d'un tableau, et ce que leurs marges gauche et droite retirent à la
+#: largeur de la colonne (6 points de chaque côté par défaut chez ReportLab).
+CELL_SIZE = 8.5
+CELL_PADDING = 12
+
+
 def _table(
     header: Sequence[str],
     rows: Sequence[Sequence[str]],
@@ -109,10 +120,14 @@ def _table(
     *,
     numeric_from: int,
     total: Sequence[str] | None = None,
-) -> Table:
-    """Tableau à en-tête répété ; colonnes numériques alignées à droite ; ligne de total."""
-    cell = pdf.style("x-cell", size=8.5)
-    cell_right = pdf.style("x-cell-right", size=8.5, align="right")
+) -> list[Flowable]:
+    """Tableau à en-tête répété ; colonnes numériques alignées à droite ; ligne de total.
+
+    Découpé en tableaux de `TABLE_CHUNK` lignes au plus, collés l'un à l'autre : même
+    rendu, en-tête en tête de chaque page, total sous le dernier paquet seulement.
+    """
+    cell = pdf.style("x-cell", size=CELL_SIZE)
+    cell_right = pdf.style("x-cell-right", size=CELL_SIZE, align="right")
     head_left = pdf.style("x-head", size=7.5, bold=True, color=pdf.GREY)
     head_right = pdf.style("x-head-right", size=7.5, bold=True, color=pdf.GREY, align="right")
     bold = pdf.style("x-total", size=8.5, bold=True)
@@ -124,20 +139,39 @@ def _table(
             for index, value in enumerate(values)
         ]
 
-    data = [line([h.upper() for h in header], head_left, head_right)]
-    data += [line(row, cell, cell_right) for row in rows]
-    styles: list[tuple[Any, ...]] = [
-        ("BACKGROUND", (0, 0), (-1, 0), pdf.HEAD_FILL),
-        ("LINEBELOW", (0, 0), (-1, 0), 1.2, pdf.INK),
-        ("LINEBELOW", (0, 1), (-1, -1), 0.4, pdf.RULE),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-    ]
-    if total is not None:
-        data.append(line(total, bold, bold_right))
-        styles.append(("LINEABOVE", (0, -1), (-1, -1), 1.2, pdf.INK))
-    return Table(data, colWidths=list(widths), repeatRows=1, style=TableStyle(styles))
+    def body(values: Sequence[str]) -> list[object]:
+        # Une cellule qui tient sur une ligne est dessinée telle quelle (texte brut, jamais
+        # lu comme balise) ; seules les autres passent par un `Paragraph`, qui coupe les
+        # lignes mais coûte cher : 10 000 ventes en 37 s au lieu de quelques secondes.
+        return [
+            value
+            if "\n" not in value
+            and pdfmetrics.stringWidth(value, pdf.SANS, CELL_SIZE) <= widths[index] - CELL_PADDING
+            else pdf.para(pdf.text(value), cell_right if index >= numeric_from else cell)
+            for index, value in enumerate(values)
+        ]
+
+    heading = line([h.upper() for h in header], head_left, head_right)
+    chunks = [rows[start : start + TABLE_CHUNK] for start in range(0, len(rows), TABLE_CHUNK)]
+    tables: list[Flowable] = []
+    for index, chunk in enumerate(chunks or [rows]):
+        data = [heading] + [body(row) for row in chunk]
+        styles: list[tuple[Any, ...]] = [
+            ("FONT", (0, 1), (-1, -1), pdf.SANS, CELL_SIZE, CELL_SIZE * 1.3),
+            ("TEXTCOLOR", (0, 1), (-1, -1), pdf.INK),
+            ("ALIGN", (numeric_from, 1), (-1, -1), "RIGHT"),
+            ("BACKGROUND", (0, 0), (-1, 0), pdf.HEAD_FILL),
+            ("LINEBELOW", (0, 0), (-1, 0), 1.2, pdf.INK),
+            ("LINEBELOW", (0, 1), (-1, -1), 0.4, pdf.RULE),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]
+        if total is not None and index == max(len(chunks), 1) - 1:
+            data.append(line(total, bold, bold_right))
+            styles.append(("LINEABOVE", (0, -1), (-1, -1), 1.2, pdf.INK))
+        tables.append(Table(data, colWidths=list(widths), repeatRows=1, style=TableStyle(styles)))
+    return tables
 
 
 def _totals(rows: Sequence[tuple[str, str, bool]]) -> Flowable:
@@ -182,7 +216,7 @@ def render_sales(report: SalesReport) -> bytes:
         story += [
             _heading("Ventes"),
             Spacer(1, 1.5 * mm),
-            _table(
+            *_table(
                 ["N°", "Date", "Client", "Total", "Payé", "Reste", "Moyen"],
                 [
                     [
@@ -211,7 +245,7 @@ def render_sales(report: SalesReport) -> bytes:
             Spacer(1, 5 * mm),
             _heading("Par jour"),
             Spacer(1, 1.5 * mm),
-            _table(
+            *_table(
                 ["Jour", "Ventes", "Total"],
                 [[dmy(day), str(count), amount(total, cur)] for day, count, total in report.by_day],
                 [WIDTH - 70 * mm, 30 * mm, 40 * mm],
@@ -220,7 +254,7 @@ def render_sales(report: SalesReport) -> bytes:
             Spacer(1, 5 * mm),
             _heading("Encaissé à la vente, par moyen"),
             Spacer(1, 1.5 * mm),
-            _table(
+            *_table(
                 ["Moyen", "Montant"],
                 [[method, amount(total, cur)] for method, total in report.by_method]
                 + (
@@ -276,7 +310,7 @@ def render_cash(report: CashReport) -> bytes:
         story += [
             _heading("Par moyen de paiement (entré moins sorti)"),
             Spacer(1, 1.5 * mm),
-            _table(
+            *_table(
                 ["Moyen", "Net"],
                 [[method, amount(net, cur)] for method, net in report.by_method],
                 [WIDTH - 40 * mm, 40 * mm],
@@ -285,7 +319,7 @@ def render_cash(report: CashReport) -> bytes:
             Spacer(1, 5 * mm),
             _heading("Par jour"),
             Spacer(1, 1.5 * mm),
-            _table(
+            *_table(
                 ["Jour", "Entrées", "Sorties", "Net"],
                 [
                     [
@@ -314,7 +348,7 @@ def render_cash(report: CashReport) -> bytes:
         story += [
             _heading("Détail"),
             Spacer(1, 1.5 * mm),
-            _table(
+            *_table(
                 ["Date", "Opération", "Moyen", "Montant"],
                 [
                     [
@@ -343,7 +377,7 @@ def render_stock(report: StockReport) -> bytes:
     if not report.lines:
         story.append(_empty("Aucun article."))
     else:
-        story.append(
+        story.extend(
             _table(
                 ["Article", "Rayon", "Quantité", "Coût moyen", "Valeur"],
                 [
@@ -380,7 +414,7 @@ def render_expenses(report: ExpensesReport) -> bytes:
         story += [
             _heading("Par type"),
             Spacer(1, 1.5 * mm),
-            _table(
+            *_table(
                 ["Type de dépense", "Total"],
                 [[name, amount(total, cur)] for name, total in report.by_category],
                 [WIDTH - 40 * mm, 40 * mm],
@@ -390,7 +424,7 @@ def render_expenses(report: ExpensesReport) -> bytes:
             Spacer(1, 5 * mm),
             _heading("Détail"),
             Spacer(1, 1.5 * mm),
-            _table(
+            *_table(
                 ["N°", "Date", "Type", "Libellé", "Montant"],
                 [
                     [
@@ -423,7 +457,7 @@ def render_debts(report: DebtsReport) -> bytes:
             story += [_empty("Personne."), Spacer(1, 5 * mm)]
             continue
         story += [
-            _table(
+            *_table(
                 ["Nom", "Depuis le", *labels, "Total"],
                 [
                     [

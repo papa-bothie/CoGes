@@ -47,13 +47,15 @@ ceux de l'écran correspondant.
 - **Période** : aujourd'hui, cette semaine (depuis lundi), ce mois (depuis le 1er), ou des
   dates choisies. 366 jours au plus : au-delà, ou dates inversées, la réponse est 422.
 - **File d'exports** (révision 0037) :
-  - `export_format` gagne `pdf` et `export_files.kind` admet `cash` ;
-  - `POST /exports/pdf` prend `{kind: sales|cash, date_from, date_to}` avec
-    `Idempotency-Key` ; il est plafonné à 3 exports en préparation par type ;
+  - `export_format` gagne `pdf` et `export_files.kind` admet `cash`, `stock`,
+    `expenses` et `debts` ;
+  - `POST /exports/pdf` prend `{kind, date_from, date_to}` avec `Idempotency-Key` (période
+    exigée pour les ventes, la caisse et les dépenses, refusée pour le stock et les
+    dettes) ; il est plafonné à 3 exports en préparation par type ;
   - le PDF est produit par la tâche existante `exports.build_sales`, qui aiguille selon le
     format (nom gardé : les demandes enfilées et le balayage de nuit le connaissent) ;
-  - plus de 20 000 lignes de caisse donne « Document trop volumineux : réduisez la
-    période ».
+  - plus de 20 000 ventes ou lignes de caisse : refus clair (voir les corrections
+    ci-dessous).
 - **Réglages → Fichiers** (écart à l'existant) : la liste, l'état et le téléchargement
   exigeaient `importexport:export`. Ils s'ouvrent désormais à qui porte un droit
   d'export, et chacun ne voit que ce que ses droits permettent :
@@ -64,7 +66,8 @@ ceux de l'écran correspondant.
   rôles par défaut rien ne change, car la ligne « Exporter » de la grille donne les quatre
   droits ensemble. Tout fichier d'export est servi en `no-store`.
 - **Exports immédiats** : `GET /analytics/stock/pdf`, `/analytics/expenses/pdf?from&to` et
-  `/analytics/debts/pdf`, en `no-store`.
+  `/analytics/debts/pdf`, en `no-store`, jusqu'à 1 000 lignes ; au-delà, la file (voir
+  les corrections ci-dessous).
 - **Journal** : chaque PDF est noté dans l'audit secondaire (`action = export`,
   `format = pdf`). L'Historique dit « X a préparé un document PDF ».
 - **Code** :
@@ -101,3 +104,45 @@ ceux de l'écran correspondant.
   - e2e : ventes du mois de bout en bout, stock immédiat, 360 px, axe.
 - Un état du stock à une date passée reste à faire, si le propriétaire le demande : il
   faudrait rejouer le journal pour retrouver le CMP de l'époque.
+
+## Corrections avant fusion (2026-11-05)
+Relecture du propriétaire ; choix posés par AskUserQuestion le 2026-11-05 (refus clair
+au-delà du plafond, lecture `READ ONLY REPEATABLE READ`, file au-delà de 1 000 lignes).
+Chaque point est reproduit par un test rouge (`test_accountant_pdf_limits.py`) puis
+corrigé.
+- **Plafond des documents de la file** : `MAX_DOCUMENT_LINES = 20 000` ventes ou lignes de
+  caisse. Les ventes sont comptées sur la première page, avant tout détail. Au-delà,
+  l'export passe en échec avec « Plus de 20 000 ventes sur la période : choisissez une
+  période plus courte. » (ou « lignes de caisse »), que Réglages → Fichiers affiche tel
+  quel. Un échec imprévu y montre « Le fichier n'a pas pu être préparé : redemandez-le. »,
+  jamais le nom de l'erreur.
+- **Tableaux** : découpés en paquets de 500 lignes (`TABLE_CHUNK`), chacun à en-tête répété,
+  le total sous le dernier. Une cellule qui tient sur une ligne est dessinée en texte brut,
+  seules les autres passent par un `Paragraph` : le profil montrait que la coupure des
+  lignes de 15 000 paragraphes prenait l'essentiel du temps.
+- **Lecture figée** : le worker produit le fichier dans une transaction
+  `REPEATABLE READ, READ ONLY` (`tenant_transaction(snapshot=True)`, posée en `SET LOCAL`
+  avant la première requête), puis le range dans une seconde transaction courte, ligne
+  verrouillée, avec l'audit. Une vente confirmée pendant la génération n'entre ni dans le
+  détail ni dans les totaux (le test le prouvait faux avant : vente en double, « 3
+  ventes »). Le tableur des ventes suit le même chemin.
+- **Stock, dépenses, dettes** : au-delà de `MAX_IMMEDIATE_LINES = 1 000` lignes (articles,
+  dépenses de la période, clients et fournisseurs qui doivent), la route immédiate répond
+  409 `report_too_large` (`details` : `kind`, `rows`, `limit`) sans rien mettre en page ;
+  l'écran dit « Ce document compte N lignes… » et propose « Préparer le PDF », qui passe
+  par `POST /exports/pdf`. Le PDF de la file est identique au PDF immédiat (test). La
+  révision 0037, pas encore déployée, est modifiée sur place.
+- **Nouvelle tentative** : la tâche ne réessaie que `ExportNotVisibleError` (demande pas
+  encore validée par l'API) ; toute autre erreur, `NotFoundError` comprise, met l'export
+  en échec.
+- **Contexte du worker** : le worker agit sans permissions. Vérifié : aucun des cinq
+  rapports ne consulte une permission (un test fait échouer `has_permission` pendant la
+  génération), et le PDF produit par le worker montre ce que l'écran du gérant montre pour
+  la même période.
+- **Mesure, 10 000 ventes** (`tests/perf/test_sales_pdf_volume.py`, `make test-perf-volume`, hors CI,
+  poste de développement) : une année de démo à 10 288 ventes confirmées, export « Ventes »
+  de 366 jours produit par la tâche du worker en **12,3 s** (lecture figée, mise en page,
+  rangement), 356 pages, 1,20 Mo (plafond de 10 Mo). Avant les corrections, la seule mise
+  en page de 10 000 ventes prenait 50,7 s (un seul tableau de paragraphes) ; découpée, 37 s ;
+  avec les cellules en texte brut, environ 12 s. Budget du test : 120 s. Semer l'année
+  prend environ 21 minutes.

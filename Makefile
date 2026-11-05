@@ -16,7 +16,7 @@ ADMIN_PNPM := pnpm --dir frontend-admin
 API_PORT ?= 8000
 COGES_API_URL ?= http://localhost:$(API_PORT)
 
-.PHONY: help install up down db-upgrade-18 logs psql migrate test test-tenancy test-perf lint format security-scan shellcheck invariants dev api worker relay ops-status seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e front-pwa-e2e e2e-reset e2e-api e2e-front admin-install admin-dev admin-api admin-check admin-e2e admin-lighthouse e2e-admin create-platform-user
+.PHONY: help install up down db-upgrade-18 logs psql migrate test test-tenancy test-perf test-perf-volume lint format security-scan shellcheck invariants dev api worker relay ops-status seed-demo seed-maquette maquette-check lighthouse openapi requirements check-generated front-install front-dev front-api front-check front-e2e front-pwa-e2e e2e-reset e2e-api e2e-front admin-install admin-dev admin-api admin-check admin-e2e admin-lighthouse e2e-admin create-platform-user
 
 help: ## Liste les cibles disponibles
 	@grep -hE '^[a-z0-9-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -52,6 +52,9 @@ test-tenancy: ## Lance uniquement les tests de fuite inter-tenant (bloquants en 
 
 test-perf: ## Mesure GET /dashboard sur le jeu de démonstration (cible < 200 ms)
 	$(UV) pytest -m perf tests/perf
+
+test-perf-volume: ## Temps du worker pour une année d'environ 10 000 ventes en PDF (~20 min, ADR 0114)
+	$(UV) pytest -s -m perf_volume tests/perf
 
 lint: ## ruff (lint + format) puis mypy --strict sur app/
 	$(UV) ruff check .

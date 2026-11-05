@@ -19,11 +19,11 @@ from sqlalchemy.orm import Session
 
 from app.core import clock
 from app.core.display import PAYMENT_METHODS
-from app.core.errors import ValidationFailedError
+from app.core.errors import BusinessRuleError, ValidationFailedError
 from app.core.tenancy import NIL_USER_ID, TenantContext
 from app.modules.analytics.schemas import CashJournalLine, CashLineKind
 from app.modules.analytics.service import (
-    CashPeriodTooBusyError,
+    DocumentTooLongError,
     _bounds,
     _check_period,
     _method_rank,
@@ -39,10 +39,14 @@ from app.modules.suppliers import service as suppliers_service
 from app.modules.users import service as users_service
 
 ZERO = Decimal("0")
-#: Ventes ou lignes de caisse lues par page, et au plus en tout : au-delà, la période est
-#: trop chargée pour un document lisible (« réduisez la période »).
+#: Ventes, articles ou dépenses lus par page.
 _PAGE = 100
-MAX_CASH_LINES = 20_000
+#: Ventes ou lignes de caisse au plus dans un document de la file : au-delà, la période
+#: est trop chargée pour un document lisible, refusée en clair (ADR 0114).
+MAX_DOCUMENT_LINES = 20_000
+#: Lignes au plus d'un document fait dans la requête (stock, dépenses, dettes), environ
+#: 3 s de rendu : au-delà, il passe par la file d'exports (ADR 0114).
+MAX_IMMEDIATE_LINES = 1_000
 #: Bornes de l'ancienneté d'une dette, en jours (0-30, 31-60, 61-90, plus de 90).
 AGING_BUCKETS: tuple[tuple[str, int | None], ...] = (
     ("0 à 30 jours", 30),
@@ -168,6 +172,9 @@ def sales_report(
             date_to=end,
             include_drafts=False,
         )
+        if page == 1 and total > MAX_DOCUMENT_LINES:
+            # Compté avant de lire le détail : rien n'est mis en page pour rien.
+            raise DocumentTooLongError("ventes", MAX_DOCUMENT_LINES)
         customers = customers_service.names_by_ids(
             session, ctx, [sale.customer_id for sale in sales if sale.customer_id]
         )
@@ -268,10 +275,10 @@ def cash_report(
         pair[0 if direction == "inflow" else 1] += total
     by_method = finance_service.cash_by_method(session, ctx, period_from=start, period_to=end)
     raw = finance_service.cash_journal(
-        session, ctx, period_from=start, period_to=end, limit=MAX_CASH_LINES + 1
+        session, ctx, period_from=start, period_to=end, limit=MAX_DOCUMENT_LINES + 1
     )
-    if len(raw) > MAX_CASH_LINES:
-        raise CashPeriodTooBusyError
+    if len(raw) > MAX_DOCUMENT_LINES:
+        raise DocumentTooLongError("lignes de caisse", MAX_DOCUMENT_LINES)
     lines = journal_lines(session, ctx, list(reversed(raw)))
     return CashReport(
         masthead=head,
@@ -543,6 +550,37 @@ class PeriodRequiredError(ValidationFailedError):
     default_message = "Choisissez la période du document."
 
 
+class ReportTooLargeError(BusinessRuleError):
+    """Trop de lignes pour un document fait tout de suite : l'écran propose la file."""
+
+    code = "report_too_large"
+    default_message = (
+        "Ce document est trop long pour être fait tout de suite : préparez-le, il arrivera "
+        "dans Réglages → Fichiers."
+    )
+
+
+def immediate_rows(
+    session: Session,
+    ctx: TenantContext,
+    kind: ReportKind,
+    *,
+    period_from: date | None = None,
+    period_to: date | None = None,
+) -> int:
+    """Lignes que mettrait en page un document immédiat, comptées sans tout lire."""
+    if kind == "stock":
+        return inventory_service.get_stock(session, ctx, page=1, page_size=1)[1]
+    if kind == "expenses" and period_from is not None and period_to is not None:
+        return expenses_service.list_expenses(
+            session, ctx, page=1, page_size=1, period_from=period_from, period_to=period_to
+        )[1]
+    # Une ligne par client ou fournisseur, quel que soit le nombre de ses dettes.
+    return len(
+        {(debt.party_type, debt.party_id) for debt in finance_service.open_debts(session, ctx)}
+    )
+
+
 def _period_of(period_from: date | None, period_to: date | None) -> tuple[date, date]:
     if period_from is None or period_to is None:
         raise PeriodRequiredError()
@@ -557,9 +595,23 @@ def pdf_report(
     *,
     period_from: date | None = None,
     period_to: date | None = None,
+    immediate: bool = False,
 ) -> PdfReport:
-    """Le PDF d'un rapport : les chiffres de l'écran, mis en page (`documents.py`)."""
+    """Le PDF d'un rapport : les chiffres de l'écran, mis en page (`documents.py`).
+
+    `immediate` : fait dans la requête (stock, dépenses, dettes) ; au-delà de
+    `MAX_IMMEDIATE_LINES` lignes, 409 `report_too_large` et l'écran passe par la file.
+    """
     from app.modules.analytics import documents
+
+    if immediate:
+        if kind == "expenses":
+            period_from, period_to = _period_of(period_from, period_to)
+        rows = immediate_rows(session, ctx, kind, period_from=period_from, period_to=period_to)
+        if rows > MAX_IMMEDIATE_LINES:
+            raise ReportTooLargeError(
+                details={"kind": kind, "rows": rows, "limit": MAX_IMMEDIATE_LINES}
+            )
 
     if kind == "stock":
         stock = stock_report(session, ctx)

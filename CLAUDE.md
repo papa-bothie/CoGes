@@ -161,6 +161,7 @@ make migrate                 # alembic upgrade head (rôle propriétaire, jamais
 make test                    # pytest (toutes suites, sauf le marqueur perf)
 make test-tenancy            # tests de fuite inter-tenant (bloquants en CI)
 make test-perf               # latence de GET /dashboard sur le jeu de démo (< 200 ms)
+make test-perf-volume        # temps du worker pour une année de ~10 000 ventes en PDF (~20 min, hors CI, ADR 0114)
 make openapi / make requirements   # régénère backend/openapi.json / requirements.txt (Vercel, jusqu'à son arrêt)
 make check-generated         # échoue si l'un des deux n'est pas à jour (CI)
 deploy/scripts/restore-check.sh    # sauvegarde → restauration → contrôles, en local

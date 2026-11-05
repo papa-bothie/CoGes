@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from app.core import clock
+from app.core.display import figure
 from app.core.errors import ValidationFailedError
 from app.core.money import amount as to_amount
 from app.core.money import quantity as to_quantity
@@ -1466,8 +1467,16 @@ def history(
 # ------------------------------------------------------------ exports PDF (ADR 0114)
 
 
-class CashPeriodTooBusyError(Exception):
-    """Plus de lignes de caisse qu'un document ne peut en porter (« réduisez la période »)."""
+class DocumentTooLongError(Exception):
+    """Plus de lignes qu'un document de la file ne peut en porter : refus clair, rangé
+    dans l'export en échec (ADR 0114). `what` nomme les lignes (« ventes »)."""
+
+    def __init__(self, what: str, limit: int) -> None:
+        self.message = (
+            f"Plus de {figure(Decimal(limit))} {what} sur la période : "
+            "choisissez une période plus courte."
+        )
+        super().__init__(self.message)
 
 
 def pdf_report(
@@ -1478,7 +1487,9 @@ def pdf_report(
     period_from: date | None = None,
     period_to: date | None = None,
 ) -> tuple[str, bytes]:
-    """Façade des exports PDF pour Import/Export (file d'exports) : (nom, octets)."""
+    """Façade des exports PDF pour Import/Export (file d'exports) : (nom, octets).
+
+    Lève `DocumentTooLongError` au-delà du plafond d'un document."""
     from app.modules.analytics import reports
 
     report = reports.pdf_report(

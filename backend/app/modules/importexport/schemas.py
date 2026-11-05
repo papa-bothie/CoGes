@@ -14,7 +14,9 @@ type ExportFormat = Literal["csv", "xlsx"]
 #: Format d'un fichier de la file : les tableurs, et les PDF du comptable (ADR 0114).
 type StoredExportFormat = Literal["csv", "xlsx", "pdf"]
 #: Documents PDF assez longs pour passer par le worker (ADR 0114).
-type PdfExportKind = Literal["sales", "cash"]
+type PdfExportKind = Literal["sales", "cash", "stock", "expenses", "debts"]
+#: Documents qui portent sur une période ; le stock et les dettes sont « à ce jour ».
+DATED_PDF_KINDS = ("sales", "cash", "expenses")
 type ExportStatus = Literal["pending", "ready", "failed", "expired"]
 
 #: Une période d'export de ventes ne dépasse pas un an : au-delà, le fichier
@@ -83,19 +85,27 @@ class SalesExportCreate(BaseModel):
 
 
 class PdfExportCreate(BaseModel):
-    """Document PDF demandé au worker : ventes ou journal de caisse d'une période (ADR 0114).
+    """Document PDF demandé au worker (ADR 0114) : ventes ou caisse, et stock, dépenses ou
+    dettes trop longs pour un téléchargement immédiat.
 
-    Période dans le fuseau de l'entreprise, bornes incluses, 366 jours au plus.
+    Période dans le fuseau de l'entreprise, bornes incluses, 366 jours au plus ; exigée
+    pour les ventes, la caisse et les dépenses, refusée pour le stock et les dettes.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     kind: PdfExportKind
-    date_from: date
-    date_to: date
+    date_from: date | None = None
+    date_to: date | None = None
 
     @model_validator(mode="after")
     def _check_period(self) -> PdfExportCreate:
+        if self.kind not in DATED_PDF_KINDS:
+            if self.date_from is not None or self.date_to is not None:
+                raise ValueError("date_from : ce document n'a pas de période, il est à ce jour.")
+            return self
+        if self.date_from is None or self.date_to is None:
+            raise ValueError("date_from : choisissez la période du document.")
         if self.date_to < self.date_from:
             raise ValueError("date_to : la fin de période précède son début.")
         if (self.date_to - self.date_from).days >= MAX_EXPORT_DAYS:

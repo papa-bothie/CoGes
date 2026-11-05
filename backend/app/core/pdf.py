@@ -210,10 +210,22 @@ def build_band(flowables: Sequence[Flowable], *, title: str, author: str) -> byt
     return buffer.getvalue()
 
 
+#: Ce qui casserait l'en-tête ou tromperait le navigateur : guillemet, barre oblique
+#: inverse et caractères de contrôle (retour à la ligne compris).
+_UNSAFE_IN_FILENAME = re.compile(r'["\\\x00-\x1f\x7f]')
+
+
 def attachment(filename: str) -> str:
-    """En-tête `Content-Disposition` : nom ASCII, et le même en UTF-8 (RFC 6266)."""
-    ascii_name = filename.encode("ascii", "ignore").decode() or "document.pdf"
-    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+    """En-tête `Content-Disposition` : nom ASCII, et le même en UTF-8 (RFC 6266).
+
+    Le nom est nettoyé d'abord : ni guillemet, ni `\\`, ni caractère de contrôle, dans
+    aucune des deux formes.
+    """
+    cleaned = _UNSAFE_IN_FILENAME.sub("", filename).strip()
+    plain = unicodedata.normalize("NFKD", cleaned).encode("ascii", "ignore").decode().strip()
+    if not plain.strip(". "):
+        plain = "document.pdf"
+    return f"attachment; filename=\"{plain}\"; filename*=UTF-8''{quote(cleaned or plain)}"
 
 
 def slug(value: str) -> str:

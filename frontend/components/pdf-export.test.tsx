@@ -124,6 +124,64 @@ describe("Exporter en PDF", () => {
     expect(api.GET).not.toHaveBeenCalled();
   });
 
+  it("un état du stock trop long passe par la file : « Préparer le PDF », puis Fichiers", async () => {
+    permissions = ["inventory:read", "analytics:export"];
+    vi.mocked(api.GET).mockResolvedValue({
+      data: undefined,
+      error: {
+        error: {
+          code: "report_too_large",
+          message: "Ce document est trop long pour être fait tout de suite.",
+          details: { kind: "stock", rows: 3200, limit: 1000 },
+        },
+      },
+      response: new Response(null, { status: 409 }),
+    } as never);
+    renderWithClient(<PdfExport kind="stock" rubrique="stock" />);
+    await userEvent.click(screen.getByRole("button", { name: t.button }));
+    expect(await screen.findByText(t.tooLarge(3200).replace(/\s+/g, " "))).toBeInTheDocument();
+    expect(saveBlob).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: t.prepare }));
+    await waitFor(() => expect(api.POST).toHaveBeenCalled());
+    const [path, init] = vi.mocked(api.POST).mock.calls[0] as unknown as [
+      string,
+      { body: Record<string, string>; headers: Record<string, string> },
+    ];
+    expect(path).toBe("/api/v1/exports/pdf");
+    expect(init.body).toEqual({ kind: "stock" });
+    expect(init.headers["Idempotency-Key"]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(await screen.findByRole("link", { name: t.files })).toHaveAttribute(
+      "href",
+      "/settings/files",
+    );
+  });
+
+  it("des dépenses trop longues gardent leur période en passant par la file", async () => {
+    permissions = ["expenses:read", "analytics:export"];
+    vi.mocked(api.GET).mockResolvedValue({
+      data: undefined,
+      error: {
+        error: {
+          code: "report_too_large",
+          message: "Trop long.",
+          details: { kind: "expenses", rows: 1500, limit: 1000 },
+        },
+      },
+      response: new Response(null, { status: 409 }),
+    } as never);
+    renderWithClient(<PdfExport kind="expenses" />);
+    await userEvent.click(screen.getByRole("button", { name: t.button }));
+    await userEvent.click(screen.getByRole("button", { name: t.choices.day }));
+    await userEvent.click(screen.getByRole("button", { name: t.download }));
+    expect(await screen.findByText(t.tooLarge(1500).replace(/\s+/g, " "))).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: t.prepare }));
+    await waitFor(() => expect(api.POST).toHaveBeenCalled());
+    const body = (vi.mocked(api.POST).mock.calls[0]![1] as { body: Record<string, string> }).body;
+    expect(body.kind).toBe("expenses");
+    expect(body.date_from).toBe(body.date_to);
+    expect(await screen.findByRole("status")).toHaveTextContent(t.queued);
+  });
+
   it("« Pour votre comptable » ne montre que les exports permis, et rien sans aucun", () => {
     permissions = ["analytics:read", "analytics:export"];
     const { unmount } = renderWithClient(<AccountantExports kinds={["sales", "cash"]} />);

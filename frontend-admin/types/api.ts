@@ -5551,25 +5551,21 @@ export interface components {
     PaymentTermsDays: number;
     /**
      * PdfExportCreate
-     * @description Document PDF demandé au worker : ventes ou journal de caisse d'une période (ADR 0114).
+     * @description Document PDF demandé au worker (ADR 0114) : ventes ou caisse, et stock, dépenses ou
+     *     dettes trop longs pour un téléchargement immédiat.
      *
-     *     Période dans le fuseau de l'entreprise, bornes incluses, 366 jours au plus.
+     *     Période dans le fuseau de l'entreprise, bornes incluses, 366 jours au plus ; exigée
+     *     pour les ventes, la caisse et les dépenses, refusée pour le stock et les dettes.
      */
     PdfExportCreate: {
       kind: components["schemas"]["PdfExportKind"];
-      /**
-       * Date From
-       * Format: date
-       */
-      date_from: string;
-      /**
-       * Date To
-       * Format: date
-       */
-      date_to: string;
+      /** Date From */
+      date_from?: string | null;
+      /** Date To */
+      date_to?: string | null;
     };
     /** @enum {string} */
-    PdfExportKind: "sales" | "cash";
+    PdfExportKind: "sales" | "cash" | "stock" | "expenses" | "debts";
     /** PeoplePage */
     PeoplePage: {
       /** Items */
