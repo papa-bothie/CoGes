@@ -260,6 +260,23 @@ class PaymentRepository(TenantRepository[Payment]):
         )
         return {row[0]: Decimal(row[1]) for row in self.session.execute(stmt)}
 
+    def paid_by_sales(self, sale_ids: Sequence[UUID]) -> list[tuple[UUID, str, Decimal]]:
+        """Encaissé à la vente, par vente et par moyen (ADR 0114) : paiements portant la
+        vente, vivants, hors compensations — ce que la caisse a vu passer."""
+        if not sale_ids:
+            return []
+        stmt = (
+            select(Payment.sale_id, Payment.method, func.coalesce(func.sum(Payment.amount), 0))
+            .where(
+                Payment.company_id == self.ctx.company_id,
+                Payment.sale_id.in_(list(sale_ids)),
+                Payment.direction == "inflow",
+                *_counts_as_cash(),
+            )
+            .group_by(Payment.sale_id, Payment.method)
+        )
+        return [(row[0], str(row[1]), Decimal(row[2])) for row in self.session.execute(stmt)]
+
     def daily_cash(
         self, *, period_from: datetime, period_to: datetime, timezone: str
     ) -> Sequence[Row[tuple[date, str, Decimal]]]:
@@ -491,6 +508,19 @@ class DebtRepository(TenantRepository[Debt]):
             for customer_id, balance in self.session.execute(stmt).all()
             if customer_id is not None
         }
+
+    def open_debts(self) -> Sequence[Debt]:
+        """Dettes ouvertes (ou en partie payées) au solde positif, la plus ancienne d'abord."""
+        stmt = (
+            select(Debt)
+            .where(
+                Debt.company_id == self.ctx.company_id,
+                Debt.status.in_(OPEN_STATUSES),
+                Debt.balance > 0,
+            )
+            .order_by(Debt.created_at, Debt.id)
+        )
+        return self.session.execute(stmt).scalars().all()
 
     def summaries_by_party(self, party_type: str) -> dict[UUID, Row[Any]]:
         """Pour chaque client (ou fournisseur) : ce qu'il reste dû, depuis quand, avant quand.

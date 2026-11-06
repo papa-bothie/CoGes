@@ -2,6 +2,7 @@
  * Fichiers Excel, maquette v2 (écran 24e, ADR 0075) : les périodes d'un export de ventes,
  * le nom d'un fichier préparé, et l'enregistrement d'un fichier reçu de l'API.
  */
+import { labels } from "@/lib/labels";
 import { addDays } from "@/lib/period";
 
 export type SalesPeriod = "month" | "last" | "year";
@@ -32,6 +33,25 @@ export function periodName(from: string, to: string): string {
   if (from.endsWith("-01") && from.slice(0, 7) === to.slice(0, 7)) return MONTH.format(at(from));
   if (from.endsWith("-01-01") && from.slice(0, 4) === to.slice(0, 4)) return from.slice(0, 4);
   return `${SHORT.format(at(from))} au ${SHORT.format(at(to))}`;
+}
+
+/**
+ * Nom d'un fichier préparé dans Réglages → Fichiers (ADR 0114) : « Ventes de septembre
+ * 2026 », « État du stock à ce jour »… ; à défaut de période, le nom du fichier.
+ */
+export function preparedTitle(
+  kind: string,
+  params: { date_from?: string; date_to?: string },
+  filename: string | null,
+): string {
+  const t = labels.settingsScreens.files;
+  if (kind === "stock") return t.stock;
+  if (kind === "debts") return t.debts;
+  if (!params.date_from || !params.date_to) return filename ?? t.sales;
+  const period = periodName(params.date_from, params.date_to);
+  if (kind === "cash") return t.cashOf(period);
+  if (kind === "expenses") return t.expensesOf(period);
+  return t.salesOf(period);
 }
 
 /** « attachment; filename="ventes.xlsx" » → « ventes.xlsx ». */

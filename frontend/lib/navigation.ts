@@ -111,7 +111,9 @@ export const SETTINGS_NAV: readonly NavItem[] = [
       { href: "/settings/history", permission: "audit:read" },
       {
         href: "/settings/files",
-        permission: { anyOf: ["importexport:export", "importexport:create"] },
+        permission: {
+          anyOf: ["importexport:export", "importexport:create", "sales:export", "analytics:export"],
+        },
       },
     ],
   },

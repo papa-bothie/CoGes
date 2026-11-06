@@ -38,6 +38,7 @@ KEYED = frozenset(
         "/api/v1/sale-returns/{return_id}/refunds",
         "/api/v1/imports/{kind}",
         "/api/v1/inventory/deliveries",
+        "/api/v1/exports/pdf",
     }
 )
 
@@ -655,6 +656,17 @@ REGISTRY: dict[tuple[str, str], Critical | Exempt] = {
             "POST",
             "/api/v1/exports/sales",
             {"date_from": date.today().isoformat(), "date_to": date.today().isoformat()},
+        )
+    ),
+    ("POST", "/api/v1/exports/pdf"): Critical(
+        lambda w: Call(
+            "POST",
+            "/api/v1/exports/pdf",
+            {
+                "kind": "cash",
+                "date_from": date.today().isoformat(),
+                "date_to": date.today().isoformat(),
+            },
         )
     ),
     ("POST", "/api/v1/notifications/read-all"): Critical(

@@ -23,6 +23,7 @@ import { formatAmount, formatDate } from "@/lib/format";
 import { labels } from "@/lib/labels";
 import { todayIn } from "@/lib/period";
 import { cn } from "@/lib/utils";
+import { AccountantExports } from "@/components/pdf-export";
 
 import { SettleDialog } from "./settle-dialog";
 import { SupplierDebtDialog } from "./supplier-debt-dialog";
@@ -251,6 +252,7 @@ export function DebtsTab() {
         pending={writeOff.isPending}
         onSubmit={(reason) => writeOff.mutateAsync({ id: writingOff!.id, reason })}
       />
+      <AccountantExports kinds={["debts"]} />
     </>
   );
 }

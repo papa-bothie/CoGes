@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from app.core import clock
+from app.core.display import figure
 from app.core.errors import ValidationFailedError
 from app.core.money import amount as to_amount
 from app.core.money import quantity as to_quantity
@@ -1213,6 +1214,26 @@ def cash_journal(session: Session, ctx: TenantContext, *, day: date | None) -> C
     truncated = len(lines) > CASH_JOURNAL_LIMIT
     lines = lines[:CASH_JOURNAL_LIMIT]
 
+    cash = finance_service.cash_summary(session, ctx, period_from=start, period_to=end)
+    by_method = finance_service.cash_by_method(session, ctx, period_from=start, period_to=end)
+    return CashJournal(
+        day=chosen,
+        cash_in=to_amount(cash["inflow"]),
+        cash_out=to_amount(cash["outflow"]),
+        net_cash=to_amount(cash["inflow"] - cash["outflow"]),
+        by_method=[
+            CashMethodTotal(method=method, net=to_amount(net))
+            for method, net in sorted(by_method.items(), key=lambda item: _method_rank(item[0]))
+        ],
+        lines=journal_lines(session, ctx, lines),
+        truncated=truncated,
+    )
+
+
+def journal_lines(
+    session: Session, ctx: TenantContext, lines: Sequence[finance_service.CashLine]
+) -> list[CashJournalLine]:
+    """Les lignes de caisse décrites comme à l'écran 21 : l'écran et le PDF (ADR 0114)."""
     returns = sales_service.return_heads(
         session, ctx, [r for line in lines if (r := line.source.sale_return_id)]
     )
@@ -1272,37 +1293,22 @@ def cash_journal(session: Session, ctx: TenantContext, *, day: date | None) -> C
                 fields["party_name"] = customers.get(head.customer_id)
         return fields
 
-    cash = finance_service.cash_summary(session, ctx, period_from=start, period_to=end)
-    by_method = finance_service.cash_by_method(session, ctx, period_from=start, period_to=end)
-    return CashJournal(
-        day=chosen,
-        cash_in=to_amount(cash["inflow"]),
-        cash_out=to_amount(cash["outflow"]),
-        net_cash=to_amount(cash["inflow"] - cash["outflow"]),
-        by_method=[
-            CashMethodTotal(method=method, net=to_amount(net))
-            for method, net in sorted(by_method.items(), key=lambda item: _method_rank(item[0]))
-        ],
-        lines=[
-            CashJournalLine(
-                payment_id=line.payment.id,
-                paid_at=line.payment.paid_at,
-                method=line.payment.method,
-                signed_amount=to_amount(
-                    line.payment.amount
-                    if line.payment.direction == "inflow"
-                    else -line.payment.amount
-                ),
-                cancelled=line.cancelled,
-                is_reversal=line.payment.reversal_of_payment_id is not None,
-                reversal_of=line.payment.reversal_of_payment_id,
-                cancel_reason=line.payment.cancel_reason,
-                **describe(line),
-            )
-            for line in lines
-        ],
-        truncated=truncated,
-    )
+    return [
+        CashJournalLine(
+            payment_id=line.payment.id,
+            paid_at=line.payment.paid_at,
+            method=line.payment.method,
+            signed_amount=to_amount(
+                line.payment.amount if line.payment.direction == "inflow" else -line.payment.amount
+            ),
+            cancelled=line.cancelled,
+            is_reversal=line.payment.reversal_of_payment_id is not None,
+            reversal_of=line.payment.reversal_of_payment_id,
+            cancel_reason=line.payment.cancel_reason,
+            **describe(line),
+        )
+        for line in lines
+    ]
 
 
 def expenses_summary(
@@ -1456,3 +1462,48 @@ def history(
         page_size=page_size,
         total=total,
     )
+
+
+# ------------------------------------------------------------ exports PDF (ADR 0114)
+
+
+class DocumentTooLongError(Exception):
+    """Plus de lignes qu'un document de la file ne peut en porter : refus clair, rangé
+    dans l'export en échec (ADR 0114). `what` nomme les lignes (« ventes »)."""
+
+    def __init__(self, what: str, limit: int) -> None:
+        self.message = (
+            f"Plus de {figure(Decimal(limit))} {what} sur la période : "
+            "choisissez une période plus courte."
+        )
+        super().__init__(self.message)
+
+
+def pdf_report(
+    session: Session,
+    ctx: TenantContext,
+    kind: str,
+    *,
+    period_from: date | None = None,
+    period_to: date | None = None,
+) -> tuple[str, bytes]:
+    """Façade des exports PDF pour Import/Export (file d'exports) : (nom, octets).
+
+    Lève `DocumentTooLongError` au-delà du plafond d'un document."""
+    from app.modules.analytics import reports
+
+    report = reports.pdf_report(
+        session,
+        ctx,
+        reports.report_kind(kind),
+        period_from=period_from,
+        period_to=period_to,
+    )
+    return report.filename, report.content
+
+
+def can_export_pdf(ctx: TenantContext, kind: str) -> bool:
+    """Droit de lecture de l'écran et droit d'export du document (ADR 0114)."""
+    from app.modules.analytics import reports
+
+    return reports.can_export(ctx, reports.report_kind(kind))

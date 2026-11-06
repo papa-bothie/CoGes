@@ -494,6 +494,34 @@ export const labels = {
       returnLine: (no: string, day: string) => `Retour n° ${no} · ${day}`,
     },
   },
+  /** Exports PDF pour le comptable (prompt 35, bloc X, ADR 0114). */
+  pdfExport: {
+    button: "Exporter en PDF",
+    period: "Quelle période ?",
+    choices: {
+      day: "Aujourd'hui",
+      week: "Cette semaine",
+      month: "Ce mois",
+      custom: "Choisir des dates",
+    },
+    from: "Du",
+    to: "Au",
+    prepare: "Préparer le PDF",
+    download: "Télécharger le PDF",
+    invalidPeriod: "Choisissez deux dates dans l'ordre, 366 jours au plus.",
+    queued: "Le PDF est en préparation. Vous le trouverez dans",
+    files: "Réglages → Fichiers",
+    tooLarge: (rows: number) =>
+      `Ce document compte ${rows.toLocaleString("fr-FR")} lignes : il est trop long pour arriver tout de suite. Préparez-le, il arrivera dans Réglages → Fichiers.`,
+    section: "Pour votre comptable",
+    titles: {
+      sales: "Ventes sur une période",
+      cash: "Journal de caisse",
+      stock: "État du stock à ce jour",
+      expenses: "Dépenses par type",
+      debts: "Dettes clients et fournisseurs",
+    },
+  },
   receipt: {
     title: (no: string) => `Reçu de la vente n° ${no}`,
     back: "Retour à la vente",
@@ -1714,6 +1742,16 @@ export const labels = {
       none: "Aucun fichier préparé pour le moment.",
       salesOf: (period: string) =>
         /^[aeiouy]/i.test(period) ? `Ventes d’${period}` : `Ventes de ${period}`,
+      cashOf: (period: string) =>
+        /^[aeiouy]/i.test(period)
+          ? `Journal de caisse d’${period}`
+          : `Journal de caisse de ${period}`,
+      expensesOf: (period: string) =>
+        /^[aeiouy]/i.test(period) ? `Dépenses d’${period}` : `Dépenses de ${period}`,
+      stock: "État du stock à ce jour",
+      debts: "Dettes clients et fournisseurs",
+      pdfTag: "PDF",
+      excelTag: "Excel",
       preparedOn: (day: string) => `Préparé le ${day}`,
       askedNow: "Demandé à l’instant",
       pending: "En préparation…",

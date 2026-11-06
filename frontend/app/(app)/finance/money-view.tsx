@@ -33,6 +33,7 @@ import {
 import { todayIn } from "@/lib/period";
 import { dueDay } from "@/lib/people";
 import { cn } from "@/lib/utils";
+import { AccountantExports } from "@/components/pdf-export";
 
 const t = labels.moneyScreens;
 type Period = Schemas["MoneyPeriod"];
@@ -130,6 +131,7 @@ export function MoneyView() {
       ) : (
         <MoneyBody data={money.data} currency={currency} today={today} timeZone={timeZone} />
       )}
+      <AccountantExports kinds={["sales", "cash"]} />
     </div>
   );
 }

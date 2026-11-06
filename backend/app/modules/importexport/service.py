@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -31,8 +31,15 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
-from app.core.errors import BusinessRuleError, CogesError, NotFoundError, ValidationFailedError
+from app.core.errors import (
+    BusinessRuleError,
+    CogesError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationFailedError,
+)
 from app.core.tenancy import TenantContext
+from app.modules.analytics import service as analytics_service
 from app.modules.categories import service as categories_service
 from app.modules.companies import service as companies_service
 from app.modules.customers import service as customers_service
@@ -49,6 +56,7 @@ from app.modules.importexport.schemas import (
     ImportKind,
     ImportReport,
     ImportRowError,
+    PdfExportCreate,
     ReferentialKind,
     SalesExportCreate,
 )
@@ -310,7 +318,40 @@ class ExportedFile:
 MEDIA_TYPES = {
     "csv": "text/csv; charset=utf-8",
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "pdf": "application/pdf",
 }
+
+#: Droit qui ouvre les tableurs de la file ; les PDF suivent leurs propres droits
+#: (`analytics_service.can_export_pdf`, ADR 0114).
+SPREADSHEET_PERMISSION = "importexport:export"
+SPREADSHEET_FORMATS = ("csv", "xlsx")
+PDF_KINDS = ("sales", "cash", "stock", "expenses", "debts")
+
+
+def visible_exports(ctx: TenantContext) -> list[tuple[str, tuple[str, ...]]]:
+    """Les couples (type, formats) que cette personne voit dans Réglages → Fichiers."""
+    visible: list[tuple[str, tuple[str, ...]]] = []
+    if ctx.has_permission(SPREADSHEET_PERMISSION):
+        visible.append(("sales", SPREADSHEET_FORMATS))
+    for kind in PDF_KINDS:
+        if analytics_service.can_export_pdf(ctx, kind):
+            visible.append((kind, ("pdf",)))
+    return visible
+
+
+def _can_see(ctx: TenantContext, export: ExportFile) -> bool:
+    return any(
+        export.kind == kind and export.format in formats for kind, formats in visible_exports(ctx)
+    )
+
+
+def require_any_export_right(ctx: TenantContext) -> None:
+    """La file s'ouvre à qui peut y voir au moins un type de fichier ; sinon 403."""
+    if not visible_exports(ctx):
+        raise PermissionDeniedError(
+            "Vous n'avez pas la permission d'effectuer cette action.",
+            details={"required_permission": SPREADSHEET_PERMISSION},
+        )
 
 
 def _render(headers: Sequence[str], rows: list[list[Any]], fmt: ExportFormat, name: str) -> bytes:
@@ -362,6 +403,40 @@ class TooManyPendingExportsError(BusinessRuleError):
         "Des exports sont déjà en préparation : attendez qu'ils soient prêts avant d'en "
         "demander un autre."
     )
+
+
+def request_pdf_export(
+    session: Session, ctx: TenantContext, payload: PdfExportCreate
+) -> ExportFile:
+    """Un document PDF demandé à la file : ventes ou caisse toujours, stock, dépenses ou
+    dettes quand ils sont trop longs pour être faits tout de suite (ADR 0114).
+
+    Le droit de lecture de l'écran **et** le droit d'export du document.
+    """
+    if not analytics_service.can_export_pdf(ctx, payload.kind):
+        raise PermissionDeniedError(
+            "Vous n'avez pas la permission d'effectuer cette action.",
+            details={"kind": payload.kind},
+        )
+    repository = ExportFileRepository(session, ctx)
+    if repository.pending_count(kind=payload.kind) >= MAX_PENDING_EXPORTS:
+        raise TooManyPendingExportsError(details={"max_pending": MAX_PENDING_EXPORTS})
+    export = repository.add(
+        ExportFile(
+            company_id=ctx.company_id,
+            kind=payload.kind,
+            format="pdf",
+            params={
+                key: day.isoformat()
+                for key, day in (("date_from", payload.date_from), ("date_to", payload.date_to))
+                if day is not None
+            },
+            requested_by=ctx.user_id,
+        )
+    )
+    session.flush()
+    session.refresh(export)
+    return export
 
 
 def request_sales_export(
@@ -434,34 +509,106 @@ def _sales_rows(
     return rows
 
 
-def build_sales_export(session: Session, ctx: TenantContext, export_id: UUID) -> str:
-    """Produit le fichier d'un export en attente (worker). Renvoie le statut final.
+class ExportNotVisibleError(Exception):
+    """La demande n'est pas (encore) visible : l'API l'enfile avant son COMMIT.
 
-    Verrouille la ligne : deux livraisons de la même tâche ne produisent pas deux
-    fois le fichier. Un export déjà traité est laissé tel quel.
+    Seule erreur que le worker réessaie ; toute autre, `NotFoundError` comprise, met
+    l'export en échec (ADR 0114).
     """
-    repository = ExportFileRepository(session, ctx)
-    export = repository.get_for_update(export_id)
-    if export is None:
-        raise NotFoundError("Export introuvable.")
-    if export.status != "pending":
-        return export.status
 
+
+@dataclass(frozen=True, slots=True)
+class BuiltExport:
+    """Le fichier produit, ou la raison claire de son refus (`error`)."""
+
+    content: bytes | None
+    filename: str | None
+    row_count: int
+    error: str | None = None
+
+
+def render_export(session: Session, ctx: TenantContext, export_id: UUID) -> BuiltExport | None:
+    """Produit le fichier d'un export en attente **sans rien écrire** ; `None` s'il est
+    déjà traité.
+
+    Le worker l'appelle dans une transaction `REPEATABLE READ, READ ONLY`
+    (`tenant_transaction(snapshot=True)`) : chaque lecture du document voit la base au
+    même instant, une vente confirmée pendant la génération n'entre ni dans le détail
+    ni dans les totaux (ADR 0114).
+    """
+    export = ExportFileRepository(session, ctx).get(export_id)
+    if export is None:
+        raise ExportNotVisibleError(str(export_id))
+    if export.status != "pending":
+        return None
+    if export.format == "pdf":
+        return _render_pdf(session, ctx, export)
     rows = _sales_rows(session, ctx, export.params["date_from"], export.params["date_to"])
     fmt: ExportFormat = "csv" if export.format == "csv" else "xlsx"
     content = _render(SALES_HEADERS, rows, fmt, "ventes")
-    export.completed_at = datetime.now(UTC)
-    export.row_count = len(rows)
     if len(content) > MAX_EXPORT_BYTES:
+        return BuiltExport(None, None, len(rows), "Fichier trop volumineux : réduisez la période.")
+    filename = f"ventes-{export.params['date_from']}-au-{export.params['date_to']}.{export.format}"
+    return BuiltExport(content, filename, len(rows))
+
+
+def store_export(
+    session: Session, ctx: TenantContext, export_id: UUID, built: BuiltExport | None
+) -> tuple[str, bool]:
+    """Range le fichier produit : (statut final, rangé par cet appel).
+
+    Verrouille la ligne : deux livraisons de la même tâche ne rangent pas deux fois le
+    fichier. Un export déjà traité est laissé tel quel.
+    """
+    export = ExportFileRepository(session, ctx).get_for_update(export_id)
+    if export is None:
+        raise ExportNotVisibleError(str(export_id))
+    if export.status != "pending" or built is None:
+        return export.status, False
+    export.completed_at = datetime.now(UTC)
+    export.row_count = built.row_count
+    if built.error is not None or built.content is None:
         export.status = "failed"
-        export.error = "Fichier trop volumineux : réduisez la période."
-        return export.status
-    export.content = content
-    export.filename = (
-        f"ventes-{export.params['date_from']}-au-{export.params['date_to']}.{export.format}"
-    )
+        export.error = built.error or "Le fichier n'a pas pu être produit."
+        return export.status, True
+    export.content = built.content
+    export.filename = built.filename
     export.status = "ready"
-    return export.status
+    return export.status, True
+
+
+def build_sales_export(session: Session, ctx: TenantContext, export_id: UUID) -> str:
+    """Les deux temps dans une même transaction (démo, seed) ; le worker les sépare pour
+    lire dans un instantané. Renvoie le statut final."""
+    status, _ = store_export(session, ctx, export_id, render_export(session, ctx, export_id))
+    return status
+
+
+def _day(value: Any) -> date | None:
+    return date.fromisoformat(value) if isinstance(value, str) else None
+
+
+def _render_pdf(session: Session, ctx: TenantContext, export: ExportFile) -> BuiltExport:
+    """Un document PDF, depuis les lectures de l'écran (façade Analytics)."""
+    try:
+        filename, content = analytics_service.pdf_report(
+            session,
+            ctx,
+            export.kind,
+            period_from=_day(export.params.get("date_from")),
+            period_to=_day(export.params.get("date_to")),
+        )
+    except analytics_service.DocumentTooLongError as refused:
+        return BuiltExport(None, None, 0, refused.message)
+    if len(content) > MAX_EXPORT_BYTES:
+        return BuiltExport(None, None, 0, "Document trop volumineux : réduisez la période.")
+    return BuiltExport(content, filename, 0)
+
+
+def export_nature(session: Session, ctx: TenantContext, export_id: UUID) -> dict[str, str]:
+    """Type et format d'un export, pour l'audit du worker (qui n'a pas de droits à lui)."""
+    export = ExportFileRepository(session, ctx).get(export_id)
+    return {} if export is None else {"kind": export.kind, "format": str(export.format)}
 
 
 def mark_export_failed(session: Session, ctx: TenantContext, export_id: UUID, reason: str) -> None:
@@ -473,14 +620,17 @@ def mark_export_failed(session: Session, ctx: TenantContext, export_id: UUID, re
 
 
 def get_export(session: Session, ctx: TenantContext, export_id: UUID) -> ExportFile:
+    """Un export visible par cette personne ; un type qu'elle ne peut pas voir ⇒ 404."""
+    require_any_export_right(ctx)
     export = ExportFileRepository(session, ctx).get(export_id)
-    if export is None:
+    if export is None or not _can_see(ctx, export):
         raise NotFoundError("Export introuvable.")
     return export
 
 
 def list_exports(session: Session, ctx: TenantContext, *, limit: int = 20) -> Sequence[ExportFile]:
-    return ExportFileRepository(session, ctx).recent(limit=limit)
+    require_any_export_right(ctx)
+    return ExportFileRepository(session, ctx).recent(limit=limit, visible=visible_exports(ctx))
 
 
 def export_content(session: Session, ctx: TenantContext, export_id: UUID) -> ExportedFile:

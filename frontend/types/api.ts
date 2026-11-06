@@ -1842,6 +1842,66 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/analytics/stock/pdf": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stock Pdf
+     * @description État du stock à l'instant, en PDF (ADR 0114).
+     */
+    get: operations["stock_pdf_api_v1_analytics_stock_pdf_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/analytics/expenses/pdf": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Expenses Pdf
+     * @description Dépenses par type sur une période (366 jours au plus), en PDF (ADR 0114).
+     */
+    get: operations["expenses_pdf_api_v1_analytics_expenses_pdf_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/analytics/debts/pdf": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Debts Pdf
+     * @description Dettes clients et fournisseurs à ce jour, par ancienneté, en PDF (ADR 0114).
+     */
+    get: operations["debts_pdf_api_v1_analytics_debts_pdf_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/notifications": {
     parameters: {
       query?: never;
@@ -2120,6 +2180,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/exports/pdf": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Request Pdf Export
+     * @description Ventes ou journal de caisse d'une période en PDF, produit par le worker (ADR 0114).
+     *
+     *     Droit de lecture de l'écran **et** droit d'export du document, vérifiés par le
+     *     service selon `kind`. Le fichier arrive dans Réglages → Fichiers.
+     */
+    post: operations["request_pdf_export_api_v1_exports_pdf_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/exports": {
     parameters: {
       query?: never;
@@ -2129,7 +2212,9 @@ export interface paths {
     };
     /**
      * List Exports
-     * @description Derniers exports demandés, du plus récent au plus ancien.
+     * @description Derniers exports que cette personne peut voir, du plus récent au plus ancien.
+     *
+     *     Tableurs : `importexport:export` ; PDF : les droits de leur document (ADR 0114).
      */
     get: operations["list_exports_api_v1_exports_get"];
     put?: never;
@@ -4282,7 +4367,7 @@ export interface components {
       id: string;
       /** Kind */
       kind: string;
-      format: components["schemas"]["ExportFormat"];
+      format: components["schemas"]["StoredExportFormat"];
       status: components["schemas"]["ExportStatus"];
       /** Params */
       params: {
@@ -5464,6 +5549,23 @@ export interface components {
       reversal_of_payment_id?: string | null;
     };
     PaymentTermsDays: number;
+    /**
+     * PdfExportCreate
+     * @description Document PDF demandé au worker (ADR 0114) : ventes ou caisse, et stock, dépenses ou
+     *     dettes trop longs pour un téléchargement immédiat.
+     *
+     *     Période dans le fuseau de l'entreprise, bornes incluses, 366 jours au plus ; exigée
+     *     pour les ventes, la caisse et les dépenses, refusée pour le stock et les dettes.
+     */
+    PdfExportCreate: {
+      kind: components["schemas"]["PdfExportKind"];
+      /** Date From */
+      date_from?: string | null;
+      /** Date To */
+      date_to?: string | null;
+    };
+    /** @enum {string} */
+    PdfExportKind: "sales" | "cash" | "stock" | "expenses" | "debts";
     /** PeoplePage */
     PeoplePage: {
       /** Items */
@@ -6919,6 +7021,8 @@ export interface components {
       /** Out Count */
       out_count: number;
     };
+    /** @enum {string} */
+    StoredExportFormat: "csv" | "xlsx" | "pdf";
     StoredPaymentMethod: components["schemas"]["PaymentMethod"] | "offset";
     /**
      * SubscriptionDetail
@@ -11216,6 +11320,78 @@ export interface operations {
       };
     };
   };
+  stock_pdf_api_v1_analytics_stock_pdf_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Le document, en PDF */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/pdf": unknown;
+        };
+      };
+    };
+  };
+  expenses_pdf_api_v1_analytics_expenses_pdf_get: {
+    parameters: {
+      query: {
+        from: string;
+        to: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Le document, en PDF */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/pdf": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  debts_pdf_api_v1_analytics_debts_pdf_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Le document, en PDF */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/pdf": unknown;
+        };
+      };
+    };
+  };
   list_notifications_api_v1_notifications_get: {
     parameters: {
       query?: {
@@ -11584,6 +11760,39 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["SalesExportCreate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExportRead"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  request_pdf_export_api_v1_exports_pdf_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PdfExportCreate"];
       };
     };
     responses: {

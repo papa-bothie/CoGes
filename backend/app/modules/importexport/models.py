@@ -18,7 +18,7 @@ from app.core.database import NOW, IdentifiedTenantBase
 EXPORT_STATUS = PG_ENUM(
     "pending", "ready", "failed", "expired", name="export_status", create_type=False
 )
-EXPORT_FORMAT = PG_ENUM("csv", "xlsx", name="export_format", create_type=False)
+EXPORT_FORMAT = PG_ENUM("csv", "xlsx", "pdf", name="export_format", create_type=False)
 
 
 class ExportFile(IdentifiedTenantBase):

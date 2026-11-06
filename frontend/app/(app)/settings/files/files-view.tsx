@@ -15,11 +15,18 @@ import { errorMessage, toApiError } from "@/lib/api/errors";
 import { useIdempotencyKey } from "@/lib/api/idempotency";
 import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
-import { attachmentName, periodName, salesPeriod, saveBlob, type SalesPeriod } from "@/lib/files";
+import {
+  attachmentName,
+  preparedTitle,
+  salesPeriod,
+  saveBlob,
+  type SalesPeriod,
+} from "@/lib/files";
 import { formatDayMonth } from "@/lib/format";
 import { labels } from "@/lib/labels";
 import { todayIn } from "@/lib/period";
 import { cn } from "@/lib/utils";
+import { AccountantExports } from "@/components/pdf-export";
 
 type Export = Schemas["ExportRead"];
 type Report = Schemas["ImportReport"];
@@ -53,6 +60,8 @@ function isExpired(file: Export, now: Date = new Date()): boolean {
 export function FilesView() {
   const canExport = usePermission("importexport:export");
   const canImport = usePermission("importexport:create");
+  // Les PDF du comptable arrivent aussi dans la liste (ADR 0114).
+  const canPdf = usePermission({ anyOf: ["sales:export", "analytics:export"] });
   return (
     <div className="flex flex-col gap-3.5">
       <h2 className="text-titre-carte">{t.title}</h2>
@@ -61,7 +70,8 @@ export function FilesView() {
         {canImport && <ImportCard />}
         {canExport && <ListsCard />}
       </div>
-      {canExport && <PreparedFiles />}
+      {(canExport || canPdf) && <PreparedFiles />}
+      <AccountantExports kinds={["sales", "cash"]} rubrique="ventes" />
     </div>
   );
 }
@@ -294,7 +304,9 @@ function PreparedFiles() {
   });
 
   if (query.isError) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
-  const files = (query.data?.items ?? []).filter((file) => file.kind === "sales");
+  // Ventes en tableur ou en PDF, et les documents PDF de la file (ADR 0114) ; le
+  // serveur ne rend que ce que les droits de la personne lui laissent voir.
+  const files = query.data?.items ?? [];
   return (
     <>
       <h3 className="mt-1.5 text-lg font-bold">{t.preparedTitle}</h3>
@@ -305,11 +317,12 @@ function PreparedFiles() {
       ) : (
         <ul>
           {files.map((file) => {
-            const params = file.params as { date_from?: string; date_to?: string };
-            const name =
-              params.date_from && params.date_to
-                ? t.salesOf(periodName(params.date_from, params.date_to))
-                : (file.filename ?? t.sales);
+            const title = preparedTitle(
+              file.kind,
+              file.params as { date_from?: string; date_to?: string },
+              file.filename,
+            );
+            const name = `${title} · ${file.format === "pdf" ? t.pdfTag : t.excelTag}`;
             const expired = isExpired(file);
             const when =
               file.status === "pending"
@@ -327,7 +340,7 @@ function PreparedFiles() {
                 {file.status === "pending" ? (
                   <span className="font-bold text-depenses-encre">{t.pending}</span>
                 ) : file.status === "failed" ? (
-                  <span className="font-bold text-destructive">{t.failed}</span>
+                  <span className="font-bold text-destructive">{file.error ?? t.failed}</span>
                 ) : expired ? (
                   <span className="text-muted-foreground">{t.expired}</span>
                 ) : (

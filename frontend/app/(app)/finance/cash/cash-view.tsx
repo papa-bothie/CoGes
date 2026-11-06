@@ -23,6 +23,7 @@ import { labels } from "@/lib/labels";
 import { cashLineDetail, cashLineText, isNegative, netAmount, signedAmount } from "@/lib/money";
 import { addDays, todayIn } from "@/lib/period";
 import { cn } from "@/lib/utils";
+import { AccountantExports } from "@/components/pdf-export";
 
 type Line = Schemas["CashJournalLine"];
 const t = labels.moneyScreens.cash;
@@ -113,6 +114,7 @@ export function CashView() {
       )}
 
       <p className="text-muted-foreground">{t.footer}</p>
+      <AccountantExports kinds={["cash"]} />
     </div>
   );
 }

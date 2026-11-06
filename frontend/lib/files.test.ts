@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { attachmentName, periodName, salesPeriod } from "./files";
+import { labels } from "@/lib/labels";
+
+import { attachmentName, periodName, preparedTitle, salesPeriod } from "./files";
 
 describe("périodes d'un export de ventes (écran 24e)", () => {
   it("borne ce mois, le mois dernier et cette année", () => {
@@ -20,5 +22,23 @@ describe("périodes d'un export de ventes (écran 24e)", () => {
   it("lit le nom du fichier envoyé par l'API", () => {
     expect(attachmentName('attachment; filename="ventes.xlsx"', "x")).toBe("ventes.xlsx");
     expect(attachmentName(null, "modele.csv")).toBe("modele.csv");
+  });
+});
+
+describe("preparedTitle (ADR 0114)", () => {
+  it("nomme chaque document de la file, daté ou à ce jour", () => {
+    const f = labels.settingsScreens.files;
+    expect(preparedTitle("sales", { date_from: "2026-09-01", date_to: "2026-09-30" }, null)).toBe(
+      f.salesOf("septembre 2026"),
+    );
+    expect(preparedTitle("cash", { date_from: "2026-09-01", date_to: "2026-09-30" }, null)).toBe(
+      f.cashOf("septembre 2026"),
+    );
+    expect(
+      preparedTitle("expenses", { date_from: "2026-09-01", date_to: "2026-09-30" }, null),
+    ).toBe(f.expensesOf("septembre 2026"));
+    expect(preparedTitle("stock", {}, "Stock-2026-11-05-Boutique.pdf")).toBe(f.stock);
+    expect(preparedTitle("debts", {}, null)).toBe(f.debts);
+    expect(preparedTitle("sales", {}, "ventes.xlsx")).toBe("ventes.xlsx");
   });
 });

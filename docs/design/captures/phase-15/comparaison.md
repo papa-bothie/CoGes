@@ -17,8 +17,8 @@ page HTML). Images : maquette | front | différences.
 | 04b | annulation (raison) | 3a | 4.4 % | 14.1 % | — | [1280](comparaison/04b-detail-vente-annulation.png) [390](comparaison/04b-detail-vente-annulation-390.png) |
 | 05 | Reçu, petit ticket 80 mm | 3a | 5.5 % | 12.4 % | 0 | [1280](comparaison/05-recu-ticket.png) [390](comparaison/05-recu-ticket-390.png) |
 | 05b | Reçu, facture A4 | 3a | 7.7 % | 16.6 % | — | [1280](comparaison/05b-recu-facture-a4.png) [390](comparaison/05b-recu-facture-a4-390.png) |
-| 06 | Retour d'articles | 3a | 5.8 % | 10.9 % | 0 | [1280](comparaison/06-retour-articles.png) [390](comparaison/06-retour-articles-390.png) |
-| 07 | Liste des articles (Stock) | 3b | 5.0 % | 12.5 % | 0 | [1280](comparaison/07-liste-articles.png) [390](comparaison/07-liste-articles-390.png) |
+| 06 | Retour d'articles | 3a | 5.8 % | 11.0 % | 0 | [1280](comparaison/06-retour-articles.png) [390](comparaison/06-retour-articles-390.png) |
+| 07 | Liste des articles (Stock) | 3b | 4.7 % | 12.1 % | 0 | [1280](comparaison/07-liste-articles.png) [390](comparaison/07-liste-articles-390.png) |
 | 08 | Fiche article et étiquette | 3b | 8.5 % | 12.5 % | 0 | [1280](comparaison/08-fiche-article.png) [390](comparaison/08-fiche-article-390.png) |
 | 09 | Nouvel article | 3b | 7.9 % | 12.3 % | 0 | [1280](comparaison/09-nouvel-article.png) [390](comparaison/09-nouvel-article-390.png) |
 | 10 | Corriger le stock | 3b | 11.5 % | 16.0 % | 0 | [1280](comparaison/10-corriger-stock.png) [390](comparaison/10-corriger-stock-390.png) |
@@ -29,15 +29,15 @@ page HTML). Images : maquette | front | différences.
 | 14b | rappel WhatsApp | 3c | 5.2 % | 18.5 % | — | [1280](comparaison/14b-fiche-client-rappel.png) [390](comparaison/14b-fiche-client-rappel-390.png) |
 | 15 | Ajouter une personne | 3c | 2.5 % | 18.3 % | 0 | [1280](comparaison/15-ajouter-personne.png) [390](comparaison/15-ajouter-personne-390.png) |
 | 16 | Fiche fournisseur | 3c | 3.7 % | 16.1 % | 0 | [1280](comparaison/16-fiche-fournisseur.png) [390](comparaison/16-fiche-fournisseur-390.png) |
-| 17 | L'argent | 3d | 14.2 % | 18.8 % | 0 | [1280](comparaison/17-argent.png) [390](comparaison/17-argent-390.png) |
-| 17b | journée en perte | 3d | 5.9 % | 23.4 % | — | [1280](comparaison/17b-argent-journee-en-perte.png) [390](comparaison/17b-argent-journee-en-perte-390.png) |
+| 17 | L'argent | 3d | 13.1 % | 17.9 % | 0 | [1280](comparaison/17-argent.png) [390](comparaison/17-argent-390.png) |
+| 17b | journée en perte | 3d | 5.5 % | 22.7 % | — | [1280](comparaison/17b-argent-journee-en-perte.png) [390](comparaison/17b-argent-journee-en-perte-390.png) |
 | 18 | Encaisser une dette | 3d | 9.0 % | 15.2 % | 0 | [1280](comparaison/18-encaisser-dette.png) [390](comparaison/18-encaisser-dette-390.png) |
 | 18b | montant libre | 3d | 9.1 % | 15.4 % | — | [1280](comparaison/18b-encaisser-dette-montant-libre.png) [390](comparaison/18b-encaisser-dette-montant-libre-390.png) |
 | 19 | Payer un fournisseur | 3d | 9.8 % | 16.4 % | 0 | [1280](comparaison/19-payer-fournisseur.png) [390](comparaison/19-payer-fournisseur-390.png) |
-| 20 | Dépenses | 3d | 9.1 % | 10.7 % | 0 | [1280](comparaison/20-depenses.png) [390](comparaison/20-depenses-390.png) |
-| 21 | Entrées et sorties de caisse | 3d | 5.0 % | 9.1 % | 0 | [1280](comparaison/21-entrees-sorties.png) [390](comparaison/21-entrees-sorties-390.png) |
-| 21b | annulation d'une ligne | 3d | 5.1 % | 9.3 % | — | [1280](comparaison/21b-entrees-sorties-annulation.png) [390](comparaison/21b-entrees-sorties-annulation-390.png) |
-| 22 | Conseils | 3e | 7.7 % | 15.5 % | 0 | [1280](comparaison/22-conseils.png) [390](comparaison/22-conseils-390.png) |
+| 20 | Dépenses | 3d | 8.4 % | 10.3 % | 0 | [1280](comparaison/20-depenses.png) [390](comparaison/20-depenses-390.png) |
+| 21 | Entrées et sorties de caisse | 3d | 4.7 % | 8.9 % | 0 | [1280](comparaison/21-entrees-sorties.png) [390](comparaison/21-entrees-sorties-390.png) |
+| 21b | annulation d'une ligne | 3d | 4.8 % | 9.2 % | — | [1280](comparaison/21b-entrees-sorties-annulation.png) [390](comparaison/21b-entrees-sorties-annulation-390.png) |
+| 22 | Conseils | 3e | 7.6 % | 15.5 % | 0 | [1280](comparaison/22-conseils.png) [390](comparaison/22-conseils-390.png) |
 | 22b | meilleurs articles | 3e | 10.0 % | 18.3 % | — | [1280](comparaison/22b-meilleurs-articles.png) [390](comparaison/22b-meilleurs-articles-390.png) |
 | 22c | prévisions | 3e | 5.3 % | 10.1 % | — | [1280](comparaison/22c-previsions.png) [390](comparaison/22c-previsions-390.png) |
 | 23 | Alertes | 3e | 6.1 % | 12.3 % | 0 | [1280](comparaison/23-alertes.png) [390](comparaison/23-alertes-390.png) |
@@ -45,6 +45,6 @@ page HTML). Images : maquette | front | différences.
 | 24b | personnes | 3e | 2.3 % | 15.6 % | — | [1280](comparaison/24b-reglages-personnes.png) [390](comparaison/24b-reglages-personnes-390.png) |
 | 24c | qui peut faire quoi | 3e | 5.0 % | 10.9 % | — | [1280](comparaison/24c-reglages-droits.png) [390](comparaison/24c-reglages-droits-390.png) |
 | 24d | historique | 3e | 2.6 % | 9.4 % | — | [1280](comparaison/24d-reglages-historique.png) [390](comparaison/24d-reglages-historique-390.png) |
-| 24e | fichiers Excel | 3e | 3.6 % | 19.3 % | — | [1280](comparaison/24e-reglages-fichiers-excel.png) [390](comparaison/24e-reglages-fichiers-excel-390.png) |
+| 24e | fichiers Excel | 3e | 3.9 % | 18.4 % | — | [1280](comparaison/24e-reglages-fichiers-excel.png) [390](comparaison/24e-reglages-fichiers-excel-390.png) |
 | 25 | Connexion | 3e | 6.0 % | 17.0 % | 0 | [1280](comparaison/25-connexion.png) [390](comparaison/25-connexion-390.png) |
 | 26 | Sur téléphone (390 px) | 3a, puis chaque lot | — | 5.5 % | 0 | [390](comparaison/26-telephone-390.png) |

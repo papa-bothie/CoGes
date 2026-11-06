@@ -14,12 +14,13 @@ from datetime import date, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request, Response
 
-from app.core.deps import TenantSession, require_permission
+from app.core import pdf, queue
+from app.core.deps import TenantSession, client_ip, require_permission, require_permissions
 from app.core.errors import PermissionDeniedError
 from app.core.repository import MAX_PAGE_SIZE
-from app.modules.analytics import service
+from app.modules.analytics import reports, service
 from app.modules.analytics.schemas import (
     MAX_RANKING_LIMIT,
     PEOPLE_PAGE_SIZE,
@@ -325,3 +326,69 @@ def history(
         period_from=period_from,
         period_to=period_to,
     )
+
+
+# ------------------------------------------------- exports PDF immédiats (ADR 0114)
+
+
+def _pdf(tenant: TenantSession, request: Request, kind: str, **period: date | None) -> Response:
+    """Le PDF dans le corps, `no-store`, et l'export tracé (audit secondaire, ADR 0041)."""
+    report = reports.pdf_report(
+        tenant.session, tenant.ctx, reports.report_kind(kind), immediate=True, **period
+    )
+    queue.enqueue(
+        AUDIT_TASK,
+        countdown=0,
+        company_id=str(tenant.ctx.company_id),
+        actor_user_id=str(tenant.ctx.user_id),
+        action="export",
+        entity_table="export_files",
+        entity_id=None,
+        diff={"kind": kind, "format": "pdf"},
+        ip_address=client_ip(request),
+    )
+    return Response(
+        content=report.content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": pdf.attachment(report.filename),
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+#: Audit secondaire (canal 2) : l'export est tracé après coup, par le worker.
+AUDIT_TASK = "audit.record"
+_PDF: dict[int | str, dict[str, object]] = {
+    200: {"content": {"application/pdf": {}}, "description": "Le document, en PDF"}
+}
+
+
+@router.get("/stock/pdf", response_class=Response, responses=_PDF)
+def stock_pdf(
+    request: Request,
+    tenant: Annotated[TenantSession, Depends(require_permissions(*reports.PDF_RIGHTS["stock"]))],
+) -> Response:
+    """État du stock à l'instant, en PDF (ADR 0114)."""
+    return _pdf(tenant, request, "stock")
+
+
+@router.get("/expenses/pdf", response_class=Response, responses=_PDF)
+def expenses_pdf(
+    request: Request,
+    tenant: Annotated[TenantSession, Depends(require_permissions(*reports.PDF_RIGHTS["expenses"]))],
+    period_from: Annotated[date, Query(alias="from")],
+    period_to: Annotated[date, Query(alias="to")],
+) -> Response:
+    """Dépenses par type sur une période (366 jours au plus), en PDF (ADR 0114)."""
+    return _pdf(tenant, request, "expenses", period_from=period_from, period_to=period_to)
+
+
+@router.get("/debts/pdf", response_class=Response, responses=_PDF)
+def debts_pdf(
+    request: Request,
+    tenant: Annotated[TenantSession, Depends(require_permissions(*reports.PDF_RIGHTS["debts"]))],
+) -> Response:
+    """Dettes clients et fournisseurs à ce jour, par ancienneté, en PDF (ADR 0114)."""
+    return _pdf(tenant, request, "debts")
