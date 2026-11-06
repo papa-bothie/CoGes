@@ -3682,6 +3682,60 @@
         }
       }
     },
+    "/api/v1/sales/{sale_id}/receipt/pdf": {
+      "get": {
+        "tags": [
+          "sales"
+        ],
+        "summary": "Read Receipt Pdf",
+        "description": "Ticket 80 mm ou facture A4 en PDF, à télécharger ou partager (ADR 0113).\n\nMême lecture que `GET /sales/{id}/receipt` : refusé sur un brouillon (409).",
+        "operationId": "read_receipt_pdf_api_v1_sales__sale_id__receipt_pdf_get",
+        "parameters": [
+          {
+            "name": "sale_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Sale Id"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "ticket",
+                "a4"
+              ],
+              "type": "string",
+              "default": "a4",
+              "title": "Format"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Le reçu, en PDF",
+            "content": {
+              "application/pdf": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sale-returns/{return_id}": {
       "get": {
         "tags": [
@@ -3711,6 +3765,46 @@
                   "$ref": "#/components/schemas/SaleReturnDetail"
                 }
               }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sale-returns/{return_id}/slip/pdf": {
+      "get": {
+        "tags": [
+          "sale_returns"
+        ],
+        "summary": "Read Return Slip Pdf",
+        "description": "Bon de retour en PDF, au gabarit du ticket (ADR 0113).",
+        "operationId": "read_return_slip_pdf_api_v1_sale_returns__return_id__slip_pdf_get",
+        "parameters": [
+          {
+            "name": "return_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Return Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Le bon, en PDF",
+            "content": {
+              "application/pdf": {}
             }
           },
           "422": {

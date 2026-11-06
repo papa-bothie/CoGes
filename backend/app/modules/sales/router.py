@@ -8,12 +8,12 @@ reste. L'absence de cette route est une information, pas un oubli.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 
-from app.core import idempotency
+from app.core import idempotency, pdf
 from app.core.deps import TenantSession, client_ip, require_permission
 from app.core.idempotency import IdempotencyKey
 from app.core.repository import MAX_PAGE_SIZE
@@ -314,6 +314,36 @@ def create_return(
     )
 
 
+def _pdf_response(document: service.PdfDocument) -> Response:
+    """Le PDF dans le corps, jamais dans une URL publique ; jamais gardé (ADR 0113)."""
+    return Response(
+        content=document.content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": pdf.attachment(document.filename),
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@router.get(
+    "/{sale_id}/receipt/pdf",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}, "description": "Le reçu, en PDF"}},
+)
+def read_receipt_pdf(
+    sale_id: UUID,
+    tenant: Annotated[TenantSession, Depends(require_permission("sales:read"))],
+    format: Annotated[Literal["ticket", "a4"], Query()] = "a4",
+) -> Response:
+    """Ticket 80 mm ou facture A4 en PDF, à télécharger ou partager (ADR 0113).
+
+    Même lecture que `GET /sales/{id}/receipt` : refusé sur un brouillon (409).
+    """
+    return _pdf_response(service.receipt_pdf(tenant.session, tenant.ctx, sale_id, format))
+
+
 @router.get("/{sale_id}/returns", response_model=SaleReturnList)
 def list_sale_returns(
     sale_id: UUID,
@@ -331,6 +361,19 @@ def get_return(
     """Retour complet : lignes rendues, lettrages et décaissements."""
     sale_return = service.get_return(tenant.session, tenant.ctx, return_id)
     return service.build_return_detail(tenant.session, tenant.ctx, sale_return)
+
+
+@returns_router.get(
+    "/{return_id}/slip/pdf",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}, "description": "Le bon, en PDF"}},
+)
+def read_return_slip_pdf(
+    return_id: UUID,
+    tenant: Annotated[TenantSession, Depends(require_permission("sale_returns:read"))],
+) -> Response:
+    """Bon de retour en PDF, au gabarit du ticket (ADR 0113)."""
+    return _pdf_response(service.return_slip_pdf(tenant.session, tenant.ctx, return_id))
 
 
 @returns_router.post("/{return_id}/refunds", response_model=SaleReturnDetail)

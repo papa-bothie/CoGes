@@ -25,8 +25,10 @@ import { labels } from "@/lib/labels";
 import { amountInWords } from "@/lib/number-words";
 import { displayNumber, qtyWithUnit } from "@/lib/units";
 import { cn } from "@/lib/utils";
+import { pdfFromResponse } from "@/lib/pdf-share";
 import { receiptText, whatsappLink } from "@/lib/whatsapp";
 
+import { PdfActions } from "../../pdf-actions";
 import { ReceiptRow, ShopLogo, TicketHeader } from "../../receipt-parts";
 
 type Receipt = Schemas["ReceiptRead"];
@@ -144,6 +146,23 @@ export function ReceiptView({ saleId }: { saleId: string }) {
             <Printer className="size-[22px]" aria-hidden />
             {t.print}
           </button>
+          {data && (
+            <PdfActions
+              load={async () =>
+                pdfFromResponse(
+                  await api.GET("/api/v1/sales/{sale_id}/receipt/pdf", {
+                    params: { path: { sale_id: saleId }, query: { format } },
+                    parseAs: "blob",
+                  }),
+                  `Recu-${displayNumber(data.sale_no)}.pdf`,
+                )
+              }
+              title={t.title(displayNumber(data.sale_no))}
+              shareText={text ?? undefined}
+              fallback={text ? whatsappLink(text, data.customer?.phone) : undefined}
+              className={SECONDARY}
+            />
+          )}
           {text && (
             <a
               href={whatsappLink(text, data?.customer?.phone)}
@@ -218,7 +237,10 @@ function Ticket({
   timeZone: string;
 }) {
   const currency = receipt.company.currency;
-  const owing = positive(receipt.balance);
+  // Une vente annulée ne réclame rien : ni reste à payer, ni somme arrêtée.
+  const cancelled = receipt.status === "cancelled";
+  const owing = positive(receipt.balance) && !cancelled;
+  const seller = receipt.seller_name?.trim();
   const dash = <div className="my-2 border-t border-dashed border-recu-encre/70" />;
   const methods = paidByMethod(receipt);
   return (
@@ -233,9 +255,7 @@ function Ticket({
         right={formatDateTime(receipt.confirmed_at ?? receipt.sold_at, timeZone)}
       />
       {receipt.customer && <div>{t.customer(receipt.customer.name)}</div>}
-      {receipt.seller_name && (
-        <div>{t.seller(receipt.seller_name.trim().split(/\s+/)[0] ?? "")}</div>
-      )}
+      {seller && <div>{t.seller(seller.split(/\s+/)[0] ?? "")}</div>}
       {dash}
       {receipt.lines.map((line) => (
         <div key={line.product_id} data-testid="ticket-line">
@@ -303,7 +323,7 @@ function Ticket({
         <div className="text-center whitespace-pre-line">{receipt.company.receipt_footer}</div>
       )}
       <div className="mt-2 text-center text-[11px]">{t.madeWith}</div>
-      {receipt.status === "cancelled" && <Stamp />}
+      {cancelled && <Stamp />}
     </article>
   );
 }

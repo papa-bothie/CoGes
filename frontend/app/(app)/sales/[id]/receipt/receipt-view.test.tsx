@@ -320,6 +320,35 @@ describe("Petit ticket refait (prompt 35, bloc F)", () => {
   });
 });
 
+describe("Corrections avant fusion (prompt 35, bloc T)", () => {
+  it.each(["a4", "ticket"])(
+    "vente annulée (%s) : ni reste à payer, ni somme arrêtée",
+    async (chosen) => {
+      format = chosen;
+      serve(receipt({ status: "cancelled" }));
+      renderWithClient(<ReceiptView saleId="s1" />);
+      expect(
+        await screen.findAllByText(t.cancelled, undefined, { timeout: 5000 }),
+      ).not.toHaveLength(0);
+      expect(screen.queryByText(t.remaining)).toBeNull();
+      expect(screen.queryByText(t.invoiceRemaining)).toBeNull();
+      expect(screen.queryByText(/Arrêtée la présente facture/)).toBeNull();
+      expect(screen.queryByText(/Reste à payer avant le/)).toBeNull();
+    },
+  );
+
+  it.each(["a4", "ticket"])(
+    "vendeur fait d'espaces (%s) : aucune ligne « Servi par »",
+    async (chosen) => {
+      format = chosen;
+      serve(receipt({ seller_name: "   " }));
+      renderWithClient(<ReceiptView saleId="s1" />);
+      await screen.findByText("Awa Ndiaye", { exact: false }, { timeout: 5000 });
+      expect(screen.queryByText(/Servi par/)).toBeNull();
+    },
+  );
+});
+
 describe("paidByMethod", () => {
   it("additionne en décimal, sans arrondi flottant", () => {
     const rows = paidByMethod(

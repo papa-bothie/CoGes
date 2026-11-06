@@ -165,6 +165,12 @@ def get_logo_png(session: Session, ctx: TenantContext) -> bytes:
     return logo.png
 
 
+def logo_png(session: Session, ctx: TenantContext) -> bytes | None:
+    """Le PNG du logo, ou `None` : façade pour les PDF (ADR 0113)."""
+    logo = CompanyRepository(session, ctx).get_logo()
+    return None if logo is None else logo.png
+
+
 def set_logo(
     session: Session, ctx: TenantContext, content: bytes, *, ip_address: str | None = None
 ) -> CompanyLogoRead:

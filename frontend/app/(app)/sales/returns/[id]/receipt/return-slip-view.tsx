@@ -13,9 +13,11 @@ import { queryKeys } from "@/lib/api/queries/keys";
 import { compareDecimal } from "@/lib/decimal";
 import { formatAmount, formatDateTime, formatFigure, formatQty } from "@/lib/format";
 import { labels } from "@/lib/labels";
+import { pdfFromResponse } from "@/lib/pdf-share";
 import { displayNumber } from "@/lib/units";
 import { cn } from "@/lib/utils";
 
+import { PdfActions } from "../../../pdf-actions";
 import { TicketHeader } from "../../../receipt-parts";
 
 const t = labels.receipt;
@@ -105,6 +107,21 @@ export function ReturnSlipView({ returnId }: { returnId: string }) {
           <Printer className="size-[22px]" aria-hidden />
           {t.print}
         </button>
+        {data && (
+          <PdfActions
+            load={async () =>
+              pdfFromResponse(
+                await api.GET("/api/v1/sale-returns/{return_id}/slip/pdf", {
+                  params: { path: { return_id: returnId } },
+                  parseAs: "blob",
+                }),
+                `Retour-${displayNumber(data.return_no)}.pdf`,
+              )
+            }
+            title={t.slip.title(displayNumber(data.return_no))}
+            className={cn(BUTTON, "border-2 border-input bg-card text-foreground hover:bg-voile")}
+          />
+        )}
       </div>
       <div className="flex justify-center rounded-carte bg-recu-fond px-4 py-8 print:block print:bg-transparent print:p-0">
         {error ? (

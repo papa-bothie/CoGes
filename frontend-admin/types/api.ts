@@ -1121,6 +1121,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/sales/{sale_id}/receipt/pdf": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read Receipt Pdf
+     * @description Ticket 80 mm ou facture A4 en PDF, à télécharger ou partager (ADR 0113).
+     *
+     *     Même lecture que `GET /sales/{id}/receipt` : refusé sur un brouillon (409).
+     */
+    get: operations["read_receipt_pdf_api_v1_sales__sale_id__receipt_pdf_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/sale-returns/{return_id}": {
     parameters: {
       query?: never;
@@ -1133,6 +1155,26 @@ export interface paths {
      * @description Retour complet : lignes rendues, lettrages et décaissements.
      */
     get: operations["get_return_api_v1_sale_returns__return_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/sale-returns/{return_id}/slip/pdf": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read Return Slip Pdf
+     * @description Bon de retour en PDF, au gabarit du ticket (ADR 0113).
+     */
+    get: operations["read_return_slip_pdf_api_v1_sale_returns__return_id__slip_pdf_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -9901,6 +9943,39 @@ export interface operations {
       };
     };
   };
+  read_receipt_pdf_api_v1_sales__sale_id__receipt_pdf_get: {
+    parameters: {
+      query?: {
+        format?: "ticket" | "a4";
+      };
+      header?: never;
+      path: {
+        sale_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Le reçu, en PDF */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/pdf": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   get_return_api_v1_sale_returns__return_id__get: {
     parameters: {
       query?: never;
@@ -9919,6 +9994,37 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SaleReturnDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  read_return_slip_pdf_api_v1_sale_returns__return_id__slip_pdf_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        return_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Le bon, en PDF */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/pdf": unknown;
         };
       };
       /** @description Validation Error */

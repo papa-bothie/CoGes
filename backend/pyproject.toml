@@ -34,6 +34,9 @@ dependencies = [
     # Logo de l'entreprise (ADR 0111) : type lu dans le contenu, image ré-encodée en PNG,
     # métadonnées retirées. Version figée.
     "pillow==13.0.0",
+    # PDF des pièces et des exports (ADR 0111, Q0 ; ADR 0113) : côté serveur, roues sans
+    # dépendance système, polices TTF embarquées. Version figée.
+    "reportlab==5.1.0",
 ]
 
 [dependency-groups]
@@ -45,6 +48,9 @@ dev = [
     "pre-commit>=4.0",
     "types-openpyxl>=3.1.5.20260827",
     "honcho>=2.0.0",
+    # Relit les PDF produits, en test seulement (ADR 0113).
+    "pypdf==6.21.4",
+    "types-reportlab==5.1.0.20261104",
 ]
 # CoGes Intelligence (phase 09, ADR 0035) : réservé à l'image worker. L'API ne lit
 # que `forecasts` et `insights` et n'importe jamais ces bibliothèques.
