@@ -87,6 +87,7 @@ export const queryKeys = {
     forecasts: (params: Record<string, unknown>) => ["intelligence", "forecasts", params] as const,
   },
   company: ["company"] as const,
+  companyLogo: (version: string | null) => ["company", "logo", version] as const,
   users: { all: ["users"] as const },
   roles: {
     all: ["roles"] as const,

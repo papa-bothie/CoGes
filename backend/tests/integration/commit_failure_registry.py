@@ -286,6 +286,36 @@ def _import_customers(w: World) -> Call:
     )
 
 
+def _logo_png(w: World) -> bytes:
+    """Un PNG différent à chaque appel : le logo change vraiment."""
+    import io
+
+    from PIL import Image
+
+    shade = int(w.marker()[:2], 16)
+    buffer = io.BytesIO()
+    Image.new("RGB", (32, 16), (shade, 80, 40)).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _put_logo(w: World) -> Call:
+    return Call(
+        "PUT",
+        "/api/v1/companies/me/logo",
+        files={"file": ("logo.png", _logo_png(w), "image/png")},
+    )
+
+
+def _delete_logo(w: World) -> Call:
+    prepared = w.client.put(
+        "/api/v1/companies/me/logo",
+        headers=auth_headers(w.token),
+        files={"file": ("logo.png", _logo_png(w), "image/png")},
+    )
+    assert prepared.status_code == 200, prepared.text
+    return Call("DELETE", "/api/v1/companies/me/logo")
+
+
 def _payment(w: World) -> Call:
     _, debt = w.customer_debt()
     return Call(
@@ -617,6 +647,8 @@ REGISTRY: dict[tuple[str, str], Critical | Exempt] = {
     ("PATCH", "/api/v1/companies/me"): Critical(
         lambda w: Call("PATCH", "/api/v1/companies/me", {"receipt_footer": f"Merci {w.marker()}"})
     ),
+    ("PUT", "/api/v1/companies/me/logo"): Critical(_put_logo),
+    ("DELETE", "/api/v1/companies/me/logo"): Critical(_delete_logo),
     # --- Restitution
     ("POST", "/api/v1/exports/sales"): Critical(
         lambda w: Call(

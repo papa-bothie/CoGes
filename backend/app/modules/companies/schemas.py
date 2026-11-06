@@ -94,6 +94,19 @@ class CompanyRead(BaseModel):
     receipt_footer: str | None
     created_at: datetime
     updated_at: datetime
+    #: Date du logo présent, ou `None` sans logo (ADR 0111). Le front s'en sert pour
+    #: savoir s'il lit l'image, et quand la relire.
+    logo_updated_at: datetime | None = None
+
+
+class CompanyLogoRead(BaseModel):
+    """Logo enregistré, après ré-encodage (ADR 0111)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    width: int
+    height: int
+    updated_at: datetime
 
 
 class CompanyUpdate(BaseModel):

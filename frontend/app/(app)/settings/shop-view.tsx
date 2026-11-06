@@ -27,6 +27,8 @@ import {
 import { labels } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
+import { LogoField } from "./logo-field";
+
 type Company = Schemas["CompanyRead"];
 type ReceiptFormat = "ticket" | "a4";
 const t = labels.settingsScreens.shop;
@@ -78,7 +80,7 @@ function cityOf(timeZone: string): string {
 
 /**
  * Ma boutique, maquette v2 (écran 24) : coordonnées du reçu, reçu par défaut, TVA et
- * conseils ; le seuil et la TVA par défaut sous « Plus de réglages ». Pas de logo en V1.
+ * conseils ; le seuil et la TVA par défaut sous « Plus de réglages ». Logo en tête (ADR 0111).
  */
 export function ShopView() {
   const query = useQuery({
@@ -175,6 +177,7 @@ function ShopForm({ company }: { company: Company }) {
       }}
     >
       <h2 className="text-titre-carte">{t.title}</h2>
+      <LogoField version={company.logo_updated_at} canEdit={canEdit} />
       <fieldset disabled={!canEdit} className="contents">
         <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3.5">
           {FIELDS.map(([key, label, max]) => (

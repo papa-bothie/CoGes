@@ -70,7 +70,22 @@ function environment(build = "v1") {
     for (const store of stores.values()) all.push(...store.keys());
     return all.sort();
   };
-  return { dispatch, cached, stores };
+  const request = (url: string) => {
+    let answered = false;
+    listeners.get("fetch")?.({
+      request: {
+        method: "GET",
+        mode: "cors",
+        url: new URL(url, "https://coges.test").href,
+        headers: new Headers({ authorization: "Bearer jeton" }),
+      },
+      respondWith: () => {
+        answered = true;
+      },
+    });
+    return answered;
+  };
+  return { dispatch, cached, stores, request };
 }
 
 const PRECACHED = [
@@ -97,6 +112,13 @@ describe("service worker (ADR 0102)", () => {
       new Response("js"),
     );
     await sw.dispatch("message", { type: "LOGOUT" });
+    expect(await sw.cached()).toEqual(PRECACHED);
+  });
+
+  it("le logo et les PDF de l'API ne passent jamais par le worker (ADR 0111)", async () => {
+    const sw = environment();
+    await sw.dispatch("install");
+    expect(sw.request("/api/v1/companies/me/logo")).toBe(false);
     expect(await sw.cached()).toEqual(PRECACHED);
   });
 
