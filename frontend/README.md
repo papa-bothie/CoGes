@@ -104,6 +104,15 @@ make front-e2e     # = make e2e-reset, puis la suite complète
   les articles des suites précédentes), `e2e/products.spec.ts` la description, et
   `e2e/polish.spec.ts` « Modifier » / « Supprimer », la carte « À surveiller » et les types
   de dépense.
+- **Groupe 2** (prompt 35, ADR 0111 à 0114) : `e2e/logo.spec.ts` ajoute, change et retire le
+  logo (SVG refusé sans envoi) ; `e2e/receipt-documents.spec.ts` ouvre le ticket et la facture
+  avec logo, adresse et description, télécharge le PDF (`%PDF-`, nom du serveur), passe le
+  ticket à un `navigator.share` simulé et télécharge le bon de retour ;
+  `e2e/accountant-pdf.spec.ts` demande les ventes du mois sur l'écran Argent, les fait produire
+  par `deploy/scripts/e2e.sh system build-exports` (les parcours tournent sans worker), puis
+  les télécharge depuis Réglages → Fichiers, et télécharge l'état du stock tout de suite. Une
+  passe axe attend qu'aucun toast ne soit affiché : le toast de succès `richColors` n'atteint
+  pas 4,5 de contraste en clair (défaut connu, hors de ce groupe).
 - Cibles tactiles : `e2e/touch-targets.spec.ts` émule une tablette (`hasTouch`, 1024 × 768)
   et mesure toutes les cibles de Nouvelle vente, Stock et Ventes (44 × 44 px au moins).
 
@@ -122,6 +131,11 @@ make front-e2e     # = make e2e-reset, puis la suite complète
   Résultats : `docs/design/captures/phase-15/comparaison.md` et une image maquette | front |
   différences par écran. `MAQUETTE_ALL=1` mesure aussi les écrans pas encore refaits, sans
   échouer. Un écran est rendu bloquant en l'ajoutant à `DONE` dans `e2e/maquette.spec.ts`.
+- **Logo et PDF** (ADR 0111, 0113) : le logo se lit par `useCompanyLogo(logo_updated_at)`,
+  en adresse `data:` (jamais le jeton dans une URL) ; un PDF de l'API se lit en blob par
+  `pdfFromResponse` et se partage par `sharePdf` (`lib/pdf-share.ts`) ; les exports du
+  comptable passent par `<AccountantExports kinds={…} />` (`components/pdf-export.tsx`), dont
+  les droits sont au registre `PDF_EXPORTS` (`lib/access.ts`).
 - **Action secondaire** (ADR 0110) : un lien ou un bouton d'action qui n'est pas l'action
   principale passe par `SecondaryAction` / `SecondaryLink` (`components/kit/secondary-action.tsx`),
   jamais par un texte souligné. Restent des liens de texte : les retours (`BackLink`), un nom
