@@ -5963,6 +5963,8 @@ export interface components {
       rc: string | null;
       /** Receipt Footer */
       receipt_footer: string | null;
+      /** Logo Updated At */
+      logo_updated_at: string | null;
     };
     /**
      * ReceiptCustomer
@@ -5995,6 +5997,9 @@ export interface components {
       sku: string;
       /** Name */
       name: string;
+      /** Description */
+      description: string | null;
+      unit: components["schemas"]["ProductUnit"];
       qty: components["schemas"]["Quantity-Output"];
       unit_price: components["schemas"]["Amount-Output"];
       discount: components["schemas"]["Amount-Output"];
@@ -6040,6 +6045,22 @@ export interface components {
       balance: components["schemas"]["Amount-Output"];
       /** Payments */
       payments: components["schemas"]["PaymentRead"][];
+      /** Returns */
+      returns: components["schemas"]["ReceiptReturn"][];
+    };
+    /**
+     * ReceiptReturn
+     * @description Retour lié à la vente, rappelé sur la facture (ADR 0112).
+     */
+    ReceiptReturn: {
+      /** Return No */
+      return_no: string;
+      /**
+       * Returned At
+       * Format: date-time
+       */
+      returned_at: string;
+      total_refund: components["schemas"]["Amount-Output"];
     };
     /** RecentExpense */
     RecentExpense: {

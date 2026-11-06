@@ -204,6 +204,19 @@ de marque éclairci. Contraste AA vérifié par axe, en clair et en sombre.
   dans `app/` et `components/`.
 - **Le vert éclat n'écrit jamais.** Il colore les barres et les icônes, pas le texte.
 - **Une rubrique, une couleur.** Un élément prend la couleur de la rubrique où il vit.
+- **Pièces imprimées** (ADR 0112, amendé le 2026-11-05). Le **ticket** et le **bon de
+  retour** n'emploient que `recu-papier` (fond), `recu-encre` (texte, filets, tampon
+  « VENTE ANNULÉE »), `recu-gris`, `recu-filet` et `recu-entete` : noir et blanc pour les
+  imprimantes thermiques, logo en niveaux de gris. La **facture A4** suit le modèle
+  `docs/design/references/modele-facture.jpg` au vert de la marque : `vert-marque` pour le
+  titre « FACTURE », le bandeau du tableau et le bandeau « Total » (texte `sur-action`,
+  blanc, 11:1), `vert-action` pour le filet de l'en-tête, les pastilles et les intitulés
+  (5,4:1 sous le blanc), `ventes-teinte` pour le cadre « Facturé à », `recu-entete` pour
+  les lignes alternées ; le reste aux jetons `recu-*`. Elle est du **papier** : la classe
+  `.papier` reprend le bloc clair des jetons, même en sombre, et `print-color-adjust:
+  exact` garde les bandeaux à l'impression. Imprimé en noir et blanc, le bandeau devient un
+  gris foncé sous texte blanc. Le PDF du serveur emploie les mêmes valeurs
+  (`app/core/pdf.py`, palette vérifiée contre `globals.css`).
 
 ## Typography
 

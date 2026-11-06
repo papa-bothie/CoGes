@@ -1,11 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, MessageCircle, Printer } from "lucide-react";
+import { ArrowLeft, MapPin, MessageCircle, Phone, Printer } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { ReactNode } from "react";
 
 import { ErrorState } from "@/components/error-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,7 +12,7 @@ import { useCompanyLocale, useMe } from "@/hooks/use-me";
 import { api, unwrap } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
-import { compareDecimal } from "@/lib/decimal";
+import { addDecimal, compareDecimal } from "@/lib/decimal";
 import {
   formatAmount,
   formatDate,
@@ -24,9 +23,11 @@ import {
 } from "@/lib/format";
 import { labels } from "@/lib/labels";
 import { amountInWords } from "@/lib/number-words";
-import { displayNumber } from "@/lib/units";
+import { displayNumber, qtyWithUnit } from "@/lib/units";
 import { cn } from "@/lib/utils";
 import { receiptText, whatsappLink } from "@/lib/whatsapp";
+
+import { ReceiptRow, ShopLogo, TicketHeader } from "../../receipt-parts";
 
 type Receipt = Schemas["ReceiptRead"];
 type Format = "ticket" | "a4";
@@ -38,6 +39,15 @@ const BUTTON = cn(
   "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
 );
 const SECONDARY = cn(BUTTON, "border-2 border-input bg-card text-foreground hover:bg-voile");
+
+/**
+ * Impression : la facture A4 numérote ses pages (« Page 1/2 ») dans la marge basse —
+ * Chrome et Edge ; le PDF du serveur le fait partout (bloc T). Le ticket suit la bande.
+ */
+const A4_PAGE = `@media print { @page { size: A4; margin: 12mm 12mm 16mm;
+  @bottom-right { content: "${labels.receipt.page} " counter(page) "/" counter(pages);
+  font: 10px sans-serif; } } }`;
+const TICKET_PAGE = "@media print { @page { size: 80mm auto; margin: 4mm; } }";
 
 /** Ce qui ne vient pas du reçu : l'échéance de la dette et le moyen du premier paiement. */
 type Extras = { dueDate: string | null; method: string | null };
@@ -93,7 +103,7 @@ export function ReceiptView({ saleId }: { saleId: string }) {
 
   return (
     <div className="mx-auto flex max-w-page flex-col gap-[18px]">
-      <style>{`@media print { @page { size: ${format === "a4" ? "A4" : "80mm auto"}; margin: ${format === "a4" ? "12mm" : "4mm"}; } }`}</style>
+      <style>{format === "a4" ? A4_PAGE : TICKET_PAGE}</style>
       <div className="flex flex-wrap items-center gap-3 print:hidden">
         <Link href={`/sales/${saleId}`} className={SECONDARY}>
           <ArrowLeft className="size-[22px]" aria-hidden />
@@ -168,7 +178,7 @@ function Stamp({ big = false }: { big?: boolean }) {
     <div
       aria-hidden
       className={cn(
-        "absolute left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-[18deg] border-depenses bg-card/85 tracking-[0.08em] text-depenses",
+        "absolute left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-[18deg] border-recu-encre bg-recu-papier/85 tracking-[0.08em] text-recu-encre",
         big
           ? "top-[40%] border-4 px-6 py-2 text-[44px] font-extrabold"
           : "top-[45%] border-3 px-3.5 py-1.5 text-[22px] font-bold",
@@ -179,24 +189,25 @@ function Stamp({ big = false }: { big?: boolean }) {
   );
 }
 
-function Row({
-  left,
-  right,
-  className,
-}: {
-  left: ReactNode;
-  right: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={cn("flex justify-between gap-2", className)}>
-      <span>{left}</span>
-      <span>{right}</span>
-    </div>
-  );
+const positive = (value: string) => compareDecimal(value, "0") === 1;
+
+/** Paiements vivants, additionnés par moyen, dans l'ordre où ils sont venus. */
+export function paidByMethod(receipt: Receipt): { method: string; amount: string }[] {
+  const totals = new Map<string, string>();
+  for (const payment of receipt.payments) {
+    if (payment.cancelled || payment.reversal_of_payment_id) continue;
+    totals.set(
+      payment.method,
+      addDecimal(totals.get(payment.method) ?? "0", payment.amount) ?? "0",
+    );
+  }
+  return [...totals].map(([method, amount]) => ({
+    method: labels.paymentMethods[method as keyof typeof labels.paymentMethods] ?? method,
+    amount,
+  }));
 }
 
-/** Petit ticket de caisse 80 mm (maquette 05), en JetBrains Mono. */
+/** Petit ticket de caisse 80 mm (maquette 05), en JetBrains Mono, noir et blanc. */
 function Ticket({
   receipt,
   extras,
@@ -207,21 +218,17 @@ function Ticket({
   timeZone: string;
 }) {
   const currency = receipt.company.currency;
-  const owing = compareDecimal(receipt.balance, "0") === 1;
-  const hasTax = compareDecimal(receipt.tax_total, "0") === 1;
+  const owing = positive(receipt.balance);
   const dash = <div className="my-2 border-t border-dashed border-recu-encre/70" />;
+  const methods = paidByMethod(receipt);
   return (
     <article
       aria-label={t.title(displayNumber(receipt.sale_no))}
       className="relative w-[302px] bg-recu-papier px-4 pt-[18px] pb-6 font-receipt text-[13px] leading-normal text-recu-encre shadow-[0_2px_10px_var(--color-recu-ombre)] print:w-auto print:p-0 print:shadow-none"
     >
-      <div className="text-center">
-        <div className="text-base font-bold uppercase">{receipt.company.name}</div>
-        {receipt.company.address && <div>{receipt.company.address}</div>}
-        {receipt.company.phone && <div>{t.phone(receipt.company.phone)}</div>}
-      </div>
+      <TicketHeader company={receipt.company} />
       {dash}
-      <Row
+      <ReceiptRow
         left={t.saleNo(displayNumber(receipt.sale_no))}
         right={formatDateTime(receipt.confirmed_at ?? receipt.sold_at, timeZone)}
       />
@@ -231,33 +238,64 @@ function Ticket({
       )}
       {dash}
       {receipt.lines.map((line) => (
-        <div key={line.product_id}>
+        <div key={line.product_id} data-testid="ticket-line">
           <div>{line.name}</div>
-          <Row
+          <ReceiptRow
             left={`  ${formatQty(line.qty)} x ${formatFigure(line.unit_price, currency)}`}
             right={formatFigure(line.line_total, currency)}
           />
+          {positive(line.discount) && (
+            <ReceiptRow
+              left={`  ${t.lineDiscount}`}
+              right={`-${formatFigure(line.discount, currency)}`}
+            />
+          )}
         </div>
       ))}
       {dash}
-      <Row
+      <Totals receipt={receipt} />
+      <ReceiptRow
         className="text-base font-bold"
         left={t.total}
         right={formatAmount(receipt.total, currency)}
       />
-      {hasTax && <Row left={t.tax(formatAmount(receipt.tax_total, currency))} right="" />}
-      <Row
-        left={extras.method ? t.paidWith(extras.method) : t.paid}
-        right={formatAmount(receipt.paid_total, currency)}
-      />
+      {methods.length > 0 ? (
+        methods.map((row) => (
+          <ReceiptRow
+            key={row.method}
+            left={t.paidWith(row.method)}
+            right={formatAmount(row.amount, currency)}
+          />
+        ))
+      ) : (
+        <ReceiptRow
+          left={extras.method ? t.paidWith(extras.method) : t.paid}
+          right={formatAmount(receipt.paid_total, currency)}
+        />
+      )}
       {owing && (
         <>
-          <Row
+          <ReceiptRow
             className="font-bold"
             left={t.remaining}
             right={formatAmount(receipt.balance, currency)}
           />
           {extras.dueDate && <div>{t.payBefore(formatDate(extras.dueDate))}</div>}
+        </>
+      )}
+      {receipt.returns.length > 0 && (
+        <>
+          {dash}
+          {receipt.returns.map((row) => (
+            <ReceiptRow
+              key={row.return_no}
+              left={t.returnLine(
+                displayNumber(row.return_no),
+                formatDate(row.returned_at.slice(0, 10)),
+              )}
+              right={`-${formatFigure(row.total_refund, currency)}`}
+            />
+          ))}
         </>
       )}
       {dash}
@@ -270,6 +308,35 @@ function Ticket({
   );
 }
 
+/** Sous-total, remises et TVA, seulement quand ils disent quelque chose. */
+function Totals({ receipt, invoice = false }: { receipt: Receipt; invoice?: boolean }) {
+  const currency = receipt.company.currency;
+  const discounted = positive(receipt.discount_total);
+  const taxed = positive(receipt.tax_total);
+  if (!discounted && !taxed) return null;
+  const row = invoice ? "flex justify-between py-1.5" : "flex justify-between gap-2";
+  return (
+    <>
+      <div className={row}>
+        <span>{t.subtotal}</span>
+        <span className="numeric">{formatAmount(receipt.subtotal, currency)}</span>
+      </div>
+      {discounted && (
+        <div className={row}>
+          <span>{t.discounts}</span>
+          <span className="numeric">-{formatAmount(receipt.discount_total, currency)}</span>
+        </div>
+      )}
+      {taxed && (
+        <div className={row}>
+          <span>{t.vat}</span>
+          <span className="numeric">{formatAmount(receipt.tax_total, currency)}</span>
+        </div>
+      )}
+    </>
+  );
+}
+
 function logoInitials(name: string): string {
   return name
     .trim()
@@ -279,13 +346,33 @@ function logoInitials(name: string): string {
     .join("");
 }
 
-/** Dernier morceau de l'adresse, après la dernière virgule : la ville (« Dakar »). */
-function cityOf(address: string | null): string | null {
-  const city = address?.split(",").at(-1)?.trim();
-  return city || null;
+/** Pastille ronde verte d'une coordonnée de l'en-tête (modèle de facture). */
+function Pastille({ icon: Icon }: { icon: typeof Phone }) {
+  return (
+    <span
+      aria-hidden
+      data-pastille
+      className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+    >
+      <Icon className="size-4" />
+    </span>
+  );
 }
 
-/** Facture A4 (maquette 05b) : en-tête, client, tableau, totaux et montant en lettres. */
+/** « 01 », « 02 »… : le numéro d'une ligne de la facture. */
+function lineNo(index: number): string {
+  return String(index + 1).padStart(2, "0");
+}
+
+/**
+ * Facture A4 au vert CoGes, d'après `docs/design/references/modele-facture.jpg` (ADR 0112,
+ * amendé) : en-tête à logo et coordonnées à pastilles, filet vert ; « De » et grand titre
+ * « FACTURE » ; « Facturé à » ; tableau à bandeau vert (l'en-tête se répète, une ligne ne
+ * se coupe jamais d'une page à l'autre), lignes alternées ; totaux à bandeau vert ; bas de
+ * page avec les moyens de paiement et le cadre de signature. `papier` garde les jetons
+ * clairs en sombre ; `print-color-adjust` garde les bandeaux à l'impression. Le PDF du
+ * serveur suit la même mise en page (bloc T).
+ */
 function Invoice({
   receipt,
   extras,
@@ -295,86 +382,162 @@ function Invoice({
   extras: Extras;
   timeZone: string;
 }) {
-  const currency = receipt.company.currency;
-  const owing = compareDecimal(receipt.balance, "0") === 1;
-  const hasTax = compareDecimal(receipt.tax_total, "0") === 1;
-  const ids = t.ids(receipt.company.ninea, receipt.company.rc);
-  const grid = "grid grid-cols-[minmax(0,3fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.4fr)]";
-  const cell = "border-b border-recu-filet px-3 py-2.5 text-left";
-  const head = cn(
-    cell,
-    "bg-recu-entete text-[13px] font-bold tracking-[0.04em] text-recu-gris uppercase",
-  );
+  const { company } = receipt;
+  const currency = company.currency;
+  // Une vente annulée ne réclame rien : ni payé, ni reste dû, ni somme arrêtée.
+  const cancelled = receipt.status === "cancelled";
+  const owing = positive(receipt.balance) && !cancelled;
+  const seller = receipt.seller_name?.trim();
+  const ids = t.ids(company.ninea, company.rc);
+  const methods = paidByMethod(receipt);
+  const label = "text-[13px] font-bold tracking-[0.04em] text-primary uppercase";
+  const cell = "px-2 py-3 align-top sm:px-3";
+  const amount = cn(cell, "numeric text-right whitespace-nowrap");
+  const head = "px-2 py-3 text-[13px] font-bold tracking-[0.04em] uppercase sm:px-3";
+  const row = "flex justify-between px-3 py-1.5";
   return (
     <article
       aria-label={t.title(displayNumber(receipt.sale_no))}
-      className="relative box-border w-[794px] max-w-full bg-recu-papier px-14 pt-14 pb-12 text-[15px] leading-normal text-recu-encre shadow-[0_2px_10px_var(--color-recu-ombre)] print:w-auto print:p-0 print:shadow-none"
+      className="papier relative box-border w-[794px] max-w-full bg-recu-papier px-5 pt-8 pb-10 text-[15px] leading-normal text-recu-encre shadow-[0_2px_10px_var(--color-recu-ombre)] [print-color-adjust:exact] sm:px-14 sm:pt-12 sm:pb-12 print:w-auto print:p-0 print:shadow-none"
     >
-      <div className="flex flex-wrap justify-between gap-6">
-        <div className="flex gap-3.5">
-          <div className="flex size-16 shrink-0 items-center justify-center rounded-touche bg-ventes text-2xl font-extrabold text-blanc">
-            {logoInitials(receipt.company.name)}
-          </div>
-          <div>
-            <div className="text-xl font-extrabold">{receipt.company.name}</div>
-            {receipt.company.address && <div>{receipt.company.address}</div>}
-            {receipt.company.phone && <div>{t.phone(receipt.company.phone)}</div>}
-            {ids && <div className="text-[13px] text-recu-gris">{ids}</div>}
-          </div>
+      <header className="flex flex-wrap items-center justify-between gap-6 border-b-2 border-primary pb-4">
+        <div className="flex min-w-0 items-center gap-3.5">
+          <ShopLogo company={company} className="max-h-16 max-w-44 shrink-0" />
+          {!company.logo_updated_at && (
+            <div
+              aria-hidden
+              className="flex size-14 shrink-0 items-center justify-center rounded-full bg-marque text-xl font-extrabold text-primary-foreground"
+            >
+              {logoInitials(company.name)}
+            </div>
+          )}
+          <div className="text-xl font-extrabold text-marque">{company.name}</div>
         </div>
-        <div className="text-right">
-          <div className="text-[26px] font-extrabold tracking-[0.04em]">{t.invoice}</div>
-          <div>{t.invoiceNo(displayNumber(receipt.sale_no))}</div>
-          <div>
-            {t.invoiceDate(
-              cityOf(receipt.company.address),
-              formatDateLong(receipt.confirmed_at ?? receipt.sold_at, timeZone),
+        {(company.phone || company.address) && (
+          <ul aria-label={t.contacts} className="flex flex-wrap gap-x-7 gap-y-2 text-[14px]">
+            {company.phone && (
+              <li className="flex items-center gap-2">
+                <Pastille icon={Phone} />
+                {company.phone}
+              </li>
             )}
+            {company.address && (
+              <li className="flex max-w-64 items-center gap-2">
+                <Pastille icon={MapPin} />
+                {company.address}
+              </li>
+            )}
+          </ul>
+        )}
+      </header>
+
+      <div className="mt-7 flex flex-wrap items-start justify-between gap-6">
+        <section aria-labelledby="facture-de" className="min-w-0">
+          <h2 id="facture-de" className={label}>
+            {t.from}
+          </h2>
+          <div className="text-lg font-extrabold">{company.name}</div>
+          {company.address && <div>{company.address}</div>}
+          {company.phone && <div>{t.phone(company.phone)}</div>}
+          {ids && <div className="text-[13px] text-recu-gris">{ids}</div>}
+        </section>
+        <div className="text-right">
+          <div className="text-[44px] leading-none font-extrabold tracking-[0.04em] text-marque">
+            {t.invoice}
           </div>
+          <dl className="mt-3 grid grid-cols-[auto_auto] justify-end gap-x-5 gap-y-0.5">
+            <dt className="font-bold">{t.invoiceNoLabel}</dt>
+            <dd>{t.invoiceNo(displayNumber(receipt.sale_no))}</dd>
+            <dt className="font-bold">{t.invoiceDateLabel}</dt>
+            <dd>{formatDateLong(receipt.confirmed_at ?? receipt.sold_at, timeZone)}</dd>
+          </dl>
+          {seller && <div className="mt-1 text-recu-gris">{t.seller(seller)}</div>}
         </div>
       </div>
 
-      {receipt.customer && (
-        <div className="mt-7 mb-5 max-w-80 rounded-[10px] border border-recu-filet px-4 py-3.5">
-          <div className="text-[13px] tracking-[0.04em] text-recu-gris uppercase">
-            {t.customerTitle}
-          </div>
-          <div className="text-[17px] font-bold">{receipt.customer.name}</div>
-          {receipt.customer.phone && <div>{t.phone(receipt.customer.phone)}</div>}
-        </div>
-      )}
+      <section
+        aria-labelledby="facture-a"
+        className="mt-5 max-w-96 rounded-[10px] bg-ventes-teinte px-4 py-3"
+      >
+        <h2 id="facture-a" className={label}>
+          {t.billedTo}
+        </h2>
+        <div className="text-[17px] font-bold">{receipt.customer?.name ?? t.walkIn}</div>
+        {receipt.customer?.phone && <div>{t.phone(receipt.customer.phone)}</div>}
+      </section>
 
-      <div className={grid}>
-        <div className={head}>{t.columns.article}</div>
-        <div className={cn(head, "text-right")}>{t.columns.qty}</div>
-        <div className={cn(head, "text-right")}>{t.columns.price}</div>
-        <div className={cn(head, "text-right")}>{t.columns.amount}</div>
+      {/* Sur un téléphone, le tableau défile dans son cadre ; imprimé, il tient sur l'A4. */}
+      <div
+        role="region"
+        aria-label={t.linesRegion}
+        tabIndex={0}
+        className="mt-6 overflow-x-auto outline-none focus-visible:ring-3 focus-visible:ring-ring/50 print:overflow-visible"
+      >
+        <table className="w-full min-w-[560px] border-collapse print:min-w-0">
+          <thead className="table-header-group">
+            <tr className="bg-marque text-primary-foreground">
+              <th scope="col" className={cn(head, "w-12 text-left")}>
+                {t.columns.no}
+              </th>
+              <th scope="col" className={cn(head, "text-left")}>
+                {t.columns.article}
+              </th>
+              <th scope="col" className={cn(head, "text-right")}>
+                {t.columns.price}
+              </th>
+              <th scope="col" className={cn(head, "text-right")}>
+                {t.columns.qty}
+              </th>
+              <th scope="col" className={cn(head, "text-right")}>
+                {t.columns.total}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {receipt.lines.map((line, index) => (
+              <tr
+                key={line.product_id}
+                className="break-inside-avoid border-b border-recu-filet even:bg-recu-entete"
+                data-testid="invoice-line"
+              >
+                <td className={cn(cell, "numeric text-recu-gris")}>{lineNo(index)}</td>
+                <td className={cell}>
+                  <div className="font-bold">{line.name}</div>
+                  {line.description && (
+                    <div className="text-[13px] whitespace-pre-line text-recu-gris">
+                      {line.description}
+                    </div>
+                  )}
+                  {positive(line.discount) && (
+                    <div className="text-[13px] text-recu-gris">
+                      {t.lineDiscountOn(formatAmount(line.discount, currency))}
+                    </div>
+                  )}
+                </td>
+                <td className={amount}>{formatAmount(line.unit_price, currency)}</td>
+                <td className={amount}>{qtyWithUnit(line.qty, line.unit)}</td>
+                <td className={amount}>{formatAmount(line.line_total, currency)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-      {receipt.lines.map((line) => (
-        <div key={line.product_id} className={grid}>
-          <div className={cell}>{line.name}</div>
-          <div className={cn(cell, "text-right numeric")}>{formatQty(line.qty)}</div>
-          <div className={cn(cell, "text-right numeric")}>
-            {formatAmount(line.unit_price, currency)}
-          </div>
-          <div className={cn(cell, "text-right numeric")}>
-            {formatAmount(line.line_total, currency)}
-          </div>
-        </div>
-      ))}
 
-      <div className="mt-4 flex justify-end">
-        <div className="w-[300px]">
-          <div className="flex justify-between border-b-2 border-recu-encre py-2 text-lg font-extrabold">
+      <div className="mt-4 flex break-inside-avoid justify-end">
+        <div className="w-[320px]">
+          <Totals receipt={receipt} invoice />
+          <div className="mt-1 flex justify-between bg-marque px-3 py-2.5 text-lg font-extrabold text-primary-foreground">
             <span>{t.invoiceTotal}</span>
             <span className="numeric">{formatAmount(receipt.total, currency)}</span>
           </div>
-          <div className="flex justify-between py-1.5">
-            <span>{t.alreadyPaid}</span>
-            <span className="numeric">{formatAmount(receipt.paid_total, currency)}</span>
-          </div>
+          {!cancelled && (
+            <div className={row}>
+              <span>{t.alreadyPaid}</span>
+              <span className="numeric">{formatAmount(receipt.paid_total, currency)}</span>
+            </div>
+          )}
           {owing && (
-            <div className="flex justify-between py-1.5 font-bold">
+            <div className={cn(row, "font-bold")}>
               <span>{t.invoiceRemaining}</span>
               <span className="numeric">{formatAmount(receipt.balance, currency)}</span>
             </div>
@@ -382,18 +545,59 @@ function Invoice({
         </div>
       </div>
 
-      <p className="mt-6">
-        {t.inWords}
-        <strong>{amountInWords(receipt.total)}</strong>.
-      </p>
-      <p className="mt-1.5 text-recu-gris">
-        {hasTax ? t.vatIncluded(formatAmount(receipt.tax_total, currency)) : t.noVat}
+      {receipt.returns.length > 0 && (
+        <section className="mt-6 break-inside-avoid">
+          <h2 className={label}>{t.returnsTitle}</h2>
+          {receipt.returns.map((item) => (
+            <div
+              key={item.return_no}
+              className="flex justify-between border-b border-recu-filet py-1.5"
+            >
+              <span>
+                {t.returnLine(
+                  displayNumber(item.return_no),
+                  formatDateLong(item.returned_at, timeZone),
+                )}
+              </span>
+              <span className="numeric">-{formatAmount(item.total_refund, currency)}</span>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {!cancelled && (
+        <p className="mt-6 break-inside-avoid">
+          {t.inWords}
+          <strong>{amountInWords(receipt.total)}</strong>.
+        </p>
+      )}
+      <p className={cn(cancelled ? "mt-6" : "mt-1.5", "text-recu-gris")}>
+        {positive(receipt.tax_total)
+          ? t.vatIncluded(formatAmount(receipt.tax_total, currency))
+          : t.noVat}
         {owing && extras.dueDate && ` ${t.remainingBefore(formatDateLong(extras.dueDate))}`}
       </p>
 
-      <div className="mt-12 flex flex-wrap justify-between gap-6">
-        <div className="text-recu-gris">
-          {t.thanks}
+      <footer className="mt-10 flex break-inside-avoid flex-wrap items-end justify-between gap-6">
+        <div className="min-w-0 flex-[1_1_280px]">
+          <div className="text-lg font-extrabold">{t.thanks}</div>
+          {methods.length > 0 && (
+            <>
+              <h2 id="facture-moyens" className={cn(label, "mt-3")}>
+                {t.paymentMethods}
+              </h2>
+              <ul aria-labelledby="facture-moyens">
+                {methods.map((item) => (
+                  <li key={item.method}>
+                    {item.method} : {formatAmount(item.amount, currency)}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {company.receipt_footer && (
+            <div className="mt-3 whitespace-pre-line text-recu-gris">{company.receipt_footer}</div>
+          )}
           <div className="mt-2.5 flex items-center gap-1.5 text-xs text-recu-gris">
             {t.invoiceMadeWith}
             <Image
@@ -406,12 +610,11 @@ function Invoice({
             />
           </div>
         </div>
-        <div className="min-w-[200px] text-center text-recu-gris">
-          {t.signature}
-          <div className="h-16" />
+        <div className="flex h-28 min-w-[220px] items-start justify-center rounded-[10px] border-2 border-recu-filet pt-2 text-recu-gris">
+          <span>{t.signature}</span>
         </div>
-      </div>
-      {receipt.status === "cancelled" && <Stamp big />}
+      </footer>
+      {cancelled && <Stamp big />}
     </article>
   );
 }

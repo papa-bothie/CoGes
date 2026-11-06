@@ -31,10 +31,11 @@ const FORBIDDEN: { term: string; pattern: RegExp }[] = [
 
 /**
  * Exceptions, chacune justifiée. Clé : chemin dans `labels` (ou `metrics.<métrique>`).
- * - `labels.receipt.invoiceNo` : « N° F-1044 » sous « FACTURE », mot pour mot de la
- *   maquette v2 (05b) ; le titre dit déjà de quelle pièce il s'agit.
+ * - `labels.receipt.columns.no` : « N° » en tête de la colonne qui numérote les lignes de
+ *   la facture (01, 02…), demandé par le propriétaire d'après le modèle de facture
+ *   (docs/design/references/modele-facture.jpg) ; la colonne ne désigne aucune pièce.
  */
-const EXCEPTIONS = new Set<string>(["labels.receipt.invoiceNo"]);
+const EXCEPTIONS = new Set<string>(["labels.receipt.columns.no"]);
 
 /** Chaque texte, avec son chemin ; une fonction est appelée avec des valeurs factices. */
 function texts(value: unknown, path: string): { path: string; text: string }[] {

@@ -16,6 +16,8 @@ import { labels } from "@/lib/labels";
 import { displayNumber } from "@/lib/units";
 import { cn } from "@/lib/utils";
 
+import { TicketHeader } from "../../../receipt-parts";
+
 const t = labels.receipt;
 
 const BUTTON = cn(
@@ -114,11 +116,7 @@ export function ReturnSlipView({ returnId }: { returnId: string }) {
             aria-label={t.slip.title(displayNumber(data.return_no))}
             className="w-[302px] bg-recu-papier px-4 pt-[18px] pb-6 font-receipt text-[13px] leading-normal text-recu-encre shadow-[0_2px_10px_var(--color-recu-ombre)] print:w-auto print:p-0 print:shadow-none"
           >
-            <div className="text-center">
-              <div className="text-base font-bold uppercase">{shop.company.name}</div>
-              {shop.company.address && <div>{shop.company.address}</div>}
-              {shop.company.phone && <div>{t.phone(shop.company.phone)}</div>}
-            </div>
+            <TicketHeader company={shop.company} />
             {dash}
             <div className="text-center font-bold">{t.slip.heading}</div>
             <Row
