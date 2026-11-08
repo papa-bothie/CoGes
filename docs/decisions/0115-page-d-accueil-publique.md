@@ -86,9 +86,9 @@ dès le premier écran et à toute largeur (vérifié en e2e à 360 px).
   - l'essai à 30 jours, comme le fixe l'ADR 0091 ;
   - aucun prix ;
   - ni « Créer ma boutique » ni lien vers des pages légales.
-- Le numéro factice livré avec le lot (`221000000000`) fait échouer
-  `content/vitrine.test.ts`, au choix de l'utilisateur : la PR ne peut pas être fusionnée
-  avec un faux contact.
+- Un numéro vide ou factice (comme le `221000000000` provisoire du début du lot) fait
+  échouer `content/vitrine.test.ts`, au choix de l'utilisateur : la vitrine ne peut pas
+  partir avec un faux contact. Le propriétaire a posé le vrai numéro avant la PR.
 - Contact par lien `wa.me` (message encodé en `%20`), sans aucune requête de la page.
   Aucun formulaire, aucune statistique, aucun script tiers.
 - La mise en page racine est commune (choix de l'utilisateur) : thème clair et sombre,
@@ -161,7 +161,7 @@ de la mise en page commune, déjà en cache pour les commerçants.
 
 Ce que le lot ne fait pas, et qui revient au propriétaire :
 
-- remplacer le numéro WhatsApp, les horaires et le message de `content/vitrine.ts` ;
+- relire les horaires et le message prérempli de `content/vitrine.ts` ;
 - poser le DNS de `www` ;
 - mentionner `coges_known` dans la politique de confidentialité.
 

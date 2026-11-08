@@ -1,9 +1,8 @@
 /**
  * Contenu de la page d'accueil publique (prompt 37), fourni par le propriétaire.
  *
- * ⚠️ VALEURS PROVISOIRES : remplacer le numéro WhatsApp, les horaires et le message avant
- * toute mise en production. Le numéro factice ci-dessous est refusé par le test
- * `content/vitrine.test.ts` (voir l'ADR de la page d'accueil).
+ * Un numéro vide ou factice est refusé par `content/vitrine.test.ts` (ADR 0115) : la vitrine
+ * ne part jamais en production sans un vrai contact.
  */
 export const vitrine = {
   /** Adresse publique du site (balises de partage, sitemap.xml, robots.txt). */
