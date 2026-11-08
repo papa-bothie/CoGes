@@ -49,6 +49,28 @@ test("manifeste, worker et page hors ligne servis sans connexion", async ({ requ
   expect((await request.get("/hors-ligne")).ok()).toBeTruthy();
 });
 
+test("application installée inchangée : start_url /dashboard, périmètre / (ADR 0115)", async ({
+  request,
+}) => {
+  const manifest = await (await request.get("/manifest.webmanifest")).json();
+  expect(manifest.start_url).toBe("/dashboard");
+  expect(manifest.scope).toBe("/");
+  expect(manifest.id).toBe("/");
+});
+
+test("la vitrine n'entre jamais dans le cache du worker (ADR 0115)", async ({ page }) => {
+  // Visiteur nouveau : la vitrine, puis le worker prend la main et on la recharge.
+  await page.goto("/");
+  await controlled(page);
+  await page.reload();
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForLoadState("networkidle");
+  const urls = await cachedUrls(page);
+  expect(urls.filter((path) => path === "/" || path.startsWith("/vitrine/"))).toEqual([]);
+  // La navigation passe par le worker, qui la relaie au réseau sans la garder
+  // (lib/pwa/sw-source.test.ts) : une nouvelle version de la vitrine paraît au rechargement.
+});
+
 test("une session complète ne laisse rien de la boutique dans le cache", async ({ page }) => {
   await login(page);
   await controlled(page);

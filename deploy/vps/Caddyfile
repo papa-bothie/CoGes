@@ -106,7 +106,17 @@
 }
 
 preprod.{$COGES_DOMAIN} {
+	# Jamais indexée (prompt 37, ADR 0115) : la vitrine de production, seule, l'est.
+	header X-Robots-Tag "noindex, nofollow"
 	import pile preprod
+}
+
+# Vitrine (prompt 37, ADR 0115) : www renvoie au domaine nu, chemin et requête gardés.
+# Le DNS (`www` en CNAME vers le domaine) est posé par le propriétaire ; Caddy obtient le
+# certificat.
+www.{$COGES_DOMAIN} {
+	import entetes (self)
+	redir https://{$COGES_DOMAIN}{uri} permanent
 }
 
 # Administration de la plateforme (ADR 0089), pile de production seulement. Sa porte

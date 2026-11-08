@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 
+import { vitrine } from "@/content/vitrine";
+
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -27,8 +29,12 @@ const jetbrainsMono = localFont({
 });
 
 export const metadata: Metadata = {
+  // Adresses absolues des balises de partage (vitrine, ADR 0115).
+  metadataBase: new URL(vitrine.siteUrl),
   title: { default: "CoGes", template: "%s · CoGes" },
   description: "Gestion commerciale pour PME : ventes, stock, argent, décisions.",
+  // Seule la vitrine (`app/(vitrine)/page.tsx`) est indexable : la connexion et l'application, non.
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
