@@ -32,7 +32,7 @@
 
 /* ── A2. Apparitions au défilement : masquées seulement si le script peut les révéler ── */
 
-/* ── A3. Halo derrière l'illustration du hero ── */
+/* ── A3. Halo derrière la mini-caisse du hero (A9) ── */
 
 .halo {
   position: relative;
@@ -132,6 +132,30 @@
   /* A3. Une seule dérive lente, puis le halo reste où il est. */
   .halo::before {
     animation: halo 20s ease-in-out backwards;
+  }
+
+  /*
+   * A9. Mini-caisse : une ligne toutes les 0,5 s à partir de 0,5 s, le total à 2,2 s,
+   * « Encaissé » à 2,8 s ; fin à 3,2 s, une seule fois. Remplissage « backwards » seul :
+   * avant son tour, chaque étape est invisible ; ensuite, elle revient à son état de repos.
+   */
+  .etape {
+    animation: ligne 0.4s ease-out backwards;
+  }
+  .etape[data-caisse-etape="1"] {
+    animation-delay: 0.5s;
+  }
+  .etape[data-caisse-etape="2"] {
+    animation-delay: 1s;
+  }
+  .etape[data-caisse-etape="3"] {
+    animation-delay: 1.5s;
+  }
+  .etape[data-caisse-etape="total"] {
+    animation-delay: 2.2s;
+  }
+  .etape[data-caisse-etape="encaisse"] {
+    animation: encaisse 0.4s cubic-bezier(0.3, 1.5, 0.5, 1) 2.8s backwards;
   }
 
   /* A4. Trois passages espacés de 4 s, puis plus rien. */
@@ -265,6 +289,20 @@
   from {
     opacity: 0;
     transform: translateY(0.45em);
+  }
+}
+
+@keyframes ligne {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes encaisse {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
   }
 }
 

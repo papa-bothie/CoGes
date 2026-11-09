@@ -40,7 +40,8 @@ Next 16 · TypeScript strict · Tailwind 4 · shadcn/ui · TanStack Query · ope
   `components/vitrine/vitrine.module.css`, plus un composant client (`revele.tsx`, un
   IntersectionObserver). Le titre (`hero-title.tsx`) fait relayer « Les ventes / Le stock /
   L'argent » pendant trois tours (27 s), puis s'arrête sur la phrase complète. Les textes
-  sont dans `hero.rotation`. Les apparitions au défilement se posent avec `revele()`
+  sont dans `hero.rotation`. La mini-caisse (`mini-caisse.tsx`, textes dans `hero.caisse`)
+  remplace l'illustration du hero : une vente d'exemple jouée une fois en 3,2 s. Les apparitions au défilement se posent avec `revele()`
   (`motion.ts`), jamais sur le premier écran. Règles tenues par test : aucune animation
   infinie, tout mouvement sous `prefers-reduced-motion: no-preference`, CLS 0. Les
   e2e (`e2e/vitrine-animations.spec.ts`) placent les animations à l'instant voulu par

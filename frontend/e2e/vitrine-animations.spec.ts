@@ -50,6 +50,15 @@ function visibleOnly(state: Record<string, number>): string[] {
     .map(([key]) => key);
 }
 
+/** Étapes de la mini-caisse entièrement visibles (lignes 1 à 3, total, « Encaissé »). */
+async function caisseVisible(page: Page): Promise<string[]> {
+  return page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>("[data-caisse-etape]")]
+      .filter((element) => Number(getComputedStyle(element).opacity) > 0.99)
+      .map((element) => element.dataset.caisseEtape!),
+  );
+}
+
 /** Révèle toute la page (défilement) et termine les animations finies d'apparition. */
 async function scrollThrough(page: Page) {
   const height = await page.evaluate(() => document.body.scrollHeight);
@@ -179,6 +188,60 @@ test.describe("vitrine : titre qui change de mot", () => {
   });
 });
 
+test.describe("vitrine : mini-caisse du hero (A9)", () => {
+  test("trois articles un par un, le total, puis « Encaissé », une seule fois", async ({
+    page,
+  }) => {
+    await ready(page);
+    // Moins de 5 s en tout (WCAG 2.2.2 : rien à mettre en pause), puis plus rien.
+    const ends = await page.evaluate(() =>
+      document
+        .querySelector("[data-caisse]")!
+        .getAnimations({ subtree: true })
+        .map((animation) => Number(animation.effect!.getComputedTiming().endTime)),
+    );
+    expect(ends.length).toBeGreaterThan(0);
+    expect(Math.max(...ends)).toBeLessThan(5000);
+    const steps: [number, string[]][] = [
+      [0, []],
+      [1000, ["1"]],
+      [2000, ["1", "2", "3"]],
+      [2700, ["1", "2", "3", "total"]],
+      [3400, ["1", "2", "3", "total", "encaisse"]],
+    ];
+    for (const [ms, expected] of steps) {
+      await seek(page, ms);
+      expect(await caisseVisible(page), `à ${ms} ms`).toEqual(expected);
+    }
+    await seek(page, 5000);
+    await page.evaluate(() => {
+      for (const animation of document.getAnimations()) {
+        if (animation.timeline === document.timeline) animation.finish();
+      }
+    });
+    expect(
+      await page.evaluate(
+        () => document.querySelector("[data-caisse]")!.getAnimations({ subtree: true }).length,
+      ),
+    ).toBe(0);
+    expect(await caisseVisible(page)).toEqual(["1", "2", "3", "total", "encaisse"]);
+  });
+
+  test("cachée aux lecteurs d'écran, avec un texte équivalent ; plus d'illustration", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const caisse = page.locator("[data-caisse]");
+    await expect(caisse).toHaveAttribute("aria-hidden", "true");
+    await expect(page.locator("section[aria-labelledby=titre] .sr-only").last()).toHaveText(
+      texte.hero.caisse.resume,
+    );
+    await expect(page.locator("section[aria-labelledby=titre] img")).toHaveCount(0);
+    for (const ligne of texte.hero.caisse.lignes) await expect(caisse).toContainText(ligne.article);
+    await expect(caisse).toContainText("21\u00a0000\u00a0F");
+  });
+});
+
 test.describe("vitrine : aucun décalage de mise en page", () => {
   for (const scheme of ["light", "dark"] as const) {
     for (const [width, height] of WIDTHS) {
@@ -209,7 +272,8 @@ test.describe("vitrine : aucun décalage de mise en page", () => {
           await seek(page, ms);
           const box = await page.locator("#titre").boundingBox();
           const zone = await page.locator("[data-zone]").boundingBox();
-          boxes.add(JSON.stringify([box, zone]));
+          const caisse = await page.locator("[data-caisse]").boundingBox();
+          boxes.add(JSON.stringify([box, zone, caisse]));
         }
         expect(boxes.size).toBe(1);
         // Aucun mot ne passe à la ligne : chacun tient sur une ligne à toute largeur.
@@ -283,6 +347,7 @@ test.describe("vitrine : mouvement réduit", () => {
     expect(visibleOnly(await opacities(page))).toEqual(["complet"]);
     await expect(page.getByRole("heading", { level: 1 })).toHaveAccessibleName(texte.hero.title);
     expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
+    expect(await caisseVisible(page)).toEqual(["1", "2", "3", "total", "encaisse"]);
     // Avant tout défilement, les sections plus bas sont déjà visibles.
     const hidden = await page.evaluate(
       () =>
@@ -313,5 +378,9 @@ test.describe("vitrine : sans JavaScript", () => {
       await expect(page.getByRole("heading", { name: item.title, exact: true })).toBeVisible();
     }
     await expect(page.getByText(texte.faq.items[0].question)).toBeVisible();
+    // La mini-caisse est du CSS seul : elle joue sans script et finit complète.
+    await expect(page.locator("[data-caisse-etape=encaisse]")).toHaveCSS("opacity", "1", {
+      timeout: 10_000,
+    });
   });
 });

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { formatAmount } from "@/lib/format/money";
+
 import { texte, TRIAL_DAYS } from "./vitrine-texte";
 import { vitrine } from "./vitrine";
 
@@ -25,7 +27,10 @@ describe("vitrine : promesses (prompt 37, ADR 0115)", () => {
 
   it("aucun prix tant que vitrine.pricing est vide", () => {
     expect(vitrine.pricing).toBeNull();
-    expect(ALL).not.toMatch(/\d[\d  ]*\s?(F|FCFA|francs)\b/);
+    // Seule exception : la mini-caisse (A9), une vente d'exemple aux prix des articles de la
+    // démo, jamais un prix de CoGes (vérifié plus bas : elle se dit « exemple »).
+    const hero = Object.entries(texte.hero).filter(([cle]) => cle !== "caisse");
+    expect(allText({ ...texte, hero })).not.toMatch(/\d[\d  ]*\s?(F|FCFA|francs)\b/);
   });
 
   it("aucun bouton « Créer ma boutique » (lot Inscription)", () => {
@@ -66,5 +71,29 @@ describe("vitrine : titre qui change de mot (prompt 38, A1)", () => {
   it("la phrase de fin (zone animée) est le début exact de hero.title", () => {
     const { complet, suite } = texte.hero.rotation;
     expect(`${complet} ${suite}`).toBe(texte.hero.title);
+  });
+});
+
+describe("vitrine : mini-caisse du hero (prompt 38, A9)", () => {
+  const { lignes, resume } = texte.hero.caisse;
+  const total = lignes.reduce((sum, ligne) => sum + ligne.quantite * ligne.prix, 0);
+
+  it("trois articles de la démo Keur Fatou, à leurs prix de la démo", () => {
+    expect(lignes.map((ligne) => [ligne.article, ligne.prix])).toEqual([
+      ["Riz brisé 25 kg", 15500],
+      ["Huile Dinor 1 L", 1400],
+      ["Sucre en morceaux 1 kg", 900],
+    ]);
+    for (const ligne of lignes) expect(Number.isInteger(ligne.quantite * ligne.prix)).toBe(true);
+  });
+
+  it("se dit exemple de vente, sans prix de CoGes", () => {
+    expect(resume).toMatch(/^Exemple de vente dans CoGes/);
+    expect(allText(texte.hero.caisse)).not.toMatch(/abonnement|par mois|offre|essai/i);
+  });
+
+  it("le texte pour lecteur d'écran donne le total exact", () => {
+    expect(total).toBe(21000);
+    expect(resume).toContain(formatAmount(String(total)));
   });
 });

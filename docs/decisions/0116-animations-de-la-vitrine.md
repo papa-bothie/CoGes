@@ -4,7 +4,8 @@
 - **Phase** : prompt 38 (lot « Animations de la vitrine », complète l'ADR 0115)
 - **Statut** : acceptée
 - **Décideur** : utilisateur (prompt 38, puis deux AskUserQuestion du 2026-11-09 : hauteur
-  du titre, taille à 768 px, entrée du hero ; puis le fondu restant du hero)
+  du titre, taille à 768 px, entrée du hero ; puis le fondu restant du hero ; enfin la
+  mini-caisse, à la place de l'illustration)
 
 ## Contexte
 
@@ -38,6 +39,7 @@ en page, en mouvement réduit et sans JavaScript, dans un budget de 5 Ko gzip.
 - `hero-title.tsx` : composant serveur du titre.
 - `revele.tsx` : le seul composant client.
 - `motion.ts` : la fonction `revele()`.
+- `mini-caisse.tsx` : composant serveur de la mini-caisse (A9).
 
 ### A1. Le titre qui change de mot
 
@@ -103,7 +105,7 @@ en page, en mouvement réduit et sans JavaScript, dans un budget de 5 Ko gzip.
 
 ### A3 à A7
 
-- **A3. Halo.** Un dégradé radial en `color-mix` du vert d'éclat, derrière l'illustration
+- **A3. Halo.** Un dégradé radial en `color-mix` du vert d'éclat, derrière la mini-caisse
   (`::before`, `z-index: -1`, `aria-hidden` par construction). Il dérive une fois en 20 s,
   puis reste fixe. Le hero coupe en `overflow-x: clip` (aucun défilement horizontal à
   360 px). Le halo n'est jamais derrière du texte.
@@ -120,8 +122,25 @@ en page, en mouvement réduit et sans JavaScript, dans un budget de 5 Ko gzip.
   `@supports selector(::details-content)`. Ailleurs, le comportement d'avant ne change pas.
   C'est **la seule animation de taille** (hauteur des réponses), et elle ne se déclenche
   qu'au clic (exclue du CLS). Le « + » qui tourne reste.
-- **A9. Mini-caisse.** Non faite dans ce lot : le prompt la laisse au choix du propriétaire
-  après avoir vu le reste.
+- **A9. Mini-caisse.** Ajoutée après avoir vu le reste, **à la place de l'illustration de la
+  boutique** (choix de l'utilisateur, contre « posée sur l'illustration » et « ordinateur
+  seul »).
+  - Une vente fictive de la démo « Keur Fatou », aux prix de `seed_maquette.py` : 1 riz brisé
+    25 kg (15 500 F), 2 huiles Dinor (2 800 F), 3 sucres (2 700 F), total 21 000 F, puis
+    « Encaissé » en espèces. Textes dans `hero.caisse` ; le total est calculé, jamais écrit.
+  - Une ligne toutes les 0,5 s à partir de 0,5 s, le total à 2,2 s, « Encaissé » à 2,8 s :
+    **fin à 3,2 s, une seule fois**. Moins de 5 s : aucune pause exigée par la règle 2.2.2.
+  - Même principe que le titre : remplissage `backwards` seul, l'état de repos est le ticket
+    complet (mouvement réduit, fin de séquence). Tout est dans le flux dès le premier
+    affichage, seules l'opacité et la position bougent : aucun décalage.
+  - La version visible est `aria-hidden` ; `hero.caisse.resume` (« Exemple de vente dans
+    CoGes : … soit 21 000 F, encaissés en espèces. ») la dit aux lecteurs d'écran.
+  - **Le test « aucun prix » de l'ADR 0115** exclut `hero.caisse` : ce sont les prix des
+    articles d'une boutique d'exemple, pas ceux de CoGes. En échange, un test exige que le
+    résumé commence par « Exemple de vente » et qu'aucun mot d'offre ou d'abonnement n'y
+    figure.
+  - `public/vitrine/illustration-boutique.svg` n'est plus affichée. Le fichier reste dans le
+    dossier et dans `VITRINE_FILES` (sa suppression est laissée au propriétaire).
 
 ### Aucune animation infinie (WCAG 2.2.2)
 
@@ -129,7 +148,7 @@ La règle 2.2.2 (« Pause, arrêt, masquage ») interdit un mouvement automatiqu
 5 s qui ne s'arrête pas et ne peut pas être mis en pause. Sur la vitrine :
 
 - chaque animation à horloge a une fin : titre à 27 s, halo à 20 s, éclat à 13,2 s,
-  apparitions en moins d'une seconde ;
+  mini-caisse à 3,2 s, apparitions en moins d'une seconde ;
 - le titre se met aussi en pause au survol et au focus ;
 - le mouvement réduit coupe tout.
 
@@ -157,14 +176,33 @@ poste (chargé, donc bruité) :
 
 Lighthouse accessibilité : 100 sur ordinateur et sur téléphone.
 
+**Mini-caisse (A9)**, mesurée à part, les deux builds côte à côte sur un poste peu chargé
+(même méthode, ce qui explique l'écart de quelques octets avec le tableau ci-dessus) :
+
+| | Avant A9 | Avec A9 | Écart |
+|---|---|---|---|
+| CSS | 20 551 o | 20 644 o | +93 o |
+| JS | 298 158 o | 298 373 o | +215 o |
+| HTML de `/` | 17 170 o | 18 255 o | +1 085 o |
+
+- Le budget (CSS + JS) passe à **+1 746 o** pour tout le lot (plafond : 5 120 o). Le HTML
+  grossit du ticket, mais l'illustration (3 182 o en gzip) n'est plus chargée.
+- LCP, médiane de 5 chargements, deux tours en alternance : à 360 px, 156 ms avant et 140 à
+  144 ms après (le paragraphe, inchangé) ; à 1280 px, 164 à 172 ms avant (l'illustration)
+  et 168 à 176 ms après (la suite du titre) : égal, au bruit près.
+- Lighthouse sur téléphone (réseau et processeur bridés) : performance **72 → 91**, LCP
+  **4,1 → 2,9 s** ; sur ordinateur : 100. Accessibilité 100 des deux côtés, CLS 0.
+
 ## Conséquences
 
 Tests ajoutés :
 
-- `content/vitrine-texte.test.ts` : cohérence de `hero.rotation` avec `hero.title`.
+- `content/vitrine-texte.test.ts` : cohérence de `hero.rotation` avec `hero.title` ;
+  mini-caisse (articles et prix de la démo, total exact dans le résumé, « Exemple de
+  vente »).
 - `components/vitrine/animations.test.ts` : aucune animation infinie, tout mouvement sous
   `no-preference`.
-- `e2e/vitrine-animations.spec.ts` (18 parcours) :
+- `e2e/vitrine-animations.spec.ts` (20 parcours) :
   - séquence aux instants 0, 3,2, 6,2, 9,2, 24,2 et 28 s, et relais à 2,8 s ;
   - fin à 27 s, puis plus aucune animation dans la zone ;
   - nom accessible du `h1` ;
@@ -174,7 +212,10 @@ Tests ajoutés :
     et en sombre ;
   - aucune apparition au premier écran ;
   - mouvement réduit (aucune animation, tout visible) ;
-  - sans JavaScript (tout visible).
+  - sans JavaScript (tout visible, mini-caisse finie complète) ;
+  - mini-caisse : étapes à 0, 1, 2, 2,7 et 3,4 s, fin avant 5 s puis plus aucune
+    animation, `aria-hidden` et texte équivalent, plus d'image dans le hero ; sa boîte est
+    vérifiée avec celle du titre dans les tests de CLS.
 
 Les animations CSS ne suivent pas `page.clock` de Playwright. Les tests les arrêtent et
 règlent leur `currentTime` (Web Animations) : aucune attente réelle.
@@ -189,6 +230,9 @@ règlent leur `currentTime` (Web Animations) : aucune attente réelle.
 
 `proxy.ts`, `proxy.test.ts`, `coges_known`, la mise en page racine et l'application ne
 changent pas.
+
+Remarque hors lot : à 360 px, le bouton « Se connecter » de l'en-tête de la vitrine passe sur
+deux lignes (déjà le cas avec l'ADR 0115).
 
 ### Suites
 

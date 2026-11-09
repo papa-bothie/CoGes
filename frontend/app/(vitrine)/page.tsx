@@ -5,6 +5,7 @@ import { BrandMark, BrandWordmark } from "@/components/brand/brand";
 import { HeroTitle } from "@/components/vitrine/hero-title";
 import { ICONS, RUBRIQUE } from "@/components/vitrine/icons";
 import { ButtonLink, WhatsAppLink } from "@/components/vitrine/links";
+import { MiniCaisse } from "@/components/vitrine/mini-caisse";
 import { motion, revele } from "@/components/vitrine/motion";
 import { Revele } from "@/components/vitrine/revele";
 import { VitrineHeader } from "@/components/vitrine/vitrine-header";
@@ -107,14 +108,12 @@ function Illustration({
   width,
   height,
   className,
-  eager = false,
   appear,
 }: {
   src: string;
   width: number;
   height: number;
   className?: string;
-  eager?: boolean;
   /** Apparition au défilement (jamais pour l'illustration du hero). */
   appear?: "gauche" | "droite";
 }) {
@@ -127,7 +126,7 @@ function Illustration({
         width={width}
         height={height}
         unoptimized
-        loading={eager ? "eager" : "lazy"}
+        loading="lazy"
         className="h-auto w-full"
       />
     </div>
@@ -173,14 +172,9 @@ export default function VitrinePage() {
               </div>
               <p className="font-semibold text-success-ink">{t.hero.trial}</p>
             </div>
+            {/* A9 : la mini-caisse remplace l'illustration de la boutique (ADR 0116). */}
             <div className={cn(motion.halo, "mx-auto w-full max-w-[420px]")}>
-              <Illustration
-                src="/vitrine/illustration-boutique.svg"
-                width={662}
-                height={646}
-                eager
-                className="w-full"
-              />
+              <MiniCaisse />
             </div>
           </section>
 
