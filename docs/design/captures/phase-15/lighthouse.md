@@ -1,9 +1,11 @@
-# Lighthouse — accessibilité des écrans de la maquette v2
+# Lighthouse — accessibilité de la vitrine et des écrans de la maquette v2
 
 Mesuré par `make lighthouse` (Lighthouse 13.5.0, Chromium de Playwright, entreprise `maquette`, thème clair ; 390 px pour l'écran 26). Seuil : 95.
 
 | Écran | Page | Score | Audits non réussis |
 |---|---|---|---|
+| 00 Vitrine (page d'accueil publique) | `/` | 100 | — |
+| 00b Vitrine sur téléphone (390 px) | `/` | 100 | — |
 | 25 Connexion | `/login` | 100 | — |
 | 01 Accueil | `/dashboard` | 100 | — |
 | 02 Nouvelle vente | `/sales/new` | 100 | — |

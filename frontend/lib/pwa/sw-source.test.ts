@@ -70,17 +70,17 @@ function environment(build = "v1") {
     for (const store of stores.values()) all.push(...store.keys());
     return all.sort();
   };
-  const request = (url: string) => {
-    let answered = false;
+  const request = (url: string, options: { mode?: string; auth?: boolean } = {}) => {
+    let answered: Promise<unknown> | boolean = false;
     listeners.get("fetch")?.({
       request: {
         method: "GET",
-        mode: "cors",
+        mode: options.mode ?? "cors",
         url: new URL(url, "https://coges.test").href,
-        headers: new Headers({ authorization: "Bearer jeton" }),
+        headers: new Headers(options.auth === false ? {} : { authorization: "Bearer jeton" }),
       },
-      respondWith: () => {
-        answered = true;
+      respondWith: (response: Promise<unknown>) => {
+        answered = response;
       },
     });
     return answered;
@@ -119,6 +119,20 @@ describe("service worker (ADR 0102)", () => {
     const sw = environment();
     await sw.dispatch("install");
     expect(sw.request("/api/v1/companies/me/logo")).toBe(false);
+    expect(await sw.cached()).toEqual(PRECACHED);
+  });
+
+  it("la vitrine et ses images ne sont jamais gardées : une nouvelle version paraît (ADR 0115)", async () => {
+    const sw = environment();
+    await sw.dispatch("install");
+    // La page : toujours le réseau, jamais mise en cache.
+    const page = sw.request("/", { mode: "navigate", auth: false });
+    expect(page).not.toBe(false);
+    await page;
+    // Les images de `public/vitrine/` : le worker n'y touche pas, le navigateur va au réseau.
+    expect(sw.request("/vitrine/apercu-ordinateur.webp", { auth: false })).toBe(false);
+    expect(sw.request("/sitemap.xml", { auth: false })).toBe(false);
+    expect(sw.request("/opengraph-image.png", { auth: false })).toBe(false);
     expect(await sw.cached()).toEqual(PRECACHED);
   });
 

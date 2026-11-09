@@ -29,6 +29,13 @@ Next 16 · TypeScript strict · Tailwind 4 · shadcn/ui · TanStack Query · ope
   une page), `lib/pwa/` (mise à jour à un moment sûr, installation). En production
   seulement ; `make front-pwa-e2e` le vérifie sur un build de production (:3102).
   L'administration n'est pas installable.
+- **Vitrine** (ADR 0115) : `/` sert la page d'accueil publique (`app/(vitrine)/`, statique)
+  au seul visiteur **nouveau** ; une session mène à `/dashboard`, le marqueur `coges_known=1`
+  (posé à la connexion et par `proxy.ts`, jamais effacé à la déconnexion) à `/login`. Contenu
+  du propriétaire dans `content/vitrine.ts` (numéro WhatsApp réel exigé par un test), textes
+  dans `content/vitrine-texte.ts`, images dans `public/vitrine/`, listées une à une dans
+  `content/vitrine-files.ts`. Captures refaites par `e2e/captures-vitrine.spec.ts` puis
+  `scripts/vitrine-images.py` (voir l'ADR).
 
 ## Commandes
 

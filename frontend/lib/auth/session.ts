@@ -14,6 +14,7 @@ import type { LoginRequest, TokenResponse } from "@/lib/api/schema";
 import { clearOwnDrafts, freezeDrafts } from "@/lib/drafts";
 import { clearAppCaches } from "@/lib/pwa/caches";
 
+import { KNOWN_MARKER, KNOWN_MAX_AGE_SECONDS } from "./known";
 import { DEFAULT_NEXT, safeNext } from "./safe-next";
 import { endSupportSession, isSupportMode, restoreSupportToken } from "./support";
 import { tokenStore } from "./token-store";
@@ -37,6 +38,14 @@ export function setSessionMarker(): void {
   document.cookie = `${SESSION_MARKER}=1; Path=/; Max-Age=${MARKER_MAX_AGE_SECONDS}; SameSite=Lax${secureSuffix()}`;
 }
 
+/**
+ * « Déjà connu sur cet appareil » (ADR 0115) : posé à chaque connexion réussie, jamais effacé
+ * par la déconnexion. La racine mène alors à la connexion, pas à la vitrine.
+ */
+export function setKnownMarker(): void {
+  document.cookie = `${KNOWN_MARKER}=1; Path=/; Max-Age=${KNOWN_MAX_AGE_SECONDS}; SameSite=Lax${secureSuffix()}`;
+}
+
 export function clearSessionMarker(): void {
   document.cookie = `${SESSION_MARKER}=; Path=/; Max-Age=0; SameSite=Lax${secureSuffix()}`;
 }
@@ -44,6 +53,7 @@ export function clearSessionMarker(): void {
 function acceptTokens(body: TokenResponse): void {
   tokenStore.set(body.access_token, body.expires_in);
   setSessionMarker();
+  setKnownMarker();
 }
 
 async function readJson(response: Response): Promise<unknown> {

@@ -1,12 +1,32 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { refreshSession, SESSION_MARKER } from "./session";
+import { KNOWN_MARKER } from "./known";
+import { clearSessionMarker, refreshSession, SESSION_MARKER } from "./session";
 import { tokenStore } from "./token-store";
 
 afterEach(() => {
   vi.unstubAllGlobals();
   tokenStore.clear();
   document.cookie = `${SESSION_MARKER}=; Path=/; Max-Age=0`;
+  document.cookie = `${KNOWN_MARKER}=; Path=/; Max-Age=0`;
+});
+
+describe("marqueur « déjà connu » (ADR 0115)", () => {
+  it("est posé à la connexion réussie et survit à la fin de session", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ access_token: "a1", expires_in: 900 }), { status: 200 }),
+      ),
+    );
+    expect(await refreshSession()).toBe("ok");
+    expect(document.cookie).toContain(`${KNOWN_MARKER}=1`);
+
+    clearSessionMarker();
+    expect(document.cookie).not.toContain(`${SESSION_MARKER}=1`);
+    expect(document.cookie).toContain(`${KNOWN_MARKER}=1`);
+  });
 });
 
 describe("refreshSession", () => {

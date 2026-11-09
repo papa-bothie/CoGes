@@ -168,6 +168,9 @@ def _listeners(config: dict[str, Any]) -> dict[str, list[str]]:
     }
 
 
+# Les hôtes de la boutique (www renvoie au domaine nu, prompt 37).
+SHOP_HOSTS = ["coges.example.sn", "preprod.coges.example.sn", "www.coges.example.sn"]
+
 needs_docker = pytest.mark.skipif(shutil.which("docker") is None, reason="docker absent")
 
 
@@ -178,7 +181,7 @@ needs_docker = pytest.mark.skipif(shutil.which("docker") is None, reason="docker
         (
             "cloudflare",
             "",
-            {":443": ["coges.example.sn", "preprod.coges.example.sn"], ":8081": []},
+            {":443": SHOP_HOSTS, ":8081": []},
         ),
         (
             "ip",
@@ -188,10 +191,11 @@ needs_docker = pytest.mark.skipif(shutil.which("docker") is None, reason="docker
                     "admin.coges.example.sn",
                     "coges.example.sn",
                     "preprod.coges.example.sn",
+                    "www.coges.example.sn",
                 ]
             },
         ),
-        ("ssh", "", {":443": ["coges.example.sn", "preprod.coges.example.sn"], ":8082": []}),
+        ("ssh", "", {":443": SHOP_HOSTS, ":8082": []}),
         (
             "mfa",
             "",
@@ -200,6 +204,7 @@ needs_docker = pytest.mark.skipif(shutil.which("docker") is None, reason="docker
                     "admin.coges.example.sn",
                     "coges.example.sn",
                     "preprod.coges.example.sn",
+                    "www.coges.example.sn",
                 ]
             },
         ),
@@ -268,3 +273,37 @@ def test_only_the_shop_may_open_the_camera(gate: str) -> None:
     admin = json.dumps(_admin_routes(config))
     assert '"camera=(), microphone=(), geolocation=()"' in admin
     assert "camera=(self)" not in admin
+
+
+def _host_routes(config: dict[str, Any], host: str) -> list[Any]:
+    return [
+        route
+        for server in config["apps"]["http"]["servers"].values()
+        for route in server.get("routes", [])
+        if f'"{host}"' in json.dumps(route.get("match", []))
+    ]
+
+
+@needs_docker
+def test_www_is_permanently_redirected_to_the_bare_domain() -> None:
+    """Vitrine (prompt 37, ADR 0115) : `www.` renvoie au domaine nu, chemin et requête
+    gardés, sans jamais atteindre le front ni l'API."""
+    www = json.dumps(_host_routes(_adapt("mfa", ""), "www.coges.example.sn"))
+    assert '"Location": ["https://coges.example.sn{http.request.uri}"]' in www
+    assert '"status_code": 301' in www
+    assert "reverse_proxy" not in www
+    assert "Strict-Transport-Security" in www
+
+
+@needs_docker
+@pytest.mark.parametrize("gate", ["mfa", "cloudflare", "ip", "ssh"])
+def test_only_the_preprod_is_kept_out_of_search_engines(gate: str) -> None:
+    """La préproduction répond `X-Robots-Tag: noindex` ; la production, jamais (la vitrine y
+    est indexable). L'administration garde le sien, inchangé (ADR 0089)."""
+    config = _adapt(gate, "192.0.2.10")
+    noindex = '"X-Robots-Tag": ["noindex, nofollow"]'
+    assert noindex in json.dumps(_host_routes(config, "preprod.coges.example.sn"))
+    assert "X-Robots-Tag" not in json.dumps(_merchant_routes(config))
+    admin = _admin_routes(config)
+    if admin:  # derrière le tunnel ou par SSH, l'administration n'a pas d'hôte nommé
+        assert noindex in json.dumps(admin)

@@ -6,7 +6,8 @@
  * lancés s'ils ne répondent pas, puis arrêtés. Chromium de Playwright, profil gardé entre
  * les pages : la session de la gérante (cookie de rafraîchissement) suit Lighthouse.
  *
- * Écrit `docs/design/captures/phase-15/lighthouse.md` et échoue sous 95.
+ * Écrit `docs/design/captures/phase-15/lighthouse.md` et échoue sous 95. La vitrine (`/`,
+ * ADR 0115) est mesurée en premier, sans cookie : celle d'un visiteur nouveau.
  */
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -32,6 +33,9 @@ const MAQUETTE = {
 
 /** Les 26 écrans (`docs/design/maquette-v2/ecrans.md`), puis les rubriques des réglages. */
 const SCREENS = [
+  // Vitrine (prompt 37, ADR 0115) : mesurée d'abord, profil neuf, donc visiteur nouveau.
+  ["00", "Vitrine (page d'accueil publique)", "/"],
+  ["00b", "Vitrine sur téléphone (390 px)", "/"],
   ["25", "Connexion", "/login"],
   ["01", "Accueil", "/dashboard"],
   ["02", "Nouvelle vente", "/sales/new"],
@@ -138,7 +142,7 @@ try {
       await page.waitForURL(/\/dashboard$/, { timeout: 60_000 });
     }
     const path = template.replace(/\{(\w+)\}/g, (_, key) => found[key]);
-    const phone = no === "26";
+    const phone = no === "26" || no === "00b";
     const result = await lighthouse(
       `${FRONT}${path}`,
       {
@@ -188,7 +192,7 @@ const below = rows.filter((row) => row.score < THRESHOLD);
 writeFileSync(
   REPORT,
   [
-    "# Lighthouse — accessibilité des écrans de la maquette v2",
+    "# Lighthouse — accessibilité de la vitrine et des écrans de la maquette v2",
     "",
     `Mesuré par \`make lighthouse\` (Lighthouse 13.5.0, Chromium de Playwright, entreprise \`maquette\`, thème clair ; 390 px pour l'écran 26). Seuil : ${THRESHOLD}.`,
     "",
