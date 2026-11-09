@@ -43,11 +43,38 @@ export const texte = {
   },
   hero: {
     title: "Les ventes, le stock et l'argent de votre boutique, au même endroit.",
+    /**
+     * Titre animé (prompt 38, ADR 0116) : les `mots` se relaient au-dessus de la `suite`,
+     * qui ne bouge pas, puis la zone s'arrête sur `complet`. Le test redonne `title`.
+     */
+    rotation: {
+      mots: ["Les ventes", "Le stock", "L'argent"],
+      complet: "Les ventes, le stock et l'argent",
+      suite: "de votre boutique, au même endroit.",
+    },
+    /**
+     * Mini-caisse du hero (prompt 38, A9, ADR 0116) : une vente fictive de la démo
+     * « Keur Fatou » (articles et prix de `seed_maquette.py`), jouée une fois. La version
+     * animée est `aria-hidden` ; `resume` la dit aux lecteurs d'écran.
+     */
+    caisse: {
+      titre: "Nouvelle vente",
+      boutique: "Alimentation Keur Fatou",
+      lignes: [
+        { article: "Riz brisé 25 kg", quantite: 1, prix: 15500 },
+        { article: "Huile Dinor 1 L", quantite: 2, prix: 1400 },
+        { article: "Sucre en morceaux 1 kg", quantite: 3, prix: 900 },
+      ],
+      total: "Total",
+      moyen: "Espèces",
+      encaisse: "Encaissé",
+      resume:
+        "Exemple de vente dans CoGes : un sac de riz brisé de 25 kg, 2 bouteilles d'huile Dinor et 3 paquets de sucre, soit 21\u00a0000\u00a0F, encaissés en espèces.",
+    },
     lead: "Vous vendez, CoGes compte : ce qui est vendu, ce qui reste en rayon, ce qui est dans la caisse et qui vous doit quoi. En francs CFA, sur téléphone ou ordinateur.",
     whatsapp: "Écrire sur WhatsApp",
     howItWorks: "Voir comment ça marche",
     trial: `Chaque nouvelle boutique commence par ${TRIAL_DAYS} jours d'essai gratuit.`,
-    illustrationAlt: "",
   },
   problems: {
     title: "Les questions de tous les jours, réglées",

@@ -36,6 +36,16 @@ Next 16 · TypeScript strict · Tailwind 4 · shadcn/ui · TanStack Query · ope
   dans `content/vitrine-texte.ts`, images dans `public/vitrine/`, listées une à une dans
   `content/vitrine-files.ts`. Captures refaites par `e2e/captures-vitrine.spec.ts` puis
   `scripts/vitrine-images.py` (voir l'ADR).
+- **Animations de la vitrine** (ADR 0116) : CSS seulement, dans
+  `components/vitrine/vitrine.module.css`, plus un composant client (`revele.tsx`, un
+  IntersectionObserver). Le titre (`hero-title.tsx`) fait relayer « Les ventes / Le stock /
+  L'argent » pendant trois tours (27 s), puis s'arrête sur la phrase complète. Les textes
+  sont dans `hero.rotation`. La mini-caisse (`mini-caisse.tsx`, textes dans `hero.caisse`)
+  remplace l'illustration du hero : une vente d'exemple jouée une fois en 3,2 s. Les apparitions au défilement se posent avec `revele()`
+  (`motion.ts`), jamais sur le premier écran. Règles tenues par test : aucune animation
+  infinie, tout mouvement sous `prefers-reduced-motion: no-preference`, CLS 0. Les
+  e2e (`e2e/vitrine-animations.spec.ts`) placent les animations à l'instant voulu par
+  `animation.currentTime`, car `page.clock` ne pilote pas les animations CSS.
 
 ## Commandes
 

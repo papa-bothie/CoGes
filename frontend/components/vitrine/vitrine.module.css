@@ -1,0 +1,350 @@
+/*
+ * Animations de la vitrine (prompt 38, ADR 0116). CSS seulement, aucune bibliothèque.
+ *
+ * Règles tenues par `animations.test.ts` et `e2e/vitrine-animations.spec.ts` :
+ * - aucune animation sans fin (WCAG 2.2.2) : toute boucle a un nombre de tours fini ;
+ * - tout mouvement est dans un bloc `prefers-reduced-motion: no-preference` : hors de ces
+ *   blocs, chaque élément est dans son état final, complet et immobile ;
+ * - on n'anime que `opacity` et `transform` (et `translate`) : aucun décalage de mise en
+ *   page. Seule exception : la hauteur des réponses de la FAQ, à l'ouverture demandée.
+ * Couleurs : jetons du thème seulement (`lib/no-hardcoded-colors.test.ts`).
+ */
+
+/* ── A1. Titre : la zone superpose les trois mots et la phrase de fin dans une même case ── */
+
+.zone {
+  display: grid;
+  /* Les mots se posent sur la ligne du bas, juste au-dessus de la suite. */
+  align-items: end;
+  /* « Les ventes, le / stock et l'argent » plutôt qu'un « l'argent » seul en bout de ligne. */
+  text-wrap: balance;
+}
+
+.zone > * {
+  grid-area: 1 / 1;
+}
+
+/* État de repos (sans animation, mouvement réduit, fin de séquence) : la phrase complète. */
+.mot {
+  opacity: 0;
+  white-space: nowrap;
+}
+
+/* ── A2. Apparitions au défilement : masquées seulement si le script peut les révéler ── */
+
+/* ── A3. Halo derrière la mini-caisse du hero (A9) ── */
+
+.halo {
+  position: relative;
+  isolation: isolate;
+}
+
+.halo::before {
+  content: "";
+  position: absolute;
+  inset: -8%;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--coges-vert-eclat) 24%, transparent),
+    transparent
+  );
+  transform: translate(3%, 2%);
+}
+
+/* ── A4. Éclat du bouton WhatsApp ── */
+
+.eclat {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.eclat::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    color-mix(in srgb, var(--coges-blanc) 38%, transparent) 50%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+}
+
+/* ── A6. En-tête : un voile (fond plein et ombre) qui apparaît au défilement ── */
+
+.entete {
+  isolation: isolate;
+}
+
+.entete::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--background);
+  box-shadow: 0 6px 18px -10px color-mix(in srgb, var(--coges-ombre) 35%, transparent);
+  opacity: 0;
+}
+
+/* ════════════════════════════ Mouvement permis ════════════════════════════ */
+
+@media (prefers-reduced-motion: no-preference) {
+  /*
+   * A1. Un tour = 9 s (3 s par mot ; entrée 0,4 s, pause, sortie 0,4 s pendant que le suivant
+   * entre). Le délai de −0,4 s montre « Les ventes » déjà en place à t = 0. Trois tours,
+   * puis la phrase complète entre à 26,6 s pendant que « L'argent » sort : fin à 27 s.
+   * Aucun remplissage « forwards » : à la fin, chaque élément revient à son état de repos.
+   */
+  .mot {
+    animation-duration: 9s;
+    animation-delay: -0.4s;
+    animation-timing-function: ease-out;
+    animation-iteration-count: 3;
+  }
+  .mot:nth-child(1) {
+    animation-name: mot-1;
+  }
+  .mot:nth-child(2) {
+    animation-name: mot-2;
+  }
+  .mot:nth-child(3) {
+    animation-name: mot-3;
+    /* Un quart de sortie de plus (0,4 s / 9 s) : « L'argent » sort en même temps que la
+       phrase complète entre, sans disparaître d'un coup. */
+    animation-iteration-count: 3.0444;
+  }
+  .complet {
+    animation: complet 0.4s ease-out 26.6s backwards;
+  }
+  .zone:hover > *,
+  .pause:focus-within .zone > * {
+    animation-play-state: paused;
+  }
+
+  /* A3. Une seule dérive lente, puis le halo reste où il est. */
+  .halo::before {
+    animation: halo 20s ease-in-out backwards;
+  }
+
+  /*
+   * A9. Mini-caisse : une ligne toutes les 0,5 s à partir de 0,5 s, le total à 2,2 s,
+   * « Encaissé » à 2,8 s ; fin à 3,2 s, une seule fois. Remplissage « backwards » seul :
+   * avant son tour, chaque étape est invisible ; ensuite, elle revient à son état de repos.
+   */
+  .etape {
+    animation: ligne 0.4s ease-out backwards;
+  }
+  .etape[data-caisse-etape="1"] {
+    animation-delay: 0.5s;
+  }
+  .etape[data-caisse-etape="2"] {
+    animation-delay: 1s;
+  }
+  .etape[data-caisse-etape="3"] {
+    animation-delay: 1.5s;
+  }
+  .etape[data-caisse-etape="total"] {
+    animation-delay: 2.2s;
+  }
+  .etape[data-caisse-etape="encaisse"] {
+    animation: encaisse 0.4s cubic-bezier(0.3, 1.5, 0.5, 1) 2.8s backwards;
+  }
+
+  /* A4. Trois passages espacés de 4 s, puis plus rien. */
+  .eclat::after {
+    animation: eclat 4s ease-in-out 1.2s 3 backwards;
+  }
+}
+
+/* A2. Masqué seulement si le script tourne ET si le mouvement est permis. */
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  .revele:not([data-vu]) {
+    opacity: 0;
+  }
+  .revele[data-vu] {
+    animation: monte 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) calc(var(--i, 0) * 80ms) backwards;
+  }
+  .revele[data-revele="gauche"][data-vu] {
+    animation-name: depuis-gauche;
+  }
+  .revele[data-revele="droite"][data-vu] {
+    animation-name: depuis-droite;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  /* A5. Cartes : léger soulèvement, icône qui bouge, au survol seulement. */
+  .carte {
+    transition:
+      transform 200ms ease-out,
+      box-shadow 200ms ease-out;
+  }
+  .carte:hover,
+  .carte:focus-visible {
+    transform: translateY(-4px);
+    box-shadow: 0 14px 28px -18px color-mix(in srgb, var(--coges-ombre) 45%, transparent);
+  }
+  .icone {
+    transition: transform 200ms ease-out;
+  }
+  .carte:hover .icone,
+  .carte:focus-visible .icone {
+    transform: translateY(-2px) rotate(-6deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* A6. Piloté par le défilement là où le navigateur le sait ; sinon rien. */
+  @supports (animation-timeline: scroll()) {
+    .entete::before {
+      animation: voile linear both;
+      animation-timeline: scroll(root);
+      animation-range: 0 96px;
+    }
+  }
+
+  /* A7. Réponses qui s'ouvrent et se ferment en douceur, là où le navigateur le sait. */
+  @supports selector(::details-content) {
+    .faq {
+      interpolate-size: allow-keywords;
+    }
+    .question::details-content {
+      block-size: 0;
+      overflow-y: clip;
+      transition:
+        block-size 250ms ease-out,
+        content-visibility 250ms allow-discrete;
+    }
+    .question[open]::details-content {
+      block-size: auto;
+    }
+  }
+}
+
+@keyframes mot-1 {
+  0% {
+    opacity: 0;
+    transform: translateY(0.45em);
+  }
+  4.444%,
+  33.333% {
+    opacity: 1;
+    transform: none;
+  }
+  37.778%,
+  100% {
+    opacity: 0;
+    transform: translateY(-0.45em);
+  }
+}
+
+@keyframes mot-2 {
+  0%,
+  33.333% {
+    opacity: 0;
+    transform: translateY(0.45em);
+  }
+  37.778%,
+  66.667% {
+    opacity: 1;
+    transform: none;
+  }
+  71.111%,
+  100% {
+    opacity: 0;
+    transform: translateY(-0.45em);
+  }
+}
+
+@keyframes mot-3 {
+  0% {
+    opacity: 1;
+    transform: none;
+  }
+  4.444%,
+  66.667% {
+    opacity: 0;
+    transform: translateY(-0.45em);
+  }
+  66.668% {
+    opacity: 0;
+    transform: translateY(0.45em);
+  }
+  71.111%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes complet {
+  from {
+    opacity: 0;
+    transform: translateY(0.45em);
+  }
+}
+
+@keyframes ligne {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes encaisse {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
+@keyframes halo {
+  from {
+    transform: translate(-4%, -3%) scale(0.94);
+  }
+}
+
+@keyframes eclat {
+  0% {
+    transform: translateX(-120%);
+  }
+  25%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes monte {
+  from {
+    opacity: 0;
+    translate: 0 24px;
+  }
+}
+
+@keyframes depuis-gauche {
+  from {
+    opacity: 0;
+    translate: -32px 0;
+  }
+}
+
+@keyframes depuis-droite {
+  from {
+    opacity: 0;
+    translate: 32px 0;
+  }
+}
+
+@keyframes voile {
+  to {
+    opacity: 1;
+  }
+}
