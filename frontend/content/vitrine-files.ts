@@ -6,7 +6,6 @@
 export const VITRINE_FILES: readonly string[] = [
   "apercu-ordinateur.webp",
   "apercu-telephone.webp",
-  "illustration-boutique.svg",
   "illustration-chiffres.svg",
   "illustration-stock.svg",
   "partage.png",

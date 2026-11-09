@@ -139,8 +139,9 @@ en page, en mouvement réduit et sans JavaScript, dans un budget de 5 Ko gzip.
     articles d'une boutique d'exemple, pas ceux de CoGes. En échange, un test exige que le
     résumé commence par « Exemple de vente » et qu'aucun mot d'offre ou d'abonnement n'y
     figure.
-  - `public/vitrine/illustration-boutique.svg` n'est plus affichée. Le fichier reste dans le
-    dossier et dans `VITRINE_FILES` (sa suppression est laissée au propriétaire).
+  - `public/vitrine/illustration-boutique.svg` est supprimée, avec sa ligne de
+    `VITRINE_FILES` et de la table des licences de l'ADR 0115 (choix de l'utilisateur) : le
+    proxy laisse passer un fichier de moins.
 
 ### Aucune animation infinie (WCAG 2.2.2)
 

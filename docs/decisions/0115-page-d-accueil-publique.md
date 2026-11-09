@@ -101,13 +101,14 @@ différé sous le pli.
 
 | Fichier | Origine | Licence |
 |---|---|---|
-| `illustration-boutique.svg` (`groceries_4via`) | unDraw, accent recoloré au vert CoGes | [licence unDraw](https://undraw.co/license) : usage commercial libre, sans attribution ni coût ; interdits : en refaire une collection, les redistribuer en lots, les utiliser pour l'entraînement d'IA |
-| `illustration-stock.svg` (`logistics_8vri`) | unDraw, recoloré | idem |
+| `illustration-stock.svg` (`logistics_8vri`) | unDraw, accent recoloré au vert CoGes | [licence unDraw](https://undraw.co/license) : usage commercial libre, sans attribution ni coût ; interdits : en refaire une collection, les redistribuer en lots, les utiliser pour l'entraînement d'IA |
 | `illustration-chiffres.svg` (`growth-analytics_vzjz`) | unDraw, recoloré | idem |
 | `apercu-ordinateur.webp`, `apercu-telephone.webp` | captures de CoGes sur la démo `demo` (`e2e/captures-vitrine.spec.ts`, puis `scripts/vitrine-images.py`) | les nôtres ; aucune donnée réelle de commerçant |
 | `partage.png` (1200 × 630) | composée par la même spec (police Figtree OFL, logo CoGes, capture de la démo) | la nôtre |
 
-`illustration-paiement` a été écartée : elle affiche des « $ ».
+`illustration-paiement` a été écartée : elle affiche des « $ ». `illustration-boutique.svg`
+(`groceries_4via`, même licence), d'abord dans le hero, a été retirée par l'ADR 0116 (A9) :
+la mini-caisse animée a pris sa place.
 
 Les illustrations sont posées sur un panneau `.papier`, qui reprend les jetons clairs comme
 la facture A4 (ADR 0112) : elles gardent leurs couleurs en mode sombre.
