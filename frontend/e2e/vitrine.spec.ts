@@ -27,7 +27,21 @@ async function scrollThrough(page: Page) {
     await page.evaluate((top) => window.scrollTo(0, top), y);
     await page.waitForTimeout(50);
   }
-  await page.waitForLoadState("networkidle");
+  // Attente explicite des images différées, et non `networkidle` : avec les animations du
+  // prompt 38, l'état « réseau calme » ne venait parfois jamais (2 fois sur 12), alors
+  // qu'aucune requête de la page n'était en attente.
+  // Seules les images affichées : une image masquée (`hidden lg:block`) ne se charge jamais.
+  await page.waitForFunction(() =>
+    [...document.images]
+      .filter((image) => image.getClientRects().length > 0)
+      .every((image) => image.complete),
+  );
+  // Apparitions et titre (prompt 38) menés à leur état final : axe mesure le contraste réel.
+  await page.evaluate(() => {
+    for (const animation of document.getAnimations()) {
+      if (animation.timeline === document.timeline) animation.finish();
+    }
+  });
 }
 
 test.describe("vitrine : visiteur nouveau", () => {

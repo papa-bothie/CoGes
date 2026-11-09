@@ -43,6 +43,15 @@ export const texte = {
   },
   hero: {
     title: "Les ventes, le stock et l'argent de votre boutique, au même endroit.",
+    /**
+     * Titre animé (prompt 38, ADR 0116) : les `mots` se relaient au-dessus de la `suite`,
+     * qui ne bouge pas, puis la zone s'arrête sur `complet`. Le test redonne `title`.
+     */
+    rotation: {
+      mots: ["Les ventes", "Le stock", "L'argent"],
+      complet: "Les ventes, le stock et l'argent",
+      suite: "de votre boutique, au même endroit.",
+    },
     lead: "Vous vendez, CoGes compte : ce qui est vendu, ce qui reste en rayon, ce qui est dans la caisse et qui vous doit quoi. En francs CFA, sur téléphone ou ordinateur.",
     whatsapp: "Écrire sur WhatsApp",
     howItWorks: "Voir comment ça marche",

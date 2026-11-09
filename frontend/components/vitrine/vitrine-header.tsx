@@ -3,6 +3,7 @@ import { texte } from "@/content/vitrine-texte";
 
 import { ButtonLink, WhatsAppLink } from "./links";
 import { MobileMenu } from "./mobile-menu";
+import styles from "./vitrine.module.css";
 
 const t = texte.nav;
 
@@ -12,7 +13,9 @@ const t = texte.nav;
  */
 export function VitrineHeader() {
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85">
+    <header
+      className={`${styles.entete} sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85`}
+    >
       <div className="relative mx-auto flex h-18 max-w-page items-center justify-between gap-3 px-4 md:px-marge-page">
         <a
           href="#haut"

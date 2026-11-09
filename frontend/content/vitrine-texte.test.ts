@@ -51,3 +51,20 @@ describe("vitrine : promesses (prompt 37, ADR 0115)", () => {
     expect(ALL.toLowerCase()).toContain(vitrine.supportHours.slice(1).toLowerCase());
   });
 });
+
+describe("vitrine : titre qui change de mot (prompt 38, A1)", () => {
+  const minuscule = (mot: string) => mot.charAt(0).toLowerCase() + mot.slice(1);
+
+  it("les trois mots relayés et la suite redonnent exactement hero.title", () => {
+    const { mots, suite } = texte.hero.rotation;
+    expect(mots).toEqual(["Les ventes", "Le stock", "L'argent"]);
+    expect(`${mots[0]}, ${minuscule(mots[1])} et ${minuscule(mots[2])} ${suite}`).toBe(
+      texte.hero.title,
+    );
+  });
+
+  it("la phrase de fin (zone animée) est le début exact de hero.title", () => {
+    const { complet, suite } = texte.hero.rotation;
+    expect(`${complet} ${suite}`).toBe(texte.hero.title);
+  });
+});
