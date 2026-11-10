@@ -4,6 +4,7 @@
     deploy/scripts/e2e.sh system missing-heartbeat  # le worker ne bat plus
     deploy/scripts/e2e.sh system build-exports      # produit les exports en attente
     deploy/scripts/e2e.sh system legal-stale <e-mail>   # acceptation d'une ancienne version
+    deploy/scripts/e2e.sh system signup-link <e-mail>   # le lien qu'aurait envoyé le worker
 
 L'API des parcours tourne sans worker, sans beat ni relais : laissée telle quelle, elle
 est toujours en panne. `healthy` écrit ce que ces processus écriraient (battements, tic
@@ -121,6 +122,25 @@ def legal_stale(email: str) -> None:
         sys.exit(f"system_state : aucun compte unique pour {email}")
 
 
+def signup_link(email: str) -> None:
+    """Tire le jeton d'une demande en attente comme le worker (ADR 0118) et imprime le
+    lien : les parcours tournent sans worker ni SMTP."""
+    from uuid import UUID
+
+    from app.core.tenancy import TenantContext, tenant_transaction
+    from app.modules.signup import repository, service
+
+    _engine_url()
+    with tenant_transaction(TenantContext.bootstrap(UUID(int=0))) as session:
+        request_id = repository.resend_target(session, email)
+    if request_id is None:
+        sys.exit(f"system_state : aucune demande en attente pour {email}")
+    issued = service.issue_verification(request_id)
+    if issued is None:
+        sys.exit(f"system_state : aucun lien possible pour {email}")
+    print(service.verification_link(issued[0]))
+
+
 if __name__ == "__main__":
     actions = {
         "healthy": healthy,
@@ -129,6 +149,9 @@ if __name__ == "__main__":
     }
     if len(sys.argv) == 3 and sys.argv[1] == "legal-stale":
         legal_stale(sys.argv[2])
+        sys.exit(0)
+    if len(sys.argv) == 3 and sys.argv[1] == "signup-link":
+        signup_link(sys.argv[2])
         sys.exit(0)
     if len(sys.argv) != 2 or sys.argv[1] not in actions:
         sys.exit(f"usage : system_state {'|'.join(actions)}|legal-stale <e-mail>")

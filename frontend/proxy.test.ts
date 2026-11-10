@@ -83,6 +83,13 @@ describe("proxy : vitrine et commerçant de retour (ADR 0115)", () => {
     ["/conditions", SESSION, null],
     ["/confidentialite", NONE, null],
     ["/confidentialite", KNOWN, null],
+    // Inscription libre-service (ADR 0118) : sans connexion ; le lien, à son seul format.
+    ["/inscription", NONE, null],
+    ["/inscription", KNOWN, null],
+    ["/verification", NONE, null],
+    ["/verification/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcde", NONE, null],
+    ["/verification/court", NONE, "/login?next=%2Fverification%2Fcourt"],
+    ["/verification/a/b", NONE, "/login?next=%2Fverification%2Fa%2Fb"],
     // L'écran d'acceptation, lui, exige une session.
     ["/acceptation", NONE, "/login?next=%2Facceptation"],
     ["/acceptation", SESSION, null],

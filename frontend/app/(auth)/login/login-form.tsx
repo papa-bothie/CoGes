@@ -11,6 +11,7 @@ import { PasswordField } from "@/components/password-field";
 import { isApiError, errorMessage } from "@/lib/api/errors";
 import { safeNext } from "@/lib/auth/safe-next";
 import { COMPANY_SUSPENDED, login } from "@/lib/auth/session";
+import { resendSignupLink } from "@/lib/signup/api";
 import { labels } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +48,9 @@ function failure(error: unknown): string {
   if (isApiError(error) && error.code === "temporary_password_expired") return t.temporaryExpired;
   // Entreprise suspendue (ADR 0089) : le bon mot de passe, mais l'accès est coupé.
   if (isApiError(error) && error.code === COMPANY_SUSPENDED) return t.suspended;
+  // Demande d'inscription pas encore activée (ADR 0118) : dit après le bon mot de passe.
+  if (isApiError(error) && error.code === "signup_email_pending") return t.signupEmailPending;
+  if (isApiError(error) && error.code === "signup_team_pending") return t.signupTeamPending;
   if (isApiError(error) && error.status === 401) return t.invalid;
   // Freinage par compte : le serveur dit combien de minutes attendre.
   if (isApiError(error) && error.status === 429 && error.details.scope === "account") {
@@ -61,6 +65,9 @@ export function LoginForm() {
   const reason = params.get("reason");
   const [formError, setFormError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(0);
+  // Lien e-mail à renvoyer, quand la connexion a révélé une demande en attente (ADR 0118).
+  const [resendTo, setResendTo] = useState<string | null>(null);
+  const [resent, setResent] = useState(false);
 
   const {
     register,
@@ -74,21 +81,29 @@ export function LoginForm() {
   });
 
   useEffect(() => {
-    const slug = rememberedSlug();
+    // Code de boutique prérempli depuis « Votre boutique est prête » ou l'e-mail de
+    // bienvenue (`?boutique=`), avant celui de la dernière connexion (ADR 0118).
+    const given = params.get("boutique")?.trim().toLowerCase() ?? "";
+    const slug = /^[a-z0-9-]{3,40}$/.test(given) ? given : rememberedSlug();
     if (slug) {
       setValue("company_slug", slug);
       setFocus("identifier");
     } else {
       setFocus("company_slug");
     }
-  }, [setValue, setFocus]);
+  }, [setValue, setFocus, params]);
 
   const onSubmit = async (values: LoginValues) => {
     setFormError(null);
+    setResendTo(null);
+    setResent(false);
     try {
       await login(values);
     } catch (error) {
       setFormError(failure(error));
+      if (isApiError(error) && error.code === "signup_email_pending") {
+        setResendTo(values.identifier.includes("@") ? values.identifier : null);
+      }
       return;
     }
     try {
@@ -128,6 +143,20 @@ export function LoginForm() {
           className="rounded-champ bg-depenses-teinte px-4 py-3.5 font-bold text-depenses-encre"
         >
           {formError}
+          {resendTo && !resent && (
+            <button
+              type="button"
+              onClick={() => void resendSignupLink(resendTo).then(() => setResent(true))}
+              className="mt-2 block min-h-cible font-bold underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              {t.signupResend}
+            </button>
+          )}
+        </p>
+      )}
+      {resent && (
+        <p role="status" className="rounded-champ bg-voile px-4 py-3 font-semibold">
+          {t.signupResent}
         </p>
       )}
 

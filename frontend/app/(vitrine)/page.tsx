@@ -12,14 +12,19 @@ import { Revele } from "@/components/vitrine/revele";
 import { VitrineHeader } from "@/components/vitrine/vitrine-header";
 import { vitrine, whatsappLink } from "@/content/vitrine";
 import { texte } from "@/content/vitrine-texte";
+import { labels } from "@/lib/labels";
+import { signupConfig } from "@/lib/signup/config";
 import { cn } from "@/lib/utils";
 
 /**
- * Page d'accueil publique (prompt 37, ADR 0115), rendue au build. `proxy.ts` ne la montre
- * qu'à un visiteur nouveau : une session mène à l'Accueil, `coges_known` à la connexion.
- * Aucune requête à l'API, aucun formulaire, aucun script tiers.
+ * Page d'accueil publique (prompt 37, ADR 0115). `proxy.ts` ne la montre qu'à un visiteur
+ * nouveau : une session mène à l'Accueil, `coges_known` à la connexion. Aucune requête à
+ * l'API depuis le navigateur, aucun formulaire, aucun script tiers.
+ *
+ * Revalidée toutes les 5 minutes (ADR 0118) : le **serveur** Next relit si l'inscription
+ * est ouverte (« Créer ma boutique ») ; le navigateur reçoit une page faite d'un bloc.
  */
-export const dynamic = "force-static";
+export const revalidate = 300;
 
 const SHARE_IMAGE = "/vitrine/partage.png";
 
@@ -134,8 +139,9 @@ function Illustration({
   );
 }
 
-export default function VitrinePage() {
+export default async function VitrinePage() {
   const t = texte;
+  const signup = await signupConfig();
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: structuredData() }} />
@@ -161,9 +167,23 @@ export default function VitrinePage() {
                 {t.hero.lead}
               </p>
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-                <WhatsAppLink className={cn(motion.eclat, "min-h-bouton text-libelle")}>
-                  {t.hero.whatsapp}
-                </WhatsAppLink>
+                {signup.enabled ? (
+                  <>
+                    <ButtonLink
+                      href="/inscription"
+                      className={cn(motion.eclat, "min-h-bouton text-libelle")}
+                    >
+                      {labels.signup.cta}
+                    </ButtonLink>
+                    <WhatsAppLink variant="borde" className="min-h-bouton text-libelle">
+                      {t.hero.whatsapp}
+                    </WhatsAppLink>
+                  </>
+                ) : (
+                  <WhatsAppLink className={cn(motion.eclat, "min-h-bouton text-libelle")}>
+                    {t.hero.whatsapp}
+                  </WhatsAppLink>
+                )}
                 <a
                   href="#comment"
                   className="inline-flex min-h-bouton items-center justify-center rounded-bouton border-2 border-input bg-card px-5 text-libelle font-bold text-foreground outline-none hover:bg-voile focus-visible:ring-3 focus-visible:ring-ring/60"
@@ -426,9 +446,12 @@ export default function VitrinePage() {
                 {t.footer.contact}
               </a>
               <p className="text-muted-foreground">{t.footer.hours}</p>
-              <ButtonLink href="/login" variant="borde">
-                {t.footer.login}
-              </ButtonLink>
+              <div className="flex flex-wrap gap-2">
+                <ButtonLink href="/login" variant="borde">
+                  {t.footer.login}
+                </ButtonLink>
+                {signup.enabled && <ButtonLink href="/inscription">{labels.signup.cta}</ButtonLink>}
+              </div>
             </div>
           </div>
           <div className="mx-auto flex max-w-page flex-col gap-1 px-4 pb-8 md:flex-row md:items-center md:justify-between md:px-marge-page">
