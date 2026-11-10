@@ -457,6 +457,10 @@ REGISTRY: dict[tuple[str, str], Critical | Exempt] = {
         "mot de passe de la personne connectée : sa propre session, couverte par "
         "test_temporary_password_expiry ; aucun argent, aucun stock"
     ),
+    ("POST", "/api/v1/auth/legal-acceptance"): Exempt(
+        "acceptation des textes légaux par la personne connectée (ADR 0117) : sa propre "
+        "ligne, couverte par test_legal_acceptance ; aucun argent, aucun stock"
+    ),
     # --- Ventes
     ("POST", "/api/v1/sales"): Critical(lambda w: Call("POST", "/api/v1/sales", {})),
     ("PATCH", "/api/v1/sales/{sale_id}"): Critical(

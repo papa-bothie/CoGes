@@ -398,6 +398,15 @@ def login_token(client: TestClient, company: DemoCompany, *, password: str = TES
     )
     assert response.status_code == 200, response.text
     token: str = response.json()["access_token"]
+    accept_legal(client, token)
+    return token
+
+
+def accept_legal(client: TestClient, token: str) -> str:
+    """Accepte les textes légaux (ADR 0117) et rend le jeton : sans cela, toute route
+    répond 409 `legal_acceptance_required`. Les tests de l'acceptation s'en passent."""
+    response = client.post("/api/v1/auth/legal-acceptance", headers=auth_headers(token), json={})
+    assert response.status_code == 204, response.text
     return token
 
 
@@ -456,6 +465,7 @@ def create_user_with_role(
     )
     assert login.status_code == 200, login.text
     access_token: str = login.json()["access_token"]
+    accept_legal(client, access_token)
     return access_token
 
 

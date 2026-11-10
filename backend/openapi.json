@@ -199,6 +199,41 @@
         }
       }
     },
+    "/api/v1/auth/legal-acceptance": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Accept Legal",
+        "description": "La personne connectée accepte les conditions et la politique de confidentialité.\n\nOuvert à un compte qui n'a pas accepté la version courante (ADR 0117) : c'est la\nseule écriture qu'il puisse faire. La version est celle du serveur ; le corps est vide.",
+        "operationId": "accept_legal_api_v1_auth_legal_acceptance_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegalAcceptance"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/companies/me": {
       "get": {
         "tags": [
@@ -13681,6 +13716,13 @@
         ],
         "title": "JobRunPage"
       },
+      "LegalAcceptance": {
+        "properties": {},
+        "additionalProperties": false,
+        "type": "object",
+        "title": "LegalAcceptance",
+        "description": "Corps vide : la version enregistrée est celle du serveur, jamais une version\nenvoyée, et pour la personne connectée seulement (ADR 0117)."
+      },
       "LineDiscount": {
         "$ref": "#/components/schemas/Amount-Input",
         "ge": "0"
@@ -13825,6 +13867,10 @@
             "type": "boolean",
             "title": "Via Support",
             "default": false
+          },
+          "legal_version": {
+            "type": "string",
+            "title": "Legal Version"
           }
         },
         "additionalProperties": false,
@@ -13833,7 +13879,8 @@
           "user",
           "roles",
           "permissions",
-          "company"
+          "company",
+          "legal_version"
         ],
         "title": "MeResponse",
         "description": "Identité de la session : ce dont l'interface a besoin pour s'afficher.\n\nLes permissions ne servent au front qu'à **masquer** : chaque route les vérifie\nà nouveau côté serveur. Aucune permission n'est exigée pour lire sa propre\nidentité, sans quoi un vendeur (ni `users:read`, ni `company:read`) ne saurait\npas qui il est."
@@ -13912,6 +13959,21 @@
           "must_change_password": {
             "type": "boolean",
             "title": "Must Change Password"
+          },
+          "must_accept_legal": {
+            "type": "boolean",
+            "title": "Must Accept Legal"
+          },
+          "legal_accepted_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Accepted Version"
           }
         },
         "additionalProperties": false,
@@ -13921,7 +13983,9 @@
           "email",
           "phone",
           "full_name",
-          "must_change_password"
+          "must_change_password",
+          "must_accept_legal",
+          "legal_accepted_version"
         ],
         "title": "MeUser"
       },

@@ -3,6 +3,7 @@
     deploy/scripts/e2e.sh system healthy            # tout va bien
     deploy/scripts/e2e.sh system missing-heartbeat  # le worker ne bat plus
     deploy/scripts/e2e.sh system build-exports      # produit les exports en attente
+    deploy/scripts/e2e.sh system legal-stale <e-mail>   # acceptation d'une ancienne version
 
 L'API des parcours tourne sans worker, sans beat ni relais : laissée telle quelle, elle
 est toujours en panne. `healthy` écrit ce que ces processus écriraient (battements, tic
@@ -97,12 +98,38 @@ def build_exports() -> None:
             )
 
 
+def legal_stale(email: str) -> None:
+    """Le compte `email` n'a accepté qu'une **ancienne** version des textes légaux (ADR
+    0117) : ce que voit tout le monde le jour où `LEGAL_VERSION` change. La constante ne se
+    change pas sous une API qui tourne ; la version acceptée, si."""
+    engine = create_engine(_engine_url())
+    try:
+        with engine.begin() as connection:
+            # Le propriétaire est soumis à la RLS FORCE : levée le temps de cette ligne.
+            connection.execute(text("ALTER TABLE users NO FORCE ROW LEVEL SECURITY"))
+            updated = connection.execute(
+                text(
+                    "UPDATE users SET legal_accepted_version = '2000-01-01', "
+                    "legal_accepted_at = now() WHERE email = :email AND deleted_at IS NULL"
+                ),
+                {"email": email},
+            ).rowcount
+            connection.execute(text("ALTER TABLE users FORCE ROW LEVEL SECURITY"))
+    finally:
+        engine.dispose()
+    if updated != 1:
+        sys.exit(f"system_state : aucun compte unique pour {email}")
+
+
 if __name__ == "__main__":
     actions = {
         "healthy": healthy,
         "missing-heartbeat": missing_heartbeat,
         "build-exports": build_exports,
     }
+    if len(sys.argv) == 3 and sys.argv[1] == "legal-stale":
+        legal_stale(sys.argv[2])
+        sys.exit(0)
     if len(sys.argv) != 2 or sys.argv[1] not in actions:
-        sys.exit(f"usage : system_state {'|'.join(actions)}")
+        sys.exit(f"usage : system_state {'|'.join(actions)}|legal-stale <e-mail>")
     actions[sys.argv[1]]()

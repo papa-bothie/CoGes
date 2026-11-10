@@ -22,6 +22,7 @@ from tests.conftest import (
     TEST_PASSWORD,
     DemoCompany,
     _create_demo_company,
+    accept_legal,
     auth_headers,
     login_token,
     write_headers,
@@ -112,6 +113,8 @@ def test_until_the_password_is_changed_only_me_and_password_answer(
 
     done = change(modou["temporary_password"], "mon-mot-de-passe-a-moi")
     assert done.status_code == 204, done.text
+    # Puis les textes légaux (ADR 0117), et enfin le reste.
+    accept_legal(api_client, seller)
     assert api_client.get("/api/v1/products", headers=auth_headers(seller)).status_code == 200
     assert (
         api_client.get("/api/v1/auth/me", headers=auth_headers(seller)).json()["user"][

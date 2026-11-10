@@ -207,6 +207,21 @@ class PasswordChangeRequiredError(CogesError):
     default_message = "Choisissez d'abord votre propre mot de passe."
 
 
+class LegalAcceptanceRequiredError(CogesError):
+    """Le compte n'a pas accepté la version courante des textes légaux (ADR 0117).
+
+    Même mécanique que le mot de passe provisoire (ADR 0074) : tant que c'est le cas,
+    seules l'identité (`/auth/me`) et l'acceptation (`/auth/legal-acceptance`) répondent.
+    """
+
+    code = "legal_acceptance_required"
+    status_code = 409
+    default_message = (
+        "Acceptez d'abord les conditions d'utilisation et de vente et la politique de "
+        "confidentialité."
+    )
+
+
 class CompanySuspendedError(CogesError):
     """L'entreprise est suspendue par l'administration de la plateforme (ADR 0089).
 

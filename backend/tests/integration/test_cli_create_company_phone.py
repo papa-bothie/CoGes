@@ -18,7 +18,7 @@ from sqlalchemy.orm import sessionmaker
 from app.cli import create_company, main
 from app.core.tenancy import TenantContext, tenant_transaction
 from app.modules.rbac.matrix import MANAGER
-from tests.conftest import TEST_PASSWORD, auth_headers
+from tests.conftest import TEST_PASSWORD, accept_legal, auth_headers
 
 pytestmark = pytest.mark.integration
 
@@ -169,7 +169,7 @@ def test_the_manager_phone_is_taken_for_the_people_screen(api_client: TestClient
     """Le numéro posé par la commande compte dans l'unicité de l'écran Personnes."""
     slug, national = _slug(), _national()
     _create(slug, manager_phone=national)
-    token = _login(api_client, slug, national).json()["access_token"]
+    token = accept_legal(api_client, _login(api_client, slug, national).json()["access_token"])
 
     twice = api_client.post(
         "/api/v1/users",
@@ -193,8 +193,8 @@ def test_the_same_phone_in_two_companies_gives_two_separate_managers(
     company_b, manager_b = _create(slug_b, manager_phone=_spaced(national))
     assert manager_a != manager_b
 
-    token_a = _login(api_client, slug_a, national).json()["access_token"]
-    token_b = _login(api_client, slug_b, national).json()["access_token"]
+    token_a = accept_legal(api_client, _login(api_client, slug_a, national).json()["access_token"])
+    token_b = accept_legal(api_client, _login(api_client, slug_b, national).json()["access_token"])
     me_a = api_client.get("/api/v1/auth/me", headers=auth_headers(token_a)).json()
     me_b = api_client.get("/api/v1/auth/me", headers=auth_headers(token_b)).json()
     assert (me_a["user"]["id"], me_a["company"]["id"]) == (str(manager_a), str(company_a))

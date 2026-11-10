@@ -34,6 +34,7 @@ from sqlalchemy.orm import sessionmaker
 from tests.conftest import (
     TEST_PASSWORD,
     DemoCompany,
+    accept_legal,
     auth_headers,
     read_scalar_in_tenant,
     write_headers,
@@ -441,7 +442,8 @@ def test_a_seller_cannot_read_the_margin(
     assert login.status_code == 200, login.text
 
     refused = api_client.get(
-        f"{OVERVIEW}?{_today_range()}", headers=auth_headers(login.json()["access_token"])
+        f"{OVERVIEW}?{_today_range()}",
+        headers=auth_headers(accept_legal(api_client, login.json()["access_token"])),
     )
     assert refused.status_code == 403, refused.text
     assert refused.json()["error"]["details"]["required_permission"] == "analytics:read"

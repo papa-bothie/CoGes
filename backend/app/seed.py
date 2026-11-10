@@ -39,9 +39,11 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import text
 
 from app.cli import create_company
 from app.core.errors import BusinessRuleError
+from app.core.legal import LEGAL_VERSION
 from app.core.tenancy import TenantContext, tenant_transaction
 from app.modules.auth import service as auth_service
 from app.modules.auth.schemas import LoginRequest
@@ -303,7 +305,33 @@ def seed(slug: str, *, password: str, days: int = DAYS, scale: float = 1.0) -> U
         ) from exc
     manager = TenantContext(user_id=UUID(manager_id_str), company_id=UUID(company_id_str))
     fill(manager, slug=slug, password=password, days=days, scale=scale)
+    accept_legal_for_everyone(manager)
     return manager.company_id
+
+
+def accept_legal_for_everyone(manager: TenantContext, *, at: datetime | None = None) -> None:
+    """Jeu local seulement (démo, maquette) : chaque compte a déjà accepté les textes
+    légaux (ADR 0117), pour que la démo et les captures s'ouvrent sur l'application.
+
+    Écrit sans ligne d'audit, exprès : ce n'est pas un geste de la personne, et l'écran
+    Historique de la démo et de la maquette doit rester celui des captures.
+    `--existing-slug` ne s'en sert pas : une vraie entreprise accepte elle-même. `at` : le
+    moment écrit (la maquette ne date rien après son heure figée), sinon maintenant."""
+    with tenant_transaction(TenantContext.bootstrap(manager.company_id)) as session:
+        session.execute(
+            text(
+                """
+                UPDATE users
+                   SET legal_accepted_version = :version, legal_accepted_at = :at
+                 WHERE company_id = :company_id AND deleted_at IS NULL;
+                """
+            ),
+            {
+                "version": LEGAL_VERSION,
+                "at": at or datetime.now(UTC),
+                "company_id": manager.company_id,
+            },
+        )
 
 
 def seed_existing(

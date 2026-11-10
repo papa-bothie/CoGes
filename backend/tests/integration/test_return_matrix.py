@@ -20,6 +20,7 @@ from sqlalchemy.orm import sessionmaker
 from tests.conftest import (
     TEST_PASSWORD,
     DemoCompany,
+    accept_legal,
     auth_headers,
     read_scalar_in_tenant,
     write_headers,
@@ -61,7 +62,7 @@ def _token_for_role(client: TestClient, token: str, company: DemoCompany, role: 
         json={"company_slug": company.slug, "email": email, "password": TEST_PASSWORD},
     )
     assert login.status_code == 200, login.text
-    return str(login.json()["access_token"])
+    return accept_legal(client, str(login.json()["access_token"]))
 
 
 def _product(client: TestClient, token: str, *, tracked: bool = True, stock: str = "100") -> str:

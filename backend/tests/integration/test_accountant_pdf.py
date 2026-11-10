@@ -26,6 +26,7 @@ from tests.conftest import (
     TEST_PASSWORD,
     DemoCompany,
     _create_demo_company,
+    accept_legal,
     auth_headers,
     login_token,
     write_headers,
@@ -426,7 +427,7 @@ def _account_with(
         "/api/v1/auth/login",
         json={"company_slug": company.slug, "email": email, "password": TEST_PASSWORD},
     )
-    return str(login.json()["access_token"])
+    return accept_legal(client, str(login.json()["access_token"]))
 
 
 def test_a_missing_read_or_export_right_is_refused(

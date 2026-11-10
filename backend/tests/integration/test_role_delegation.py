@@ -26,6 +26,7 @@ from tests.conftest import (
     TEST_PASSWORD,
     DemoCompany,
     _create_demo_company,
+    accept_legal,
     auth_headers,
     login_token,
 )
@@ -91,7 +92,10 @@ def delegate(
         json={"company_slug": company_alpha.slug, "email": email, "password": TEST_PASSWORD},
     )
     assert login.status_code == 200, login.text
-    return {"token": login.json()["access_token"], "role_id": str(role_id)}
+    return {
+        "token": accept_legal(api_client, login.json()["access_token"]),
+        "role_id": str(role_id),
+    }
 
 
 def test_a_delegate_cannot_create_a_manager(
