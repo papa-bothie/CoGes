@@ -480,7 +480,9 @@ d'inscription, appelées sous `coges_app` (qui n'a aucun droit direct sur ces ta
 pg_dump ne sauvegarde pas les rôles : une restauration sur un projet neuf exige ce script
 d'abord (`docs/runbooks/sauvegarde.md`). L'inscription reste **éteinte** tant que
 `COGES_SIGNUP_ENABLED` ne vaut pas `true` ; ouverte, elle exige `COGES_SIGNUP_IP_HASH_KEY`
-(`openssl rand -hex 32`, contrôlé par `check_runtime_env.py`). En local, sans recréer le
+(`openssl rand -hex 32`, contrôlé par `check_runtime_env.py`). Ouvrir ou fermer :
+`docs/runbooks/inscriptions.md` ; traiter les demandes : `docs/runbooks/demandes-inscription.md` ;
+e-mails (SPF, DKIM, DMARC) : `docs/runbooks/emails.md`. En local, sans recréer le
 volume :
 
 ```bash

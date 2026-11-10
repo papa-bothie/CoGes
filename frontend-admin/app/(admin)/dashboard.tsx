@@ -4,6 +4,7 @@ import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useSignupQueue } from "@/components/admin-shell";
 import { useSystemHealth } from "@/components/system-health";
 import { Card, Notice, PageHeader } from "@/components/ui";
 import { api, unwrap } from "@/lib/api/client";
@@ -42,9 +43,18 @@ function Tiles({ title, tiles, computedAt }: { title: string; tiles: Tile[]; com
 }
 
 /** « À traiter » (prompt 27, D1.6) : visible dès l'ouverture, sans naviguer. */
-function ToHandle({ attention }: { attention: AttentionRead }) {
+function ToHandle({ attention, signupQueue }: { attention: AttentionRead; signupQueue: number }) {
   const { state } = useSystemHealth();
   const items: { key: string; text: string; href: string; tone: "danger" | "attention" }[] = [];
+  // Demandes d'inscription qui attendent l'équipe (ADR 0118).
+  if (signupQueue > 0) {
+    items.push({
+      key: "demandes",
+      text: `${signupQueue} demande${signupQueue > 1 ? "s" : ""} d'inscription à traiter`,
+      href: "/demandes",
+      tone: "attention",
+    });
+  }
   if (state.kind === "down") {
     items.push({
       key: "systeme",
@@ -135,6 +145,7 @@ function ToHandle({ attention }: { attention: AttentionRead }) {
 }
 
 export function Dashboard() {
+  const signupQueue = useSignupQueue("/");
   const [team, setTeam] = useState<TeamSummary | null>(null);
   const [overview, setOverview] = useState<StatsOverview | null>(null);
   const [attention, setAttention] = useState<AttentionRead | null>(null);
@@ -151,7 +162,11 @@ export function Dashboard() {
     <section aria-labelledby="titre-tableau" className="space-y-8">
       <PageHeader id="titre-tableau" title="Tableau de bord" />
       {error && <Notice tone="danger">{error}</Notice>}
-      {attention ? <ToHandle attention={attention} /> : <p aria-live="polite">Chargement…</p>}
+      {attention ? (
+        <ToHandle attention={attention} signupQueue={signupQueue} />
+      ) : (
+        <p aria-live="polite">Chargement…</p>
+      )}
       {team && (
         <Tiles
           title="Équipe"

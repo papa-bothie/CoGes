@@ -205,6 +205,29 @@ consommation `coges_signup` qui pose une date de vérification du numéro, et ab
   vraie demande par l'API et ne force que la réponse de la page.
   `e2e.sh system signup-link <e-mail>` produit le lien qu'aurait envoyé le worker.
 
+### Administration (PR A)
+- Entrée **« Demandes »** dans le menu, avec le compteur de la file de l'équipe (relu à
+  chaque page). Le tableau de bord la compte aussi dans « À traiter ».
+- **Liste** : filtres (à traiter, lien en attente, ouvertes, refusées, abandonnées,
+  toutes), date, boutique, nom, téléphone, état en mots, ancienneté, pastille « Déjà
+  connu ».
+- **Statistiques des 30 derniers jours** : demandes avec et sans e-mail, ouvertes par le
+  lien ou par l'équipe, refusées, abandonnées, délai moyen. Avertissement visible si le
+  SMTP n'est pas configuré.
+- **Fiche** :
+  - « Déjà connu : boutique X » ;
+  - « Écrire sur WhatsApp » : lien `wa.me` prérempli et modifiable, gratuit, aucune API ;
+  - « Appeler » (`tel:`) ;
+  - note ;
+  - « Ouvrir la boutique » (confirmation unique) et « Refuser » (raison en liste fermée et
+    note) ;
+  - après l'ouverture, « Envoyer l'accès sur WhatsApp » : le code de la boutique et le lien
+    de connexion, **jamais le mot de passe**.
+  - Le support voit tout et ne décide rien.
+- **Runbooks** : `docs/runbooks/demandes-inscription.md` (traiter),
+  `inscriptions.md` (ouvrir ou fermer) et `emails.md` (relais SMTP, SPF, DKIM et DMARC
+  chez Cloudflare).
+
 ## Conséquences
 - **Prérequis** : `create_signup_role.sql` sur Neon (préproduction, puis production) avant
   le déploiement de la révision 0039 ; `COGES_SIGNUP_IP_HASH_KEY` avant d'allumer

@@ -37,3 +37,7 @@ export type AttentionRead = Schemas["AttentionRead"];
 export type TeamMemberUpdate = Schemas["TeamMemberUpdate"];
 export type SecurityEvent = Schemas["SecurityEvent"];
 export type RecoveryCodes = Schemas["RecoveryCodes"];
+// Inscription libre-service (ADR 0118).
+export type SignupRequestRead = Schemas["SignupRequestRead"];
+export type SignupRequestPage = Schemas["SignupRequestPage"];
+export type SignupStats = Schemas["SignupStats"];

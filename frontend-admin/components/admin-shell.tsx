@@ -179,6 +179,7 @@ function Navigation({
 }) {
   const pathname = usePathname();
   const current = currentHref(pathname);
+  const queue = useSignupQueue(pathname);
   return (
     <nav aria-label="Navigation principale" className="space-y-5">
       {NAV.map((group) => (
@@ -209,6 +210,12 @@ function Navigation({
                     >
                       <Icon aria-hidden="true" className="size-5 shrink-0" />
                       <span className="flex-1">{item.label}</span>
+                      {item.href === "/demandes" && queue > 0 && (
+                        <span className="inline-flex min-w-7 justify-center rounded-full bg-attention-teinte px-2 text-sm font-bold text-attention tabular-nums">
+                          {queue}
+                          <span className="sr-only"> à traiter</span>
+                        </span>
+                      )}
                       {item.href === "/system" && down && (
                         <span className="inline-flex items-center gap-1.5 text-sm text-danger">
                           <span aria-hidden="true" className="size-2.5 rounded-full bg-danger" />
@@ -226,4 +233,24 @@ function Navigation({
       ))}
     </nav>
   );
+}
+
+/** Demandes d'inscription qui attendent l'équipe (ADR 0118), relues à chaque page. */
+export function useSignupQueue(pathname: string): number {
+  const [queue, setQueue] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    unwrap(
+      api.GET("/api/v1/platform/signup-requests", {
+        params: { query: { status: "pending", path: "team", page_size: 1 } },
+      }),
+    ).then(
+      (page) => alive && setQueue(page.team_queue),
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+  }, [pathname]);
+  return queue;
 }
