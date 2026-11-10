@@ -465,6 +465,31 @@ compose (« Voir l'entreprise ») ; rien à ajouter dans `/etc/coges/coges.env`.
 ferme chaque nuit (01 h 30 UTC) les sessions échues restées ouvertes
 (`platform.support_sessions_close`). Procédure : `docs/runbooks/acces-support.md`.
 
+### Rôle `coges_signup` et inscription libre-service (révision 0039, ADR 0118)
+
+Rôle de cluster NOLOGIN, **avant** la migration 0039 sur Neon, en `neondb_owner`, sur la
+**préproduction d'abord, puis la production** (sans lui, la migration s'arrête avant de
+rien toucher et nomme ce script) :
+
+```bash
+psql "$NEONDB_OWNER_DSN" -f deploy/sql/create_signup_role.sql
+```
+
+Il possède les neuf fonctions `SECURITY DEFINER` qui lisent et écrivent les demandes
+d'inscription, appelées sous `coges_app` (qui n'a aucun droit direct sur ces tables).
+pg_dump ne sauvegarde pas les rôles : une restauration sur un projet neuf exige ce script
+d'abord (`docs/runbooks/sauvegarde.md`). L'inscription reste **éteinte** tant que
+`COGES_SIGNUP_ENABLED` ne vaut pas `true` ; ouverte, elle exige `COGES_SIGNUP_IP_HASH_KEY`
+(`openssl rand -hex 32`, contrôlé par `check_runtime_env.py`). En local, sans recréer le
+volume :
+
+```bash
+docker compose exec -T postgres psql -U postgres -c "CREATE ROLE coges_signup NOLOGIN NOBYPASSRLS" \
+  -c "GRANT coges_signup TO coges_owner WITH INHERIT FALSE"
+# puis, dans chaque base (coges, coges_test, coges_e2e) :
+#   GRANT USAGE ON SCHEMA public TO coges_signup;
+```
+
 ## Sauvegarde externe chiffrée (ADR 0084)
 
 Guide complet : `docs/runbooks/sauvegarde.md`. Chaque nuit à 02 h 15 UTC, GitHub Actions

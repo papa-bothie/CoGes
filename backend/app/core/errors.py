@@ -251,3 +251,48 @@ class SupportSessionEndedError(AuthenticationRequiredError):
 
     code = "support_session_ended"
     default_message = "L'accès support est terminé."
+
+
+class SignupUnavailableError(CogesError):
+    """L'inscription ne peut pas compter les demandes (Redis indisponible) : refus,
+    jamais une demande acceptée sans limite (ADR 0118)."""
+
+    code = "signup_unavailable"
+    status_code = 503
+    default_message = (
+        "Les inscriptions sont momentanément indisponibles. Réessayez dans quelques minutes, "
+        "ou écrivez-nous sur WhatsApp."
+    )
+
+
+class SignupLinkInvalidError(CogesError):
+    """Lien de vérification inconnu, expiré ou déjà utilisé : une seule réponse."""
+
+    code = "signup_link_invalid"
+    status_code = 400
+    default_message = (
+        "Ce lien ne marche plus : il a expiré ou a déjà servi. Demandez-en un nouveau."
+    )
+
+
+class SignupPendingError(CogesError):
+    """Connexion avec les coordonnées d'une demande pas encore activée (ADR 0118).
+
+    Révélé seulement **après** le mot de passe vérifié, sans session ni jeton.
+    """
+
+    status_code = 403
+
+    def __init__(self, *, email_pending: bool) -> None:
+        if email_pending:
+            self.code = "signup_email_pending"
+            message = (
+                "Votre boutique n'est pas encore ouverte : ouvrez le lien reçu par e-mail. "
+                "Vous pouvez en demander un nouveau."
+            )
+        else:
+            self.code = "signup_team_pending"
+            message = (
+                "Votre boutique est en cours d'activation : nous vous contactons sur WhatsApp."
+            )
+        super().__init__(message)

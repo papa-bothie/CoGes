@@ -1,0 +1,23 @@
+# Adresses jetables connues (ADR 0118) : la demande passe par l'équipe, sans refus.
+# Une ligne par domaine ; les sous-domaines comptent aussi. Liste courte, à compléter.
+10minutemail.com
+dispostable.com
+emailondeck.com
+fakeinbox.com
+getnada.com
+guerrillamail.com
+guerrillamailblock.com
+maildrop.cc
+mailinator.com
+mailnesia.com
+mintemail.com
+mohmal.com
+sharklasers.com
+temp-mail.org
+tempmail.com
+tempmail.dev
+tempmailo.com
+throwawaymail.com
+trashmail.com
+yopmail.com
+yopmail.fr

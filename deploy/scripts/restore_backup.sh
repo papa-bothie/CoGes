@@ -16,7 +16,7 @@
 #     par-dessus la production ;
 #   • base cible non vide (une table, un type, une fonction ou une séquence dans le
 #     schéma public, hors extensions) : après un échec, recréer la base ;
-#   • coges_auth, coges_bus, coges_ops ou coges_billing absent de la cible, ou sans USAGE
+#   • coges_auth, coges_bus, coges_ops, coges_billing ou coges_signup absent de la cible, ou sans USAGE
 #     et CREATE sur son schéma public (le message donne le GRANT à lancer) ;
 #   • pg_restore d'une version majeure plus ancienne que le pg_dump noté dans le
 #     manifeste (ADR 0095 ; manifeste sans version : avertissement seulement).
@@ -126,7 +126,7 @@ missing=$(psql "$TARGET" -X -A -t -F ' ' -v ON_ERROR_STOP=1 -c "
       WHEN has_schema_privilege(r, 'public', 'USAGE')
        AND has_schema_privilege(r, 'public', 'CREATE') THEN 'ok'
       ELSE 'droits' END AS state
-    FROM unnest(ARRAY['coges_auth', 'coges_bus', 'coges_ops', 'coges_billing']) AS r
+    FROM unnest(ARRAY['coges_auth', 'coges_bus', 'coges_ops', 'coges_billing', 'coges_signup']) AS r
   ) roles WHERE state <> 'ok' ORDER BY r")
 absent=$(awk '$2 == "absent" { print $1 }' <<<"$missing" | paste -sd ' ' -)
 [[ -z "$absent" ]] \
@@ -135,7 +135,7 @@ lacking=$(awk '$2 == "droits" { print $1 }' <<<"$missing" | paste -sd ',' - | se
 [[ -z "$lacking" ]] \
   || die "$lacking sans USAGE et CREATE sur le schéma public de la cible ; lancer, en" \
     "propriétaire de la base : GRANT USAGE, CREATE ON SCHEMA public TO $lacking;"
-echo "    coges_auth, coges_bus, coges_ops, coges_billing : USAGE et CREATE sur public"
+echo "    coges_auth, coges_bus, coges_ops, coges_billing, coges_signup : USAGE et CREATE sur public"
 
 echo "3/4 — sommaire, déchiffrement et restauration"
 # pg_restore --list peut s'arrêter avant la fin du flux : age reçoit alors SIGPIPE (141).

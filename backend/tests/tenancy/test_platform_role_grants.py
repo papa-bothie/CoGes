@@ -130,6 +130,40 @@ COLUMN_GRANTS: dict[str, dict[str, set[str]]] = {
     "user_roles": {column: {"SELECT"} for column in ("user_id", "role_id", "company_id")},
     # La date seulement : ni `diff`, ni `entity_table`, ni l'acteur.
     "audit_logs": {column: {"SELECT"} for column in ("company_id", "occurred_at")},
+    # Demandes d'inscription (ADR 0118) : l'équipe lit tout sauf le mot de passe haché et
+    # l'empreinte de l'IP, qu'elle ne peut qu'effacer (tâche des 30 jours).
+    "signup_requests": {
+        **{
+            column: {"SELECT"}
+            for column in (
+                "id",
+                "legal_version",
+                "legal_accepted_at",
+                "email_verified_at",
+                "created_at",
+                "activated_company_id",
+            )
+        },
+        **{
+            column: {"SELECT", "UPDATE"}
+            for column in (
+                "shop_name",
+                "full_name",
+                "phone",
+                "email",
+                "path",
+                "path_changed_at",
+                "status",
+                "reject_reason",
+                "team_note",
+                "decided_at",
+                "decided_by",
+                "decided_via",
+                "purged_at",
+            )
+        },
+        **{column: {"UPDATE"} for column in ("password_hash", "ip_hash")},
+    },
 }
 
 #: Tables commerciales citées par le prompt : jamais le moindre droit, même en colonne.

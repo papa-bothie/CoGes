@@ -38,6 +38,8 @@ SUBSCRIPTIONS_DAILY = "platform.subscriptions_daily"
 TRIAL_NOTICE = "platform.trial_notice"
 #: Accès support (ADR 0092) : ferme à leur échéance les sessions restées ouvertes.
 SUPPORT_SESSIONS_CLOSE = "platform.support_sessions_close"
+#: Inscription libre-service (ADR 0118) : bascule à 48 h, abandon, effacement.
+SIGNUP_MAINTENANCE = "signup.maintenance"
 
 #: Délai dur d'une tâche (`task_time_limit`). Une trace restée `running` au-delà est
 #: celle d'un worker tué : la lecture la compte comme un échec.
@@ -130,6 +132,13 @@ BEAT_SCHEDULE: dict[str, dict[str, Any]] = {
         "task": SUPPORT_SESSIONS_CLOSE,
         "schedule": crontab(hour="1", minute="30"),
     },
+    # Toutes les heures, à 20 — demandes d'inscription (ADR 0118) : avec e-mail jamais
+    # vérifié depuis 48 h ⇒ file de l'équipe ; 7 jours sans suite ⇒ abandonnée ;
+    # 30 jours après refus ou abandon ⇒ données personnelles effacées.
+    "signup-maintenance": {
+        "task": SIGNUP_MAINTENANCE,
+        "schedule": crontab(minute="20"),
+    },
     # Toutes les 5 min — « beat est vivant et un worker consomme ». Écrit dans Redis et
     # pingue, sans toucher la base, qui peut ainsi s'endormir en préproduction.
     "beat-tick": {
@@ -168,6 +177,7 @@ JOB_FRESHNESS: dict[str, Freshness] = {
     ML_INFER: Freshness(DAILY, "ml_infer.infer"),
     SCAN_DUE_DEBTS: Freshness(DAILY, "notifications.scan_due_debts"),
     CHECK_REVENUE: Freshness(WEEKLY, "reconcile.check_revenue"),
+    SIGNUP_MAINTENANCE: Freshness(DAILY),
     SUBSCRIPTIONS_DAILY: Freshness(DAILY, TRIAL_NOTICE),
     SUPPORT_SESSIONS_CLOSE: Freshness(DAILY),
 }

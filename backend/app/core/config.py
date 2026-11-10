@@ -200,6 +200,35 @@ class Settings(BaseSettings):
     smtp_starttls: bool = True
     smtp_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
 
+    # --- Inscription libre-service (lot 30, ADR 0118) ---
+    # Éteinte par défaut : routes publiques en 404, aucun lien « Créer ma boutique ».
+    signup_enabled: bool = False
+    # Clé du HMAC qui remplace l'IP d'une demande (et les compteurs par numéro et par
+    # e-mail) : 32 caractères au moins. Un sha256 sans clé d'une IPv4 se retrouve en
+    # quelques minutes. Exigée dès que l'inscription est ouverte (`check_runtime_env.py`).
+    signup_ip_hash_key: SecretStr | None = None
+    # Adresse publique de la boutique (liens des e-mails) ; sur le VPS, posée par le compose.
+    merchant_url: str = "http://localhost:3000"
+    # Numéro WhatsApp du support, chiffres seuls, montré après une demande sans e-mail et
+    # dans l'e-mail de bienvenue ; le même que celui de la vitrine (`content/vitrine.ts`).
+    support_whatsapp: str = Field(default="221781811756", pattern=r"^[1-9][0-9]{6,14}$")
+    # Durées (ADR 0118) : lien e-mail, bascule vers l'équipe, abandon, effacement.
+    signup_token_ttl_hours: int = Field(default=24, ge=1)
+    signup_team_after_hours: int = Field(default=48, ge=1)
+    signup_abandon_after_days: int = Field(default=7, ge=1)
+    signup_purge_after_days: int = Field(default=30, ge=1)
+    # Limites (Redis, fermées si Redis manque) et plafonds.
+    signup_ip_per_hour: int = Field(default=5, ge=1)
+    signup_ip_per_day: int = Field(default=20, ge=1)
+    signup_phone_per_day: int = Field(default=3, ge=1)
+    signup_email_per_day: int = Field(default=3, ge=1)
+    signup_global_per_hour: int = Field(default=30, ge=1)
+    # Au-delà, les nouvelles demandes avec e-mail passent par l'équipe, et l'équipe est
+    # prévenue : jamais un refus silencieux.
+    signup_auto_per_day: int = Field(default=50, ge=1)
+    signup_resend_interval_seconds: int = Field(default=60, ge=1)
+    signup_resend_per_day: int = Field(default=5, ge=1)
+
     # Durée de vie d'un mot de passe provisoire (ADR 0078), en heures.
     temp_password_ttl_hours: int = Field(default=48, ge=1)
 
@@ -315,6 +344,29 @@ class Settings(BaseSettings):
                 f"(COGES_ENV vaut « {self.env} »)."
             )
         return self
+
+    @field_validator("signup_ip_hash_key", mode="before")
+    @classmethod
+    def _empty_signup_key_is_unset(cls, value: Any) -> Any:
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("signup_ip_hash_key")
+    @classmethod
+    def _signup_key_is_long_enough(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value()) < 32:
+            raise ValueError("COGES_SIGNUP_IP_HASH_KEY : 32 caractères au moins.")
+        return value
+
+    def require_signup_ip_hash_key(self) -> bytes:
+        """Clé du HMAC des demandes ; refus hors `local` et `ci` quand elle manque."""
+        if self.signup_ip_hash_key is not None:
+            return self.signup_ip_hash_key.get_secret_value().encode()
+        if self.env not in DEVELOPMENT_ENVS:
+            raise RuntimeError(
+                "COGES_SIGNUP_IP_HASH_KEY manque : l'inscription libre-service en a besoin "
+                f"(COGES_ENV vaut « {self.env} »)."
+            )
+        return b"coges-signup-cle-de-developpement-seulement"
 
     @field_validator("mfa_encryption_key", mode="before")
     @classmethod

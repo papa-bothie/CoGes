@@ -172,6 +172,12 @@ services:
       # Vides en mode `ip` ou `ssh` (check_runtime_env.py l'impose).
       COGES_ACCESS_TEAM_DOMAIN: ${COGES_ACCESS_TEAM_DOMAIN:-}
       COGES_ACCESS_AUD: ${COGES_ACCESS_AUD:-}
+      # Inscription libre-service (ADR 0118) : éteinte par défaut ; ouverte, sa clé HMAC
+      # est exigée (check_runtime_env.py). L'API ne fait que savoir si un e-mail part.
+      COGES_SIGNUP_ENABLED: ${COGES_SIGNUP_ENABLED:-false}
+      COGES_SIGNUP_IP_HASH_KEY: ${COGES_SIGNUP_IP_HASH_KEY:-}
+      COGES_SUPPORT_WHATSAPP: ${COGES_SUPPORT_WHATSAPP:-221781811756}
+      COGES_MERCHANT_URL: https://${COGES_DOMAIN:?}
     networks:
       edge: { aliases: ["${COGES_STACK:?}-api"] }
       data: {}
@@ -204,6 +210,10 @@ services:
       COGES_SMTP_FROM: ${COGES_SMTP_FROM:-}
       # Liens d'invitation de l'équipe (ADR 0094).
       COGES_ADMIN_URL: https://admin.${COGES_DOMAIN:?}
+      # E-mails de l'inscription (ADR 0118) : lien de vérification et bienvenue.
+      COGES_MERCHANT_URL: https://${COGES_DOMAIN:?}
+      COGES_SUPPORT_WHATSAPP: ${COGES_SUPPORT_WHATSAPP:-221781811756}
+      COGES_SIGNUP_IP_HASH_KEY: ${COGES_SIGNUP_IP_HASH_KEY:-}
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
     volumes: [ml-artifacts:/var/lib/coges/ml]
     networks: [data, jobs]

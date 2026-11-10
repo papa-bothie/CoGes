@@ -186,13 +186,14 @@ majeure plus récente que lui, et `pg_restore` une archive d'un `pg_dump` plus r
       reprend les rôles `coges_*`. (Projet neuf : créer d'abord les rôles,
       `deploy/postgres/init/01-roles.sql` adapté, voir `deploy/README-infra.md`, « Rôles
       PostgreSQL », puis `deploy/sql/create_backup_role.sql` et
-      `deploy/sql/create_billing_role.sql`.)
+      `deploy/sql/create_billing_role.sql`, puis `deploy/sql/create_signup_role.sql` :
+      pg_dump ne sauvegarde pas les rôles, une restauration sans eux échoue sur les droits.)
    2. *SQL Editor* de cette branche, base **`neondb`** : l'éditeur se connecte en
       propriétaire de la base choisie, et c'est `neondb_owner` qui peut créer des rôles.
       Créer le rôle qui restaure, avec un mot de passe tapé seulement dans l'éditeur :
       ```sql
       CREATE ROLE coges_restorer LOGIN BYPASSRLS PASSWORD '…';
-      GRANT coges_owner, coges_auth, coges_bus, coges_ops, coges_billing
+      GRANT coges_owner, coges_auth, coges_bus, coges_ops, coges_billing, coges_signup
         TO coges_restorer WITH INHERIT TRUE, SET TRUE;
       ```
       `BYPASSRLS` : les tables sont en RLS `FORCE`, `pg_restore` les remplit sans filtre.
@@ -201,7 +202,7 @@ majeure plus récente que lui, et `pg_restore` une archive d'un `pg_dump` plus r
    4. *SQL Editor*, base `coges_secours` (donc en `coges_owner`, propriétaire du schéma
       `public`) :
       ```sql
-      GRANT USAGE, CREATE ON SCHEMA public TO coges_auth, coges_bus, coges_ops, coges_billing;
+      GRANT USAGE, CREATE ON SCHEMA public TO coges_auth, coges_bus, coges_ops, coges_billing, coges_signup;
       ```
       Sans ce droit, `ALTER FUNCTION … OWNER TO coges_bus` échoue au milieu de la
       restauration ; `restore_backup.sh` le vérifie avant et donne le `GRANT` à lancer.

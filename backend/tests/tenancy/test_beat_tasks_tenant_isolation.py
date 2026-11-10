@@ -76,6 +76,10 @@ PLATFORM: dict[str, str] = {
         "ferme les accès support échus sous le rôle de la plateforme (ADR 0092), "
         "sans rien lire d'une entreprise"
     ),
+    beat.SIGNUP_MAINTENANCE: (
+        "bascule, abandonne et efface des demandes d'inscription (ADR 0118), tables de la "
+        "plateforme sous son rôle : aucune entreprise n'existe encore"
+    ),
 }
 
 _TABLES = text(

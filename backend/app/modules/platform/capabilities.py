@@ -53,6 +53,13 @@ LABELS: dict[str, str] = {
     f"GET {_PLATFORM}/system/workers": "Voir l'état du système",
     f"GET {_PLATFORM}/system/job-runs": "Voir l'historique des tâches",
     f"GET {_PLATFORM}/system/outbox": "Voir les événements en échec",
+    # Demandes d'inscription (ADR 0118), servies par le module Signup.
+    f"GET {_PLATFORM}/signup-requests": "Voir les demandes d'inscription",
+    f"GET {_PLATFORM}/signup-requests/stats": "Voir les statistiques des inscriptions",
+    f"GET {_PLATFORM}/signup-requests/{{request_id}}": "Voir une demande d'inscription",
+    f"POST {_PLATFORM}/signup-requests/{{request_id}}/activate": "Ouvrir une boutique demandée",
+    f"POST {_PLATFORM}/signup-requests/{{request_id}}/reject": "Refuser une demande d'inscription",
+    f"PUT {_PLATFORM}/signup-requests/{{request_id}}/note": "Noter une demande d'inscription",
     f"GET {_PLATFORM}/team": "Voir l'équipe",
     f"GET {_PLATFORM}/team/summary": "Voir le bilan de l'équipe",
     f"POST {_PLATFORM}/team/invitations": "Inviter un collègue",

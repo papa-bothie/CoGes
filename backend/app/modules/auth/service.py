@@ -31,6 +31,7 @@ from app.core.config import get_settings
 from app.core.errors import (
     AuthenticationRequiredError,
     CompanySuspendedError,
+    SignupPendingError,
     TemporaryPasswordExpiredError,
 )
 from app.core.phone import normalise_phone
@@ -53,6 +54,7 @@ from app.modules.auth.repository import (
 from app.modules.auth.schemas import LoginRequest, MeCompany, MeResponse, MeRole, MeUser
 from app.modules.companies import service as companies_service
 from app.modules.rbac import service as rbac_service
+from app.modules.signup import service as signup_service
 from app.modules.users import service as users_service
 
 #: Haché une fois au chargement : sert de leurre quand aucune identité n'est trouvée,
@@ -172,8 +174,21 @@ def login(
         typed=key or raw.strip().lower(),
     )
 
-    password_hash = identity.password_hash if identity else _DECOY_HASH
+    # Aucun compte : une demande d'inscription en attente, peut-être (ADR 0118). Son
+    # mot de passe haché prend la place du leurre : toujours UNE vérification Argon2, la
+    # durée ne trahit ni un compte ni une demande.
+    pending = signup_service.pending_login(raw) if identity is None and key else None
+    if identity is not None:
+        password_hash = identity.password_hash
+    else:
+        password_hash = pending.password_hash if pending else _DECOY_HASH
     password_matches = verify_password(payload.password, password_hash)
+
+    if pending is not None and password_matches:
+        # Son message n'est donné qu'après le mot de passe vérifié, sans session ni jeton ;
+        # l'essai n'est ni un échec ni un succès, comme un provisoire expiré.
+        rate_limit.cancel_attempt(attempt)
+        raise SignupPendingError(email_pending=pending.email_pending)
 
     if identity is None or not password_matches or not identity.is_active:
         failure = rate_limit.record_failure(attempt)

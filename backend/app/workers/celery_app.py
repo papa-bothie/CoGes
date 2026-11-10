@@ -128,6 +128,7 @@ celery_app = Celery(
         "app.workers.tasks.exports",
         "app.workers.tasks.system",
         "app.workers.tasks.platform",
+        "app.workers.tasks.signup",
     ],
 )
 celery_app.conf.update(
