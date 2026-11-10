@@ -4,8 +4,11 @@ Mesuré par `make lighthouse` (Lighthouse 13.5.0, Chromium de Playwright, entrep
 
 | Écran | Page | Score | Audits non réussis |
 |---|---|---|---|
-| 00 Vitrine (page d'accueil publique) | `/` | 100 | — |
-| 00b Vitrine sur téléphone (390 px) | `/` | 100 | — |
+| 00 Vitrine (page d'accueil publique) | `/` | 96 | `color-contrast` |
+| 00b Vitrine sur téléphone (390 px) | `/` | 96 | `color-contrast` |
+| 00c Conditions d'utilisation et de vente | `/conditions` | 100 | — |
+| 00d Politique de confidentialité | `/confidentialite` | 100 | — |
+| 00e Conditions sur téléphone (390 px) | `/conditions` | 100 | — |
 | 25 Connexion | `/login` | 100 | — |
 | 01 Accueil | `/dashboard` | 100 | — |
 | 02 Nouvelle vente | `/sales/new` | 100 | — |

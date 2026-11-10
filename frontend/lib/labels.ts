@@ -101,6 +101,28 @@ export const labels = {
       logout: "Se déconnecter",
     },
   },
+  /** Textes légaux (prompt 36, ADR 0117). Les textes eux-mêmes sont dans `content/legal/`. */
+  legal: {
+    conditions: "Conditions d'utilisation et de vente",
+    privacy: "Confidentialité",
+    linksLabel: "Textes légaux",
+    version: (date: string) => `Version du ${date}`,
+    backHome: "Accueil",
+    login: "Se connecter",
+    acceptance: {
+      pageTitle: "Avant de continuer",
+      intro:
+        "Pour utiliser CoGes, lisez et acceptez nos conditions d'utilisation et de vente et notre politique de confidentialité.",
+      conditionsLink: "Lire les conditions d'utilisation et de vente",
+      privacyLink: "Lire la politique de confidentialité",
+      consent:
+        "J'ai lu et j'accepte les conditions d'utilisation et de vente et la politique de confidentialité.",
+      submit: "Accepter et continuer",
+      hint: "Cochez la case pour continuer.",
+      logout: "Se déconnecter",
+      opensNewTab: "(s'ouvre dans un nouvel onglet)",
+    },
+  },
   validation: {
     required: "Ce champ est obligatoire.",
     slug: "3 à 40 caractères : lettres minuscules, chiffres et tirets.",

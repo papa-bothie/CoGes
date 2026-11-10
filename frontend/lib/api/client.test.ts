@@ -143,3 +143,44 @@ describe("authFetch", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 });
+
+describe("authFetch : textes légaux (ADR 0117)", () => {
+  const legal = (code: string) =>
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: { code, message: "", details: {} } }), {
+          status: 409,
+        }),
+    );
+
+  it("un 409 legal_acceptance_required ouvre l'écran d'acceptation, sans rafraîchir", async () => {
+    const onLegalRequired = vi.fn();
+    const refresh = vi.fn(async () => "ok" as RefreshOutcome);
+    const authFetch = createAuthFetch({
+      fetch: legal("legal_acceptance_required"),
+      refresh,
+      onExpired: vi.fn(),
+      onSuspended: vi.fn(),
+      token: tokenHolder("neuf"),
+      onLegalRequired,
+    });
+    const response = await authFetch(new Request(url));
+    expect(response.status).toBe(409);
+    expect(onLegalRequired).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("un autre 409 ne l'ouvre pas", async () => {
+    const onLegalRequired = vi.fn();
+    const authFetch = createAuthFetch({
+      fetch: legal("insufficient_stock"),
+      refresh: vi.fn(async () => "ok" as RefreshOutcome),
+      onExpired: vi.fn(),
+      onSuspended: vi.fn(),
+      token: tokenHolder("neuf"),
+      onLegalRequired,
+    });
+    await authFetch(new Request(url));
+    expect(onLegalRequired).not.toHaveBeenCalled();
+  });
+});

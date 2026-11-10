@@ -19,7 +19,16 @@ export const E2E: Credentials = {
   password: process.env.E2E_PASSWORD ?? "demo-coges-2026",
 };
 
-export async function loginThroughUi(page: Page, credentials: Credentials) {
+/**
+ * `acceptLegal` (défaut) : si « Avant de continuer » s'ouvre (textes légaux, ADR 0117), la
+ * case est cochée et l'écran passé, comme le ferait la personne. Le parcours qui prouve
+ * l'écran lui-même passe `{ acceptLegal: false }`.
+ */
+export async function loginThroughUi(
+  page: Page,
+  credentials: Credentials,
+  { acceptLegal = true }: { acceptLegal?: boolean } = {},
+) {
   // Une fois chargé, le formulaire remet le dernier code de boutique puis place le curseur.
   // Remplir avant, c'est risquer d'ajouter au code remis au lieu de le remplacer (« e2ee2e »).
   await expect(page.locator("form input:focus")).toHaveCount(1);
@@ -27,6 +36,58 @@ export async function loginThroughUi(page: Page, credentials: Credentials) {
   await page.getByLabel("Votre e-mail ou téléphone").fill(credentials.email);
   await page.getByLabel("Mot de passe", { exact: true }).fill(credentials.password);
   await page.getByRole("button", { name: "Entrer" }).click();
+  if (acceptLegal) await acceptLegalIfAsked(page);
+}
+
+export const LEGAL_HEADING = "Avant de continuer";
+
+/**
+ * Attend où mène la connexion : l'application (`#contenu`), une erreur, le mot de passe
+ * provisoire, ou « Avant de continuer », qu'on accepte alors. Rien d'autre n'est touché.
+ */
+export async function acceptLegalIfAsked(page: Page) {
+  const asked = page.getByRole("heading", { name: LEGAL_HEADING });
+  const settled = asked
+    .or(page.locator("#contenu"))
+    // L'erreur du formulaire seulement : l'annonceur de route de Next est aussi un `alert`.
+    .or(page.locator("form").getByRole("alert"))
+    // Une saisie refusée avant tout appel : rien n'est envoyé, rien ne s'ouvrira.
+    .or(page.locator('form [aria-invalid="true"]'))
+    .or(page.getByRole("heading", { name: "Choisissez votre mot de passe" }));
+  try {
+    await settled.first().waitFor({ timeout: 30_000 });
+  } catch {
+    return;
+  }
+  if (!(await asked.isVisible())) return;
+  await page.getByRole("checkbox", { name: /J'ai lu et j'accepte/ }).check();
+  await page.getByRole("button", { name: "Accepter et continuer" }).click();
+  await expect(page).not.toHaveURL(/\/acceptation$/, { timeout: 30_000 });
+}
+
+/**
+ * Jeton d'accès d'un compte par l'API, textes légaux acceptés (ADR 0117) : sans cela, toute
+ * route répond 409 `legal_acceptance_required`.
+ */
+export async function apiLogin(
+  request: APIRequestContext,
+  credentials: Credentials,
+): Promise<string> {
+  const response = await request.post("/api/v1/auth/login", {
+    data: {
+      company_slug: credentials.slug,
+      email: credentials.email,
+      password: credentials.password,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+  const token = (await response.json()).access_token as string;
+  const accepted = await request.post("/api/v1/auth/legal-acceptance", {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {},
+  });
+  expect(accepted.status()).toBe(204);
+  return token;
 }
 
 /** Jeton d'un gérant, obtenu par l'API **à travers la réécriture du front**. */
@@ -34,11 +95,7 @@ export async function managerToken(
   request: APIRequestContext,
   company: Credentials = E2E,
 ): Promise<string> {
-  const response = await request.post("/api/v1/auth/login", {
-    data: { company_slug: company.slug, email: company.email, password: company.password },
-  });
-  expect(response.ok()).toBeTruthy();
-  return (await response.json()).access_token as string;
+  return apiLogin(request, company);
 }
 
 /**

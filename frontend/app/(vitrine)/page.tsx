@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 
 import { BrandMark, BrandWordmark } from "@/components/brand/brand";
+import { LegalLinks } from "@/components/legal/legal-links";
 import { HeroTitle } from "@/components/vitrine/hero-title";
 import { ICONS, RUBRIQUE } from "@/components/vitrine/icons";
 import { ButtonLink, WhatsAppLink } from "@/components/vitrine/links";
@@ -430,9 +431,10 @@ export default function VitrinePage() {
               </ButtonLink>
             </div>
           </div>
-          <p className="mx-auto max-w-page px-4 pb-8 text-mini text-muted-foreground md:px-marge-page">
-            {t.footer.copyright}
-          </p>
+          <div className="mx-auto flex max-w-page flex-col gap-1 px-4 pb-8 md:flex-row md:items-center md:justify-between md:px-marge-page">
+            <LegalLinks />
+            <p className="text-mini text-muted-foreground">{t.footer.copyright}</p>
+          </div>
         </footer>
       </div>
       <Revele />

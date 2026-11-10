@@ -1,6 +1,13 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
-import { E2E, loginThroughUi, managerApi, managerToken, type Credentials } from "./fixtures";
+import {
+  apiLogin,
+  E2E,
+  loginThroughUi,
+  managerApi,
+  managerToken,
+  type Credentials,
+} from "./fixtures";
 
 /**
  * Droits (prompt 28, C3, ADR 0099) : un compte ne voit et n'atteint que ce que son rôle
@@ -53,15 +60,7 @@ async function login(page: Page, credentials: Credentials) {
 }
 
 async function tokenOf(request: APIRequestContext, credentials: Credentials) {
-  const response = await request.post("/api/v1/auth/login", {
-    data: {
-      company_slug: credentials.slug,
-      email: credentials.email,
-      password: credentials.password,
-    },
-  });
-  expect(response.ok()).toBeTruthy();
-  return { Authorization: `Bearer ${(await response.json()).access_token}` };
+  return { Authorization: `Bearer ${await apiLogin(request, credentials)}` };
 }
 
 /** Les entrées du menu principal, dans l'ordre (barre du haut, écran large). */

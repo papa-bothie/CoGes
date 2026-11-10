@@ -67,7 +67,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (mustChange) window.location.replace("/password");
   }, [mustChange]);
 
-  if (me.isPending || mustChange) return <ShellSkeleton />;
+  // Textes légaux (ADR 0117), après le mot de passe : même mécanique, même écran d'attente.
+  const mustAccept = !mustChange && me.data?.user.must_accept_legal === true;
+  useEffect(() => {
+    if (mustAccept) window.location.replace("/acceptation");
+  }, [mustAccept]);
+
+  if (me.isPending || mustChange || mustAccept) return <ShellSkeleton />;
 
   if (me.isError) {
     return (

@@ -16,8 +16,11 @@ import { DEFAULT_NEXT, safeNext } from "@/lib/auth/safe-next";
  */
 const SESSION_MARKER = "coges_session";
 const PUBLIC_PWA = new Set(["/manifest.webmanifest", "/sw.js", "/hors-ligne"]);
-// Routes publiques de la vitrine, nommées une à une (jamais un motif large).
+// Routes publiques de la vitrine, nommées une à une (jamais un motif large) ; les textes
+// légaux s'ouvrent sans connexion (prompt 36, ADR 0117).
 const PUBLIC_VITRINE = new Set([
+  "/conditions",
+  "/confidentialite",
   "/robots.txt",
   "/sitemap.xml",
   ...VITRINE_FILES.map((name) => `/vitrine/${name}`),

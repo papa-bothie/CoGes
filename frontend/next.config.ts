@@ -52,6 +52,13 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
   },
+  // Anciennes adresses des conditions (prompt 36, ADR 0117) : un seul texte, `/conditions`.
+  async redirects() {
+    return [
+      { source: "/cgu", destination: "/conditions", permanent: true },
+      { source: "/cgv", destination: "/conditions", permanent: true },
+    ];
+  },
   async rewrites() {
     return [{ source: "/api/v1/:path*", destination: `${apiOrigin()}/api/v1/:path*` }];
   },

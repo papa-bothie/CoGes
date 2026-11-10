@@ -8,3 +8,5 @@ test-results
 next-env.d.ts
 AGENTS.md
 CLAUDE.md
+# Textes légaux déposés par le propriétaire : jamais reformatés (prompt 36, ADR 0117).
+content/legal/

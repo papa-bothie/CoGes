@@ -7,7 +7,8 @@
  * les pages : la session de la gérante (cookie de rafraîchissement) suit Lighthouse.
  *
  * Écrit `docs/design/captures/phase-15/lighthouse.md` et échoue sous 95. La vitrine (`/`,
- * ADR 0115) est mesurée en premier, sans cookie : celle d'un visiteur nouveau.
+ * ADR 0115) et les textes légaux (ADR 0117) sont mesurés en premier, sans cookie : ceux
+ * d'un visiteur nouveau.
  */
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -36,6 +37,10 @@ const SCREENS = [
   // Vitrine (prompt 37, ADR 0115) : mesurée d'abord, profil neuf, donc visiteur nouveau.
   ["00", "Vitrine (page d'accueil publique)", "/"],
   ["00b", "Vitrine sur téléphone (390 px)", "/"],
+  // Textes légaux (prompt 36, ADR 0117) : publics, sans cookie comme la vitrine.
+  ["00c", "Conditions d'utilisation et de vente", "/conditions"],
+  ["00d", "Politique de confidentialité", "/confidentialite"],
+  ["00e", "Conditions sur téléphone (390 px)", "/conditions"],
   ["25", "Connexion", "/login"],
   ["01", "Accueil", "/dashboard"],
   ["02", "Nouvelle vente", "/sales/new"],
@@ -142,7 +147,7 @@ try {
       await page.waitForURL(/\/dashboard$/, { timeout: 60_000 });
     }
     const path = template.replace(/\{(\w+)\}/g, (_, key) => found[key]);
-    const phone = no === "26" || no === "00b";
+    const phone = no === "26" || no === "00b" || no === "00e";
     const result = await lighthouse(
       `${FRONT}${path}`,
       {
