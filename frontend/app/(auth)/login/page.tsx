@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { BrandLogo } from "@/components/brand/brand";
+import { LegalLinks } from "@/components/legal/legal-links";
 import { labels } from "@/lib/labels";
 
 import { LoginForm } from "./login-form";
@@ -38,6 +39,7 @@ export default function LoginPage() {
           <Suspense>
             <LoginForm />
           </Suspense>
+          <LegalLinks className="pt-2" />
         </div>
       </section>
     </main>

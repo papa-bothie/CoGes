@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.legal import LEGAL_VERSION
 from app.modules.rbac.matrix import (
     ACCOUNTANT,
     ACCOUNTANT_PERMISSIONS,
@@ -31,6 +32,8 @@ def test_manager_sees_self_company_and_every_permission(
         "phone": None,
         "full_name": "Gérante de test",
         "must_change_password": False,
+        "must_accept_legal": False,
+        "legal_accepted_version": LEGAL_VERSION,
     }
     assert [(role["name"], role["description"]) for role in body["roles"]] == [("gerant", "Gérant")]
     assert body["company"] == {

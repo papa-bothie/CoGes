@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import {
+  apiLogin,
   createSalesperson,
   customerWithCredit,
   DEMO,
@@ -135,10 +136,7 @@ test("un vendeur n'accède pas aux paramètres, ni à l'écran ni à l'API", asy
   await expect(page.getByRole("navigation", { name: "Rubriques des réglages" })).toHaveCount(0);
 
   // Côté API : chaque route refuse, quelle que soit l'interface.
-  const signIn = await request.post("/api/v1/auth/login", {
-    data: { company_slug: seller.slug, email: seller.email, password: seller.password },
-  });
-  const headers = { Authorization: `Bearer ${(await signIn.json()).access_token}` };
+  const headers = { Authorization: `Bearer ${await apiLogin(request, seller)}` };
   for (const [method, path] of [
     ["get", "/api/v1/companies/me"],
     ["patch", "/api/v1/companies/me"],

@@ -21,6 +21,7 @@ from tests.conftest import (
     TEST_PASSWORD,
     DemoCompany,
     _create_demo_company,
+    accept_legal,
     auth_headers,
     login_token,
     write_headers,
@@ -235,7 +236,7 @@ def test_a_ticked_line_takes_effect_for_the_person(api_client: TestClient) -> No
             "password": TEST_PASSWORD,
         },
     )
-    modou = logged.json()["access_token"]
+    modou = accept_legal(api_client, logged.json()["access_token"])
     assert api_client.get("/api/v1/debts", headers=auth_headers(modou)).status_code == 403
 
     _set(api_client, token, seller["role_id"], ["base", "see", "sell", "collect_debt"])
@@ -390,14 +391,17 @@ def test_history_needs_the_audit_permission(api_client: TestClient) -> None:
             "role_ids": [seller["role_id"]],
         },
     )
-    modou = api_client.post(
-        "/api/v1/auth/login",
-        json={
-            "company_slug": company.slug,
-            "identifier": "modou@example.com",
-            "password": TEST_PASSWORD,
-        },
-    ).json()["access_token"]
+    modou = accept_legal(
+        api_client,
+        api_client.post(
+            "/api/v1/auth/login",
+            json={
+                "company_slug": company.slug,
+                "identifier": "modou@example.com",
+                "password": TEST_PASSWORD,
+            },
+        ).json()["access_token"],
+    )
     assert (
         api_client.get("/api/v1/analytics/history", headers=auth_headers(modou)).status_code == 403
     )

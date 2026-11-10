@@ -136,6 +136,17 @@ describe("service worker (ADR 0102)", () => {
     expect(await sw.cached()).toEqual(PRECACHED);
   });
 
+  it("les textes légaux ne sont jamais gardés : une nouvelle version paraît (ADR 0117)", async () => {
+    const sw = environment();
+    await sw.dispatch("install");
+    for (const path of ["/conditions", "/confidentialite"]) {
+      const page = sw.request(path, { mode: "navigate", auth: false });
+      expect(page).not.toBe(false);
+      await page;
+    }
+    expect(await sw.cached()).toEqual(PRECACHED);
+  });
+
   it("un identifiant de build ne casse jamais la source du worker", () => {
     expect(() => environment("v1*/ throw 1; /*")).not.toThrow();
     expect(serviceWorkerSource("v1*/x")).not.toContain("v1*/x */");

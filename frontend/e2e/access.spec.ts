@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { DEMO, E2E, loginThroughUi, managerApi } from "./fixtures";
+import { acceptLegalIfAsked, DEMO, E2E, loginThroughUi, managerApi } from "./fixtures";
 
 /**
  * Lot 3e (ADR 0074) : une personne ajoutée par son téléphone reçoit un mot de passe
@@ -40,6 +40,9 @@ test("connexion par téléphone, puis le mot de passe provisoire est remplacé",
   await page.getByLabel("Nouveau mot de passe", { exact: true }).fill("mon-mot-de-passe-a-moi");
   await page.getByLabel("Retapez le nouveau mot de passe").fill("mon-mot-de-passe-a-moi");
   await page.getByRole("button", { name: "Enregistrer et entrer" }).click();
+  // Le mot de passe d'abord, puis les textes légaux (ADR 0117).
+  await expect(page).toHaveURL(/\/acceptation$/, { timeout: 30_000 });
+  await acceptLegalIfAsked(page);
   await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
   await expect(page.getByRole("heading", { level: 1, name: /^Bonjour / })).toBeVisible();
 });

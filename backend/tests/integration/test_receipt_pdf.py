@@ -19,6 +19,7 @@ from tests.conftest import (
     TEST_PASSWORD,
     DemoCompany,
     _create_demo_company,
+    accept_legal,
     auth_headers,
     create_user_with_role,
     login_token,
@@ -247,7 +248,7 @@ def test_a_missing_right_is_refused(
         "/api/v1/auth/login",
         json={"company_slug": shop.slug, "email": email, "password": TEST_PASSWORD},
     )
-    token = login.json()["access_token"]
+    token = accept_legal(api_client, login.json()["access_token"])
     assert _pdf(api_client, token, f"/api/v1/sales/{sale_id}/receipt/pdf").status_code == 403
 
 

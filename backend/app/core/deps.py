@@ -32,12 +32,13 @@ from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 
-from app.core import rate_limit, support_access
+from app.core import legal, rate_limit, support_access
 from app.core.config import get_settings
 from app.core.database import get_platform_app_session_factory
 from app.core.errors import (
     AuthenticationRequiredError,
     CompanySuspendedError,
+    LegalAcceptanceRequiredError,
     NotFoundError,
     PasswordChangeRequiredError,
     PermissionDeniedError,
@@ -58,6 +59,7 @@ _LOAD_IDENTITY = text(
     SELECT u.company_id AS company_id,
            u.is_active  AS is_active,
            u.must_change_password AS must_change_password,
+           u.legal_accepted_version AS legal_accepted_version,
            c.status::text AS company_status,
            COALESCE(
              array_agg(p.code) FILTER (WHERE p.code IS NOT NULL),
@@ -72,7 +74,8 @@ _LOAD_IDENTITY = text(
     LEFT JOIN permissions       p ON p.id = rp.permission_id
     WHERE u.id = :user_id
       AND u.deleted_at IS NULL
-    GROUP BY u.company_id, u.is_active, u.must_change_password, c.status
+    GROUP BY u.company_id, u.is_active, u.must_change_password, u.legal_accepted_version,
+             c.status
     """
 )
 
@@ -134,6 +137,14 @@ def get_tenant_session(
         # Un essai échu passe par la suspension (tâche de nuit, ADR 0091) : rien d'autre ici.
         if row.must_change_password and request.url.path not in PASSWORD_CHANGE_PATHS:
             raise PasswordChangeRequiredError()
+        # Textes légaux (ADR 0117), après le mot de passe : la même barrière, relue à chaque
+        # requête, si bien qu'une nouvelle version s'impose dès la requête suivante.
+        if (
+            legal.acceptance_required(row.legal_accepted_version)
+            and not row.must_change_password
+            and request.url.path not in legal.LEGAL_ACCEPTANCE_PATHS
+        ):
+            raise LegalAcceptanceRequiredError()
 
         company_id: UUID = row.company_id
         ctx = TenantContext(

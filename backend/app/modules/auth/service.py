@@ -25,7 +25,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
-from app.core import queue, rate_limit, support_access
+from app.core import legal, queue, rate_limit, support_access
 from app.core.audit import AuditAction, audit_critical
 from app.core.config import get_settings
 from app.core.errors import (
@@ -442,6 +442,9 @@ def current_identity(session: Session, ctx: TenantContext) -> MeResponse:
                 phone=None,
                 full_name=support_access.DISPLAY_NAME,
                 must_change_password=False,
+                # Le support lit seulement : il n'accepte rien au nom de l'entreprise.
+                must_accept_legal=False,
+                legal_accepted_version=None,
             ),
             roles=[
                 MeRole(
@@ -454,6 +457,7 @@ def current_identity(session: Session, ctx: TenantContext) -> MeResponse:
             permissions=sorted(ctx.permissions),
             company=me_company,
             via_support=True,
+            legal_version=legal.LEGAL_VERSION,
         )
     user = users_service.get_user(session, ctx, ctx.user_id)
     return MeResponse(
@@ -463,6 +467,8 @@ def current_identity(session: Session, ctx: TenantContext) -> MeResponse:
             phone=user.phone,
             full_name=user.full_name,
             must_change_password=user.must_change_password,
+            must_accept_legal=legal.acceptance_required(user.legal_accepted_version),
+            legal_accepted_version=user.legal_accepted_version,
         ),
         roles=[
             MeRole(
@@ -475,4 +481,5 @@ def current_identity(session: Session, ctx: TenantContext) -> MeResponse:
         ],
         permissions=sorted(ctx.permissions),
         company=me_company,
+        legal_version=legal.LEGAL_VERSION,
     )

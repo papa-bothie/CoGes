@@ -69,6 +69,7 @@ from app.modules.suppliers import service as suppliers_service
 from app.modules.suppliers.schemas import SupplierCreate, SupplierUpdate
 from app.modules.users import service as users_service
 from app.modules.users.schemas import UserCreate, UserUpdate
+from app.seed import accept_legal_for_everyone
 
 #: Le moment des captures, et la valeur de `COGES_FROZEN_NOW` qui va avec.
 FROZEN_NOW = datetime(2026, 10, 6, 10, 45, tzinfo=UTC)
@@ -478,6 +479,7 @@ def seed(*, slug: str = SLUG, password: str = PASSWORD, owner_engine: Engine | N
         raise SystemExit(f"Une entreprise porte déjà le slug « {slug} ».") from exc
     manager = TenantContext(user_id=UUID(manager_id), company_id=UUID(company_id))
     shop = _fill(manager, plan, slug=slug, password=password)
+    accept_legal_for_everyone(manager, at=OPENING)
     engine = owner_engine or create_engine(get_settings().require_owner_url(), future=True)
     try:
         _alerts(engine, manager.company_id)

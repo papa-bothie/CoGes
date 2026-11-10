@@ -154,6 +154,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/auth/legal-acceptance": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Accept Legal
+     * @description La personne connectée accepte les conditions et la politique de confidentialité.
+     *
+     *     Ouvert à un compte qui n'a pas accepté la version courante (ADR 0117) : c'est la
+     *     seule écriture qu'il puisse faire. La version est celle du serveur ; le corps est vide.
+     */
+    post: operations["accept_legal_api_v1_auth_legal_acceptance_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/companies/me": {
     parameters: {
       query?: never;
@@ -4810,6 +4833,12 @@ export interface components {
       /** Total */
       total: number;
     };
+    /**
+     * LegalAcceptance
+     * @description Corps vide : la version enregistrée est celle du serveur, jamais une version
+     *     envoyée, et pour la personne connectée seulement (ADR 0117).
+     */
+    LegalAcceptance: Record<string, never>;
     LineDiscount: components["schemas"]["Amount-Input"];
     LinePrice: components["schemas"]["Amount-Input"];
     /**
@@ -4877,6 +4906,8 @@ export interface components {
        * @default false
        */
       via_support: boolean;
+      /** Legal Version */
+      legal_version: string;
     };
     /**
      * MeRole
@@ -4910,6 +4941,10 @@ export interface components {
       full_name: string;
       /** Must Change Password */
       must_change_password: boolean;
+      /** Must Accept Legal */
+      must_accept_legal: boolean;
+      /** Legal Accepted Version */
+      legal_accepted_version: string | null;
     };
     /**
      * MerchantUser
@@ -7910,6 +7945,37 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["PasswordUpdate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  accept_legal_api_v1_auth_legal_acceptance_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LegalAcceptance"];
       };
     };
     responses: {

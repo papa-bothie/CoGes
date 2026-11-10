@@ -15,7 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from tests.conftest import TEST_BASE_URL, TEST_PASSWORD, DemoCompany, auth_headers
+from tests.conftest import TEST_BASE_URL, TEST_PASSWORD, DemoCompany, accept_legal, auth_headers
 
 pytestmark = pytest.mark.integration
 
@@ -40,7 +40,13 @@ def victim(
             json={"company_slug": company_alpha.slug, "email": email, "password": TEST_PASSWORD},
         )
         assert login.status_code == 200, login.text
-        yield browser, {"id": created.json()["id"], "token": login.json()["access_token"]}
+        yield (
+            browser,
+            {
+                "id": created.json()["id"],
+                "token": accept_legal(browser, login.json()["access_token"]),
+            },
+        )
 
 
 def test_a_password_given_by_the_manager_ends_the_old_sessions(

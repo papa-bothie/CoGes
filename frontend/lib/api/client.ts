@@ -45,7 +45,17 @@ export type AuthFetchDeps = {
   /** Entreprise suspendue (403 `company_suspended`, ADR 0089). */
   onSuspended: () => void;
   token: { fresh: () => string | null; get: () => string | null };
+  /** Textes légaux à accepter (409 `legal_acceptance_required`, ADR 0117). */
+  onLegalRequired?: () => void;
 };
+
+export const LEGAL_ACCEPTANCE_REQUIRED = "legal_acceptance_required";
+
+/** L'écran « Avant de continuer » ; rien à faire si l'on y est déjà. */
+export function openLegalAcceptance(): void {
+  if (typeof window === "undefined" || window.location.pathname === "/acceptation") return;
+  window.location.replace("/acceptation");
+}
 
 export function createAuthFetch(deps: AuthFetchDeps) {
   // Chaque requête dit sa version ; une version refusée (426) déclenche la mise à jour à un
@@ -67,6 +77,17 @@ export function createAuthFetch(deps: AuthFetchDeps) {
     try {
       const body = (await response.clone().json()) as { error?: { code?: string } };
       return body.error?.code === COMPANY_SUSPENDED;
+    } catch {
+      return false;
+    }
+  };
+
+  /** Une nouvelle version des textes légaux, publiée pendant qu'un onglet était ouvert. */
+  const isLegalRequired = async (response: Response): Promise<boolean> => {
+    if (response.status !== 409) return false;
+    try {
+      const body = (await response.clone().json()) as { error?: { code?: string } };
+      return body.error?.code === LEGAL_ACCEPTANCE_REQUIRED;
     } catch {
       return false;
     }
@@ -107,6 +128,10 @@ export function createAuthFetch(deps: AuthFetchDeps) {
       deps.onSuspended();
       return response;
     }
+    if (await isLegalRequired(response)) {
+      deps.onLegalRequired?.();
+      return response;
+    }
     if (response.status !== 401) return response;
     if (await isSupportEnd(response)) {
       deps.onExpired();
@@ -133,6 +158,7 @@ const authFetch = createAuthFetch({
   onExpired: expireSession,
   onSuspended: suspendSession,
   token: tokenStore,
+  onLegalRequired: openLegalAcceptance,
 });
 
 export const api = createClient<paths>({

@@ -15,7 +15,13 @@ from app.core.config import get_settings
 from app.core.deps import CurrentTenant, client_ip
 from app.core.errors import AuthenticationRequiredError
 from app.modules.auth import service
-from app.modules.auth.schemas import LoginRequest, MeResponse, PasswordUpdate, TokenResponse
+from app.modules.auth.schemas import (
+    LegalAcceptance,
+    LoginRequest,
+    MeResponse,
+    PasswordUpdate,
+    TokenResponse,
+)
 from app.modules.users import service as users_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -112,3 +118,14 @@ def change_password(
         ip_address=client_ip(request),
     )
     _set_refresh_cookie(response, raw_token)
+
+
+@router.post("/legal-acceptance", status_code=status.HTTP_204_NO_CONTENT)
+def accept_legal(payload: LegalAcceptance, request: Request, tenant: CurrentTenant) -> None:
+    """La personne connectée accepte les conditions et la politique de confidentialité.
+
+    Ouvert à un compte qui n'a pas accepté la version courante (ADR 0117) : c'est la
+    seule écriture qu'il puisse faire. La version est celle du serveur ; le corps est vide.
+    """
+    del payload
+    users_service.accept_legal(tenant.session, tenant.ctx, ip_address=client_ip(request))

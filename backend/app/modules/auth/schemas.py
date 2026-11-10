@@ -63,6 +63,17 @@ class MeUser(BaseModel):
     full_name: str
     #: Vrai : le front ouvre « Choisissez votre mot de passe » avant tout (ADR 0074).
     must_change_password: bool
+    #: Vrai : le front ouvre « Avant de continuer » (ADR 0117), après le mot de passe.
+    must_accept_legal: bool
+    #: Version acceptée (`AAAA-MM-JJ`), `None` tant que rien n'est accepté.
+    legal_accepted_version: str | None
+
+
+class LegalAcceptance(BaseModel):
+    """Corps vide : la version enregistrée est celle du serveur, jamais une version
+    envoyée, et pour la personne connectée seulement (ADR 0117)."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class MeRole(BaseModel):
@@ -107,3 +118,5 @@ class MeResponse(BaseModel):
     #: Vrai sous un jeton d'accès support (ADR 0092) : l'équipe CoGes lit, en lecture
     #: seule ; `user` et `roles` sont alors ceux, fictifs, du support.
     via_support: bool = False
+    #: Version courante des textes légaux (`app/core/legal.py`, ADR 0117).
+    legal_version: str

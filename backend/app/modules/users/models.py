@@ -29,6 +29,12 @@ class User(IdentifiedTenantBase):
     must_change_password_until: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    #: Version des textes légaux acceptée (`app/core/legal.py`, révision 0038, ADR 0117) ;
+    #: `None` tant que rien n'est accepté.
+    legal_accepted_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    legal_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     #: Moment où l'accès a été coupé, `None` tant qu'il est ouvert (révision 0020).
     deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

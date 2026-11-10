@@ -77,6 +77,15 @@ describe("proxy : vitrine et commerçant de retour (ADR 0115)", () => {
     ["/robots.txt", NONE, null],
     [IMAGE, NONE, null],
     [IMAGE, KNOWN, null],
+    // Textes légaux (prompt 36, ADR 0117) : sans connexion, connu ou non, connecté aussi.
+    ["/conditions", NONE, null],
+    ["/conditions", KNOWN, null],
+    ["/conditions", SESSION, null],
+    ["/confidentialite", NONE, null],
+    ["/confidentialite", KNOWN, null],
+    // L'écran d'acceptation, lui, exige une session.
+    ["/acceptation", NONE, "/login?next=%2Facceptation"],
+    ["/acceptation", SESSION, null],
   ];
 
   it.each(table)("%s avec %j → %s", (path, cookies, expected) => {
@@ -87,6 +96,8 @@ describe("proxy : vitrine et commerçant de retour (ADR 0115)", () => {
     expect(outcome(visit("/vitrine/inconnu.webp"))).toContain("/login");
     expect(outcome(visit("/vitrine"))).toContain("/login");
     expect(outcome(visit("/robots.txt/x"))).toContain("/login");
+    expect(outcome(visit("/conditions/x"))).toContain("/login");
+    expect(outcome(visit("/confidentialites"))).toContain("/login");
   });
 
   it("pose coges_known sur toute réponse qui porte coges_session=1", () => {

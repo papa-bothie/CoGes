@@ -13,6 +13,7 @@ from uuid import UUID
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import legal
 from app.core.audit import AuditAction, audit_critical
 from app.core.config import get_settings
 from app.core.errors import (
@@ -349,6 +350,36 @@ def change_own_password(
         entity_id=user.id,
         before={"password_changed": False},
         after={"password_changed": True},
+        ip_address=ip_address,
+    )
+    return user
+
+
+def accept_legal(session: Session, ctx: TenantContext, *, ip_address: str | None = None) -> User:
+    """La personne connectée accepte la version **courante** des textes légaux (ADR 0117).
+
+    La version vient du serveur (`app/core/legal.py`), jamais du client, et seulement pour
+    soi : `ctx.user_id` est relu en base par la dépendance de session. Déjà acceptée :
+    rien n'est réécrit, rien n'est audité.
+    """
+    user = get_user(session, ctx, ctx.user_id)
+    if user.legal_accepted_version == legal.LEGAL_VERSION:
+        return user
+    before = {"legal_accepted_version": user.legal_accepted_version}
+    user.legal_accepted_version = legal.LEGAL_VERSION
+    user.legal_accepted_at = datetime.now(UTC)
+    session.flush()
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.UPDATE,
+        entity_table="users",
+        entity_id=user.id,
+        before=before,
+        after={
+            "legal_accepted_version": user.legal_accepted_version,
+            "legal_accepted_at": user.legal_accepted_at.isoformat(),
+        },
         ip_address=ip_address,
     )
     return user
