@@ -23,10 +23,12 @@ import { FRONT_VERSION, FRONT_VERSION_HEADER, signalOutdated } from "@/lib/pwa/s
 
 /** Routes qui ne doivent jamais déclencher de rafraîchissement automatique. */
 const SESSION_ENDPOINTS = ["/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout"];
+/** Inscription libre-service (ADR 0118) : publiques, jamais de jeton ni de rafraîchissement. */
+const SIGNUP_PREFIX = "/api/v1/auth/signup-";
 
 function isSessionEndpoint(url: string): boolean {
   const { pathname } = new URL(url, "http://localhost");
-  return SESSION_ENDPOINTS.includes(pathname);
+  return SESSION_ENDPOINTS.includes(pathname) || pathname.startsWith(SIGNUP_PREFIX);
 }
 
 function unauthenticated(): Response {

@@ -8,6 +8,7 @@
 #   deploy/scripts/e2e.sh admin   # administration (frontend-admin) sur :3200, même API e2e
 #   deploy/scripts/e2e.sh system healthy|missing-heartbeat   # état de la zone B (ADR 0090)
 #   deploy/scripts/e2e.sh system legal-stale <e-mail>        # textes légaux à réaccepter (ADR 0117)
+#   deploy/scripts/e2e.sh system signup-link <e-mail>        # lien de vérification d'une demande (ADR 0118)
 #   deploy/scripts/e2e.sh maquette        # ajoute l'entreprise `maquette` (seed de la maquette v2)
 #   deploy/scripts/e2e.sh maquette-api    # API sur :8101, heure figée au 6 octobre 2026 10 h 45
 #   deploy/scripts/e2e.sh maquette-front  # front sur :3101, branché sur l'API de la maquette
@@ -176,6 +177,16 @@ SQL
     # s'additionneraient d'une suite à l'autre sur les mêmes comptes.
     export COGES_LOGIN_THROTTLE_FREE_FAILURES=1000000
     export COGES_LOGIN_THROTTLE_ALERT_AFTER=1000000
+    # Inscription libre-service ouverte (ADR 0118), limites hors d'atteinte ; sans SMTP,
+    # toute demande passe par l'équipe, et `system signup-link` produit le lien qu'aurait
+    # envoyé le worker.
+    export COGES_SIGNUP_ENABLED=true
+    export COGES_SIGNUP_IP_PER_HOUR=100000
+    export COGES_SIGNUP_IP_PER_DAY=100000
+    export COGES_SIGNUP_GLOBAL_PER_HOUR=100000
+    export COGES_SIGNUP_PHONE_PER_DAY=100000
+    export COGES_SIGNUP_EMAIL_PER_DAY=100000
+    export COGES_MERCHANT_URL="http://localhost:$E2E_FRONT_PORT"
     # L'administration exige un jeton Cloudflare Access (ADR 0104), signé par une clé de
     # test dont le jeu public est servi ici ; les routes commerçantes ne changent pas.
     uv run --directory backend python -m tests.helpers.access_tokens "$E2E_ACCESS_DIR"

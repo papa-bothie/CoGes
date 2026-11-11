@@ -173,6 +173,38 @@ aura sa table de codes hachés (comme `signup_email_tokens`) et une fonction de
 consommation `coges_signup` qui pose une date de vérification du numéro, et aboutira au
 **même** `activate_request`. Rien de ce lot n'est à refaire ; non codé ici.
 
+### Front commerçant (PR C)
+- **« Créer ma boutique »** sur la vitrine (en tête et au pied) et sur la connexion,
+  seulement si l'inscription est ouverte. L'état est lu **par le serveur Next**, revalidé
+  toutes les 5 minutes (ISR, `revalidate = 300`, `lib/signup/config.ts`), jamais par le
+  navigateur : la vitrine garde « aucune requête à l'API » (ADR 0115). Si l'API est
+  injoignable, le bouton reste caché (choix de l'utilisateur, AskUserQuestion).
+- **`/inscription`** (404 si l'inscription est fermée) :
+  - champs : nom de la boutique, votre nom, numéro (préfixe +221 affiché), e-mail
+    facultatif avec sa mention, mot de passe (`PasswordField`, règle visible avant
+    l'erreur) et confirmation ;
+  - la case `LegalConsent` (ADR 0117) rend le bouton actif ;
+  - un champ piège invisible ;
+  - rien dans l'URL, et le focus va au titre à chaque étape.
+- **Écrans d'attente** :
+  - « Vérifiez votre e-mail » : adresse masquée, renvoi avec délai affiché, « Je n'ai pas
+    reçu l'e-mail : être contacté sur WhatsApp » ;
+  - « Demande reçue » : horaires, WhatsApp du support, trois étapes.
+- **`/verification/[jeton]`** : le jeton est retiré de l'adresse dès sa lecture
+  (`history.replaceState`) et la page interdit le `Referer`. Un même jeton n'est envoyé
+  qu'une fois, même si React rend deux fois. Réponses :
+  - « Votre boutique est prête », avec le code de boutique, et la connexion préremplie par
+    `?boutique=` ;
+  - lien invalide : un seul message, et un nouveau lien possible.
+- **Connexion** : messages `signup_email_pending` (avec « Renvoyer le lien ») et
+  `signup_team_pending`.
+- **Tableau de bord** d'une boutique neuve (aucun article, aucune vente) : « Pour bien
+  démarrer », avec les trois premiers gestes, chacun selon les droits.
+- **Client API** : les routes `/auth/signup-*` passent sans jeton ni rafraîchissement.
+- **e2e** : l'API des parcours ouvre l'inscription sans SMTP. Le chemin e-mail crée la
+  vraie demande par l'API et ne force que la réponse de la page.
+  `e2e.sh system signup-link <e-mail>` produit le lien qu'aurait envoyé le worker.
+
 ## Conséquences
 - **Prérequis** : `create_signup_role.sql` sur Neon (préproduction, puis production) avant
   le déploiement de la révision 0039 ; `COGES_SIGNUP_IP_HASH_KEY` avant d'allumer

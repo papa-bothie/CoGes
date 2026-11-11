@@ -30,6 +30,10 @@ function isPublic(pathname: string): boolean {
   // Application installable (ADR 0102) : manifeste, worker et page hors ligne répondent sans
   // connexion, sans jamais renvoyer vers /login.
   if (PUBLIC_PWA.has(pathname) || PUBLIC_VITRINE.has(pathname)) return true;
+  // Inscription libre-service (ADR 0118) : le formulaire, et le lien de l'e-mail, dont le
+  // jeton est le seul segment variable (les pages répondent 404 si l'inscription est fermée).
+  if (pathname === "/inscription" || pathname === "/verification") return true;
+  if (/^\/verification\/[A-Za-z0-9_-]{20,200}$/.test(pathname)) return true;
   // Accès support (ADR 0092) : l'entrée lit le jeton du fragment, la fin le dit.
   return pathname === "/support" || pathname === "/support/termine";
 }

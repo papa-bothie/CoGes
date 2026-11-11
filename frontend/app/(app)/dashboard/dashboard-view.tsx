@@ -1,6 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+
+import { FirstSteps } from "@/components/signup/first-steps";
 import { CreditCard, Plus, ShoppingCart, TriangleAlert, Users } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -74,6 +76,13 @@ export function DashboardView() {
     queryFn: () => unwrap(api.GET("/api/v1/dashboard")),
   });
   const permissions = me.data?.permissions;
+  // Boutique neuve (ADR 0118) : aucun article ⇒ les trois premiers gestes, en tête.
+  const readsProducts = can(permissions, "products:read");
+  const products = useQuery({
+    queryKey: ["products", "count"],
+    queryFn: () => unwrap(api.GET("/api/v1/products", { params: { query: { page_size: 1 } } })),
+    enabled: readsProducts,
+  });
   const money = (value: string | null | undefined) => formatAmount(value ?? undefined, currency);
 
   if (query.isError) {
@@ -173,6 +182,10 @@ export function DashboardView() {
           </Link>
         )}
       </div>
+
+      {data && products.data?.total === 0 && data.recent_sales.length === 0 && (
+        <FirstSteps visible={opens} />
+      )}
 
       {/* Ordinateur (01) : quatre grandes tuiles. */}
       <div className="hidden gap-4 md:grid md:grid-cols-[repeat(auto-fit,minmax(240px,1fr))]">

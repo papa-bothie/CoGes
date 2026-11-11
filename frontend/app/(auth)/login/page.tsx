@@ -3,11 +3,17 @@ import { Suspense } from "react";
 
 import { BrandLogo } from "@/components/brand/brand";
 import { LegalLinks } from "@/components/legal/legal-links";
+import { ButtonLink } from "@/components/vitrine/links";
+import { signupConfig } from "@/lib/signup/config";
 import { labels } from "@/lib/labels";
 
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = { title: labels.login.pageTitle };
+
+/** « Créer ma boutique » paraît si l'inscription est ouverte : relu par le serveur au plus
+ *  toutes les 5 minutes (ADR 0118). */
+export const revalidate = 300;
 
 const t = labels.login;
 
@@ -16,7 +22,8 @@ const t = labels.login;
  * simplement. », les quatre rubriques), à droite le formulaire. Sur téléphone, le panneau
  * se réduit à son logo et sa phrase, au-dessus du formulaire.
  */
-export default function LoginPage() {
+export default async function LoginPage() {
+  const signup = await signupConfig();
   return (
     <main className="flex min-h-dvh flex-col bg-background md:flex-row">
       <section className="flex flex-col justify-between gap-8 bg-ventes-teinte px-6 py-8 text-marque md:min-h-dvh md:flex-1 md:px-12 md:py-14">
@@ -39,6 +46,14 @@ export default function LoginPage() {
           <Suspense>
             <LoginForm />
           </Suspense>
+          {signup.enabled && (
+            <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
+              <p className="text-lg text-encre-2">{t.createShop}</p>
+              <ButtonLink href="/inscription" variant="borde">
+                {labels.signup.cta}
+              </ButtonLink>
+            </div>
+          )}
           <LegalLinks className="pt-2" />
         </div>
       </section>

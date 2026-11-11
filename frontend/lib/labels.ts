@@ -87,6 +87,12 @@ export const labels = {
     loggedOut: "Vous êtes déconnecté.",
     suspended:
       "L'accès de votre entreprise à CoGes est suspendu. Vos données sont conservées : contactez l'équipe CoGes pour le rétablir.",
+    signupEmailPending: "Votre boutique n'est pas encore ouverte : ouvrez le lien reçu par e-mail.",
+    signupResend: "Renvoyer le lien",
+    signupResent: "Un nouveau lien vient de partir. Ouvrez-le pour ouvrir votre boutique.",
+    signupTeamPending:
+      "Votre boutique est en cours d'activation : nous vous contactons sur WhatsApp.",
+    createShop: "Pas encore de boutique ?",
     firstPassword: {
       title: "Choisissez votre mot de passe",
       intro:
@@ -100,6 +106,80 @@ export const labels = {
       submit: "Enregistrer et entrer",
       logout: "Se déconnecter",
     },
+  },
+  /** Inscription libre-service (lot 30, ADR 0118). */
+  signup: {
+    cta: "Créer ma boutique",
+    pageTitle: "Créer ma boutique",
+    intro: "Quelques informations, et votre boutique est prête à vendre. 30 jours d'essai gratuit.",
+    shopName: "Nom de la boutique",
+    shopNameHint: "Comme vos clients la connaissent, par exemple « Épicerie Awa ».",
+    fullName: "Votre nom",
+    phone: "Numéro de téléphone",
+    phonePrefix: "+221",
+    phoneHint: "Par exemple 77 000 00 00. Il sert à vous connecter et à vous joindre sur WhatsApp.",
+    email: "E-mail",
+    emailOptional: "facultatif",
+    emailHintInstant: "Avec un e-mail, votre boutique s'ouvre tout de suite.",
+    emailHintTeam: "Avec ou sans e-mail, nous ouvrons votre boutique avec vous sur WhatsApp.",
+    password: "Mot de passe",
+    passwordHint: "12 caractères au moins. Une phrase courte se retient bien.",
+    confirm: "Retapez le mot de passe",
+    mismatch: "Les deux mots de passe ne sont pas identiques.",
+    tooShort: "12 caractères au moins.",
+    required: "Ce champ est obligatoire.",
+    phoneInvalid: "Ce numéro de téléphone n'est pas valide.",
+    emailInvalid: "Cette adresse e-mail n'est pas valide.",
+    submit: "Créer ma boutique",
+    consentHint: "Cochez la case des conditions pour continuer.",
+    already: "Vous avez déjà une boutique ?",
+    login: "Se connecter",
+    // Écran « Vérifiez votre e-mail »
+    checkTitle: "Vérifiez votre e-mail",
+    checkIntro: (email: string) =>
+      `Nous avons envoyé un lien à ${email}. Cliquez dessus pour ouvrir votre boutique.`,
+    checkHint: "Pas d'e-mail ? Regardez dans les courriers indésirables.",
+    resend: "Renvoyer le lien",
+    resendIn: (seconds: number) => `Renvoyer le lien (dans ${seconds} s)`,
+    resent: "C'est fait. Un nouveau lien vient de partir.",
+    noEmail: "Je n'ai pas reçu l'e-mail : être contacté sur WhatsApp",
+    contacted: "C'est noté : nous vous contactons sur WhatsApp sous 24 h.",
+    // Écran « Demande reçue »
+    receivedTitle: "Demande reçue",
+    receivedIntro: "Nous vous contactons sur WhatsApp sous 24 h pour ouvrir votre boutique.",
+    hours: "Nos horaires",
+    whatsapp: "Nous écrire sur WhatsApp",
+    nextTitle: "Que se passe-t-il ensuite ?",
+    nextSteps: [
+      "Nous vous écrivons sur WhatsApp, au numéro que vous avez donné.",
+      "Nous ouvrons votre boutique avec vous.",
+      "Vous vous connectez avec votre numéro et votre mot de passe.",
+    ] as const,
+    backHome: "Retour à l'accueil",
+    // /verification/[jeton]
+    verifyingTitle: "Ouverture de votre boutique",
+    verifying: "Un instant, nous vérifions votre lien…",
+    readyTitle: "Votre boutique est prête",
+    readyIntro: "Connectez-vous avec votre e-mail ou votre numéro, et votre mot de passe.",
+    shopCode: "Code de la boutique",
+    goLogin: "Me connecter",
+    teamTitle: "Adresse vérifiée",
+    invalidTitle: "Ce lien ne marche plus",
+    invalidIntro:
+      "Il a expiré ou a déjà servi. Demandez un nouveau lien : il arrive dans votre boîte e-mail.",
+    invalidEmail: "Votre e-mail",
+    invalidResend: "Recevoir un nouveau lien",
+  },
+  /** Premiers pas d'une boutique neuve (ADR 0118). */
+  firstSteps: {
+    title: "Pour bien démarrer",
+    intro: "Trois gestes, et votre boutique tourne.",
+    product: "Ajouter un article",
+    productHint: "Ce que vous vendez, avec son prix.",
+    customer: "Ajouter un client",
+    customerHint: "Pour vendre à crédit et suivre ce qu'on vous doit.",
+    sale: "Faire une vente",
+    saleHint: "Le stock et la caisse se mettent à jour tout seuls.",
   },
   /** Textes légaux (prompt 36, ADR 0117). Les textes eux-mêmes sont dans `content/legal/`. */
   legal: {
