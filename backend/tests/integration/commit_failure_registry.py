@@ -457,6 +457,31 @@ REGISTRY: dict[tuple[str, str], Critical | Exempt] = {
         "mot de passe de la personne connectée : sa propre session, couverte par "
         "test_temporary_password_expiry ; aucun argent, aucun stock"
     ),
+    # Inscription libre-service (ADR 0118) : aucune entreprise avant l'activation ; le
+    # COMMIT refusé de l'activation (rien de créé, aucun e-mail, lien encore valable) est
+    # prouvé par test_signup::test_a_refused_commit_creates_nothing_and_sends_nothing.
+    ("POST", "/api/v1/auth/signup-requests"): Exempt(
+        "demande de la plateforme, sans entreprise ; e-mail enfilé après le COMMIT seulement"
+    ),
+    ("POST", "/api/v1/auth/signup-requests/verify"): Exempt(
+        "activation par lien : COMMIT refusé prouvé par test_signup (rien de créé)"
+    ),
+    ("POST", "/api/v1/auth/signup-requests/resend"): Exempt(
+        "aucune écriture dans l'API : le worker tire le jeton après coup"
+    ),
+    ("POST", "/api/v1/auth/signup-requests/contact-team"): Exempt(
+        "bascule d'une demande vers l'équipe ; table de la plateforme, sans entreprise"
+    ),
+    ("POST", "/api/v1/platform/signup-requests/{request_id}/activate"): Exempt(
+        "même activation que le lien e-mail, une transaction (test_signup : une seule boutique)"
+    ),
+    ("POST", "/api/v1/platform/signup-requests/{request_id}/reject"): Exempt(
+        "décision de l'équipe sur une demande, table de la plateforme, audit dans la même "
+        "transaction"
+    ),
+    ("PUT", "/api/v1/platform/signup-requests/{request_id}/note"): Exempt(
+        "note de l'équipe sur une demande, table de la plateforme"
+    ),
     ("POST", "/api/v1/auth/legal-acceptance"): Exempt(
         "acceptation des textes légaux par la personne connectée (ADR 0117) : sa propre "
         "ligne, couverte par test_legal_acceptance ; aucun argent, aucun stock"

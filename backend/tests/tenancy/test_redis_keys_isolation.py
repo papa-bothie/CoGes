@@ -61,6 +61,15 @@ GLOBAL_KEYS: dict[str, str] = {
     r"^coges:celery:deliveries:[0-9a-f-]{32,36}$": (
         "livraisons interrompues d'une tâche Celery, par identifiant de tâche (ADR 0088)"
     ),
+    # Inscription libre-service (ADR 0118) : avant toute entreprise ; IP, numéro et
+    # e-mail n'y entrent que par un HMAC à clé, jamais en clair.
+    r"^coges:signup:(ip:h|ip:d|phone:d|email:d|resend:d):[0-9a-f]{64}:\d+$": (
+        "limites de l'inscription par IP, numéro, e-mail et renvois (HMAC à clé)"
+    ),
+    r"^coges:signup:(global:h|auto:d):\d+$": (
+        "plafond global par heure et demandes automatiques du jour, sans personne"
+    ),
+    r"^coges:signup:resend:[0-9a-f]{64}$": "délai entre deux renvois du lien (HMAC à clé)",
 }
 
 
@@ -234,3 +243,25 @@ def test_without_redis_reads_fall_back_to_the_database_for_both(
                 json={"name": f"Sans Redis {uuid4().hex[:6]}"},
             )
             assert category.status_code == 201, category.text
+
+
+def test_signup_keys_are_declared_keyed_and_expire(
+    redis_client: redis.Redis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Inscription (ADR 0118) : chaque clé est déclarée, a une durée, et ne contient ni IP,
+    ni numéro, ni e-mail en clair."""
+    from app.modules.signup import limits
+
+    for key in redis_client.scan_iter("coges:signup:*"):
+        redis_client.delete(key)
+    ip, phone, email = "198.51.100.23", "+221770001122", "cle@example.com"
+    limits.check_request(ip_hash=limits.ip_fingerprint(ip), phone=phone, email=email)
+    limits.take_automatic_slot()
+    limits.check_resend(email)
+    created = set(redis_client.scan_iter("coges:signup:*"))
+    assert len(created) >= 7, created
+    for key in created:
+        assert any(re.match(pattern, key) for pattern in GLOBAL_KEYS), key
+        assert redis_client.ttl(key) > 0, key
+        for secret in (ip, phone, phone.lstrip("+"), email):
+            assert secret not in key, key

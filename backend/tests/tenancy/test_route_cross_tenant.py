@@ -56,6 +56,13 @@ PUBLIC_PATHS = frozenset(
         "/api/v1/auth/login",
         "/api/v1/auth/refresh",
         "/api/v1/auth/logout",
+        # Inscription libre-service (ADR 0118) : publiques par nature, derrière
+        # l'interrupteur COGES_SIGNUP_ENABLED (`test_signup.py` : 404 éteint).
+        "/api/v1/auth/signup-config",
+        "/api/v1/auth/signup-requests",
+        "/api/v1/auth/signup-requests/verify",
+        "/api/v1/auth/signup-requests/resend",
+        "/api/v1/auth/signup-requests/contact-team",
         # Connexion de l'administration (ADR 0089) : sans jeton par nature.
         "/api/v1/platform/auth/login",
         "/api/v1/platform/auth/refresh",

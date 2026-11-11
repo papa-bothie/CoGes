@@ -76,12 +76,17 @@ CREATE ROLE coges_app_platform LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATE
 -- d'autre que `plans` et `subscriptions` (révision 0028).
 CREATE ROLE coges_billing NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
 
+-- Inscription libre-service (lot 30, ADR 0118) : propriétaire des fonctions qui lisent
+-- et écrivent les demandes d'inscription, appelées sous coges_app. NOLOGIN, NOBYPASSRLS.
+CREATE ROLE coges_signup NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+
 -- coges_owner doit pouvoir transférer la propriété des fonctions à leur rôle final.
 -- WITH INHERIT FALSE : aucune élévation implicite, il faut un SET ROLE explicite.
 GRANT coges_auth TO coges_owner WITH INHERIT FALSE;
 GRANT coges_bus  TO coges_owner WITH INHERIT FALSE;
 GRANT coges_ops  TO coges_owner WITH INHERIT FALSE;
 GRANT coges_billing TO coges_owner WITH INHERIT FALSE;
+GRANT coges_signup TO coges_owner WITH INHERIT FALSE;
 
 CREATE DATABASE coges      OWNER coges_owner;
 CREATE DATABASE coges_test OWNER coges_owner;
@@ -97,6 +102,7 @@ GRANT USAGE ON SCHEMA public TO coges_analytics;
 GRANT USAGE ON SCHEMA public TO coges_bus;
 GRANT USAGE ON SCHEMA public TO coges_app_platform;
 GRANT USAGE ON SCHEMA public TO coges_billing;
+GRANT USAGE ON SCHEMA public TO coges_signup;
 
 \connect coges_test
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
@@ -107,6 +113,7 @@ GRANT USAGE ON SCHEMA public TO coges_analytics;
 GRANT USAGE ON SCHEMA public TO coges_bus;
 GRANT USAGE ON SCHEMA public TO coges_app_platform;
 GRANT USAGE ON SCHEMA public TO coges_billing;
+GRANT USAGE ON SCHEMA public TO coges_signup;
 
 \connect coges_e2e
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
@@ -117,3 +124,4 @@ GRANT USAGE ON SCHEMA public TO coges_analytics;
 GRANT USAGE ON SCHEMA public TO coges_bus;
 GRANT USAGE ON SCHEMA public TO coges_app_platform;
 GRANT USAGE ON SCHEMA public TO coges_billing;
+GRANT USAGE ON SCHEMA public TO coges_signup;

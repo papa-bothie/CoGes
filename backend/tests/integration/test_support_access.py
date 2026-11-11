@@ -469,6 +469,11 @@ TOKENLESS_WRITES = {
     "/api/v1/auth/login",
     "/api/v1/auth/refresh",
     "/api/v1/auth/logout",
+    # Inscription libre-service (ADR 0118) : publique, avant toute entreprise.
+    "/api/v1/auth/signup-requests",
+    "/api/v1/auth/signup-requests/verify",
+    "/api/v1/auth/signup-requests/resend",
+    "/api/v1/auth/signup-requests/contact-team",
 }
 
 

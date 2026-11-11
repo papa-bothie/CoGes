@@ -41,6 +41,26 @@ OPS_TABLES = ["job_runs"]
 BILLING_TABLES = ["plans", "subscriptions"]
 BILLING_USER_COLUMNS = ["company_id", "deleted_at", "id", "is_active"]
 
+#: Inscription libre-service (ADR 0118) : propriétaire des neuf fonctions qui lisent et
+#: écrivent les demandes, appelées sous `coges_app`. NOLOGIN, sans BYPASSRLS.
+SIGNUP_ROLE = "coges_signup"
+#: Ce qu'il atteint : ses deux tables, le journal de l'administration (en écriture) et
+#: trois colonnes de `users`, par une politique qui ne nomme que lui.
+SIGNUP_TABLES = ["platform_audit_logs", "signup_email_tokens", "signup_requests"]
+SIGNUP_USER_COLUMNS = ["deleted_at", "email", "phone"]
+#: Les fonctions et leur signature exacte (révision 0039).
+SIGNUP_FUNCTIONS = {
+    "signup_create": "signup_create(text, text, text, citext, text, text, text, text)",
+    "signup_token_issue": "signup_token_issue(uuid, text, interval)",
+    "signup_token_consume": "signup_token_consume(text)",
+    "signup_reserve": "signup_reserve(uuid)",
+    "signup_mark_activated": "signup_mark_activated(uuid, uuid, uuid, text, inet)",
+    "signup_known": "signup_known(citext, text)",
+    "signup_login_lookup": "signup_login_lookup(citext, text)",
+    "signup_resend_target": "signup_resend_target(citext)",
+    "signup_switch_to_team": "signup_switch_to_team(citext)",
+}
+
 #: Les fonctions du projet dont `EXECUTE` a été retiré à `PUBLIC`. Ce sont celles qui
 #: franchissent la RLS ou qui accordent un geste que le rôle appelant n'a pas.
 PRIVILEGED_FUNCTIONS = {
@@ -58,6 +78,7 @@ PRIVILEGED_FUNCTIONS = {
     "purge_job_runs",
     "companies_start_trial",
     "users_plan_limit",
+    *SIGNUP_FUNCTIONS,
 }
 
 #: Seules tables sur lesquelles `coges_app` a le droit de supprimer (ADR 0007, 0020).
@@ -685,6 +706,10 @@ TABLES_WITHOUT_RLS: dict[str, str] = {
     "platform_mfa_challenges": "jetons intermédiaires de connexion de l'équipe CoGes",
     "platform_recovery_codes": "empreintes des codes de secours de l'équipe CoGes",
     "platform_known_devices": "appareils déjà vus des comptes de l'équipe CoGes",
+    # Inscription libre-service (ADR 0118) : une demande n'est pas une boutique ;
+    # `coges_app` n'y a aucun droit, tout passe par les fonctions de `coges_signup`.
+    "signup_requests": "demandes d'inscription, avant toute entreprise",
+    "signup_email_tokens": "empreintes des liens de vérification des demandes",
 }
 
 
@@ -706,3 +731,97 @@ def test_t37_tables_without_rls_are_named(app_engine: Engine) -> None:
         f"Tables sans RLS non déclarées : {sorted(unprotected - set(TABLES_WITHOUT_RLS))} ; "
         f"déclarées mais protégées ou disparues : {sorted(set(TABLES_WITHOUT_RLS) - unprotected)}"
     )
+
+
+def test_t36_signup_role_reach_is_named(app_engine: Engine) -> None:
+    """T36 — `coges_signup` : NOLOGIN, sans BYPASSRLS, une portée écrite ici (ADR 0118)."""
+    with app_engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT rolcanlogin, rolbypassrls FROM pg_roles WHERE rolname = :role"),
+            {"role": SIGNUP_ROLE},
+        ).one_or_none()
+        assert row is not None, "coges_signup absent : voir deploy/sql/create_signup_role.sql"
+        reachable = sorted(
+            set(_table_privileges(connection, SIGNUP_ROLE, "SELECT"))
+            | set(_table_privileges(connection, SIGNUP_ROLE, "INSERT"))
+            | set(_table_privileges(connection, SIGNUP_ROLE, "UPDATE"))
+            | set(_table_privileges(connection, SIGNUP_ROLE, "DELETE"))
+        )
+        user_columns = sorted(
+            connection.execute(
+                text(
+                    "SELECT a.attname FROM pg_attribute a "
+                    "WHERE a.attrelid = 'public.users'::regclass AND a.attnum > 0 "
+                    "AND NOT a.attisdropped "
+                    "AND has_column_privilege(:role, a.attrelid, a.attnum, 'SELECT')"
+                ),
+                {"role": SIGNUP_ROLE},
+            ).scalars()
+        )
+        deletes = _table_privileges(connection, SIGNUP_ROLE, "DELETE")
+    assert row.rolcanlogin is False, f"{SIGNUP_ROLE} doit rester NOLOGIN"
+    assert row.rolbypassrls is False, f"{SIGNUP_ROLE} n'a pas à contourner la RLS"
+    assert reachable == SIGNUP_TABLES, f"portée inattendue : {reachable}"
+    assert user_columns == SIGNUP_USER_COLUMNS
+    assert deletes == []
+
+
+def test_t36_signup_functions_are_locked(app_engine: Engine) -> None:
+    """T36 — chaque fonction de `coges_signup` (ADR 0118) : propriétaire `coges_signup`,
+    `search_path` figé, retirée à PUBLIC, exécutable par `coges_app` seul."""
+    with app_engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                """
+                SELECT p.proname, pg_get_userbyid(p.proowner) AS owner, p.prosecdef,
+                       p.proconfig, p.proacl::text AS acl
+                  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                 WHERE n.nspname = 'public' AND p.proname = ANY(:names)
+                """
+            ),
+            {"names": sorted(SIGNUP_FUNCTIONS)},
+        ).all()
+        callers = {
+            (name, role): connection.execute(
+                text("SELECT has_function_privilege(:role, :signature, 'EXECUTE')"),
+                {"role": role, "signature": signature},
+            ).scalar_one()
+            for name, signature in SIGNUP_FUNCTIONS.items()
+            for role in (APP_ROLE, RELAY_ROLE, ANALYTICS_ROLE, "coges_app_platform", BACKUP_ROLE)
+        }
+    assert {row.proname for row in rows} == set(SIGNUP_FUNCTIONS)
+    for row in rows:
+        assert row.owner == SIGNUP_ROLE, row.proname
+        assert row.prosecdef is True, row.proname
+        assert row.proconfig == ["search_path=pg_catalog, public"], row.proname
+        entries = row.acl.strip("{}").split(",")
+        assert not any(entry.startswith("=") for entry in entries), f"PUBLIC sur {row.proname}"
+        grantees = {entry.split("=", 1)[0] for entry in entries}
+        assert grantees == {SIGNUP_ROLE, APP_ROLE}, (row.proname, grantees)
+    wrong = {key: allowed for key, allowed in callers.items() if allowed != (key[1] == APP_ROLE)}
+    assert wrong == {}, f"droits d'exécution inattendus : {wrong}"
+
+
+def test_t36_signup_known_answers_true_or_false_only(app_engine: Engine) -> None:
+    """T36 — `signup_known` ne rend qu'un booléen : jamais une ligne ni un identifiant."""
+    with app_engine.connect() as connection:
+        result = connection.execute(
+            text(
+                "SELECT pg_get_function_result(p.oid) FROM pg_proc p "
+                "WHERE p.proname = 'signup_known'"
+            )
+        ).scalar_one()
+    assert result == "boolean"
+
+
+@pytest.mark.parametrize("role", [APP_ROLE, ANALYTICS_ROLE, RELAY_ROLE])
+def test_t36_no_runtime_role_touches_signup_tables(app_engine: Engine, role: str) -> None:
+    """T36 — aucun rôle d'exécution commerçant ne lit ni n'écrit les demandes."""
+    with app_engine.connect() as connection:
+        granted = [
+            (table, privilege)
+            for table in ("signup_requests", "signup_email_tokens")
+            for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE")
+            if table in _table_privileges(connection, role, privilege)
+        ]
+    assert granted == [], f"{role} détient {granted}"

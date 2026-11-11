@@ -56,13 +56,10 @@ from sqlalchemy.orm import Session
 from app.core.config import REPO_ROOT
 from app.core.errors import ValidationFailedError
 from app.core.tenancy import TenantContext, tenant_transaction
-from app.modules.companies import service as companies_service
 from app.modules.inventory import service as inventory_service
 from app.modules.inventory.schemas import StockRebuildLine
 from app.modules.platform import service as platform_service
-from app.modules.rbac import service as rbac_service
-from app.modules.rbac.matrix import MANAGER
-from app.modules.users import service as users_service
+from app.modules.signup import service as signup_service
 from app.modules.users.schemas import UserCreate
 
 MIN_PASSWORD_LENGTH = 12
@@ -120,15 +117,17 @@ def create_company(
 
     try:
         with tenant_transaction(ctx) as session:
-            companies_service.create_company(
-                session, ctx, name=name, slug=slug, currency=currency, timezone=timezone
+            # La seule façon de fabriquer une entreprise, partagée avec l'inscription
+            # libre-service (ADR 0118) : entreprise, rôles système, gérant.
+            signup_service.onboard_company(
+                session,
+                ctx,
+                name=name,
+                slug=slug,
+                manager=payload,
+                currency=currency,
+                timezone=timezone,
             )
-            roles = rbac_service.create_system_roles(session, ctx)
-            # Même façade que l'écran Personnes : mêmes contrôles d'unicité, mêmes
-            # messages. Sans rôle ici : le gérant n'existe pas encore pour déléguer.
-            manager, _ = users_service.create_user(session, ctx, payload, user_id=manager_id)
-            # L'auteur de l'audit est le gérant lui-même, déjà écrit (flush) en base.
-            rbac_service.assign_role(session, ctx, manager.id, roles[MANAGER].id)
     except ValidationFailedError as exc:
         raise SystemExit(exc.message) from exc
 

@@ -177,6 +177,106 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/auth/signup-config": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Signup Config
+     * @description Inscription ouverte ou non, et ce que l'écran doit dire. Aucun secret.
+     */
+    get: operations["signup_config_api_v1_auth_signup_config_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/signup-requests": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create Signup Request
+     * @description « Créer ma boutique » : une demande, jamais une boutique. Réponse neutre.
+     */
+    post: operations["create_signup_request_api_v1_auth_signup_requests_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/signup-requests/verify": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Verify Signup Email
+     * @description Lien de l'e-mail : jeton à usage unique, puis activation de la boutique.
+     */
+    post: operations["verify_signup_email_api_v1_auth_signup_requests_verify_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/signup-requests/resend": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Resend Signup Email
+     * @description « Renvoyer le lien » : un envoi par minute, cinq par jour. Réponse neutre.
+     */
+    post: operations["resend_signup_email_api_v1_auth_signup_requests_resend_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/auth/signup-requests/contact-team": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Contact Signup Team
+     * @description « Je n'ai pas reçu l'e-mail » : la demande passe dans la file de l'équipe.
+     */
+    post: operations["contact_signup_team_api_v1_auth_signup_requests_contact_team_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/companies/me": {
     parameters: {
       query?: never;
@@ -3111,6 +3211,126 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/platform/signup-requests": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Signup Requests
+     * @description Demandes d'inscription, les plus récentes d'abord, avec le compteur de la file.
+     */
+    get: operations["list_signup_requests_api_v1_platform_signup_requests_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/signup-requests/stats": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Signup Stats
+     * @description Reçues, activées par lien ou par l'équipe, refusées, abandonnées, délai moyen.
+     */
+    get: operations["signup_stats_api_v1_platform_signup_requests_stats_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/signup-requests/{request_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Signup Request
+     * @description Une demande, avec « déjà connu : boutique X » si le numéro ou l'e-mail l'est.
+     */
+    get: operations["get_signup_request_api_v1_platform_signup_requests__request_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/signup-requests/{request_id}/activate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Activate Signup Request
+     * @description Ouvre la boutique : la même activation que le lien e-mail, en une transaction.
+     */
+    post: operations["activate_signup_request_api_v1_platform_signup_requests__request_id__activate_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/signup-requests/{request_id}/reject": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Reject Signup Request
+     * @description Refuse la demande : raison en liste fermée, note facultative, audit critique.
+     */
+    post: operations["reject_signup_request_api_v1_platform_signup_requests__request_id__reject_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/signup-requests/{request_id}/note": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Note Signup Request
+     * @description Note de l'équipe (« appelé lundi, rappeler jeudi ») ; le fait est audité.
+     */
+    put: operations["note_signup_request_api_v1_platform_signup_requests__request_id__note_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4832,6 +5052,26 @@ export interface components {
       page_size: number;
       /** Total */
       total: number;
+    };
+    /**
+     * KnownAccount
+     * @description Une boutique où ce numéro ou cet e-mail ont déjà un compte.
+     */
+    KnownAccount: {
+      /**
+       * Company Id
+       * Format: uuid
+       */
+      company_id: string;
+      /** Company Name */
+      company_name: string;
+      /** Company Slug */
+      company_slug: string;
+      /**
+       * Matched On
+       * @enum {string}
+       */
+      matched_on: "phone" | "email";
     };
     /**
      * LegalAcceptance
@@ -6944,6 +7184,203 @@ export interface components {
       count: number;
     };
     /**
+     * SignupConfig
+     * @description Réglages publics, sans secret : le front affiche ou cache « Créer ma boutique ».
+     */
+    SignupConfig: {
+      /** Enabled */
+      enabled: boolean;
+      /** Instant With Email */
+      instant_with_email: boolean;
+      /** Support Whatsapp */
+      support_whatsapp: string;
+      /** Resend Interval Seconds */
+      resend_interval_seconds: number;
+    };
+    /**
+     * SignupEmail
+     * @description Renvoyer le lien, ou passer par l'équipe : réponse neutre dans les deux cas.
+     */
+    SignupEmail: {
+      /**
+       * Email
+       * Format: email
+       */
+      email: string;
+    };
+    /** SignupNeutral */
+    SignupNeutral: {
+      /** Message */
+      message: string;
+    };
+    /** SignupNote */
+    SignupNote: {
+      /** Note */
+      note: string;
+    };
+    /** SignupReject */
+    SignupReject: {
+      /**
+       * Reason
+       * @enum {string}
+       */
+      reason: "unreachable" | "duplicate" | "not_a_business" | "fraud" | "other";
+      /** Note */
+      note?: string | null;
+    };
+    /**
+     * SignupRequestAccepted
+     * @description Réponse neutre : la même pour un même chemin, que le numéro ou l'e-mail soient
+     *     nouveaux, déjà en attente ou déjà liés à un compte (aucune énumération).
+     */
+    SignupRequestAccepted: {
+      /**
+       * Path
+       * @enum {string}
+       */
+      path: "email" | "team";
+      /** Message */
+      message: string;
+    };
+    /**
+     * SignupRequestCreate
+     * @description Formulaire public « Créer ma boutique ». Le numéro est obligatoire, l'e-mail non.
+     */
+    SignupRequestCreate: {
+      /** Shop Name */
+      shop_name: string;
+      /** Full Name */
+      full_name: string;
+      /** Phone */
+      phone: string;
+      /** Email */
+      email?: string | null;
+      /** Password */
+      password: string;
+      /**
+       * Accept Legal
+       * @constant
+       */
+      accept_legal: true;
+      /**
+       * Website
+       * @default
+       */
+      website: string;
+    };
+    /** SignupRequestPage */
+    SignupRequestPage: {
+      /** Items */
+      items: components["schemas"]["SignupRequestRead"][];
+      /** Total */
+      total: number;
+      /** Page */
+      page: number;
+      /** Page Size */
+      page_size: number;
+      /** Team Queue */
+      team_queue: number;
+      /** Smtp Configured */
+      smtp_configured: boolean;
+    };
+    /** SignupRequestRead */
+    SignupRequestRead: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Shop Name */
+      shop_name: string | null;
+      /** Full Name */
+      full_name: string | null;
+      /** Phone */
+      phone: string | null;
+      /** Email */
+      email: string | null;
+      /**
+       * Path
+       * @enum {string}
+       */
+      path: "email" | "team";
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "pending" | "activated" | "rejected" | "abandoned";
+      /** Email Verified At */
+      email_verified_at: string | null;
+      /** Reject Reason */
+      reject_reason: ("unreachable" | "duplicate" | "not_a_business" | "fraud" | "other") | null;
+      /** Team Note */
+      team_note: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Path Changed At */
+      path_changed_at: string | null;
+      /** Decided At */
+      decided_at: string | null;
+      /** Decided Via */
+      decided_via: ("email_link" | "team" | "system") | null;
+      /** Company Id */
+      company_id: string | null;
+      /** Company Slug */
+      company_slug?: string | null;
+      /** Legal Version */
+      legal_version: string;
+      /** Purged */
+      purged: boolean;
+      /** Known Accounts */
+      known_accounts?: components["schemas"]["KnownAccount"][];
+    };
+    /** SignupStats */
+    SignupStats: {
+      /** Received Email */
+      received_email: number;
+      /** Received Team */
+      received_team: number;
+      /** Activated By Link */
+      activated_by_link: number;
+      /** Activated By Team */
+      activated_by_team: number;
+      /** Rejected */
+      rejected: number;
+      /** Abandoned */
+      abandoned: number;
+      /** Pending Team */
+      pending_team: number;
+      /** Pending Email */
+      pending_email: number;
+      /** Average Hours To Activation */
+      average_hours_to_activation: number | null;
+      /** Smtp Configured */
+      smtp_configured: boolean;
+    };
+    /**
+     * SignupVerified
+     * @description `ready` : la boutique est ouverte, `company_slug` sert à préremplir la connexion.
+     *     `team` : l'adresse est vérifiée, mais l'équipe doit voir la demande avant.
+     */
+    SignupVerified: {
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "ready" | "team";
+      /** Company Slug */
+      company_slug?: string | null;
+      /** Message */
+      message: string;
+    };
+    /** SignupVerify */
+    SignupVerify: {
+      /** Token */
+      token: string;
+    };
+    /**
      * SignupsRead
      * @description Nouvelles entreprises (non supprimées) sur 12 mois ou 52 semaines ; la dernière
      *     période est celle en cours, les périodes vides valent 0.
@@ -7985,6 +8422,158 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  signup_config_api_v1_auth_signup_config_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SignupConfig"];
+        };
+      };
+    };
+  };
+  create_signup_request_api_v1_auth_signup_requests_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SignupRequestCreate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SignupRequestAccepted"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  verify_signup_email_api_v1_auth_signup_requests_verify_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SignupVerify"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SignupVerified"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  resend_signup_email_api_v1_auth_signup_requests_resend_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SignupEmail"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SignupNeutral"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  contact_signup_team_api_v1_auth_signup_requests_contact_team_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SignupEmail"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SignupNeutral"];
+        };
       };
       /** @description Validation Error */
       422: {
@@ -13169,6 +13758,204 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["PlatformOutbox"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_signup_requests_api_v1_platform_signup_requests_get: {
+    parameters: {
+      query?: {
+        page?: number;
+        page_size?: number;
+        status?: ("pending" | "activated" | "rejected" | "abandoned") | null;
+        path?: ("email" | "team") | null;
+        older_than_hours?: number | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SignupRequestPage"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  signup_stats_api_v1_platform_signup_requests_stats_get: {
+    parameters: {
+      query?: {
+        days?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SignupStats"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_signup_request_api_v1_platform_signup_requests__request_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        request_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SignupRequestRead"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  activate_signup_request_api_v1_platform_signup_requests__request_id__activate_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        request_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SignupRequestRead"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  reject_signup_request_api_v1_platform_signup_requests__request_id__reject_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        request_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SignupReject"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SignupRequestRead"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  note_signup_request_api_v1_platform_signup_requests__request_id__note_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        request_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SignupNote"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SignupRequestRead"];
         };
       };
       /** @description Validation Error */

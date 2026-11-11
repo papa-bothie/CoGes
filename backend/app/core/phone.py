@@ -28,3 +28,24 @@ def normalise_phone(raw: str | None) -> str | None:
     if not MIN_DIGITS <= len(digits) <= MAX_DIGITS:
         return None
     return digits
+
+
+def to_e164(raw: str | None) -> str | None:
+    """Le même numéro au format international (`+221771234567`), pour les demandes
+    d'inscription et les liens `wa.me` (ADR 0118).
+
+    Construit sur `normalise_phone` : il n'existe qu'**une** lecture d'un numéro, si bien
+    que « 77 123 45 67 », « +221 77 123 45 67 » et « 00221 771234567 » désignent toujours
+    le même commerçant, à l'inscription comme à la connexion.
+    """
+    digits = normalise_phone(raw)
+    if digits is None:
+        return None
+    if len(digits) == NATIONAL_DIGITS:
+        return f"+{SENEGAL_PREFIX}{digits}"
+    return f"+{digits}"
+
+
+def stored_form(e164: str | None) -> str | None:
+    """Le numéro d'une demande, ramené à la forme de `users.phone` (activation, doublons)."""
+    return normalise_phone(e164)

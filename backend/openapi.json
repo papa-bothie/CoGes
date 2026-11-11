@@ -234,6 +234,196 @@
         }
       }
     },
+    "/api/v1/auth/signup-config": {
+      "get": {
+        "tags": [
+          "signup"
+        ],
+        "summary": "Signup Config",
+        "description": "Inscription ouverte ou non, et ce que l'écran doit dire. Aucun secret.",
+        "operationId": "signup_config_api_v1_auth_signup_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/signup-requests": {
+      "post": {
+        "tags": [
+          "signup"
+        ],
+        "summary": "Create Signup Request",
+        "description": "« Créer ma boutique » : une demande, jamais une boutique. Réponse neutre.",
+        "operationId": "create_signup_request_api_v1_auth_signup_requests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupRequestCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupRequestAccepted"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/signup-requests/verify": {
+      "post": {
+        "tags": [
+          "signup"
+        ],
+        "summary": "Verify Signup Email",
+        "description": "Lien de l'e-mail : jeton à usage unique, puis activation de la boutique.",
+        "operationId": "verify_signup_email_api_v1_auth_signup_requests_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupVerify"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupVerified"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/signup-requests/resend": {
+      "post": {
+        "tags": [
+          "signup"
+        ],
+        "summary": "Resend Signup Email",
+        "description": "« Renvoyer le lien » : un envoi par minute, cinq par jour. Réponse neutre.",
+        "operationId": "resend_signup_email_api_v1_auth_signup_requests_resend_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupEmail"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupNeutral"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/signup-requests/contact-team": {
+      "post": {
+        "tags": [
+          "signup"
+        ],
+        "summary": "Contact Signup Team",
+        "description": "« Je n'ai pas reçu l'e-mail » : la demande passe dans la file de l'équipe.",
+        "operationId": "contact_signup_team_api_v1_auth_signup_requests_contact_team_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupEmail"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupNeutral"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/companies/me": {
       "get": {
         "tags": [
@@ -9060,6 +9250,365 @@
           }
         }
       }
+    },
+    "/api/v1/platform/signup-requests": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "List Signup Requests",
+        "description": "Demandes d'inscription, les plus récentes d'abord, avec le compteur de la file.",
+        "operationId": "list_signup_requests_api_v1_platform_signup_requests_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending",
+                    "activated",
+                    "rejected",
+                    "abandoned"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "email",
+                    "team"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Path"
+            }
+          },
+          {
+            "name": "older_than_hours",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 8784,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Older Than Hours"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupRequestPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/signup-requests/stats": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Signup Stats",
+        "description": "Reçues, activées par lien ou par l'équipe, refusées, abandonnées, délai moyen.",
+        "operationId": "signup_stats_api_v1_platform_signup_requests_stats_get",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 366,
+              "minimum": 1,
+              "default": 30,
+              "title": "Days"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupStats"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/signup-requests/{request_id}": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Get Signup Request",
+        "description": "Une demande, avec « déjà connu : boutique X » si le numéro ou l'e-mail l'est.",
+        "operationId": "get_signup_request_api_v1_platform_signup_requests__request_id__get",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupRequestRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/signup-requests/{request_id}/activate": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Activate Signup Request",
+        "description": "Ouvre la boutique : la même activation que le lien e-mail, en une transaction.",
+        "operationId": "activate_signup_request_api_v1_platform_signup_requests__request_id__activate_post",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupRequestRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/signup-requests/{request_id}/reject": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Reject Signup Request",
+        "description": "Refuse la demande : raison en liste fermée, note facultative, audit critique.",
+        "operationId": "reject_signup_request_api_v1_platform_signup_requests__request_id__reject_post",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupReject"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupRequestRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/signup-requests/{request_id}/note": {
+      "put": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Note Signup Request",
+        "description": "Note de l'équipe (« appelé lundi, rappeler jeudi ») ; le fait est audité.",
+        "operationId": "note_signup_request_api_v1_platform_signup_requests__request_id__note_put",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupNote"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupRequestRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -13715,6 +14264,41 @@
           "total"
         ],
         "title": "JobRunPage"
+      },
+      "KnownAccount": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company Name"
+          },
+          "company_slug": {
+            "type": "string",
+            "title": "Company Slug"
+          },
+          "matched_on": {
+            "type": "string",
+            "enum": [
+              "phone",
+              "email"
+            ],
+            "title": "Matched On"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "company_id",
+          "company_name",
+          "company_slug",
+          "matched_on"
+        ],
+        "title": "KnownAccount",
+        "description": "Une boutique où ce numéro ou cet e-mail ont déjà un compte."
       },
       "LegalAcceptance": {
         "properties": {},
@@ -19448,6 +20032,577 @@
           "count"
         ],
         "title": "SignupBucket"
+      },
+      "SignupConfig": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "instant_with_email": {
+            "type": "boolean",
+            "title": "Instant With Email"
+          },
+          "support_whatsapp": {
+            "type": "string",
+            "title": "Support Whatsapp"
+          },
+          "resend_interval_seconds": {
+            "type": "integer",
+            "title": "Resend Interval Seconds"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled",
+          "instant_with_email",
+          "support_whatsapp",
+          "resend_interval_seconds"
+        ],
+        "title": "SignupConfig",
+        "description": "Réglages publics, sans secret : le front affiche ou cache « Créer ma boutique »."
+      },
+      "SignupEmail": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "SignupEmail",
+        "description": "Renvoyer le lien, ou passer par l'équipe : réponse neutre dans les deux cas."
+      },
+      "SignupNeutral": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "SignupNeutral"
+      },
+      "SignupNote": {
+        "properties": {
+          "note": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "note"
+        ],
+        "title": "SignupNote"
+      },
+      "SignupReject": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "enum": [
+              "unreachable",
+              "duplicate",
+              "not_a_business",
+              "fraud",
+              "other"
+            ],
+            "title": "Reason"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "SignupReject"
+      },
+      "SignupRequestAccepted": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "enum": [
+              "email",
+              "team"
+            ],
+            "title": "Path"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "message"
+        ],
+        "title": "SignupRequestAccepted",
+        "description": "Réponse neutre : la même pour un même chemin, que le numéro ou l'e-mail soient\nnouveaux, déjà en attente ou déjà liés à un compte (aucune énumération)."
+      },
+      "SignupRequestCreate": {
+        "properties": {
+          "shop_name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 2,
+            "title": "Shop Name"
+          },
+          "full_name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Full Name"
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 30,
+            "minLength": 6,
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "email"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 12,
+            "title": "Password"
+          },
+          "accept_legal": {
+            "type": "boolean",
+            "const": true,
+            "title": "Accept Legal"
+          },
+          "website": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Website",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "shop_name",
+          "full_name",
+          "phone",
+          "password",
+          "accept_legal"
+        ],
+        "title": "SignupRequestCreate",
+        "description": "Formulaire public « Créer ma boutique ». Le numéro est obligatoire, l'e-mail non."
+      },
+      "SignupRequestPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SignupRequestRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "team_queue": {
+            "type": "integer",
+            "title": "Team Queue"
+          },
+          "smtp_configured": {
+            "type": "boolean",
+            "title": "Smtp Configured"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "team_queue",
+          "smtp_configured"
+        ],
+        "title": "SignupRequestPage"
+      },
+      "SignupRequestRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "shop_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shop Name"
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "path": {
+            "type": "string",
+            "enum": [
+              "email",
+              "team"
+            ],
+            "title": "Path"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "activated",
+              "rejected",
+              "abandoned"
+            ],
+            "title": "Status"
+          },
+          "email_verified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Verified At"
+          },
+          "reject_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "unreachable",
+                  "duplicate",
+                  "not_a_business",
+                  "fraud",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reject Reason"
+          },
+          "team_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Note"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "path_changed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path Changed At"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decided_via": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "email_link",
+                  "team",
+                  "system"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided Via"
+          },
+          "company_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Id"
+          },
+          "company_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Slug"
+          },
+          "legal_version": {
+            "type": "string",
+            "title": "Legal Version"
+          },
+          "purged": {
+            "type": "boolean",
+            "title": "Purged"
+          },
+          "known_accounts": {
+            "items": {
+              "$ref": "#/components/schemas/KnownAccount"
+            },
+            "type": "array",
+            "title": "Known Accounts"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "shop_name",
+          "full_name",
+          "phone",
+          "email",
+          "path",
+          "status",
+          "email_verified_at",
+          "reject_reason",
+          "team_note",
+          "created_at",
+          "path_changed_at",
+          "decided_at",
+          "decided_via",
+          "company_id",
+          "legal_version",
+          "purged"
+        ],
+        "title": "SignupRequestRead"
+      },
+      "SignupStats": {
+        "properties": {
+          "received_email": {
+            "type": "integer",
+            "title": "Received Email"
+          },
+          "received_team": {
+            "type": "integer",
+            "title": "Received Team"
+          },
+          "activated_by_link": {
+            "type": "integer",
+            "title": "Activated By Link"
+          },
+          "activated_by_team": {
+            "type": "integer",
+            "title": "Activated By Team"
+          },
+          "rejected": {
+            "type": "integer",
+            "title": "Rejected"
+          },
+          "abandoned": {
+            "type": "integer",
+            "title": "Abandoned"
+          },
+          "pending_team": {
+            "type": "integer",
+            "title": "Pending Team"
+          },
+          "pending_email": {
+            "type": "integer",
+            "title": "Pending Email"
+          },
+          "average_hours_to_activation": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Hours To Activation"
+          },
+          "smtp_configured": {
+            "type": "boolean",
+            "title": "Smtp Configured"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "received_email",
+          "received_team",
+          "activated_by_link",
+          "activated_by_team",
+          "rejected",
+          "abandoned",
+          "pending_team",
+          "pending_email",
+          "average_hours_to_activation",
+          "smtp_configured"
+        ],
+        "title": "SignupStats"
+      },
+      "SignupVerified": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "team"
+            ],
+            "title": "Status"
+          },
+          "company_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Slug"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "SignupVerified",
+        "description": "`ready` : la boutique est ouverte, `company_slug` sert à préremplir la connexion.\n`team` : l'adresse est vérifiée, mais l'équipe doit voir la demande avant."
+      },
+      "SignupVerify": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 20,
+            "title": "Token"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "SignupVerify"
       },
       "SignupsRead": {
         "properties": {

@@ -27,9 +27,10 @@ def is_configured() -> bool:
     return bool(get_settings().smtp_host)
 
 
-def send_email(*, to: list[str], subject: str, body: str) -> bool:
-    """Envoie un message texte. `False` si l'envoi n'est pas configuré ou n'a personne à qui
-    écrire ; une erreur SMTP remonte, pour que la tâche réessaie."""
+def send_email(*, to: list[str], subject: str, body: str, html: str | None = None) -> bool:
+    """Envoie un message texte, avec une version HTML légère si `html` est donné (ADR
+    0118). `False` si l'envoi n'est pas configuré ou n'a personne à qui écrire ; une
+    erreur SMTP remonte, pour que la tâche réessaie."""
     settings = get_settings()
     recipients = [address for address in to if address]
     if not settings.smtp_host:
@@ -43,6 +44,8 @@ def send_email(*, to: list[str], subject: str, body: str) -> bool:
     message["To"] = ", ".join(recipients)
     message["Subject"] = subject
     message.set_content(body)
+    if html is not None:
+        message.add_alternative(html, subtype="html")
 
     with smtplib.SMTP(
         settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout_seconds

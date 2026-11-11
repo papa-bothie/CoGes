@@ -219,6 +219,28 @@ def mfa_key_violations(values: dict[str, str], *, source: str) -> list[str]:
     return []
 
 
+#: Clé du HMAC des demandes d'inscription (ADR 0118) : comme les autres secrets.
+SIGNUP_KEY_MIN_LENGTH = 32
+
+
+def signup_violations(values: dict[str, str], *, source: str) -> list[str]:
+    """Inscription libre-service (ADR 0118) : l'interrupteur vaut true ou false ; ouverte,
+    elle exige COGES_SIGNUP_IP_HASH_KEY (HMAC de l'IP, du numéro et de l'e-mail : un
+    sha256 sans clé d'une IPv4 se retrouve en quelques minutes)."""
+    enabled = values.get("COGES_SIGNUP_ENABLED", "false").strip("\"'").lower()
+    if enabled not in {"true", "false", ""}:
+        return [f"{source} : COGES_SIGNUP_ENABLED vaut true ou false (lu : « {enabled} »)"]
+    if enabled != "true":
+        return []
+    key = values.get("COGES_SIGNUP_IP_HASH_KEY", "").strip("\"'")
+    if len(key) < SIGNUP_KEY_MIN_LENGTH:
+        return [
+            f"{source} : COGES_SIGNUP_IP_HASH_KEY doit compter {SIGNUP_KEY_MIN_LENGTH} "
+            "caractères au moins quand l'inscription est ouverte (openssl rand -hex 32)"
+        ]
+    return []
+
+
 def vps_violations(
     pairs: list[tuple[str, str]], *, source: str, stack: str | None = None
 ) -> list[str]:
@@ -264,6 +286,7 @@ def vps_violations(
         found += admin_gate_violations(values, source=source)
 
     found += mfa_key_violations(values, source=source)
+    found += signup_violations(values, source=source)
 
     for key in ("COGES_JWT_SECRET", "COGES_REDIS_PASSWORD"):
         if len(values.get(key, "")) < MIN_SECRET_LENGTH:

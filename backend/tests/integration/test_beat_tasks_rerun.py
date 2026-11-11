@@ -70,6 +70,7 @@ def test_every_scheduled_task_is_covered_here() -> None:
         "system.beat_tick",
         "platform.subscriptions_daily",
         "platform.support_sessions_close",
+        "signup.maintenance",
     }
     assert {entry["task"] for entry in BEAT_SCHEDULE.values()} == covered
 
@@ -132,6 +133,16 @@ def test_support_sessions_close_rerun() -> None:
     """Accès support échus (ADR 0092) : la seconde passe n'en trouve plus à fermer."""
     _, second = _twice(platform.support_sessions_close)
     assert second == 0
+
+
+@pytest.mark.usefixtures("platform_bound_to_test_database")
+def test_signup_maintenance_rerun() -> None:
+    """Demandes d'inscription (ADR 0118) : la seconde passe ne bascule, n'abandonne et
+    n'efface plus rien."""
+    from app.workers.tasks import signup
+
+    _, second = _twice(signup.maintenance)
+    assert second == {"switched_to_team": 0, "abandoned": 0, "purged": 0}
 
 
 def test_beat_tick_rerun(ops_redis: redis.Redis) -> None:

@@ -5,6 +5,7 @@ déploiement. Ce module se limite au câblage : sonde de santé, journalisation
 structurée, format d'erreur unique et montage des routeurs de modules.
 """
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request
@@ -53,6 +54,9 @@ from app.modules.products.router import router as products_router
 from app.modules.rbac.router import router as rbac_router
 from app.modules.sales.router import returns_router
 from app.modules.sales.router import router as sales_router
+from app.modules.signup.router import platform_router as signup_platform_router
+from app.modules.signup.router import public as signup_public_router
+from app.modules.signup.router import router as signup_config_router
 from app.modules.suppliers.router import router as suppliers_router
 from app.modules.system.router import platform_router as system_platform_router
 from app.modules.system.router import router as system_router
@@ -65,6 +69,14 @@ settings = get_settings()
 # L'administration exige la double authentification (ADR 0105) : sans sa clé, hors
 # `local` et `ci`, l'API refuse de démarrer plutôt que de refuser chaque connexion.
 settings.require_mfa_encryption_key()
+# Inscription ouverte (ADR 0118) : sa clé de HMAC est exigée, comme celle de la MFA.
+# Sans SMTP, elle marche quand même : toute demande passe par l'équipe, ce qu'on dit.
+if settings.signup_enabled:
+    settings.require_signup_ip_hash_key()
+    if not settings.smtp_host:
+        logging.getLogger("coges.signup").warning(
+            "Inscription ouverte sans SMTP : toutes les demandes passent par l'équipe"
+        )
 
 # La documentation interactive charge Swagger UI depuis un CDN : elle n'est pas servie
 # en production. Le contrat reste lisible dans `backend/openapi.json`, versionné.
@@ -134,6 +146,9 @@ def health_ready() -> JSONResponse:
 
 
 api_router.include_router(auth_router)
+# Inscription libre-service (ADR 0118) : routes publiques derrière l'interrupteur.
+api_router.include_router(signup_config_router)
+api_router.include_router(signup_public_router)
 api_router.include_router(companies_router)
 api_router.include_router(users_router)
 api_router.include_router(rbac_router)
@@ -173,6 +188,9 @@ api_router.include_router(audit_router)
 # sous `/platform`, avec son jeton, son rôle PostgreSQL et son sous-domaine.
 api_router.include_router(platform_router)
 api_router.include_router(system_platform_router)
+# Les demandes d'inscription, vues et décidées par l'équipe (ADR 0118) : sous
+# `/platform`, mais servies par le module Signup (l'activation fabrique une entreprise).
+api_router.include_router(signup_platform_router)
 
 app.include_router(api_router)
 

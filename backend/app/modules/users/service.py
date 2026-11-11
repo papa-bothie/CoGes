@@ -166,9 +166,13 @@ def create_user(
     *,
     ip_address: str | None = None,
     user_id: UUID | None = None,
+    password_hash: str | None = None,
 ) -> tuple[User, str | None]:
     """Crée un compte dans l'entreprise du contexte ; rend aussi son mot de passe
     provisoire s'il a été tiré par le serveur.
+
+    `password_hash` : le mot de passe déjà haché d'une demande d'inscription (ADR 0118),
+    choisi par la personne elle-même ; il n'est ni provisoire ni jamais revu en clair.
 
     L'e-mail est unique **par entreprise** : le même e-mail peut exister chez un
     autre tenant, ce sont deux comptes distincts (§ 2.2).
@@ -193,15 +197,15 @@ def create_user(
 
     # Sans mot de passe donné, un provisoire lisible, à changer à la première
     # connexion (ADR 0074). Un mot de passe choisi (CLI, seed, API) reste tel quel.
-    temporary = payload.password is None
-    password = readable_password() if temporary else str(payload.password)
+    temporary = payload.password is None and password_hash is None
+    password = readable_password() if temporary else str(payload.password or "")
     user = repository.add(
         User(
             **({"id": user_id} if user_id is not None else {}),
             company_id=ctx.company_id,
             email=str(payload.email) if payload.email is not None else None,
             phone=payload.phone,
-            password_hash=hash_password(password),
+            password_hash=password_hash or hash_password(password),
             full_name=payload.full_name,
             is_active=True,
             must_change_password=temporary,
@@ -383,6 +387,26 @@ def accept_legal(session: Session, ctx: TenantContext, *, ip_address: str | None
         ip_address=ip_address,
     )
     return user
+
+
+def record_legal_acceptance(
+    session: Session, ctx: TenantContext, user_id: UUID, *, version: str, accepted_at: datetime
+) -> None:
+    """L'acceptation faite **avant** que le compte n'existe (case de l'inscription, ADR
+    0118) : la version et le moment de la demande, recopiés sur le gérant."""
+    user = get_user(session, ctx, user_id)
+    user.legal_accepted_version = version
+    user.legal_accepted_at = accepted_at
+    session.flush()
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.UPDATE,
+        entity_table="users",
+        entity_id=user.id,
+        before={"legal_accepted_version": None},
+        after={"legal_accepted_version": version, "legal_accepted_at": accepted_at.isoformat()},
+    )
 
 
 def record_login(session: Session, user: User) -> None:

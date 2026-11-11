@@ -87,10 +87,15 @@ READ_ROUTES: dict[str, tuple[str, dict[str, str]]] = {
     "/api/v1/platform/system/workers": (PLATFORM, {}),
     "/api/v1/platform/system/job-runs": (PLATFORM, {}),
     "/api/v1/platform/system/outbox": (PLATFORM, {}),
+    # Demandes d'inscription (ADR 0118) : tables de la plateforme, `test_signup.py`.
+    "/api/v1/platform/signup-requests": (PLATFORM, {}),
+    "/api/v1/platform/signup-requests/stats": (PLATFORM, {}),
     "/api/v1/health": (PUBLIC, {}),
     "/api/v1/health/ready": (PUBLIC, {}),
     # Contrôle Cloudflare Access de Caddy (ADR 0104) : 204 vide, aucune donnée.
     "/api/v1/platform/access": (PUBLIC, {}),
+    # Inscription ouverte ou non (ADR 0118) : quatre réglages publics, aucun secret.
+    "/api/v1/auth/signup-config": (PUBLIC, {}),
     # Jeton d'exploitation, pas un compte : aucune donnée d'entreprise (ADR 0077).
     "/api/v1/system/workers": (OPS, {}),
     # Catalogue global des permissions, identique pour toutes les entreprises.

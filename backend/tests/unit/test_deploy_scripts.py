@@ -327,3 +327,31 @@ def test_the_script_and_the_api_agree_that_mfa_is_required() -> None:
     from app.core import mfa  # noqa: PLC0415
 
     assert _module().PLATFORM_MFA_REQUIRED is mfa.PLATFORM_MFA_REQUIRED is True
+
+
+@pytest.mark.parametrize(
+    ("lines", "reason"),
+    [
+        ("COGES_SIGNUP_ENABLED=true\n", "COGES_SIGNUP_IP_HASH_KEY doit compter 32"),
+        ("COGES_SIGNUP_ENABLED=true\nCOGES_SIGNUP_IP_HASH_KEY=courte\n", "32 caractères"),
+        ("COGES_SIGNUP_ENABLED=oui\n", "COGES_SIGNUP_ENABLED vaut true ou false"),
+    ],
+)
+def test_an_open_signup_needs_its_hash_key(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], lines: str, reason: str
+) -> None:
+    """Inscription ouverte (ADR 0118) : sans clé HMAC, l'API refuserait de démarrer."""
+    assert _module().main(_env(tmp_path, _GOOD_ENV + lines)) == 1
+    assert reason in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "lines",
+    [
+        "",
+        "COGES_SIGNUP_ENABLED=false\n",
+        "COGES_SIGNUP_ENABLED=true\nCOGES_SIGNUP_IP_HASH_KEY=" + "a" * 64 + "\n",
+    ],
+)
+def test_a_closed_signup_or_a_keyed_one_passes(tmp_path: Path, lines: str) -> None:
+    assert _module().main(_env(tmp_path, _GOOD_ENV + lines)) == 0
