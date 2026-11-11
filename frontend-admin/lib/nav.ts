@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Building2,
+  Inbox,
   History,
   LayoutDashboard,
   ListChecks,
@@ -25,6 +26,8 @@ export const NAV: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/", label: "Tableau de bord", icon: LayoutDashboard },
       { href: "/companies", label: "Entreprises", icon: Building2 },
+      // Demandes d'inscription (ADR 0118) : le compteur de la file vient de l'en-tête.
+      { href: "/demandes", label: "Demandes", icon: Inbox },
       { href: "/users", label: "Utilisateurs", icon: Users },
       { href: "/team", label: "Équipe", icon: UserCog },
       { href: "/audit", label: "Journal", icon: History, roles: ["administrator"] },

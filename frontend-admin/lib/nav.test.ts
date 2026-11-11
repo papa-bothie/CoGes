@@ -8,6 +8,7 @@ describe("menu", () => {
     expect(NAV[0]!.items.map((item) => item.label)).toEqual([
       "Tableau de bord",
       "Entreprises",
+      "Demandes",
       "Utilisateurs",
       "Équipe",
       "Journal",
@@ -18,6 +19,7 @@ describe("menu", () => {
     expect(currentHref("/")).toBe("/");
     expect(currentHref("/companies/123")).toBe("/companies");
     expect(currentHref("/system/jobs")).toBe("/system/jobs");
+    expect(currentHref("/demandes/abc")).toBe("/demandes");
     expect(currentHref("/system")).toBe("/system");
   });
 });
