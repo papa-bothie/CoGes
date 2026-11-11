@@ -2,6 +2,7 @@
 
 import { Check, MessageCircle, Printer } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
 import { SecondaryLink } from "@/components/kit/secondary-action";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,8 @@ import { formatAmount } from "@/lib/format";
 import { labels } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { receiptText, whatsappLink } from "@/lib/whatsapp";
+
+import { CorrectSale } from "./correct-sale";
 
 const t = labels.sales.editor.success;
 
@@ -41,6 +44,8 @@ export function SaleSuccess({
   onNewSale: () => void;
 }) {
   const text = receiptText(sale, { shop, timeZone, currency });
+  // Le décompte de « Corriger cette vente » part de l'arrivée de la vente confirmée.
+  const [receivedAt] = useState(() => Date.now());
   return (
     <div className="flex justify-center pt-10">
       <section
@@ -82,6 +87,9 @@ export function SaleSuccess({
             <MessageCircle className="size-[22px]" aria-hidden />
             {labels.whatsapp.send}
           </a>
+        </div>
+        <div className="flex w-full flex-wrap justify-center gap-3">
+          <CorrectSale sale={sale} receivedAt={receivedAt} />
         </div>
         <SecondaryLink href="/dashboard" className="mt-1.5 self-center">
           {t.home}

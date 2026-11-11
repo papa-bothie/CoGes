@@ -276,6 +276,11 @@ function CashRow({
         </span>
         <div className="min-w-0 flex-1">
           <p className={cn("font-bold", line.cancelled && "line-through")}>{cashLineText(line)}</p>
+          {line.correction && (
+            <span className="mt-1 inline-block rounded-full bg-ventes-teinte px-2.5 py-0.5 text-sm font-bold text-ventes-encre">
+              {t.correction}
+            </span>
+          )}
           <p className="text-muted-foreground">{cashLineDetail(line, timeZone)}</p>
         </div>
         <span

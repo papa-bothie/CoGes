@@ -174,6 +174,7 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
     "/api/v1/sales/{sale_id}/cancel": CrossTenantCase(
         parameters={"sale_id": "sale"}, body={"reason": "Test de fuite inter-tenant"}
     ),
+    "/api/v1/sales/{sale_id}/correct": CrossTenantCase(parameters={"sale_id": "sale"}, body={}),
     "/api/v1/sales/{sale_id}/returns": CrossTenantCase(
         parameters={"sale_id": "sale"},
         body={"lines": [{"sale_item_id": "sale_item", "qty": "1"}]},

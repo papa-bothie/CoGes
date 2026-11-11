@@ -82,13 +82,18 @@ def sale_cancelled_payload(
     total: Decimal,
     reason: str,
     reversed_movement_ids: list[UUID],
+    corrected_by_user_id: UUID | None = None,
 ) -> dict[str, Any]:
     """Corps de `sale.cancelled`.
 
     `sold_at` et non `cancelled_at` en tête : l'analytique réécrit le jour de la
     **vente**, pas celui de l'annulation (§ 12.1 point 3).
+
+    Une annulation par « Corriger cette vente » (ADR 0119) le dit, et dit qui : l'alerte
+    du gérant nomme la personne. Champs ajoutés seulement dans ce cas, les
+    consommateurs existants les ignorent.
     """
-    return {
+    payload: dict[str, Any] = {
         "sale_id": str(sale_id),
         "sale_no": sale_no,
         "sold_at": sold_at.isoformat(),
@@ -96,6 +101,10 @@ def sale_cancelled_payload(
         "reason": reason,
         "reversed_movement_ids": [str(movement_id) for movement_id in reversed_movement_ids],
     }
+    if corrected_by_user_id is not None:
+        payload["corrected"] = True
+        payload["corrected_by_user_id"] = str(corrected_by_user_id)
+    return payload
 
 
 def returned_line_payload(

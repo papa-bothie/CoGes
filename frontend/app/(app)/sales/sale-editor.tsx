@@ -42,6 +42,7 @@ import {
 import { draftOneOf, draftString } from "@/lib/drafts";
 import { PAYMENT_METHODS } from "@/lib/payment-methods";
 import { todayIn } from "@/lib/period";
+import { displayNumber } from "@/lib/units";
 import { cn } from "@/lib/utils";
 
 import { SaleSuccess } from "./sale-success";
@@ -499,6 +500,11 @@ export function SaleEditor({
           aria-label={labels.sales.receipt}
           className="flex min-w-0 flex-col gap-[18px] rounded-carte border border-border bg-card p-5"
         >
+          {data?.corrects_sale && (
+            <p className="rounded-champ bg-voile px-4 py-3 text-libelle">
+              {labels.sales.correction.editorBanner(displayNumber(data.corrects_sale.sale_no))}
+            </p>
+          )}
           {draft.restored && (
             <DraftBanner
               onClear={() => {

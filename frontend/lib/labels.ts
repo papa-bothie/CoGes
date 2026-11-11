@@ -594,6 +594,27 @@ export const labels = {
       payBefore: "À payer avant le",
       returns: "Retours de cette vente",
       returnLine: (no: string, day: string) => `Retour n° ${no} · ${day}`,
+      correctedBanner: (no: string) => `Corrigée — remplacée par la vente n° ${no}.`,
+      correctingBanner: (no: string) =>
+        `Corrigée — en cours de correction dans la vente n° ${no}, pas encore encaissée.`,
+      openCorrection: "Ouvrir la correction",
+      seeReplacement: "Voir la nouvelle vente",
+      replacesBanner: (no: string) => `Cette vente remplace la vente n° ${no}, corrigée.`,
+    },
+    /** « Corriger cette vente » : annuler et refaire pendant 10 minutes (ADR 0119). */
+    correction: {
+      button: "Corriger cette vente",
+      left: (seconds: number) =>
+        seconds < 60 ? "moins d'une minute" : `encore ${Math.ceil(seconds / 60)} min`,
+      question: (no: string) =>
+        `La vente n° ${no} sera annulée. Vous la referez, puis vous encaisserez de nouveau.`,
+      hint: "Les articles et le client sont repris. Si vous ne réencaissez pas, la vente reste annulée et la correction vous attend dans « Nouvelle vente ».",
+      yes: "Oui, corriger",
+      no: "Non, garder la vente",
+      already: "Cette vente a déjà été corrigée.",
+      openDraft: "Ouvrir la correction",
+      editorBanner: (no: string) =>
+        `Correction de la vente n° ${no}, annulée. Corrigez puis encaissez.`,
     },
   },
   /** Exports PDF pour le comptable (prompt 35, bloc X, ADR 0114). */
@@ -2147,6 +2168,8 @@ export const labels = {
       line: (time: string, method: string) => `${time} · ${method}`,
       cancel: "Annuler",
       cancelled: "Annulé",
+      /** Ligne d'une vente corrigée ou de sa nouvelle vente (ADR 0119). */
+      correction: "Correction",
       why: "Pourquoi ?",
       reasons: ["Erreur de montant", "Saisi deux fois", "Mauvais client"] as const,
       keep: "Garder",

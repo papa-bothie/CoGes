@@ -83,6 +83,11 @@ def _date_long(moment: datetime, tz: str) -> str:
     return f"{local.day} {MONTHS[local.month - 1]} {local.year}"
 
 
+def cancelled_label(receipt: ReceiptRead) -> str:
+    """Le bandeau d'une vente annulée : une correction le dit (ADR 0119)."""
+    return "VENTE ANNULÉE — corrigée" if receipt.corrected else "VENTE ANNULÉE"
+
+
 def _paid_by_method(receipt: ReceiptRead) -> list[tuple[str, Decimal]]:
     """Paiements vivants additionnés par moyen, dans l'ordre d'arrivée (comme l'écran)."""
     totals: dict[str, Decimal] = {}
@@ -258,7 +263,9 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
     story: list[Flowable] = []
     if cancelled:
         story.append(
-            pdf.para("VENTE ANNULÉE", pdf.style("cancelled", size=16, bold=True, align="center"))
+            pdf.para(
+                cancelled_label(receipt), pdf.style("cancelled", size=16, bold=True, align="center")
+            )
         )
     story += [header, Spacer(1, 6 * mm), parties, Spacer(1, 4 * mm), billed_to, Spacer(1, 5 * mm)]
 
@@ -516,7 +523,7 @@ def render_ticket(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> b
     if receipt.status == "cancelled":
         story.append(
             pdf.para(
-                "VENTE ANNULÉE",
+                cancelled_label(receipt),
                 pdf.style("t-cancel", size=11, mono=True, bold=True, align="center"),
             )
         )

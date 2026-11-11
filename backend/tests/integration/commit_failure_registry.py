@@ -34,6 +34,7 @@ KEYED = frozenset(
         "/api/v1/debts",
         "/api/v1/expenses",
         "/api/v1/sales/{sale_id}/confirm",
+        "/api/v1/sales/{sale_id}/correct",
         "/api/v1/sales/{sale_id}/returns",
         "/api/v1/sale-returns/{return_id}/refunds",
         "/api/v1/imports/{kind}",
@@ -511,6 +512,10 @@ REGISTRY: dict[tuple[str, str], Critical | Exempt] = {
         lambda w: Call(
             "POST", f"/api/v1/sales/{w.credit_sale()}/cancel", {"reason": "Erreur de saisie"}
         )
+    ),
+    # Correction (ADR 0119) : vente encaissée à l'instant, donc dans le délai.
+    ("POST", "/api/v1/sales/{sale_id}/correct"): Critical(
+        lambda w: Call("POST", f"/api/v1/sales/{w.confirmed_sale()[0]}/correct", {})
     ),
     ("POST", "/api/v1/sales/{sale_id}/returns"): Critical(_sale_return),
     ("POST", "/api/v1/sale-returns/{return_id}/refunds"): Critical(_refund),

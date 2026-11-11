@@ -1214,6 +1214,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/sales/{sale_id}/correct": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Correct Sale
+     * @description « Corriger cette vente » : annule la vente encaissée et ouvre un brouillon identique.
+     *
+     *     Pendant 10 minutes après la confirmation, à l'heure du serveur, pour toute personne
+     *     qui peut vendre (ADR 0119). Rend le brouillon, à corriger puis réencaisser. Ce
+     *     n'est pas le droit d'annuler : `sales:cancel` reste au gérant.
+     */
+    post: operations["correct_sale_api_v1_sales__sale_id__correct_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/sales/{sale_id}/returns": {
     parameters: {
       query?: never;
@@ -3640,6 +3664,11 @@ export interface components {
       party_name: string | null;
       /** Expense Label */
       expense_label: string | null;
+      /**
+       * Correction
+       * @default false
+       */
+      correction: boolean;
     };
     /**
      * CashLineKind
@@ -6464,6 +6493,11 @@ export interface components {
       balance: components["schemas"]["Amount-Output"];
       /** Payments */
       payments: components["schemas"]["PaymentRead"][];
+      /**
+       * Corrected
+       * @default false
+       */
+      corrected: boolean;
       /** Returns */
       returns: components["schemas"]["ReceiptReturn"][];
     };
@@ -6741,6 +6775,14 @@ export interface components {
       due_date?: string | null;
     };
     /**
+     * SaleCorrect
+     * @description « Corriger cette vente » : rien à dire de plus, le serveur sait tout (ADR 0119).
+     *
+     *     Un corps vide plutôt qu'aucun : la clé d'idempotence s'enregistre avec une
+     *     empreinte du corps, comme pour les autres écritures financières.
+     */
+    SaleCorrect: Record<string, never>;
+    /**
      * SaleCreate
      * @description Ouverture d'un brouillon. Aucun effet de bord (§ 5.1).
      */
@@ -6817,6 +6859,10 @@ export interface components {
       item_count: number;
       /** Returnable */
       returnable: boolean;
+      /** Correction Seconds Left */
+      correction_seconds_left?: number | null;
+      corrects_sale?: components["schemas"]["SaleLink"] | null;
+      corrected_by_sale?: components["schemas"]["SaleLink"] | null;
       /** Seller Name */
       seller_name: string | null;
       /** Items */
@@ -6887,6 +6933,20 @@ export interface components {
       unit_price?: components["schemas"]["LinePrice"] | null;
       price_reason?: components["schemas"]["PriceReason"] | null;
     };
+    /**
+     * SaleLink
+     * @description Une vente reliée par une correction (ADR 0119) : de quoi l'écrire et y mener.
+     */
+    SaleLink: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Sale No */
+      sale_no: string;
+      status: components["schemas"]["SaleStatus"];
+    };
     /** SalePage */
     SalePage: {
       /** Items */
@@ -6943,6 +7003,10 @@ export interface components {
       item_count: number;
       /** Returnable */
       returnable: boolean;
+      /** Correction Seconds Left */
+      correction_seconds_left?: number | null;
+      corrects_sale?: components["schemas"]["SaleLink"] | null;
+      corrected_by_sale?: components["schemas"]["SaleLink"] | null;
     };
     /**
      * SaleReturnCreate
@@ -10613,6 +10677,41 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["SaleCancel"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SaleDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  correct_sale_api_v1_sales__sale_id__correct_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        sale_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SaleCorrect"];
       };
     };
     responses: {

@@ -181,6 +181,26 @@ class SaleItemRead(BaseModel):
     returned_qty: Quantity
 
 
+class SaleCorrect(BaseModel):
+    """« Corriger cette vente » : rien à dire de plus, le serveur sait tout (ADR 0119).
+
+    Un corps vide plutôt qu'aucun : la clé d'idempotence s'enregistre avec une
+    empreinte du corps, comme pour les autres écritures financières.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SaleLink(BaseModel):
+    """Une vente reliée par une correction (ADR 0119) : de quoi l'écrire et y mener."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    sale_no: str
+    status: SaleStatus
+
+
 class SaleRead(BaseModel):
     """Vente en liste : l'en-tête, sans ses lignes."""
 
@@ -217,6 +237,14 @@ class SaleRead(BaseModel):
     #: Vente confirmée dont une ligne reste à retourner : la liste propose « Retour »
     #: pour les mêmes ventes que la fiche (ADR 0097). Dérivé, jamais stocké.
     returnable: bool
+    #: Secondes qui restent pour « Corriger cette vente », à l'heure du serveur ; `null`
+    #: si elle ne se corrige pas (délai passé, retour, dette réglée, déjà corrigée). Le
+    #: droit de vendre reste à vérifier : ce champ ne dit rien de la personne (ADR 0119).
+    correction_seconds_left: int | None = None
+    #: La vente annulée que ce brouillon (ou cette vente) remplace.
+    corrects_sale: SaleLink | None = None
+    #: La vente qui remplace celle-ci : `draft` tant qu'elle n'est pas réencaissée.
+    corrected_by_sale: SaleLink | None = None
 
 
 class SaleDetail(SaleRead):
@@ -376,6 +404,9 @@ class ReceiptRead(BaseModel):
     paid_total: Amount
     balance: Amount
     payments: list[PaymentRead]
+    #: Vente annulée par « Corriger cette vente » (ADR 0119) : les pièces portent
+    #: « ANNULÉE — corrigée ». `false` pour toute autre vente.
+    corrected: bool = False
     #: Du plus ancien au plus récent.
     returns: list[ReceiptReturn]
 

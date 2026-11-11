@@ -530,6 +530,9 @@ class CashJournalLine(BaseModel):
     #: Le client, le fournisseur ou la catégorie de dépense ; `null` pour un client de passage.
     party_name: str | None
     expense_label: str | None
+    #: Ligne d'une correction de vente (ADR 0119) : l'annulation de l'encaissement de la
+    #: vente corrigée, ou l'encaissement de la vente qui la remplace.
+    correction: bool = False
 
 
 class CashMethodTotal(BaseModel):

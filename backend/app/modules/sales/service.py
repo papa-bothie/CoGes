@@ -23,7 +23,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal, NamedTuple
 from uuid import UUID
@@ -89,6 +89,7 @@ from app.modules.sales.schemas import (
     SaleItemCreate,
     SaleItemRead,
     SaleItemUpdate,
+    SaleLink,
     SaleRead,
     SaleReturnCreate,
     SaleReturnDetail,
@@ -137,6 +138,32 @@ class SaleHasPaymentError(BusinessRuleError):
 class SaleHasReturnsError(BusinessRuleError):
     code = "sale_has_returns"
     default_message = "Cette vente porte un retour : l'annulation n'est pas un substitut au retour."
+
+
+class CorrectionWindowClosedError(BusinessRuleError):
+    code = "correction_window_closed"
+    default_message = (
+        "Cette vente a été encaissée il y a plus de 10 minutes : elle ne se corrige plus. "
+        "Faites plutôt un retour."
+    )
+
+
+class CorrectionAfterReturnError(BusinessRuleError):
+    # Même code que le refus de l'annulation : la règle est la même, le conseil diffère.
+    code = "sale_has_returns"
+    default_message = "Cette vente a déjà un retour : faites plutôt un retour."
+
+
+class SalePaidAfterConfirmationError(BusinessRuleError):
+    code = "sale_paid_after_confirmation"
+    default_message = (
+        "Cette vente a déjà été réglée depuis l'encaissement : faites plutôt un retour."
+    )
+
+
+class SaleAlreadyCorrectedError(BusinessRuleError):
+    code = "sale_already_corrected"
+    default_message = "Cette vente a déjà été corrigée."
 
 
 class OverpaymentError(BusinessRuleError):
@@ -824,8 +851,26 @@ def cancel_sale(
             details={"sale_id": str(sale.id), "paid_total": str(sale.paid_total)}
         )
 
-    before = _audited(sale)
+    return _cancel_confirmed(
+        session, ctx, sale, before=_audited(sale), reason=payload.reason, ip_address=ip_address
+    )
 
+
+def _cancel_confirmed(
+    session: Session,
+    ctx: TenantContext,
+    sale: Sale,
+    *,
+    before: dict[str, Any],
+    reason: str,
+    ip_address: str | None,
+    correction: dict[str, Any] | None = None,
+) -> Sale:
+    """Étapes 2 à 5 du § 5.2, communes à l'annulation et à la correction (ADR 0119).
+
+    La vente est verrouillée et ses refus vérifiés par l'appelant. `correction` dit le
+    brouillon qui la remplace : il entre dans l'audit, et l'événement nomme qui corrige.
+    """
     # 2-3. Un mouvement inverse par sortie. `inv_reversal_uq` garantit l'unicité :
     #      une seconde annulation ne peut pas doubler le stock (T15).
     item_ids = [item.id for item in SaleItemRepository(session, ctx).for_sale(sale.id)]
@@ -836,15 +881,18 @@ def cancel_sale(
 
     # 4. Dette liée : abandonnée si rien n'a été réglé, refus sinon.
     finance_service.write_off_sale_debt(
-        session, ctx, sale_id=sale.id, reason=payload.reason, ip_address=ip_address
+        session, ctx, sale_id=sale.id, reason=reason, ip_address=ip_address
     )
 
     # 5. Statut, date et motif. `sales_cancel_coherent` exige les trois ensemble.
     sale.status = "cancelled"
     sale.cancelled_at = datetime.now(UTC)
-    sale.cancel_reason = payload.reason
+    sale.cancel_reason = reason
     _flush(session, sale, details={"sale_id": str(sale.id)})
 
+    after = _audited(sale)
+    if correction is not None:
+        after["correction"] = correction
     audit_critical(
         session,
         ctx,
@@ -852,7 +900,7 @@ def cancel_sale(
         entity_table="sales",
         entity_id=sale.id,
         before=before,
-        after=_audited(sale),
+        after=after,
         ip_address=ip_address,
     )
     emit(
@@ -866,11 +914,161 @@ def cancel_sale(
             sale_no=sale.sale_no,
             sold_at=sale.sold_at,
             total=sale.total,
-            reason=payload.reason,
+            reason=reason,
             reversed_movement_ids=reversed_ids,
+            corrected_by_user_id=ctx.user_id if correction is not None else None,
         ),
     )
     return sale
+
+
+# ------------------------------------------------------------------- correction
+
+#: Délai pour « Corriger cette vente », compté depuis la confirmation à l'heure du
+#: serveur (ADR 0119). Décision du propriétaire du 11 novembre 2026.
+CORRECTION_WINDOW = timedelta(minutes=10)
+
+#: Motif d'annulation d'une vente corrigée, lu tel quel par l'écran et l'historique.
+CORRECTION_REASON = "Corrigée"
+
+
+def _correction_now() -> datetime:
+    """L'heure réelle du serveur : jamais celle du téléphone.
+
+    Pas `clock.now()` : `confirmed_at` est écrit à l'heure réelle, une heure figée
+    (ADR 0065) fausserait le délai. Les tests figent cette fonction-ci.
+    """
+    return datetime.now(UTC)
+
+
+def correction_seconds_left(
+    sale: Sale, *, has_returns: bool, debt_status: str | None, corrected: bool
+) -> int | None:
+    """Secondes qui restent pour corriger la vente, ou `None` si elle ne se corrige pas.
+
+    Le serveur seul compte : l'écran décompte à partir de ce nombre.
+    """
+    if (
+        sale.status != "confirmed"
+        or sale.confirmed_at is None
+        or corrected
+        or has_returns
+        or debt_status not in (None, "open")
+    ):
+        return None
+    left = int((sale.confirmed_at + CORRECTION_WINDOW - _correction_now()).total_seconds())
+    return left if left > 0 else None
+
+
+def correct_sale(
+    session: Session,
+    ctx: TenantContext,
+    sale_id: UUID,
+    *,
+    ip_address: str | None = None,
+) -> Sale:
+    """« Corriger cette vente » : annuler et refaire, en une transaction (ADR 0119).
+
+    Verrous dans l'ordre de l'annulation (dette, puis vente, ADR 0062 et 0088), puis
+    les paiements de la confirmation et le stock. Les encaissements de la
+    confirmation sont contre-passés (ADR 0038), la vente est annulée avec le motif
+    « Corrigée », et un brouillon identique est ouvert, relié par `corrects_sale_id`.
+    Rend ce brouillon. Aucun argent ne sort, aucun droit d'annuler n'est donné.
+    """
+    finance_service.lock_sale_debt(session, ctx, sale_id)
+    repository = SaleRepository(session, ctx)
+    sale = repository.get_for_update(sale_id)
+    if sale is None:
+        raise NotFoundError("Vente introuvable.")
+
+    details: dict[str, Any] = {"sale_id": str(sale.id)}
+    # Vu après le verrou : la seconde de deux personnes lit le brouillon de la première.
+    existing = repository.correction_of(sale.id)
+    if existing is not None:
+        raise SaleAlreadyCorrectedError(
+            details={**details, "draft_id": str(existing.id), "draft_sale_no": existing.sale_no}
+        )
+    if sale.status == "cancelled":
+        raise SaleAlreadyCancelledError(details=details)
+    if sale.status != "confirmed" or sale.confirmed_at is None:
+        raise SaleNotConfirmedError(details={**details, "status": sale.status})
+    if _correction_now() - sale.confirmed_at > CORRECTION_WINDOW:
+        raise CorrectionWindowClosedError(
+            details={**details, "confirmed_at": sale.confirmed_at.isoformat()}
+        )
+    if has_returns(session, ctx, sale.id):
+        raise CorrectionAfterReturnError(details=details)
+    if finance_service.sale_debt_moved(session, ctx, sale.id):
+        raise SalePaidAfterConfirmationError(details=details)
+
+    before = _audited(sale)
+    finance_service.cancel_sale_payments(
+        session, ctx, sale_id=sale.id, reason=CORRECTION_REASON, ip_address=ip_address
+    )
+    session.refresh(sale)
+    draft = _correction_draft(session, ctx, sale)
+    _cancel_confirmed(
+        session,
+        ctx,
+        sale,
+        before=before,
+        reason=CORRECTION_REASON,
+        ip_address=ip_address,
+        correction={"draft_id": str(draft.id), "draft_sale_no": draft.sale_no},
+    )
+    session.refresh(draft)
+    return draft
+
+
+def _correction_draft(session: Session, ctx: TenantContext, sale: Sale) -> Sale:
+    """Le brouillon qui remplace `sale` : même client, mêmes lignes.
+
+    Un prix changé à la caisse et son motif sont repris (ADR 0107) ; une ligne au prix
+    de la fiche suit la fiche du moment, comme toute ligne ajoutée. Pas de contrôle de
+    stock ici : le stock de la vente annulée lui revient dans la même transaction, et
+    la confirmation contrôle de toute façon (ADR 0109).
+    """
+    draft = SaleRepository(session, ctx).add(
+        Sale(
+            company_id=ctx.company_id,
+            customer_id=sale.customer_id,
+            sale_no=next_document_number(session, ctx, DOCUMENT_TYPE),
+            status="draft",
+            subtotal=Decimal("0"),
+            discount_total=Decimal("0"),
+            tax_total=Decimal("0"),
+            paid_total=Decimal("0"),
+            created_by=ctx.user_id,
+            corrects_sale_id=sale.id,
+        )
+    )
+    _flush(session, draft, details={"sale_id": str(sale.id)})
+
+    item_repository = SaleItemRepository(session, ctx)
+    for item in item_repository.for_sale(sale.id):
+        price = products_service.assert_sellable(session, ctx, item.product_id)
+        typed = item.list_price is not None and item.unit_price != item.list_price
+        copy = item_repository.add(
+            SaleItem(
+                company_id=ctx.company_id,
+                sale_id=draft.id,
+                product_id=item.product_id,
+                price_id=price.price_id,
+                qty=item.qty,
+                unit_price=item.unit_price if typed else price.unit_price,
+                list_price=price.unit_price,
+                price_reason=item.price_reason if typed else None,
+                unit_cost=Decimal("0"),
+                discount=item.discount,
+                tax_rate=_line_tax_rate(session, ctx, item.product_id),
+            )
+        )
+        _flush(
+            session,
+            copy,
+            details={"sale_id": str(sale.id), "product_id": str(item.product_id)},
+        )
+    return draft
 
 
 # -------------------------------------------------------------------- privés
@@ -946,6 +1144,8 @@ def build_read(
     debt_status: DebtStatus | None,
     item_count: int,
     returnable: bool,
+    corrects: Sale | None = None,
+    corrected_by: Sale | None = None,
 ) -> SaleRead:
     """En-tête d'une vente, tel que la liste l'affiche.
 
@@ -975,7 +1175,19 @@ def build_read(
         cancelled_at=sale.cancelled_at,
         item_count=item_count,
         returnable=sale.status == "confirmed" and returnable,
+        correction_seconds_left=correction_seconds_left(
+            sale,
+            has_returns=returned_total is not None,
+            debt_status=debt_status,
+            corrected=corrected_by is not None,
+        ),
+        corrects_sale=_link(corrects),
+        corrected_by_sale=_link(corrected_by),
     )
+
+
+def _link(sale: Sale | None) -> SaleLink | None:
+    return None if sale is None else SaleLink(id=sale.id, sale_no=sale.sale_no, status=sale.status)
 
 
 def build_page(
@@ -996,6 +1208,10 @@ def build_page(
     returnable = items.with_returnable_qty(
         [sale.id for sale in sales if sale.status == "confirmed"]
     )
+    repository = SaleRepository(session, ctx)
+    corrected_by = repository.corrections_of([sale.id for sale in sales if sale.status != "draft"])
+    corrected_ids = [sale.corrects_sale_id for sale in sales if sale.corrects_sale_id]
+    corrects = {sale.id: sale for sale in repository.by_ids(corrected_ids)} if corrected_ids else {}
     return [
         build_read(
             sale,
@@ -1004,6 +1220,8 @@ def build_page(
             debt_status=debt_statuses.get(sale.id),
             item_count=item_counts.get(sale.id, 0),
             returnable=sale.id in returnable,
+            corrects=None if sale.corrects_sale_id is None else corrects.get(sale.corrects_sale_id),
+            corrected_by=corrected_by.get(sale.id),
         )
         for sale in sales
     ]
@@ -1142,6 +1360,8 @@ def build_receipt(session: Session, ctx: TenantContext, sale_id: UUID) -> Receip
         paid_total=sale.paid_total,
         balance=sale.total - sale.paid_total,
         payments=finance_service.payment_reads_for_sale(session, ctx, sale.id),
+        corrected=sale.status == "cancelled"
+        and SaleRepository(session, ctx).correction_of(sale.id) is not None,
         returns=[
             ReceiptReturn(
                 return_no=row.return_no, returned_at=row.returned_at, total_refund=row.total_refund
@@ -1824,10 +2044,16 @@ def sale_numbers(session: Session, ctx: TenantContext, sale_ids: Sequence[UUID])
 
 
 class SaleHead(NamedTuple):
-    """Ce qu'une ligne de caisse dit d'une vente : son numéro et son client."""
+    """Ce qu'une ligne de caisse dit d'une vente : son numéro et son client.
+
+    `corrected` : la vente a été annulée par une correction ; `correcting` : elle en
+    remplace une (ADR 0119).
+    """
 
     sale_no: str
     customer_id: UUID | None
+    corrected: bool = False
+    correcting: bool = False
 
 
 def sale_heads(
@@ -1836,9 +2062,17 @@ def sale_heads(
     """Numéro et client de chaque vente du lot (écran 21)."""
     if not sale_ids:
         return {}
+    repository = SaleRepository(session, ctx)
+    sales = repository.by_ids(list(set(sale_ids)))
+    corrected = repository.corrections_of([sale.id for sale in sales if sale.status == "cancelled"])
     return {
-        sale.id: SaleHead(sale.sale_no, sale.customer_id)
-        for sale in SaleRepository(session, ctx).by_ids(list(set(sale_ids)))
+        sale.id: SaleHead(
+            sale.sale_no,
+            sale.customer_id,
+            corrected=sale.id in corrected,
+            correcting=sale.corrects_sale_id is not None,
+        )
+        for sale in sales
     }
 
 

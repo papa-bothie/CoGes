@@ -33,6 +33,22 @@ class SaleRepository(TenantRepository[Sale]):
         stmt = self._select().where(Sale.id == sale_id).with_for_update()
         return self.session.execute(stmt).scalar_one_or_none()
 
+    def correction_of(self, sale_id: UUID) -> Sale | None:
+        """La vente qui corrige celle-ci (ADR 0119), ou `None`. Une seule au plus."""
+        stmt = self._select().where(Sale.corrects_sale_id == sale_id)
+        return self.session.execute(stmt).scalar_one_or_none()
+
+    def corrections_of(self, sale_ids: Sequence[UUID]) -> dict[UUID, Sale]:
+        """Vente corrigée → vente qui la corrige, pour un lot (listes, caisse)."""
+        if not sale_ids:
+            return {}
+        stmt = self._select().where(Sale.corrects_sale_id.in_(list(set(sale_ids))))
+        return {
+            sale.corrects_sale_id: sale
+            for sale in self.session.execute(stmt).scalars()
+            if sale.corrects_sale_id is not None
+        }
+
     def _filters(
         self,
         *,
