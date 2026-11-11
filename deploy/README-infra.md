@@ -492,6 +492,18 @@ docker compose exec -T postgres psql -U postgres -c "CREATE ROLE coges_signup NO
 #   GRANT USAGE ON SCHEMA public TO coges_signup;
 ```
 
+## Notifications sur le téléphone (Web Push, ADR 0120)
+
+Facultatives : sans `COGES_VAPID_PUBLIC_KEY`, `COGES_VAPID_PRIVATE_KEY` et
+`COGES_VAPID_SUBJECT`, aucun bouton « Activer les notifications », rien ne part. Les trois
+ensemble (contrôlé par `check_runtime_env.py`), tirées une fois par
+`uv run --directory backend python -m app.cli generate-vapid-keys`, posées dans
+`/etc/coges/coges.env` ; `api` et `worker` les reçoivent. La clé privée est un secret ; la
+changer désabonne tous les téléphones. Le worker poste chez les services de push des
+navigateurs (Google, Mozilla, Apple, Microsoft) par le réseau `jobs`, qui sort déjà sur
+Internet. Révision 0041 (`push_subscriptions`), sans rôle nouveau. Guide :
+`docs/runbooks/notifications.md`.
+
 ## Sauvegarde externe chiffrée (ADR 0084)
 
 Guide complet : `docs/runbooks/sauvegarde.md`. Chaque nuit à 02 h 15 UTC, GitHub Actions

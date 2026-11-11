@@ -413,6 +413,7 @@ def emit(
                 body=draft.body,
                 entity_id=str(insight_id),
                 data={"insight_id": str(insight_id), "insight_type": draft.insight_type.value},
+                push=notifications_service.push_texts.insight_critical(draft.insight_type.value),
             )
 
     run.resolved = repository.resolve_live(

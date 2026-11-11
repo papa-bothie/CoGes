@@ -371,6 +371,14 @@ REGISTRY: dict[tuple[str, str], Critical | Exempt] = {
         "rotation de session, couverte par test_auth (réutilisation, délai de grâce)"
     ),
     ("POST", "/api/v1/auth/logout"): Exempt("révocation de session, idempotente par nature"),
+    # Web Push (ADR 0120) : un abonnement d'appareil n'est pas une donnée de gestion ; le
+    # navigateur le renvoie à chaque ouverture de l'écran, l'arrêt est idempotent.
+    ("POST", "/api/v1/notifications/push/subscriptions"): Exempt(
+        "abonnement d'un appareil, renvoyé par le navigateur, sans donnée de gestion"
+    ),
+    ("POST", "/api/v1/notifications/push/subscriptions/remove"): Exempt(
+        "arrêt d'un abonnement, idempotent, sans donnée de gestion"
+    ),
     # --- Administration de la plateforme (ADR 0089) : aucune entreprise ne s'y connecte,
     # le harnais ci-dessous parle en commerçant. Leur COMMIT refusé est prouvé à part.
     ("POST", "/api/v1/platform/auth/login"): Exempt(

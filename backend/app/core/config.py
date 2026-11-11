@@ -25,6 +25,8 @@ from typing import Annotated, Any, Literal
 from pydantic import AwareDatetime, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from app.core.webpush import vapid_problem
+
 # backend/app/core/config.py -> backend/app/core -> backend/app -> backend -> racine
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -200,6 +202,19 @@ class Settings(BaseSettings):
     smtp_starttls: bool = True
     smtp_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
 
+    # --- Notifications sur le téléphone (Web Push, ADR 0120) ---
+    # Les trois ensemble, ou aucune : sans elles, le bouton « Activer les notifications »
+    # n'apparaît pas et rien n'est envoyé. Clés en base64url (P-256 brute), tirées par
+    # `python -m app.cli generate-vapid-keys`. La privée ne quitte jamais le serveur.
+    vapid_public_key: str | None = None
+    vapid_private_key: SecretStr | None = None
+    # « mailto:equipe@… » ou une adresse https:// : le service de push sait qui écrire.
+    vapid_subject: str | None = None
+    # Plafonds par personne (ADR 0120) : appareils vivants, notifications par heure.
+    push_max_devices: int = Field(default=5, ge=1, le=20)
+    push_max_per_hour: int = Field(default=30, ge=1, le=500)
+    push_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+
     # --- Inscription libre-service (lot 30, ADR 0118) ---
     # Éteinte par défaut : routes publiques en 404, aucun lien « Créer ma boutique ».
     signup_enabled: bool = False
@@ -344,6 +359,37 @@ class Settings(BaseSettings):
                 f"(COGES_ENV vaut « {self.env} »)."
             )
         return self
+
+    @field_validator("vapid_public_key", "vapid_private_key", "vapid_subject", mode="before")
+    @classmethod
+    def _empty_vapid_is_unset(cls, value: Any) -> Any:
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @model_validator(mode="after")
+    def _vapid_is_complete(self) -> "Settings":
+        """Refuse au démarrage des clés VAPID à moitié posées ou fausses (ADR 0120)."""
+        values = (self.vapid_public_key, self.vapid_private_key, self.vapid_subject)
+        if all(value is None for value in values):
+            return self
+        if any(value is None for value in values):
+            raise ValueError(
+                "COGES_VAPID_PUBLIC_KEY, COGES_VAPID_PRIVATE_KEY et COGES_VAPID_SUBJECT vont "
+                "ensemble : posez les trois, ou aucune."
+            )
+        assert self.vapid_public_key and self.vapid_private_key and self.vapid_subject
+        problem = vapid_problem(
+            self.vapid_public_key,
+            self.vapid_private_key.get_secret_value(),
+            self.vapid_subject,
+        )
+        if problem is not None:
+            raise ValueError(problem)
+        return self
+
+    @property
+    def push_enabled(self) -> bool:
+        """Les notifications sur le téléphone sont configurées."""
+        return self.vapid_private_key is not None
 
     @field_validator("signup_ip_hash_key", mode="before")
     @classmethod

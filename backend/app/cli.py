@@ -56,6 +56,7 @@ from sqlalchemy.orm import Session
 from app.core.config import REPO_ROOT
 from app.core.errors import ValidationFailedError
 from app.core.tenancy import TenantContext, tenant_transaction
+from app.core.webpush import generate_vapid_keys
 from app.modules.inventory import service as inventory_service
 from app.modules.inventory.schemas import StockRebuildLine
 from app.modules.platform import service as platform_service
@@ -270,6 +271,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     deactivate.add_argument("--email", required=True)
 
+    subparsers.add_parser(
+        "generate-vapid-keys",
+        help="Tirer une paire de clés VAPID (notifications sur le téléphone, ADR 0120)",
+    )
+
     openapi = subparsers.add_parser(
         "export-openapi", help="Écrire le contrat OpenAPI versionné (source des types du front)"
     )
@@ -311,6 +317,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Gérant créé      : {user_id}")
         login = f"email={manager.email}" if manager.email else f"téléphone={manager.phone}"
         print(f"Connexion        : slug={args.slug} {login}")
+
+    if args.command == "generate-vapid-keys":
+        # Rien n'est écrit sur disque : les deux lignes vont dans /etc/coges/coges.env.
+        public_key, private_key = generate_vapid_keys()
+        print(f"COGES_VAPID_PUBLIC_KEY={public_key}")
+        print(f"COGES_VAPID_PRIVATE_KEY={private_key}")
+        print("COGES_VAPID_SUBJECT=mailto:<adresse de l'équipe>")
 
     if args.command == "rebuild-stock":
         gaps = rebuild_stock(args.company_id)

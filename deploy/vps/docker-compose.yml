@@ -178,6 +178,11 @@ services:
       COGES_SIGNUP_IP_HASH_KEY: ${COGES_SIGNUP_IP_HASH_KEY:-}
       COGES_SUPPORT_WHATSAPP: ${COGES_SUPPORT_WHATSAPP:-221781811756}
       COGES_MERCHANT_URL: https://${COGES_DOMAIN:?}
+      # Notifications sur le téléphone (ADR 0120) : les trois ensemble ou aucune ; vides, pas
+      # de bouton « Activer les notifications ». L'API sert la clé publique, le worker signe.
+      COGES_VAPID_PUBLIC_KEY: ${COGES_VAPID_PUBLIC_KEY:-}
+      COGES_VAPID_PRIVATE_KEY: ${COGES_VAPID_PRIVATE_KEY:-}
+      COGES_VAPID_SUBJECT: ${COGES_VAPID_SUBJECT:-}
     networks:
       edge: { aliases: ["${COGES_STACK:?}-api"] }
       data: {}
@@ -214,6 +219,11 @@ services:
       COGES_MERCHANT_URL: https://${COGES_DOMAIN:?}
       COGES_SUPPORT_WHATSAPP: ${COGES_SUPPORT_WHATSAPP:-221781811756}
       COGES_SIGNUP_IP_HASH_KEY: ${COGES_SIGNUP_IP_HASH_KEY:-}
+      # Notifications sur le téléphone (ADR 0120) : les trois ensemble ou aucune ; vides, pas
+      # de bouton « Activer les notifications ». L'API sert la clé publique, le worker signe.
+      COGES_VAPID_PUBLIC_KEY: ${COGES_VAPID_PUBLIC_KEY:-}
+      COGES_VAPID_PRIVATE_KEY: ${COGES_VAPID_PRIVATE_KEY:-}
+      COGES_VAPID_SUBJECT: ${COGES_VAPID_SUBJECT:-}
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
     volumes: [ml-artifacts:/var/lib/coges/ml]
     networks: [data, jobs]

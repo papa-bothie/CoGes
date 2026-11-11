@@ -28,3 +28,21 @@ class Notification(IdentifiedTenantBase):
     data: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     read_at: Mapped[dt.datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(server_default=NOW, nullable=False)
+
+
+class PushSubscription(IdentifiedTenantBase):
+    """Un appareil qui reçoit les alertes de sa personne sur le téléphone (ADR 0120)."""
+
+    __tablename__ = "push_subscriptions"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False)
+    p256dh: Mapped[str] = mapped_column(Text, nullable=False)
+    auth: Mapped[str] = mapped_column(Text, nullable=False)
+    device_label: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(server_default=NOW, nullable=False)
+    updated_at: Mapped[dt.datetime] = mapped_column(server_default=NOW, nullable=False)
+    last_success_at: Mapped[dt.datetime | None] = mapped_column(nullable=True)
+    failure_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    disabled_at: Mapped[dt.datetime | None] = mapped_column(nullable=True)
+    disabled_reason: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -7,7 +7,8 @@
  * Cache Storage.
  *
  * Il ne s'active pas seul (`skipWaiting` seulement sur demande) : la page choisit un moment
- * sûr (`lib/pwa/update.ts`). Les caches d'un autre build sont supprimés à l'activation ; tout
+ * sûr (`lib/pwa/update.ts`). Il affiche aussi les notifications envoyées par le serveur
+ * (Web Push, ADR 0120) et ouvre l'écran qu'elles nomment, sans rien mettre en cache. Les caches d'un autre build sont supprimés à l'activation ; tout
  * est vidé sur le message `LOGOUT`, puis la pré-mise en cache (page hors ligne, ses styles et
  * ses polices, icônes, manifeste : aucune donnée) est remise — sans quoi une navigation sans
  * réseau après une déconnexion montrerait l'erreur du navigateur (prompt 32, P2).
@@ -107,6 +108,58 @@ self.addEventListener("message", (event) => {
     );
   }
   if (type === "VERSION" && event.ports && event.ports[0]) event.ports[0].postMessage(BUILD);
+});
+
+// Notifications sur le téléphone (ADR 0120). Le serveur écrit titre, texte et chemin ; ici,
+// on n'affiche que ça, sans rien garder. Le chemin est revérifié : relatif à l'application,
+// jamais \`//hôte\` ni une autre origine. Sinon, la liste des alertes.
+const ALERTS = "/notifications";
+function appPath(value) {
+  return typeof value === "string" && /^\\/(?![\\/\\\\])[A-Za-z0-9\\/_\\-?=&.%]*$/.test(value)
+    ? value
+    : ALERTS;
+}
+
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (error) {
+    data = {};
+  }
+  const title =
+    typeof data.title === "string" && data.title ? data.title : "Nouvelle alerte dans CoGes";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: typeof data.body === "string" ? data.body : "",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      // Une seule notification à la fois sur l'appareil : la rafale la remplace.
+      tag: typeof data.tag === "string" && data.tag ? data.tag : "coges-alertes",
+      renotify: true,
+      data: { url: appPath(data.url) },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL(
+    appPath(event.notification.data && event.notification.data.url),
+    self.location.origin,
+  ).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+      const open = windows.find((client) => new URL(client.url).origin === self.location.origin);
+      if (!open) return self.clients.openWindow(target);
+      // Naviguer d'abord (onglet contrôlé par ce worker), puis le mettre devant ; un onglet
+      // qui refuse la navigation laisse place à une fenêtre neuve.
+      return open
+        .navigate(target)
+        .then((client) => (client || open).focus())
+        .catch(() => self.clients.openWindow(target));
+    }),
+  );
 });
 
 self.addEventListener("fetch", (event) => {

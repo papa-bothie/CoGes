@@ -55,6 +55,30 @@ export const labels = {
     submit: "Enregistrer le nouveau mot de passe",
     done: "Mot de passe changé. Vos autres appareils sont déconnectés : reconnectez-les avec le nouveau.",
   },
+  /** Notifications sur le téléphone (Web Push, prompt 36, bloc N, ADR 0120). */
+  push: {
+    menu: "Notifications sur le téléphone",
+    title: "Notifications sur le téléphone",
+    intro:
+      "Recevez vos alertes même quand CoGes est fermé : stock bas, client qui n'a pas payé à temps, vente annulée. L'écran verrouillé ne montre jamais de montant.",
+    enable: "Activer les notifications",
+    disable: "Désactiver sur cet appareil",
+    on: "Les notifications sont activées sur cet appareil.",
+    off: "Les notifications sont désactivées sur cet appareil.",
+    asking: "Votre téléphone va vous demander l'autorisation : touchez « Autoriser ».",
+    denied:
+      "Vous avez refusé les notifications pour CoGes. Pour les réautoriser : touchez le cadenas à côté de l'adresse (ou ouvrez les réglages du navigateur), choisissez « Notifications », puis « Autoriser ». Revenez ensuite sur cet écran.",
+    unsupported:
+      "Ce navigateur ne sait pas recevoir de notifications. Essayez avec Chrome sur Android, ou installez CoGes sur l'écran d'accueil de votre iPhone.",
+    needsInstall:
+      "Sur iPhone et iPad, les notifications ne marchent que si CoGes est installé sur l'écran d'accueil.",
+    installSteps:
+      "Dans Safari, touchez le bouton Partager, puis « Sur l'écran d'accueil ». Ouvrez ensuite CoGes depuis son icône et revenez ici.",
+    unavailable: "Les notifications sur le téléphone ne sont pas encore disponibles.",
+    failed: "L'activation n'a pas abouti. Vérifiez votre connexion et réessayez.",
+    devices: (count: number) =>
+      count === 1 ? "1 appareil reçoit vos alertes." : `${count} appareils reçoivent vos alertes.`,
+  },
   header: {
     logout: "Se déconnecter",
     theme: "Changer de thème",

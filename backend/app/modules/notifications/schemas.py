@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class NotificationType(StrEnum):
@@ -106,3 +106,53 @@ class UnreadCount(BaseModel):
     #: Dont les alertes graves (`critical`) : seules elles allument le badge de la cloche
     #: (maquette v2, ADR 0070).
     critical: int
+
+
+# ------------------------------------------------------- Web Push (ADR 0120)
+
+
+class PushConfig(BaseModel):
+    """Ce dont le navigateur a besoin pour s'abonner. `null` : notifications indisponibles."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    public_key: str | None
+
+
+class PushKeys(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    p256dh: str = Field(min_length=80, max_length=100)
+    auth: str = Field(min_length=16, max_length=32)
+
+
+class PushSubscriptionCreate(BaseModel):
+    """L'abonnement rendu par `PushManager.subscribe()`, plus un nom d'appareil lisible."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    endpoint: str = Field(min_length=12, max_length=2048)
+    keys: PushKeys
+    device_label: str | None = Field(default=None, max_length=120)
+
+
+class PushSubscriptionRemove(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    endpoint: str = Field(min_length=12, max_length=2048)
+
+
+class PushSubscriptionRead(BaseModel):
+    """Un appareil abonné, sans ses clés : elles ne repartent jamais vers le client."""
+
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
+
+    id: UUID
+    device_label: str | None
+    created_at: datetime
+
+
+class PushSubscriptionList(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[PushSubscriptionRead]

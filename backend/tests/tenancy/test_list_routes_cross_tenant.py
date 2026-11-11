@@ -134,6 +134,9 @@ READ_ROUTES: dict[str, tuple[str, dict[str, str]]] = {
     "/api/v1/inventory/stock/summary": (TENANT, {}),
     "/api/v1/notifications": (TENANT, {}),
     "/api/v1/notifications/unread-count": (TENANT, {}),
+    # Web Push (ADR 0120) : la clé publique (identique partout) et ses propres appareils.
+    "/api/v1/notifications/push/config": (TENANT, {}),
+    "/api/v1/notifications/push/subscriptions": (TENANT, {}),
     "/api/v1/payments": (TENANT, {}),
     "/api/v1/products": (TENANT, {}),
     "/api/v1/products/category-counts": (TENANT, {}),

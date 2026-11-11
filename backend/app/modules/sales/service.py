@@ -916,6 +916,7 @@ def _cancel_confirmed(
             total=sale.total,
             reason=reason,
             reversed_movement_ids=reversed_ids,
+            cancelled_by_user_id=ctx.user_id,
             corrected_by_user_id=ctx.user_id if correction is not None else None,
         ),
     )
