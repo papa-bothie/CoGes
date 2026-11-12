@@ -21,7 +21,7 @@ from typing import Any
 from uuid import UUID
 
 #: Une somme : des chiffres suivis d'une devise (« 5 000 F », « 12000 FCFA », « 3 XOF »).
-_MONEY = re.compile(r"\d[\d\s  .,]*\s*(?:F|FCFA|CFA|XOF|francs?)(?![A-Za-zÀ-ÿ])", re.IGNORECASE)
+_MONEY = re.compile(r"\d[\d\s\u00a0\u202f.,]*\s*(?:F|(?i:FCFA|CFA|XOF|francs?))(?![A-Za-zÀ-ÿ0-9])")
 #: Un numéro de téléphone : huit chiffres ou plus, séparés ou non.
 _PHONE = re.compile(r"(?:\+?\d[\s  .\-]?){8,}")
 #: Chemin de l'application : une barre, puis ni barre ni barre oblique inverse, sans schéma.

@@ -82,6 +82,11 @@ def test_the_detector_finds_amounts_and_phone_numbers(text: str) -> None:
     assert push.shows_money_or_phone(text)
 
 
+@pytest.mark.parametrize("text", ["Lot 4f0a", "Pile 9V", "Riz 25 kg 3e4f", "Ampoule 60W", "2 fois"])
+def test_ordinary_names_are_not_taken_for_amounts(text: str) -> None:
+    assert not push.shows_money_or_phone(text)
+
+
 def test_an_article_named_with_a_price_falls_back_to_the_generic_text() -> None:
     """Le nom vient du client : « Sac 5 000 F » ne s'affiche pas sur l'écran verrouillé."""
     message = push.safe_message(*push.stock_out("Sac 5 000 F", ID).as_data().values())
