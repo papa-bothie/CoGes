@@ -376,6 +376,17 @@ def test_a_cancelled_sale_neither_asks_for_the_rest_nor_states_the_sum(
         assert "Arrêtée la présente facture" not in text, (fmt, text)
 
 
+def test_a_corrected_sale_says_so_on_both_documents(api_client: TestClient, manager: str) -> None:
+    """« Corriger cette vente » (ADR 0119) : les pièces portent « ANNULÉE — corrigée »."""
+    sale_id = _credit_sale(api_client, manager)
+    _post(api_client, manager, f"/api/v1/sales/{sale_id}/correct", {})
+    for fmt in ("a4", "ticket"):
+        response = _pdf(api_client, manager, f"/api/v1/sales/{sale_id}/receipt/pdf", format=fmt)
+        assert response.status_code == 200, response.text
+        _, text = _read(response.content)
+        assert "VENTE ANNULÉE — corrigée" in text, (fmt, text)
+
+
 def test_a_shop_name_with_markup_and_no_logo_is_printed_as_typed(
     api_client: TestClient, manager: str
 ) -> None:

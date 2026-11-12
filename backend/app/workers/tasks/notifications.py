@@ -122,12 +122,20 @@ def on_sale_cancelled(self: Any, **message: Any) -> str:
         total = serialize(amount)
         reason = str(payload.get("reason", "")).strip()
         number = sale_no.split("-")[-1].lstrip("0") or sale_no
+        body = f"Raison : {reason[:1].lower()}{reason[1:]}" if reason else "Sans raison donnée"
+        # Une correction n'est jamais silencieuse : l'alerte nomme qui l'a faite (ADR 0119).
+        corrector = payload.get("corrected_by_user_id")
+        if payload.get("corrected") and corrector:
+            name = users_service.names_by_id(session, ctx, [UUID(str(corrector))]).get(
+                UUID(str(corrector))
+            )
+            body = f"Corrigée par {name}" if name else "Corrigée"
         notifications_service.notify(
             session,
             ctx,
             notification_type=NotificationType.SALE_CANCELLED,
             title=f"Vente n° {number} annulée ({fcfa(amount)})",
-            body=f"Raison : {reason[:1].lower()}{reason[1:]}" if reason else "Sans raison donnée",
+            body=body,
             entity_id=str(received.aggregate_id),
             data={"sale_id": str(received.aggregate_id), "sale_no": sale_no, "total": total},
         )

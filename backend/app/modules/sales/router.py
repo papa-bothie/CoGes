@@ -14,7 +14,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 
 from app.core import idempotency, pdf
-from app.core.deps import TenantSession, client_ip, require_permission
+from app.core.deps import TenantSession, client_ip, require_permission, require_permissions
 from app.core.idempotency import IdempotencyKey
 from app.core.repository import MAX_PAGE_SIZE
 from app.modules.sales import service
@@ -24,6 +24,7 @@ from app.modules.sales.schemas import (
     RefundCreate,
     SaleCancel,
     SaleConfirm,
+    SaleCorrect,
     SaleCreate,
     SaleDayTotals,
     SaleDetail,
@@ -55,6 +56,9 @@ returns_router = APIRouter(prefix="/sale-returns", tags=["sale_returns"])
 #: présentée pour la seconde rejouerait la réponse de la première (ADR 0039).
 CONFIRM_SALE_ENDPOINT = "POST /api/v1/sales/{sale_id}/confirm"
 REFUND_RETURN_ENDPOINT = "POST /api/v1/sale-returns/{return_id}/refunds"
+#: La correction contre-passe des encaissements et ouvre un brouillon : un double appui
+#: n'en ouvre qu'un (ADR 0119).
+CORRECT_SALE_ENDPOINT = "POST /api/v1/sales/{sale_id}/correct"
 #: Un retour crée un reste dû au client et remet du stock : rejoué après une coupure
 #: réseau, il en créerait un second. Même règle, depuis la phase 10 (ADR 0042).
 CREATE_RETURN_ENDPOINT = "POST /api/v1/sales/{sale_id}/returns"
@@ -270,6 +274,40 @@ def cancel_sale(
         tenant.session, tenant.ctx, sale_id, payload, ip_address=client_ip(request)
     )
     return service.build_detail(tenant.session, tenant.ctx, sale)
+
+
+@router.post("/{sale_id}/correct", response_model=SaleDetail)
+def correct_sale(
+    sale_id: UUID,
+    payload: SaleCorrect,
+    request: Request,
+    tenant: Annotated[TenantSession, Depends(require_permissions("sales:create", "sales:confirm"))],
+    idempotency_key: IdempotencyKey,
+) -> Response:
+    """« Corriger cette vente » : annule la vente encaissée et ouvre un brouillon identique.
+
+    Pendant 10 minutes après la confirmation, à l'heure du serveur, pour toute personne
+    qui peut vendre (ADR 0119). Rend le brouillon, à corriger puis réencaisser. Ce
+    n'est pas le droit d'annuler : `sales:cancel` reste au gérant.
+    """
+    replay = idempotency.reserve(
+        tenant.session,
+        tenant.ctx,
+        key=idempotency_key,
+        endpoint=CORRECT_SALE_ENDPOINT.format(sale_id=sale_id),
+        payload=payload,
+    )
+    if replay is not None:
+        return idempotency.replay_response(replay)
+
+    draft = service.correct_sale(tenant.session, tenant.ctx, sale_id, ip_address=client_ip(request))
+    return idempotency.completed(
+        tenant.session,
+        tenant.ctx,
+        key=idempotency_key,
+        status_code=status.HTTP_200_OK,
+        model=service.build_detail(tenant.session, tenant.ctx, draft),
+    )
 
 
 @router.post(

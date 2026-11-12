@@ -56,6 +56,24 @@ class PaymentRepository(TenantRepository[Payment]):
         )
         return self.session.execute(stmt).scalars().all()
 
+    def live_inflows_for_sale(self, sale_id: UUID) -> Sequence[Payment]:
+        """Encaissements directs **non annulés** de la vente, dans l'ordre des ids.
+
+        Depuis l'ADR 0087, seul `confirm` rattache un paiement à une vente : ce sont
+        les encaissements de la confirmation. Un règlement ultérieur passe par la dette.
+        """
+        stmt = (
+            self._select()
+            .where(
+                Payment.sale_id == sale_id,
+                Payment.direction == "inflow",
+                Payment.reversal_of_payment_id.is_(None),
+                ~_is_cancelled(),
+            )
+            .order_by(Payment.id.asc())
+        )
+        return self.session.execute(stmt).scalars().all()
+
     def for_return(self, sale_return_id: UUID) -> Sequence[Payment]:
         """Décaissements rattachés à un retour, du plus ancien au plus récent."""
         stmt = (

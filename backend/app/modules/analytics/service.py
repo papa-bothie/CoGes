@@ -1264,6 +1264,7 @@ def journal_lines(
             "sale_id": None,
             "party_name": None,
             "expense_label": None,
+            "correction": False,
         }
         if kind is CashLineKind.REFUND and source.sale_return_id in returns:
             return_no, sale_id = returns[source.sale_return_id]
@@ -1285,6 +1286,13 @@ def journal_lines(
             head = sales.get(debt_sale) if debt_sale else None
             if head:
                 fields.update(document_no=head.sale_no, sale_id=debt_sale)
+                # La contre-écriture d'une vente corrigée, et l'encaissement direct de la
+                # vente qui la remplace (ADR 0119). L'encaissement d'origine, lui, était
+                # ordinaire : il reste barré, sans marque.
+                is_reversal = line.payment.reversal_of_payment_id is not None
+                fields["correction"] = source.sale_id is not None and (
+                    (is_reversal and head.corrected) or (not is_reversal and head.correcting)
+                )
             if line.debt_party == "supplier" and line.party_id:
                 fields["party_name"] = suppliers.get(line.party_id)
             elif line.debt_party == "customer" and line.party_id:

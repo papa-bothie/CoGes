@@ -415,6 +415,38 @@ def has_settled_payment(session: Session, ctx: TenantContext, sale_id: UUID) -> 
     return PaymentRepository(session, ctx).inflow_count_for_sale(sale_id) > 0
 
 
+def sale_debt_moved(session: Session, ctx: TenantContext, sale_id: UUID) -> bool:
+    """La dette de la vente a-t-elle bougé depuis la confirmation ?
+
+    Un règlement lettré (même partiel), une compensation ou un abandon : la dette
+    n'est plus celle que la confirmation a ouverte. Une vente sans dette répond non.
+    Sert à « Corriger cette vente » (ADR 0119), qui ne défait que la confirmation.
+    """
+    debt = DebtRepository(session, ctx).for_sale(sale_id)
+    return debt is not None and (debt.amount_paid > 0 or debt.status != "open")
+
+
+def cancel_sale_payments(
+    session: Session,
+    ctx: TenantContext,
+    *,
+    sale_id: UUID,
+    reason: str,
+    ip_address: str | None = None,
+) -> list[Payment]:
+    """Contre-passe les encaissements de la confirmation d'une vente (ADR 0119).
+
+    Chacun par `cancel_payment` (ADR 0038) : contre-écriture, audit critique et
+    `payment.cancelled`, rien de nouveau. Aucun argent ne sort : la caisse revient à
+    ce qu'elle était avant la vente. Rend les contre-écritures.
+    """
+    payments = PaymentRepository(session, ctx).live_inflows_for_sale(sale_id)
+    return [
+        cancel_payment(session, ctx, payment.id, reason=reason, ip_address=ip_address)[1]
+        for payment in payments
+    ]
+
+
 def refunds_for_return(
     session: Session, ctx: TenantContext, sale_return_id: UUID
 ) -> list[SaleReturnRefund]:

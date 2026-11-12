@@ -30,6 +30,8 @@ import { displayNumber } from "@/lib/units";
 import { cn } from "@/lib/utils";
 import { receiptText, whatsappLink } from "@/lib/whatsapp";
 
+import { CorrectSale } from "../correct-sale";
+
 type SaleDetail = Schemas["SaleDetail"];
 
 const t = labels.sales.detail;
@@ -136,10 +138,32 @@ export function SaleDetailView({ saleId }: { saleId: string }) {
         )}
       </div>
 
-      {cancelled && (
+      {cancelled && !data.corrected_by_sale && (
         <p className="rounded-[18px] bg-voile px-[18px] py-4 text-libelle">
           {t.cancelledBanner((data.cancel_reason ?? "").toLocaleLowerCase("fr-FR"))}
         </p>
+      )}
+      {data.corrected_by_sale && (
+        <CorrectionBanner
+          text={
+            data.corrected_by_sale.status === "draft"
+              ? t.correctingBanner(displayNumber(data.corrected_by_sale.sale_no))
+              : t.correctedBanner(displayNumber(data.corrected_by_sale.sale_no))
+          }
+          href={
+            data.corrected_by_sale.status === "draft"
+              ? `/sales/${data.corrected_by_sale.id}/edit`
+              : `/sales/${data.corrected_by_sale.id}`
+          }
+          action={data.corrected_by_sale.status === "draft" ? t.openCorrection : t.seeReplacement}
+        />
+      )}
+      {data.corrects_sale && (
+        <CorrectionBanner
+          text={t.replacesBanner(displayNumber(data.corrects_sale.sale_no))}
+          href={`/sales/${data.corrects_sale.id}`}
+          action={t.title(displayNumber(data.corrects_sale.sale_no))}
+        />
       )}
 
       {!cancelled && !asking && (
@@ -177,6 +201,7 @@ export function SaleDetailView({ saleId }: { saleId: string }) {
               </Link>
             </Can>
           )}
+          <CorrectSale sale={data} receivedAt={sale.dataUpdatedAt} />
           <Can permission="sales:cancel">
             <button
               type="button"
@@ -307,6 +332,16 @@ export function SaleDetailView({ saleId }: { saleId: string }) {
           )}
         </section>
       </div>
+    </div>
+  );
+}
+
+/** Traçabilité d'une correction (ADR 0119) : ce qui la remplace, ou ce qu'elle remplace. */
+function CorrectionBanner({ text, href, action }: { text: string; href: string; action: string }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[18px] bg-voile px-[18px] py-4">
+      <p className="text-libelle">{text}</p>
+      <SecondaryLink href={href}>{action}</SecondaryLink>
     </div>
   );
 }
