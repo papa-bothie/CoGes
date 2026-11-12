@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.core.deps import TenantSession, require_permission
 from app.core.repository import MAX_PAGE_SIZE
@@ -19,6 +19,11 @@ from app.modules.notifications.schemas import (
     NotificationPage,
     NotificationRead,
     NotificationUpdate,
+    PushConfig,
+    PushSubscriptionCreate,
+    PushSubscriptionList,
+    PushSubscriptionRead,
+    PushSubscriptionRemove,
     UnreadCount,
 )
 
@@ -78,3 +83,60 @@ def update_notification(
     """
     notification = service.set_read(tenant.session, tenant.ctx, notification_id, read=payload.read)
     return NotificationRead.model_validate(notification)
+
+
+# ------------------------------------------- notifications sur le téléphone (ADR 0120)
+# Pour soi seulement : l'abonnement est rattaché à la personne du jeton, qui ne peut
+# désigner personne d'autre. Le droit est celui de lire son fil.
+
+
+@router.get("/push/config", response_model=PushConfig)
+def push_config(
+    _: Annotated[TenantSession, Depends(require_permission("notifications:read"))],
+) -> PushConfig:
+    """Clé publique VAPID, ou `null` : le bouton « Activer » n'apparaît pas sans elle."""
+    return service.push_config()
+
+
+@router.get("/push/subscriptions", response_model=PushSubscriptionList)
+def my_push_subscriptions(
+    tenant: Annotated[TenantSession, Depends(require_permission("notifications:read"))],
+) -> PushSubscriptionList:
+    """Appareils abonnés de la personne, sans leurs clés."""
+    return PushSubscriptionList(
+        items=[
+            PushSubscriptionRead.model_validate(item)
+            for item in service.my_subscriptions(tenant.session, tenant.ctx)
+        ]
+    )
+
+
+@router.post("/push/subscriptions", response_model=PushSubscriptionRead, status_code=201)
+def subscribe_push(
+    payload: PushSubscriptionCreate,
+    tenant: Annotated[TenantSession, Depends(require_permission("notifications:read"))],
+) -> PushSubscriptionRead:
+    """Abonne cet appareil. L'adresse doit venir d'un service de push connu."""
+    return PushSubscriptionRead.model_validate(
+        service.subscribe(tenant.session, tenant.ctx, payload)
+    )
+
+
+@router.post("/push/subscriptions/remove", status_code=204)
+def unsubscribe_push(
+    payload: PushSubscriptionRemove,
+    tenant: Annotated[TenantSession, Depends(require_permission("notifications:read"))],
+    logout: bool = False,
+) -> Response:
+    """Arrête l'abonnement de cet appareil (« Désactiver », ou la déconnexion).
+
+    204 même si l'adresse est inconnue : rien n'est révélé, et la déconnexion n'échoue
+    jamais pour un abonnement déjà arrêté.
+    """
+    service.unsubscribe(
+        tenant.session,
+        tenant.ctx,
+        payload.endpoint,
+        reason="logout" if logout else "unsubscribed",
+    )
+    return Response(status_code=204)

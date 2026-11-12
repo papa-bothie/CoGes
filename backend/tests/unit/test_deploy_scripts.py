@@ -355,3 +355,52 @@ def test_an_open_signup_needs_its_hash_key(
 )
 def test_a_closed_signup_or_a_keyed_one_passes(tmp_path: Path, lines: str) -> None:
     assert _module().main(_env(tmp_path, _GOOD_ENV + lines)) == 0
+
+
+# --------------------------------------------- notifications sur le téléphone (ADR 0120)
+
+_PUBLIC = "B" + "A" * 86  # 65 octets en base64url
+_PRIVATE = "A" * 43  # 32 octets en base64url
+
+
+def test_no_vapid_key_is_not_a_refusal(tmp_path: Path) -> None:
+    """Sans clés, pas de bouton « Activer les notifications » : ce n'est pas une panne."""
+    assert "COGES_VAPID" not in _GOOD_ENV
+    assert _module().main(_env(tmp_path, _GOOD_ENV)) == 0
+
+
+def test_three_vapid_keys_pass(tmp_path: Path) -> None:
+    text = (
+        _GOOD_ENV
+        + f"COGES_VAPID_PUBLIC_KEY={_PUBLIC}\nCOGES_VAPID_PRIVATE_KEY={_PRIVATE}\n"
+        + "COGES_VAPID_SUBJECT=mailto:equipe@coges.sn\n"
+    )
+    assert _module().main(_env(tmp_path, text)) == 0
+
+
+@pytest.mark.parametrize(
+    ("extra", "reason"),
+    [
+        (f"COGES_VAPID_PUBLIC_KEY={_PUBLIC}\n", "vont ensemble"),
+        (
+            f"COGES_VAPID_PUBLIC_KEY={_PUBLIC}\nCOGES_VAPID_PRIVATE_KEY=court\n"
+            "COGES_VAPID_SUBJECT=mailto:a@b.sn\n",
+            "COGES_VAPID_PRIVATE_KEY doit faire 32 octets",
+        ),
+        (
+            f"COGES_VAPID_PUBLIC_KEY=court\nCOGES_VAPID_PRIVATE_KEY={_PRIVATE}\n"
+            "COGES_VAPID_SUBJECT=mailto:a@b.sn\n",
+            "COGES_VAPID_PUBLIC_KEY doit faire 65 octets",
+        ),
+        (
+            f"COGES_VAPID_PUBLIC_KEY={_PUBLIC}\nCOGES_VAPID_PRIVATE_KEY={_PRIVATE}\n"
+            "COGES_VAPID_SUBJECT=equipe@b.sn\n",
+            "COGES_VAPID_SUBJECT",
+        ),
+    ],
+)
+def test_half_or_wrong_vapid_keys_are_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], extra: str, reason: str
+) -> None:
+    assert _module().main(_env(tmp_path, _GOOD_ENV + extra)) == 1
+    assert reason in capsys.readouterr().err

@@ -12,6 +12,7 @@
 import { networkError, toApiError } from "@/lib/api/errors";
 import type { LoginRequest, TokenResponse } from "@/lib/api/schema";
 import { clearOwnDrafts, freezeDrafts } from "@/lib/drafts";
+import { stopPushAtLogout } from "@/lib/push";
 import { clearAppCaches } from "@/lib/pwa/caches";
 
 import { KNOWN_MARKER, KNOWN_MAX_AGE_SECONDS } from "./known";
@@ -169,6 +170,9 @@ export async function logout(): Promise<void> {
   // Un rafraîchissement en cours poserait un jeton neuf **après** l'oubli local, et la
   // personne resterait connectée dans cet onglet (ADR 0088) : on l'attend d'abord.
   if (inFlight) await inFlight.catch(() => undefined);
+  // L'abonnement aux notifications de cet appareil s'arrête avec la session (ADR 0120) : le
+  // téléphone ne sonne plus pour une boutique dont on vient de sortir.
+  await stopPushAtLogout(tokenStore.get());
   try {
     await fetch("/api/v1/auth/logout", { method: "POST", credentials: "same-origin" });
   } catch {

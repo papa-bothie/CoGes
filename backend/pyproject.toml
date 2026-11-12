@@ -37,6 +37,11 @@ dependencies = [
     # PDF des pièces et des exports (ADR 0111, Q0 ; ADR 0113) : côté serveur, roues sans
     # dépendance système, polices TTF embarquées. Version figée.
     "reportlab==5.1.0",
+    # Notifications sur le téléphone (Web Push, ADR 0120) : chiffrement RFC 8291 et jeton
+    # VAPID, les deux briques de pywebpush sans ses clients HTTP (envoi par httpx).
+    # Versions figées.
+    "http-ece==1.2.1",
+    "py-vapid==1.9.6",
 ]
 
 [dependency-groups]

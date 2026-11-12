@@ -10,7 +10,7 @@ from uuid import UUID
 from sqlalchemy import Select, func, select, update
 
 from app.core.repository import MAX_PAGE_SIZE, TenantRepository
-from app.modules.notifications.models import Notification
+from app.modules.notifications.models import Notification, PushSubscription
 
 
 class NotificationRepository(TenantRepository[Notification]):
@@ -106,6 +106,25 @@ class NotificationRepository(TenantRepository[Notification]):
         stmt = stmt.order_by(Notification.created_at.desc()).limit(1)
         return self.session.execute(stmt).scalar_one_or_none()
 
+    def by_ids(self, ids: Sequence[UUID]) -> Sequence[Notification]:
+        if not ids:
+            return []
+        stmt = self._select().where(Notification.id.in_(list(set(ids))))
+        return self.session.execute(stmt).scalars().all()
+
+    def created_since(self, user_id: UUID, since: dt.datetime) -> int:
+        """Alertes reçues par la personne depuis `since` (regroupement des rafales)."""
+        stmt = (
+            select(func.count())
+            .select_from(Notification)
+            .where(
+                Notification.company_id == self.ctx.company_id,
+                Notification.user_id == user_id,
+                Notification.created_at >= since,
+            )
+        )
+        return int(self.session.execute(stmt).scalar_one())
+
     def add_for_user(
         self,
         *,
@@ -125,3 +144,44 @@ class NotificationRepository(TenantRepository[Notification]):
                 data=data,
             )
         )
+
+
+class PushSubscriptionRepository(TenantRepository[PushSubscription]):
+    """Abonnements Web Push (ADR 0120). « Arrêter » remplace la suppression."""
+
+    model = PushSubscription
+
+    def live_by_endpoint(self, endpoint: str) -> PushSubscription | None:
+        stmt = self._select().where(
+            PushSubscription.endpoint == endpoint, PushSubscription.disabled_at.is_(None)
+        )
+        return self.session.execute(stmt.with_for_update()).scalar_one_or_none()
+
+    def live_for_user(self, user_id: UUID) -> Sequence[PushSubscription]:
+        """Appareils vivants d'une personne, du plus ancien au plus récent."""
+        stmt = (
+            self._select()
+            .where(PushSubscription.user_id == user_id, PushSubscription.disabled_at.is_(None))
+            .order_by(PushSubscription.created_at.asc(), PushSubscription.id.asc())
+        )
+        return self.session.execute(stmt).scalars().all()
+
+    def live_for_users(self, user_ids: Sequence[UUID]) -> Sequence[PushSubscription]:
+        if not user_ids:
+            return []
+        stmt = self._select().where(
+            PushSubscription.user_id.in_(list(set(user_ids))),
+            PushSubscription.disabled_at.is_(None),
+        )
+        return self.session.execute(stmt).scalars().all()
+
+    def by_ids_for_update(self, ids: Sequence[UUID]) -> Sequence[PushSubscription]:
+        if not ids:
+            return []
+        stmt = (
+            self._select()
+            .where(PushSubscription.id.in_(list(set(ids))))
+            .order_by(PushSubscription.id)
+            .with_for_update()
+        )
+        return self.session.execute(stmt).scalars().all()

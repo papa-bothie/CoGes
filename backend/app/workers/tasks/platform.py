@@ -244,6 +244,7 @@ def trial_notice(self: Any, company_id: str, days: int, trial_ends_at: str) -> b
                     ),
                     entity_id=f"trial:{days}",
                     data={"days": days, "trial_ends_at": trial_ends_at},
+                    push=notifications_service.push_texts.trial_ending(days),
                     dedupe_hours=24 * 31,
                 )
                 > 0
@@ -324,6 +325,7 @@ def support_notice(self: Any, company_id: str, session_id: str, expires_at: str)
                 ),
                 entity_id=f"support:{session_id}",
                 data={"session_id": session_id, "expires_at": expires_at},
+                push=notifications_service.push_texts.support_access(),
                 dedupe_hours=24,
             )
             > 0

@@ -14,6 +14,8 @@ export const ROUTE_ACCESS: Readonly<Record<string, PermissionRule | null>> = {
   "/notifications": "notifications:read",
   // « Changer mon mot de passe » (ADR 0098) : à toute personne, depuis le menu du compte.
   "/account/password": null,
+  // Notifications sur le téléphone (ADR 0120) : ses propres alertes, donc le droit de les lire.
+  "/account/notifications": "notifications:read",
 
   "/sales": "sales:read",
   "/sales/new": "sales:create",

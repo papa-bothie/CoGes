@@ -1,6 +1,8 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import {
+  BellRing,
   Download,
   FileText,
   KeyRound,
@@ -23,6 +25,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { api, unwrap } from "@/lib/api/client";
+import { queryKeys } from "@/lib/api/queries/keys";
 import type { Me } from "@/lib/api/schema";
 import { logout, loginUrl } from "@/lib/auth/session";
 import { labels } from "@/lib/labels";
@@ -52,6 +56,16 @@ export function SettingsMenu({ me, className }: { me: Me; className?: string }) 
   // Conseils et Réglages s'ouvrent sur un écran que cette personne peut lire (ADR 0099).
   const advice = resolveNav(ADVICE_NAV, me.permissions);
   const settings = resolveNav(SETTINGS_NAV[0]!, me.permissions);
+  // Notifications sur le téléphone (ADR 0120) : l'entrée n'existe que si le serveur a ses
+  // clés VAPID, et pour qui lit ses alertes.
+  const readsAlerts = me.permissions.includes("notifications:read");
+  const pushConfig = useQuery({
+    queryKey: queryKeys.notifications.pushConfig,
+    queryFn: () => unwrap(api.GET("/api/v1/notifications/push/config")),
+    enabled: readsAlerts,
+    staleTime: 60 * 60 * 1000,
+  });
+  const push = readsAlerts && Boolean(pushConfig.data?.public_key);
 
   const handleLogout = async () => {
     setLeaving(true);
@@ -102,6 +116,13 @@ export function SettingsMenu({ me, className }: { me: Me; className?: string }) 
             }}
           >
             <Download aria-hidden /> {labels.pwa.install}
+          </DropdownMenuItem>
+        )}
+        {push && (
+          <DropdownMenuItem asChild className="min-h-cible text-corps">
+            <Link href="/account/notifications">
+              <BellRing aria-hidden /> {labels.push.menu}
+            </Link>
           </DropdownMenuItem>
         )}
         <DropdownMenuItem asChild className="min-h-cible text-corps">

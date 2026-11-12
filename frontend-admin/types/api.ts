@@ -2133,6 +2133,73 @@ export interface paths {
     patch: operations["update_notification_api_v1_notifications__notification_id__patch"];
     trace?: never;
   };
+  "/api/v1/notifications/push/config": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Push Config
+     * @description Clé publique VAPID, ou `null` : le bouton « Activer » n'apparaît pas sans elle.
+     */
+    get: operations["push_config_api_v1_notifications_push_config_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/notifications/push/subscriptions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * My Push Subscriptions
+     * @description Appareils abonnés de la personne, sans leurs clés.
+     */
+    get: operations["my_push_subscriptions_api_v1_notifications_push_subscriptions_get"];
+    put?: never;
+    /**
+     * Subscribe Push
+     * @description Abonne cet appareil. L'adresse doit venir d'un service de push connu.
+     */
+    post: operations["subscribe_push_api_v1_notifications_push_subscriptions_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/notifications/push/subscriptions/remove": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Unsubscribe Push
+     * @description Arrête l'abonnement de cet appareil (« Désactiver », ou la déconnexion).
+     *
+     *     204 même si l'adresse est inconnue : rien n'est révélé, et la déconnexion n'échoue
+     *     jamais pour un abonnement déjà arrêté.
+     */
+    post: operations["unsubscribe_push_api_v1_notifications_push_subscriptions_remove_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/insights": {
     parameters: {
       query?: never;
@@ -6350,6 +6417,60 @@ export interface components {
       description: string;
       /** Capabilities */
       capabilities: components["schemas"]["Capability"][];
+    };
+    /**
+     * PushConfig
+     * @description Ce dont le navigateur a besoin pour s'abonner. `null` : notifications indisponibles.
+     */
+    PushConfig: {
+      /** Public Key */
+      public_key: string | null;
+    };
+    /** PushKeys */
+    PushKeys: {
+      /** P256Dh */
+      p256dh: string;
+      /** Auth */
+      auth: string;
+    };
+    /**
+     * PushSubscriptionCreate
+     * @description L'abonnement rendu par `PushManager.subscribe()`, plus un nom d'appareil lisible.
+     */
+    PushSubscriptionCreate: {
+      /** Endpoint */
+      endpoint: string;
+      keys: components["schemas"]["PushKeys"];
+      /** Device Label */
+      device_label?: string | null;
+    };
+    /** PushSubscriptionList */
+    PushSubscriptionList: {
+      /** Items */
+      items: components["schemas"]["PushSubscriptionRead"][];
+    };
+    /**
+     * PushSubscriptionRead
+     * @description Un appareil abonné, sans ses clés : elles ne repartent jamais vers le client.
+     */
+    PushSubscriptionRead: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Device Label */
+      device_label: string | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /** PushSubscriptionRemove */
+    PushSubscriptionRemove: {
+      /** Endpoint */
+      endpoint: string;
     };
     "Quantity-Input": number | string;
     "Quantity-Output": string;
@@ -12242,6 +12363,112 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["NotificationRead"];
         };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  push_config_api_v1_notifications_push_config_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PushConfig"];
+        };
+      };
+    };
+  };
+  my_push_subscriptions_api_v1_notifications_push_subscriptions_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PushSubscriptionList"];
+        };
+      };
+    };
+  };
+  subscribe_push_api_v1_notifications_push_subscriptions_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PushSubscriptionCreate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PushSubscriptionRead"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  unsubscribe_push_api_v1_notifications_push_subscriptions_remove_post: {
+    parameters: {
+      query?: {
+        logout?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PushSubscriptionRemove"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {

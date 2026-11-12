@@ -187,6 +187,10 @@ SQL
     export COGES_SIGNUP_PHONE_PER_DAY=100000
     export COGES_SIGNUP_EMAIL_PER_DAY=100000
     export COGES_MERCHANT_URL="http://localhost:$E2E_FRONT_PORT"
+    # Notifications sur le téléphone (ADR 0120) : une paire VAPID tirée à chaque lancement,
+    # jamais écrite sur disque. Le parcours simule l'arrivée d'un push dans le navigateur.
+    eval "$(uv run --directory backend python -m app.cli generate-vapid-keys | sed -n '1,2s/^/export /p')"
+    export COGES_VAPID_SUBJECT="mailto:e2e@coges.example.com"
     # L'administration exige un jeton Cloudflare Access (ADR 0104), signé par une clé de
     # test dont le jeu public est servi ici ; les routes commerçantes ne changent pas.
     uv run --directory backend python -m tests.helpers.access_tokens "$E2E_ACCESS_DIR"

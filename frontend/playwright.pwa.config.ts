@@ -10,7 +10,7 @@ const PWA_FRONT = "http://localhost:3102";
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: ["pwa.spec.ts", "scan-library.spec.ts"],
+  testMatch: ["pwa.spec.ts", "scan-library.spec.ts", "push.spec.ts"],
   fullyParallel: false,
   workers: 1,
   retries: 0,

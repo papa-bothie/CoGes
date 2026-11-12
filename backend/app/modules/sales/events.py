@@ -82,6 +82,7 @@ def sale_cancelled_payload(
     total: Decimal,
     reason: str,
     reversed_movement_ids: list[UUID],
+    cancelled_by_user_id: UUID | None = None,
     corrected_by_user_id: UUID | None = None,
 ) -> dict[str, Any]:
     """Corps de `sale.cancelled`.
@@ -101,6 +102,9 @@ def sale_cancelled_payload(
         "reason": reason,
         "reversed_movement_ids": [str(movement_id) for movement_id in reversed_movement_ids],
     }
+    if cancelled_by_user_id is not None:
+        # Qui a annulé : son propre téléphone n'en est pas notifié (ADR 0120).
+        payload["cancelled_by_user_id"] = str(cancelled_by_user_id)
     if corrected_by_user_id is not None:
         payload["corrected"] = True
         payload["corrected_by_user_id"] = str(corrected_by_user_id)

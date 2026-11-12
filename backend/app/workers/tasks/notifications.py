@@ -16,9 +16,12 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+import httpx
 from sqlalchemy.orm import Session
 
-from app.core.display import dmy, fcfa, qty
+from app.core import webpush
+from app.core.config import get_settings
+from app.core.display import dmy, fcfa, qty, qty_with_unit
 from app.core.events.inbox import Event, handle
 from app.core.money import serialize
 from app.core.tenancy import TenantContext, tenant_transaction
@@ -69,10 +72,12 @@ def on_stock_updated(self: Any, **message: Any) -> str:
 
         # Mots de la maquette v2 (écran 23, ADR 0074), sans accord : on ne connaît pas
         # le genre d'un article (« Huile », « Riz »).
+        texts = notifications_service.push_texts
         if on_hand <= 0:
             kind = NotificationType.STOCK_OUT
             title = f"{label} : plus en stock"
             body = "Vous ne pouvez plus en vendre."
+            push = texts.stock_out(label, product_id)
         else:
             kind = NotificationType.STOCK_LOW
             threshold = summary.reorder_point if summary is not None else None
@@ -82,6 +87,8 @@ def on_stock_updated(self: Any, **message: Any) -> str:
                 if threshold is not None
                 else "Sous votre seuil d'alerte"
             )
+            unit = summary.unit if summary is not None else ""
+            push = texts.stock_low(label, qty_with_unit(on_hand, unit), product_id)
 
         sent = notifications_service.notify(
             session,
@@ -91,6 +98,7 @@ def on_stock_updated(self: Any, **message: Any) -> str:
             body=body,
             entity_id=str(product_id),
             data={"product_id": str(product_id), "qty_on_hand": serialize(on_hand)},
+            push=push,
         )
         logger.info(
             "Alerte de stock",
@@ -123,12 +131,14 @@ def on_sale_cancelled(self: Any, **message: Any) -> str:
         reason = str(payload.get("reason", "")).strip()
         number = sale_no.split("-")[-1].lstrip("0") or sale_no
         body = f"Raison : {reason[:1].lower()}{reason[1:]}" if reason else "Sans raison donnée"
+        # Qui a annulé : `cancelled_by_user_id` (ADR 0120), ou celui qui a corrigé (ADR
+        # 0119). Absent des événements plus anciens.
+        corrected = bool(payload.get("corrected"))
+        raw_actor = payload.get("cancelled_by_user_id") or payload.get("corrected_by_user_id")
+        actor = UUID(str(raw_actor)) if raw_actor else None
+        name = users_service.names_by_id(session, ctx, [actor]).get(actor) if actor else None
         # Une correction n'est jamais silencieuse : l'alerte nomme qui l'a faite (ADR 0119).
-        corrector = payload.get("corrected_by_user_id")
-        if payload.get("corrected") and corrector:
-            name = users_service.names_by_id(session, ctx, [UUID(str(corrector))]).get(
-                UUID(str(corrector))
-            )
+        if corrected:
             body = f"Corrigée par {name}" if name else "Corrigée"
         notifications_service.notify(
             session,
@@ -138,6 +148,10 @@ def on_sale_cancelled(self: Any, **message: Any) -> str:
             body=body,
             entity_id=str(received.aggregate_id),
             data={"sale_id": str(received.aggregate_id), "sale_no": sale_no, "total": total},
+            push=notifications_service.push_texts.sale_cancelled(
+                number, name, corrected=corrected, sale_id=received.aggregate_id
+            ),
+            actor_user_id=actor,
         )
 
     try:
@@ -172,6 +186,7 @@ def login_failures(self: Any, company_id: str, user_id: str, failures: int) -> i
                 ),
                 entity_id=user_id,
                 data={"user_id": user_id, "failures": failures},
+                push=notifications_service.push_texts.login_failures(name),
                 dedupe_hours=1,
             )
     except Exception as exc:
@@ -227,6 +242,7 @@ def scan_due_debts(company_id: str, today: str | None = None) -> int:
                     "balance": serialize(debt.balance),
                     "due_date": due_date,
                 },
+                push=notifications_service.push_texts.debt_due(name, debt.party_type, party_id),
             )
     logger.info(
         "Balayage des dettes à payer",
@@ -244,3 +260,58 @@ def scan_due_debts_all() -> int:
         scan_due_debts.delay(str(company_id))
         count += 1
     return count
+
+
+@celery_app.task(
+    name=notifications_service.push_texts.PUSH_DELIVER,
+    bind=True,
+    max_retries=3,
+    default_retry_delay=30,
+)
+def push_deliver(self: Any, company_id: str, ids: list[str]) -> int:
+    """Envoie sur les téléphones les alertes déjà validées (Web Push, ADR 0120).
+
+    Trois temps, pour ne jamais tenir une transaction pendant un appel réseau : lire ce
+    qui part, poster chez les services de push, puis noter les réponses (404 ou 410 :
+    abonnement arrêté). Le plafond horaire par personne est compté dans Redis. Rend le
+    nombre de messages remis à au moins un appareil.
+    """
+    settings = get_settings()
+    if not settings.push_enabled or settings.vapid_private_key is None:
+        return 0
+    assert settings.vapid_subject is not None
+    ctx = TenantContext.bootstrap(UUID(company_id))
+    try:
+        with tenant_transaction(ctx) as session:
+            plan = notifications_service.push_plan(session, ctx, [UUID(item) for item in ids])
+    except Exception as exc:
+        raise self.retry(exc=exc) from exc
+
+    private_key = settings.vapid_private_key.get_secret_value()
+    results: list[tuple[UUID, webpush.PushResult]] = []
+    delivered = 0
+    with httpx.Client(timeout=settings.push_timeout_seconds) as client:
+        for outgoing in plan:
+            if not notifications_service.push_allowed_this_hour(ctx.company_id, outgoing.user_id):
+                logger.info(
+                    "Plafond horaire de notifications atteint", extra={"company_id": company_id}
+                )
+                continue
+            message = {**outgoing.message.as_data(), "tag": "coges-alertes"}
+            sent = False
+            for subscription_id, target in outgoing.targets:
+                result = webpush.send(
+                    target,
+                    message,
+                    private_key=private_key,
+                    subject=settings.vapid_subject,
+                    client=client,
+                )
+                results.append((subscription_id, result))
+                sent = sent or result.delivered
+            delivered += int(sent)
+
+    # Les réponses sont notées même si un envoi a échoué : un 410 arrête l'abonnement.
+    with tenant_transaction(ctx) as session:
+        notifications_service.record_push_results(session, ctx, results)
+    return delivered

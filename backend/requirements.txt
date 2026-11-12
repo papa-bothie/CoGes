@@ -49,6 +49,8 @@ click-repl==0.4.0
 cryptography==50.0.2
     # via
     #   coges-backend
+    #   http-ece
+    #   py-vapid
     #   pyjwt
 defusedxml==0.7.1
     # via coges-backend
@@ -68,6 +70,8 @@ h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
+http-ece==1.2.1
+    # via coges-backend
 httpcore==1.0.9
     # via httpx
 httptools==0.8.0
@@ -101,6 +105,8 @@ psycopg==3.3.6
     # via coges-backend
 psycopg-binary==3.3.6 ; implementation_name != 'pypy'
     # via psycopg
+py-vapid==1.9.6
+    # via coges-backend
 pycparser==3.0 ; implementation_name != 'PyPy'
     # via cffi
 pydantic==2.13.5

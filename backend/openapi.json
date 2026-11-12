@@ -6546,6 +6546,137 @@
         }
       }
     },
+    "/api/v1/notifications/push/config": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Push Config",
+        "description": "Clé publique VAPID, ou `null` : le bouton « Activer » n'apparaît pas sans elle.",
+        "operationId": "push_config_api_v1_notifications_push_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/push/subscriptions": {
+      "get": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "My Push Subscriptions",
+        "description": "Appareils abonnés de la personne, sans leurs clés.",
+        "operationId": "my_push_subscriptions_api_v1_notifications_push_subscriptions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushSubscriptionList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Subscribe Push",
+        "description": "Abonne cet appareil. L'adresse doit venir d'un service de push connu.",
+        "operationId": "subscribe_push_api_v1_notifications_push_subscriptions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushSubscriptionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushSubscriptionRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/push/subscriptions/remove": {
+      "post": {
+        "tags": [
+          "notifications"
+        ],
+        "summary": "Unsubscribe Push",
+        "description": "Arrête l'abonnement de cet appareil (« Désactiver », ou la déconnexion).\n\n204 même si l'adresse est inconnue : rien n'est révélé, et la déconnexion n'échoue\njamais pour un abonnement déjà arrêté.",
+        "operationId": "unsubscribe_push_api_v1_notifications_push_subscriptions_remove_post",
+        "parameters": [
+          {
+            "name": "logout",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Logout"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushSubscriptionRemove"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/insights": {
       "get": {
         "tags": [
@@ -17778,6 +17909,151 @@
           "capabilities"
         ],
         "title": "ProfileRead"
+      },
+      "PushConfig": {
+        "properties": {
+          "public_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Key"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "public_key"
+        ],
+        "title": "PushConfig",
+        "description": "Ce dont le navigateur a besoin pour s'abonner. `null` : notifications indisponibles."
+      },
+      "PushKeys": {
+        "properties": {
+          "p256dh": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 80,
+            "title": "P256Dh"
+          },
+          "auth": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 16,
+            "title": "Auth"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "p256dh",
+          "auth"
+        ],
+        "title": "PushKeys"
+      },
+      "PushSubscriptionCreate": {
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 12,
+            "title": "Endpoint"
+          },
+          "keys": {
+            "$ref": "#/components/schemas/PushKeys"
+          },
+          "device_label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Label"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "endpoint",
+          "keys"
+        ],
+        "title": "PushSubscriptionCreate",
+        "description": "L'abonnement rendu par `PushManager.subscribe()`, plus un nom d'appareil lisible."
+      },
+      "PushSubscriptionList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PushSubscriptionRead"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "PushSubscriptionList"
+      },
+      "PushSubscriptionRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "device_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Label"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "device_label",
+          "created_at"
+        ],
+        "title": "PushSubscriptionRead",
+        "description": "Un appareil abonné, sans ses clés : elles ne repartent jamais vers le client."
+      },
+      "PushSubscriptionRemove": {
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 12,
+            "title": "Endpoint"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "endpoint"
+        ],
+        "title": "PushSubscriptionRemove"
       },
       "Quantity-Input": {
         "anyOf": [

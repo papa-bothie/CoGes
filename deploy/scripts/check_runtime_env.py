@@ -241,6 +241,42 @@ def signup_violations(values: dict[str, str], *, source: str) -> list[str]:
     return []
 
 
+VAPID_KEYS = ("COGES_VAPID_PUBLIC_KEY", "COGES_VAPID_PRIVATE_KEY", "COGES_VAPID_SUBJECT")
+
+
+def _b64url_length(value: str) -> int:
+    try:
+        return len(base64.urlsafe_b64decode(value + "=" * (-len(value) % 4)))
+    except (ValueError, binascii.Error):
+        return -1
+
+
+def vapid_violations(values: dict[str, str], *, source: str) -> list[str]:
+    """Notifications sur le téléphone (ADR 0120) : les trois clés VAPID ensemble, ou aucune.
+
+    Sans elles, le bouton « Activer les notifications » n'apparaît pas : ce n'est pas un
+    refus. La concordance des deux clés est revérifiée par l'API à son démarrage.
+    """
+    present = {key: values.get(key, "").strip("\"'") for key in VAPID_KEYS}
+    if not any(present.values()):
+        return []
+    missing = [key for key, value in present.items() if not value]
+    if missing:
+        return [
+            f"{source} : {', '.join(missing)} manque — les trois clés VAPID vont ensemble "
+            "(uv run --directory backend python -m app.cli generate-vapid-keys)"
+        ]
+    found: list[str] = []
+    if _b64url_length(present["COGES_VAPID_PRIVATE_KEY"]) != 32:
+        found.append(f"{source} : COGES_VAPID_PRIVATE_KEY doit faire 32 octets en base64url")
+    if _b64url_length(present["COGES_VAPID_PUBLIC_KEY"]) != 65:
+        found.append(f"{source} : COGES_VAPID_PUBLIC_KEY doit faire 65 octets en base64url")
+    subject = present["COGES_VAPID_SUBJECT"]
+    if not (subject.startswith("mailto:") or subject.startswith("https://")):
+        found.append(f"{source} : COGES_VAPID_SUBJECT vaut « mailto:adresse » ou https://…")
+    return found
+
+
 def vps_violations(
     pairs: list[tuple[str, str]], *, source: str, stack: str | None = None
 ) -> list[str]:
@@ -287,6 +323,7 @@ def vps_violations(
 
     found += mfa_key_violations(values, source=source)
     found += signup_violations(values, source=source)
+    found += vapid_violations(values, source=source)
 
     for key in ("COGES_JWT_SECRET", "COGES_REDIS_PASSWORD"):
         if len(values.get(key, "")) < MIN_SECRET_LENGTH:

@@ -103,6 +103,8 @@ export const queryKeys = {
     all: ["notifications"] as const,
     list: (params: Record<string, unknown>) => ["notifications", "list", params] as const,
     unread: ["notifications", "unread"] as const,
+    pushConfig: ["notifications", "push", "config"] as const,
+    pushDevices: ["notifications", "push", "devices"] as const,
   },
 } as const;
 
