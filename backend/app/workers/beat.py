@@ -40,6 +40,8 @@ TRIAL_NOTICE = "platform.trial_notice"
 SUPPORT_SESSIONS_CLOSE = "platform.support_sessions_close"
 #: Inscription libre-service (ADR 0118) : bascule à 48 h, abandon, effacement.
 SIGNUP_MAINTENANCE = "signup.maintenance"
+#: Photos des articles (ADR 0121) : images orphelines retirées de Cloudinary.
+SWEEP_PHOTOS = "products.sweep_photos_all"
 
 #: Délai dur d'une tâche (`task_time_limit`). Une trace restée `running` au-delà est
 #: celle d'un worker tué : la lecture la compte comme un échec.
@@ -139,6 +141,12 @@ BEAT_SCHEDULE: dict[str, dict[str, Any]] = {
         "task": SIGNUP_MAINTENANCE,
         "schedule": crontab(minute="20"),
     },
+    # 04 h 45 — photos orphelines (ADR 0121) : images de plus d'un jour qu'aucun article
+    # ne nomme. Un appel à l'API Admin de Cloudinary par entreprise.
+    "sweep-photos": {
+        "task": SWEEP_PHOTOS,
+        "schedule": crontab(hour="4", minute="45"),
+    },
     # Toutes les 5 min — « beat est vivant et un worker consomme ». Écrit dans Redis et
     # pingue, sans toucher la base, qui peut ainsi s'endormir en préproduction.
     "beat-tick": {
@@ -180,4 +188,5 @@ JOB_FRESHNESS: dict[str, Freshness] = {
     SIGNUP_MAINTENANCE: Freshness(DAILY),
     SUBSCRIPTIONS_DAILY: Freshness(DAILY, TRIAL_NOTICE),
     SUPPORT_SESSIONS_CLOSE: Freshness(DAILY),
+    SWEEP_PHOTOS: Freshness(DAILY, "products.sweep_photos"),
 }

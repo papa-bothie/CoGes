@@ -404,3 +404,39 @@ def test_half_or_wrong_vapid_keys_are_refused(
 ) -> None:
     assert _module().main(_env(tmp_path, _GOOD_ENV + extra)) == 1
     assert reason in capsys.readouterr().err
+
+
+# ------------------------------------------------- photos des articles (ADR 0121)
+
+
+def test_no_cloudinary_account_is_not_a_refusal(tmp_path: Path) -> None:
+    assert "COGES_CLOUDINARY" not in _GOOD_ENV
+    assert _module().main(_env(tmp_path, _GOOD_ENV)) == 0
+
+
+def test_a_complete_cloudinary_account_passes(tmp_path: Path) -> None:
+    text = (
+        _GOOD_ENV
+        + "COGES_CLOUDINARY_CLOUD_NAME=coges-prod\nCOGES_CLOUDINARY_API_KEY=123456789012345\n"
+        + "COGES_CLOUDINARY_API_SECRET=abcdefghijklmnopqrstuvwxyz0\n"
+    )
+    assert _module().main(_env(tmp_path, text)) == 0
+
+
+@pytest.mark.parametrize(
+    ("extra", "reason"),
+    [
+        ("COGES_CLOUDINARY_CLOUD_NAME=coges-prod\n", "vont ensemble"),
+        (
+            "COGES_CLOUDINARY_CLOUD_NAME=coges-prod\nCOGES_CLOUDINARY_API_KEY=clé\n"
+            "COGES_CLOUDINARY_API_SECRET=abcdefghijklmnopqrstuvwxyz0\n",
+            "COGES_CLOUDINARY_API_KEY est la clé d'API",
+        ),
+        ("COGES_CLOUDINARY_API_BASE=http://127.0.0.1:9000\n", "réservé aux parcours e2e"),
+    ],
+)
+def test_half_or_test_cloudinary_settings_are_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], extra: str, reason: str
+) -> None:
+    assert _module().main(_env(tmp_path, _GOOD_ENV + extra)) == 1
+    assert reason in capsys.readouterr().err

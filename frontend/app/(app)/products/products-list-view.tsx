@@ -242,7 +242,7 @@ export function ProductsListView() {
                 "outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50",
               )}
             >
-              <ProductSquare name={line.name} size="moyen" />
+              <ProductSquare name={line.name} size="moyen" photo={line.photo} />
               <span className="min-w-0 flex-[1_1_220px]">
                 <span className="block text-libelle">{line.name}</span>
                 <ProductHint text={hints.get(line.product_id)} name={line.name} />

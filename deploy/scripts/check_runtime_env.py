@@ -277,6 +277,41 @@ def vapid_violations(values: dict[str, str], *, source: str) -> list[str]:
     return found
 
 
+CLOUDINARY_KEYS = (
+    "COGES_CLOUDINARY_CLOUD_NAME",
+    "COGES_CLOUDINARY_API_KEY",
+    "COGES_CLOUDINARY_API_SECRET",
+)
+
+
+def cloudinary_violations(values: dict[str, str], *, source: str) -> list[str]:
+    """Photos des articles (ADR 0121) : les trois réglages Cloudinary ensemble, ou aucun.
+
+    Sans eux, la photo est simplement indisponible : ce n'est pas un refus. Le faux
+    Cloudinary des parcours e2e (COGES_CLOUDINARY_API_BASE) n'a rien à faire sur le VPS.
+    """
+    found: list[str] = []
+    if values.get("COGES_CLOUDINARY_API_BASE", "").strip("\"'"):
+        found.append(f"{source} : COGES_CLOUDINARY_API_BASE est réservé aux parcours e2e")
+    present = {key: values.get(key, "").strip("\"'") for key in CLOUDINARY_KEYS}
+    if not any(present.values()):
+        return found
+    missing = [key for key, value in present.items() if not value]
+    if missing:
+        return [
+            *found,
+            f"{source} : {', '.join(missing)} manque — les trois réglages Cloudinary vont "
+            "ensemble (docs/runbooks/photos.md)",
+        ]
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", present["COGES_CLOUDINARY_CLOUD_NAME"]):
+        found.append(f"{source} : COGES_CLOUDINARY_CLOUD_NAME est le « cloud name » du compte")
+    if not re.fullmatch(r"[0-9]{6,32}", present["COGES_CLOUDINARY_API_KEY"]):
+        found.append(f"{source} : COGES_CLOUDINARY_API_KEY est la clé d'API, en chiffres")
+    if len(present["COGES_CLOUDINARY_API_SECRET"]) < 16:
+        found.append(f"{source} : COGES_CLOUDINARY_API_SECRET semble tronqué")
+    return found
+
+
 def vps_violations(
     pairs: list[tuple[str, str]], *, source: str, stack: str | None = None
 ) -> list[str]:
@@ -324,6 +359,7 @@ def vps_violations(
     found += mfa_key_violations(values, source=source)
     found += signup_violations(values, source=source)
     found += vapid_violations(values, source=source)
+    found += cloudinary_violations(values, source=source)
 
     for key in ("COGES_JWT_SECRET", "COGES_REDIS_PASSWORD"):
         if len(values.get(key, "")) < MIN_SECRET_LENGTH:

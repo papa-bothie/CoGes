@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_vali
 
 from app.core.money import Amount, Quantity, UnitCost
 from app.modules.finance.schemas import PaymentMethod
-from app.modules.products.schemas import ProductCreate, ProductRead, ProductUnit
+from app.modules.products.schemas import ProductCreate, ProductPhoto, ProductRead, ProductUnit
 
 NOTE_MAX_LENGTH = 500
 
@@ -213,6 +213,8 @@ class StockLine(BaseModel):
     level: Decimal
     #: Un article non suivi (service, recharge) figure sans quantité à compter.
     is_stock_tracked: bool
+    #: Vignette de l'article (ADR 0121), `null` sans photo.
+    photo: ProductPhoto | None = None
 
 
 class ScannedProduct(BaseModel):

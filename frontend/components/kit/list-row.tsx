@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { photoUrl, type ProductPhoto } from "@/lib/photo";
 import { cn } from "@/lib/utils";
 
 import { RUBRIQUE_CLASSES, RUBRIQUES, type Rubrique } from "./rubrique";
@@ -93,18 +94,44 @@ export function articleTone(key: string): number {
   return (hash(key) % ARTICLE_TONES.length) + 1;
 }
 
-/** Carré d'article à initiale (maquette 02, 07) : couleur pleine, lettre blanche. */
+/** Côté en pixels CSS de chaque taille, pour demander la vignette juste (écrans × 2). */
+const SQUARE_PIXELS = { petit: 44, normal: 48, moyen: 50, grand: 52, "tres-grand": 64 } as const;
+
+/**
+ * Carré d'article à initiale (maquette 02, 07) : couleur pleine, lettre blanche. Avec une
+ * photo (ADR 0121), la vignette prend sa place, chargée à la demande ; sans, le carré reste.
+ */
 export function ProductSquare({
   name,
   tone,
   size = "normal",
+  photo,
 }: {
   name: string;
   /** 1 à 12 ; par défaut tiré du nom. */
   tone?: number;
   size?: "petit" | "normal" | "moyen" | "grand" | "tres-grand";
+  photo?: ProductPhoto | null;
 }) {
   const index = (tone ?? articleTone(name)) - 1;
+  const shape = size === "petit" ? "rounded-mini" : "rounded-touche";
+  if (photo) {
+    const pixels = SQUARE_PIXELS[size];
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- image d'une autre origine, déjà à la bonne taille
+      <img
+        src={photoUrl(photo, pixels * 2)}
+        alt=""
+        aria-hidden
+        width={pixels}
+        height={pixels}
+        loading="lazy"
+        decoding="async"
+        className={cn("shrink-0 bg-voile object-cover", shape)}
+        style={{ width: pixels, height: pixels }}
+      />
+    );
+  }
   return (
     <span
       aria-hidden

@@ -174,6 +174,8 @@ CROSS_TENANT_ROUTES: dict[str, CrossTenantCase] = {
     "/api/v1/sales/{sale_id}/cancel": CrossTenantCase(
         parameters={"sale_id": "sale"}, body={"reason": "Test de fuite inter-tenant"}
     ),
+    # Photo d'un article (ADR 0121) : sans compte Cloudinary en test, le 404 vient avant.
+    "/api/v1/products/{product_id}/photo": CrossTenantCase(parameters={"product_id": "product"}),
     "/api/v1/sales/{sale_id}/correct": CrossTenantCase(parameters={"sale_id": "sale"}, body={}),
     "/api/v1/sales/{sale_id}/returns": CrossTenantCase(
         parameters={"sale_id": "sale"},

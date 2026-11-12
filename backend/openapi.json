@@ -1756,6 +1756,123 @@
         }
       }
     },
+    "/api/v1/products/photos/config": {
+      "get": {
+        "tags": [
+          "products"
+        ],
+        "summary": "Photo Config",
+        "description": "Les photos sont-elles disponibles ? Sans compte Cloudinary : non (ADR 0121).",
+        "operationId": "photo_config_api_v1_products_photos_config_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/products/{product_id}/photo": {
+      "put": {
+        "tags": [
+          "products"
+        ],
+        "summary": "Put Photo",
+        "description": "Ajoute ou change la photo de l'article (ADR 0121).\n\n`products:update`, ou `products:create` pour un article encore sans photo (« Nouvel\narticle »). L'image est vérifiée, ré-encodée sans métadonnée et déposée chez\nCloudinary par le serveur : le navigateur ne parle jamais à Cloudinary.",
+        "operationId": "put_photo_api_v1_products__product_id__photo_put",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_put_photo_api_v1_products__product_id__photo_put"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "products"
+        ],
+        "summary": "Delete Photo",
+        "description": "Retire la photo ; l'image est supprimée chez Cloudinary après le COMMIT.",
+        "operationId": "delete_photo_api_v1_products__product_id__photo_delete",
+        "parameters": [
+          {
+            "name": "product_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Product Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/products/{product_id}": {
       "get": {
         "tags": [
@@ -10404,6 +10521,25 @@
         ],
         "title": "Body_put_logo_api_v1_companies_me_logo_put"
       },
+      "Body_put_photo_api_v1_products__product_id__photo_put": {
+        "properties": {
+          "file": {
+            "anyOf": [
+              {
+                "type": "string",
+                "contentMediaType": "application/octet-stream"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File",
+            "description": "Photo PNG, JPEG ou WebP, 5 Mo au plus"
+          }
+        },
+        "type": "object",
+        "title": "Body_put_photo_api_v1_products__product_id__photo_put"
+      },
       "CancelReason": {
         "type": "string",
         "maxLength": 500,
@@ -16857,6 +16993,21 @@
         "maxLength": 40,
         "minLength": 1
       },
+      "PhotoConfig": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "PhotoConfig",
+        "description": "Les photos sont-elles disponibles ? Sans compte Cloudinary : non, sans erreur."
+      },
       "PlanBreakdown": {
         "properties": {
           "code": {
@@ -17351,6 +17502,41 @@
         ],
         "title": "ProductPage"
       },
+      "ProductPhoto": {
+        "properties": {
+          "cloud_name": {
+            "type": "string",
+            "title": "Cloud Name"
+          },
+          "public_id": {
+            "type": "string",
+            "title": "Public Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "width": {
+            "type": "integer",
+            "title": "Width"
+          },
+          "height": {
+            "type": "integer",
+            "title": "Height"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cloud_name",
+          "public_id",
+          "version",
+          "width",
+          "height"
+        ],
+        "title": "ProductPhoto",
+        "description": "Où lire la photo chez Cloudinary (ADR 0121). Jamais de secret : une image publique.\n\nLe navigateur compose l'adresse `https://res.cloudinary.com/<cloud_name>/image/upload/\n<transformation>/v<version>/<public_id>` et choisit sa taille. `null` partout quand\nles photos ne sont pas configurées : l'article garde son carré coloré."
+      },
       "ProductPriceCreate": {
         "properties": {
           "unit_price": {
@@ -17728,6 +17914,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/CostPrice-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "photo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductPhoto"
               },
               {
                 "type": "null"
@@ -21236,6 +21432,16 @@
           "is_stock_tracked": {
             "type": "boolean",
             "title": "Is Stock Tracked"
+          },
+          "photo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductPhoto"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,

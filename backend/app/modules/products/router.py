@@ -5,14 +5,20 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, status
 
-from app.core.deps import TenantSession, client_ip, require_permission
+from app.core.deps import (
+    TenantSession,
+    client_ip,
+    require_any_permission,
+    require_permission,
+)
 from app.core.repository import MAX_PAGE_SIZE
 from app.modules.products import service
 from app.modules.products.schemas import (
     CategoryCount,
     CategoryCounts,
+    PhotoConfig,
     ProductCreate,
     ProductPage,
     ProductPriceCreate,
@@ -81,6 +87,53 @@ def create_product(
         tenant.session, tenant.ctx, payload, ip_address=client_ip(request)
     )
     return ProductRead.build(product, price)
+
+
+@router.get("/photos/config", response_model=PhotoConfig)
+def photo_config(
+    _: Annotated[TenantSession, Depends(require_permission("products:read"))],
+) -> PhotoConfig:
+    """Les photos sont-elles disponibles ? Sans compte Cloudinary : non (ADR 0121)."""
+    return service.photo_config()
+
+
+@router.put("/{product_id}/photo", response_model=ProductRead)
+def put_photo(
+    product_id: UUID,
+    request: Request,
+    tenant: Annotated[
+        TenantSession,
+        Depends(require_any_permission("products:update", "products:create")),
+    ],
+    file: Annotated[
+        UploadFile | None, File(description="Photo PNG, JPEG ou WebP, 5 Mo au plus")
+    ] = None,
+) -> ProductRead:
+    """Ajoute ou change la photo de l'article (ADR 0121).
+
+    `products:update`, ou `products:create` pour un article encore sans photo (« Nouvel
+    article »). L'image est vérifiée, ré-encodée sans métadonnée et déposée chez
+    Cloudinary par le serveur : le navigateur ne parle jamais à Cloudinary.
+    """
+    # Facultatif ici : l'article d'une autre entreprise répond 404 avant tout (ADR 0121).
+    content = None if file is None else file.file.read(service.MAX_PHOTO_READ_BYTES)
+    product = service.set_photo(
+        tenant.session, tenant.ctx, product_id, content, ip_address=client_ip(request)
+    )
+    return service.read_product(tenant.session, tenant.ctx, product)
+
+
+@router.delete("/{product_id}/photo", response_model=ProductRead)
+def delete_photo(
+    product_id: UUID,
+    request: Request,
+    tenant: Annotated[TenantSession, Depends(require_permission("products:update"))],
+) -> ProductRead:
+    """Retire la photo ; l'image est supprimée chez Cloudinary après le COMMIT."""
+    product = service.remove_photo(
+        tenant.session, tenant.ctx, product_id, ip_address=client_ip(request)
+    )
+    return service.read_product(tenant.session, tenant.ctx, product)
 
 
 @router.get("/{product_id}", response_model=ProductRead)

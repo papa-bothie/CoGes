@@ -411,6 +411,7 @@ def get_stock(
             unit_price=prices.get(row.product_id),
             level=_level(row.qty_on_hand, highest.get(row.product_id)),
             is_stock_tracked=summary.is_stock_tracked,
+            photo=summary.photo,
         )
         for row, summary, state in shown
     ]
