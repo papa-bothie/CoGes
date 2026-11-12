@@ -10,12 +10,19 @@ import pkg from "./package.json" with { type: "json" };
  * rafraîchissement (`SameSite=Lax`, chemin `/api/v1/auth`, ADR 0006) reste ainsi un cookie
  * « first-party ».
  */
-function apiOrigin(): string {
-  const value = process.env.COGES_API_URL;
-  return value ? value.replace(/\/+$/, "") : "http://localhost:8000";
-}
-
 const isDev = process.env.NODE_ENV !== "production";
+
+/**
+ * Lue **au build** : Next fige les réécritures dans `routes-manifest.json`. L'image du VPS
+ * est construite sans elle (une même image pour la production et la préproduction, qui
+ * partagent `coges_edge`) : aucune réécriture, Caddy seul route `/api/v1`, plutôt qu'un
+ * filet qui pourrait viser l'API de l'autre pile. En développement : `localhost:8000`.
+ */
+function apiOrigin(): string | null {
+  const value = process.env.COGES_API_URL;
+  if (value) return value.replace(/\/+$/, "");
+  return isDev ? "http://localhost:8000" : null;
+}
 
 // Next injecte des scripts en ligne pour l'hydratation : 'unsafe-inline' reste
 // nécessaire sans nonce. Tout le reste est confiné à la même origine.
@@ -69,7 +76,8 @@ const nextConfig: NextConfig = {
     ];
   },
   async rewrites() {
-    return [{ source: "/api/v1/:path*", destination: `${apiOrigin()}/api/v1/:path*` }];
+    const origin = apiOrigin();
+    return origin ? [{ source: "/api/v1/:path*", destination: `${origin}/api/v1/:path*` }] : [];
   },
   async headers() {
     return [

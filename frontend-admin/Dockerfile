@@ -18,9 +18,10 @@ FROM ${NODE_IMAGE} AS build
 WORKDIR /src
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     NEXT_TELEMETRY_DISABLED=1
-# Filet seulement : en production, Caddy envoie /api/v1/* à l'API avant le front.
-ARG COGES_API_URL=http://api:8000
-ENV COGES_API_URL=${COGES_API_URL}
+# Aucune adresse d'API figée ici : la même image sert la production et la préproduction,
+# qui partagent le réseau coges_edge. Caddy envoie /api/v1/* à l'API de sa pile ; sans
+# COGES_API_URL au build, next.config.ts n'émet aucune réécriture. Ce que le serveur lit à
+# l'exécution vient du compose (deploy/vps/docker-compose.yml).
 COPY --from=deps /src/node_modules ./node_modules
 COPY . .
 RUN corepack enable && pnpm build

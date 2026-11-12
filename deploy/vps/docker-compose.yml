@@ -122,6 +122,11 @@ services:
   front:
     <<: *service
     image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/front:${COGES_IMAGE_TAG:?}
+    environment:
+      # Lue à l'exécution par le serveur Next (état de l'inscription, ADR 0118). L'alias de
+      # la pile, jamais « api » : production et préproduction partagent coges_edge, où
+      # « api » désigne les deux. L'image n'en fige aucune (même image pour les deux piles).
+      COGES_API_URL: http://${COGES_STACK:?}-api:8000
     networks:
       edge: { aliases: ["${COGES_STACK:?}-front"] }
     # Fichiers statiques des builds précédents, gardés 14 jours (ADR 0102). Un volume par pile.
