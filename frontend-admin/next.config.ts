@@ -7,12 +7,19 @@ import type { NextConfig } from "next";
  * cookie de rafraîchissement de l'administration (`/api/v1/platform/auth`) reste ainsi
  * « first-party ».
  */
-function apiOrigin(): string {
-  const value = process.env.COGES_API_URL;
-  return value ? value.replace(/\/+$/, "") : "http://localhost:8000";
-}
-
 const isDev = process.env.NODE_ENV !== "production";
+
+/**
+ * Lue **au build** : Next fige les réécritures dans `routes-manifest.json`. L'image du VPS
+ * est construite sans elle (une même image pour la production et la préproduction, qui
+ * partagent `coges_edge`) : aucune réécriture, Caddy seul route `/api/v1`, plutôt qu'un
+ * filet qui pourrait viser l'API de l'autre pile. En développement : `localhost:8000`.
+ */
+function apiOrigin(): string | null {
+  const value = process.env.COGES_API_URL;
+  if (value) return value.replace(/\/+$/, "");
+  return isDev ? "http://localhost:8000" : null;
+}
 
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -34,10 +41,12 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   async rewrites() {
     // Seulement l'API de l'administration : aucune route commerçante ne passe par ici.
+    const origin = apiOrigin();
+    if (!origin) return [];
     return [
       {
         source: "/api/v1/platform/:path*",
-        destination: `${apiOrigin()}/api/v1/platform/:path*`,
+        destination: `${origin}/api/v1/platform/:path*`,
       },
     ];
   },

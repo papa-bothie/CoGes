@@ -307,3 +307,63 @@ def test_only_the_preprod_is_kept_out_of_search_engines(gate: str) -> None:
     admin = _admin_routes(config)
     if admin:  # derrière le tunnel ou par SSH, l'administration n'a pas d'hôte nommé
         assert noindex in json.dumps(admin)
+
+
+# ------------------------------- variables lues à l'exécution par les fronts (correctif)
+#
+# Le Dockerfile du front ne posait COGES_API_URL qu'à l'étape de build : à l'exécution,
+# `signupConfig()` (lu par le serveur Next) visait localhost, échouait et rendait
+# « fermé ». Le bouton « Créer ma boutique » ne s'affichait jamais en production.
+
+FRONTS = {"front": REPO / "frontend", "admin": REPO / "frontend-admin"}
+# Lus au build (`next.config.ts`, tests, Playwright) ou inlinés par Next : pas à l'exécution.
+BUILD_ONLY_FILES = {"next.config.ts", "playwright.config.ts", "vitest.config.ts"}
+INLINED = re.compile(r"^(NODE_ENV|NEXT_PUBLIC_\w+|NEXT_DEPLOYMENT_ID)$")
+SKIPPED_DIRS = {"node_modules", "e2e", "test", "public", "scripts"}
+
+
+def _server_env_reads(root: Path) -> dict[str, list[str]]:
+    """Variable → fichiers du code servi qui la lisent par `process.env`."""
+    reads: dict[str, list[str]] = {}
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root)
+        if path.suffix not in {".ts", ".tsx", ".js", ".mjs"} or not path.is_file():
+            continue
+        if relative.parts[0].startswith(".") or SKIPPED_DIRS & set(relative.parts):
+            continue
+        if path.name in BUILD_ONLY_FILES or ".test." in path.name:
+            continue
+        for name in re.findall(r"process\.env\.([A-Z0-9_]+)", path.read_text("utf-8")):
+            if not INLINED.match(name):
+                reads.setdefault(name, []).append(str(relative))
+    return reads
+
+
+def test_the_reads_are_discovered() -> None:
+    assert "COGES_API_URL" in _server_env_reads(FRONTS["front"])
+    assert "COGES_MERCHANT_URL" in _server_env_reads(FRONTS["admin"])
+
+
+@pytest.mark.parametrize("service", sorted(FRONTS))
+def test_every_server_side_read_is_given_at_run_time(service: str) -> None:
+    environment = _services()[service].get("environment", {})
+    missing = {
+        name: files
+        for name, files in _server_env_reads(FRONTS[service]).items()
+        if name not in environment
+    }
+    assert not missing, f"lues à l'exécution, absentes du service {service} : {missing}"
+
+
+def test_the_front_reaches_the_api_of_its_own_stack() -> None:
+    services = _services()
+    # Production et préproduction partagent coges_edge : « api » y désigne les deux piles.
+    assert services["front"]["environment"]["COGES_API_URL"] == "http://${COGES_STACK:?}-api:8000"
+    assert "${COGES_STACK:?}-api" in services["api"]["networks"]["edge"]["aliases"]
+
+
+@pytest.mark.parametrize("service", sorted(FRONTS))
+def test_no_image_bakes_an_api_host(service: str) -> None:
+    """La même image sert les deux piles : aucune valeur de build ne nomme la bonne."""
+    dockerfile = (FRONTS[service] / "Dockerfile").read_text(encoding="utf-8")
+    assert not re.search(r"^\s*(ARG|ENV)\s+COGES_API_URL", dockerfile, re.MULTILINE)

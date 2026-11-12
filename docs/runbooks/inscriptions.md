@@ -29,6 +29,24 @@ sudo -u deploy /opt/coges/deploy.sh production <version en place>   # relit l'en
 `check_runtime_env.py` refuse de démarrer si la clé manque. Le bouton paraît sur la vitrine
 et sur la connexion **dans les 5 minutes** (pages relues par le serveur toutes les 5 minutes).
 
+### Le bouton n'apparaît pas
+
+L'API dit « ouvert », mais c'est le **serveur du front** qui la lit, par `COGES_API_URL`,
+à l'exécution. Vérifier dans l'ordre (pile `production` : conteneur `coges-front-1` ;
+pile `preprod` : `coges-preprod-front-1`) :
+
+```bash
+curl -s https://<domaine>/api/v1/auth/signup-config        # "enabled": true attendu
+docker exec coges-front-1 node -e "console.log(process.env.COGES_API_URL)"
+# attendu : http://production-api:8000 (http://preprod-api:8000 en préproduction) ;
+# « undefined » = front d'avant le correctif : redéployer
+docker exec coges-front-1 node -e \
+  "fetch(process.env.COGES_API_URL+'/api/v1/auth/signup-config').then(r=>r.text()).then(console.log)"
+```
+
+Jamais `http://api:8000` : les deux piles partagent le réseau `coges_edge`, où « api »
+désigne l'une ou l'autre.
+
 ## Fermer (en cas d'abus, par exemple)
 
 Même commande avec `false`, puis le même redéploiement. Les routes publiques répondent 404
