@@ -114,20 +114,26 @@ test("activer, recevoir une alerte sans montant, la toucher ouvre le bon écran"
   expect(devices.length).toBeGreaterThanOrEqual(1);
 
   // Un push arrive, tel que le worker l'écrit (texte sans montant, chemin relatif).
-  await deliverPush(page, {
-    title: "Riz 25 kg est épuisé",
-    body: "Vous ne pouvez plus en vendre.",
-    url: "/sales",
-    tag: "coges-alertes",
-  });
+  // Livré jusqu'à ce qu'il s'affiche : au premier lancement, le worker peut finir de
+  // s'activer pendant la première livraison. Même `tag` : l'appareil n'en garde qu'une.
   const sw = worker(context);
   await expect
-    .poll(() =>
-      sw.evaluate(() =>
-        (self as unknown as WorkerScope).registration
-          .getNotifications()
-          .then((items) => items.map((item) => ({ title: item.title, data: item.data }))),
-      ),
+    .poll(
+      async () => {
+        await deliverPush(page, {
+          title: "Riz 25 kg est épuisé",
+          body: "Vous ne pouvez plus en vendre.",
+          url: "/sales",
+          tag: "coges-alertes",
+        });
+        await page.waitForTimeout(1_000);
+        return sw.evaluate(() =>
+          (self as unknown as WorkerScope).registration
+            .getNotifications()
+            .then((items) => items.map((item) => ({ title: item.title, data: item.data }))),
+        );
+      },
+      { timeout: 30_000, intervals: [500, 2_000, 4_000] },
     )
     .toEqual([{ title: "Riz 25 kg est épuisé", data: { url: "/sales" } }]);
 
