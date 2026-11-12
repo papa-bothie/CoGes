@@ -680,6 +680,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/products/photos/config": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Photo Config
+     * @description Les photos sont-elles disponibles ? Sans compte Cloudinary : non (ADR 0121).
+     */
+    get: operations["photo_config_api_v1_products_photos_config_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/products/{product_id}/photo": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Put Photo
+     * @description Ajoute ou change la photo de l'article (ADR 0121).
+     *
+     *     `products:update`, ou `products:create` pour un article encore sans photo (« Nouvel
+     *     article »). L'image est vérifiée, ré-encodée sans métadonnée et déposée chez
+     *     Cloudinary par le serveur : le navigateur ne parle jamais à Cloudinary.
+     */
+    put: operations["put_photo_api_v1_products__product_id__photo_put"];
+    post?: never;
+    /**
+     * Delete Photo
+     * @description Retire la photo ; l'image est supprimée chez Cloudinary après le COMMIT.
+     */
+    delete: operations["delete_photo_api_v1_products__product_id__photo_delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/products/{product_id}": {
     parameters: {
       query?: never;
@@ -3665,6 +3713,14 @@ export interface components {
        */
       file: string;
     };
+    /** Body_put_photo_api_v1_products__product_id__photo_put */
+    Body_put_photo_api_v1_products__product_id__photo_put: {
+      /**
+       * File
+       * @description Photo PNG, JPEG ou WebP, 5 Mo au plus
+       */
+      file?: string | null;
+    };
     CancelReason: string;
     /** Capability */
     Capability: {
@@ -6036,6 +6092,14 @@ export interface components {
     };
     Phone: string;
     /**
+     * PhotoConfig
+     * @description Les photos sont-elles disponibles ? Sans compte Cloudinary : non, sans erreur.
+     */
+    PhotoConfig: {
+      /** Enabled */
+      enabled: boolean;
+    };
+    /**
      * PlanBreakdown
      * @description Une offre et ses entreprises, d'après l'**abonnement** : les essais (tous sur
      *     Premium) à part des payantes (`active` et `past_due`), pour ne pas gonfler l'offre.
@@ -6249,6 +6313,26 @@ export interface components {
       total: number;
     };
     /**
+     * ProductPhoto
+     * @description Où lire la photo chez Cloudinary (ADR 0121). Jamais de secret : une image publique.
+     *
+     *     Le navigateur compose l'adresse `https://res.cloudinary.com/<cloud_name>/image/upload/
+     *     <transformation>/v<version>/<public_id>` et choisit sa taille. `null` partout quand
+     *     les photos ne sont pas configurées : l'article garde son carré coloré.
+     */
+    ProductPhoto: {
+      /** Cloud Name */
+      cloud_name: string;
+      /** Public Id */
+      public_id: string;
+      /** Version */
+      version: number;
+      /** Width */
+      width: number;
+      /** Height */
+      height: number;
+    };
+    /**
      * ProductPriceCreate
      * @description Nouveau prix. L'intervalle courant est fermé au même instant.
      */
@@ -6382,6 +6466,7 @@ export interface components {
       created_at: string;
       unit_price: components["schemas"]["SellingPrice-Output"] | null;
       cost_price: components["schemas"]["CostPrice-Output"] | null;
+      photo?: components["schemas"]["ProductPhoto"] | null;
     };
     /** @enum {string} */
     ProductUnit: "piece" | "kg" | "litre" | "carton" | "metre" | "paquet" | "sac" | "bouteille";
@@ -7642,6 +7727,7 @@ export interface components {
       level: string;
       /** Is Stock Tracked */
       is_stock_tracked: boolean;
+      photo?: components["schemas"]["ProductPhoto"] | null;
     };
     /** StockPage */
     StockPage: {
@@ -9662,6 +9748,92 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["CategoryCounts"];
+        };
+      };
+    };
+  };
+  photo_config_api_v1_products_photos_config_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PhotoConfig"];
+        };
+      };
+    };
+  };
+  put_photo_api_v1_products__product_id__photo_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        product_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "multipart/form-data": components["schemas"]["Body_put_photo_api_v1_products__product_id__photo_put"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProductRead"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  delete_photo_api_v1_products__product_id__photo_delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        product_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProductRead"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
         };
       };
     };

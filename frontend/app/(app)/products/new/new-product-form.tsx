@@ -15,6 +15,11 @@ import { QuantityStepper } from "@/components/kit/quantity-stepper";
 import { fieldClasses } from "@/components/kit/rubrique";
 import { BarcodeScanButton } from "@/components/products/barcode-scanner";
 import { DescriptionField } from "@/components/products/description-field";
+import {
+  PhotoField,
+  uploadProductPhoto,
+  usePhotosEnabled,
+} from "@/components/products/photo-field";
 import { Button } from "@/components/ui/button";
 import { useDraft } from "@/hooks/use-draft";
 import { useCompanyLocale } from "@/hooks/use-me";
@@ -107,6 +112,9 @@ export function NewProductForm({ intake }: { intake?: Intake } = {}) {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  // Photo choisie avant l'enregistrement : jamais dans le brouillon (ADR 0101, 0121).
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const photos = usePhotosEnabled();
   const [price, setPrice] = useState("");
   const [cost, setCost] = useState("");
   const [unit, setUnit] = useState<Unit>("piece");
@@ -173,8 +181,19 @@ export function NewProductForm({ intake }: { intake?: Intake } = {}) {
 
   const save = useMutation({
     meta: { toastError: false },
-    mutationFn: (body: Schemas["NewProductCreate"]) =>
-      unwrap(api.POST("/api/v1/inventory/products", { body })),
+    mutationFn: async (body: Schemas["NewProductCreate"]) => {
+      const created = await unwrap(api.POST("/api/v1/inventory/products", { body }));
+      // La photo part une fois l'article créé (ADR 0121). Si elle échoue, l'article reste :
+      // la photo s'ajoute ensuite depuis sa fiche.
+      if (photoFile) {
+        try {
+          await uploadProductPhoto(created.product.id, photoFile);
+        } catch (failure) {
+          toast.error(errorMessage(failure));
+        }
+      }
+      return created;
+    },
     onSuccess: (created) => {
       for (const key of [queryKeys.products.all, queryKeys.stock.all]) {
         void queryClient.invalidateQueries({ queryKey: key });
@@ -353,6 +372,7 @@ export function NewProductForm({ intake }: { intake?: Intake } = {}) {
         />
       </div>
       <DescriptionField value={description} onChange={setDescription} />
+      {photos && <PhotoField name={name} onPending={setPhotoFile} />}
 
       <div className="space-y-6">
         <div className="flex flex-wrap gap-4">

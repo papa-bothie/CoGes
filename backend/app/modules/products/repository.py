@@ -199,6 +199,13 @@ class ProductRepository(TenantRepository[Product]):
         )
         return int(self.session.execute(stmt).scalar_one())
 
+    def photo_public_ids(self) -> set[str]:
+        """Images nommées par un article, supprimé compris (balayage, ADR 0121)."""
+        stmt = select(Product.photo_public_id).where(
+            Product.company_id == self.ctx.company_id, Product.photo_public_id.is_not(None)
+        )
+        return {str(value) for value in self.session.execute(stmt).scalars()}
+
 
 class ProductPriceRepository(TenantRepository[ProductPrice]):
     """Historique de tarification. Une ligne ne se corrige pas : elle se ferme."""

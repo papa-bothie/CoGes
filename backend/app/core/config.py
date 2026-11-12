@@ -215,6 +215,17 @@ class Settings(BaseSettings):
     push_max_per_hour: int = Field(default=30, ge=1, le=500)
     push_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
 
+    # --- Photos des articles (Cloudinary, ADR 0121) ---
+    # Les trois ensemble, ou aucune : sans elles, la photo est simplement indisponible. Le
+    # secret ne quitte jamais le serveur ; le navigateur ne parle jamais à l'API Cloudinary.
+    cloudinary_cloud_name: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,64}$")
+    cloudinary_api_key: str | None = Field(default=None, pattern=r"^[0-9]{6,32}$")
+    cloudinary_api_secret: SecretStr | None = None
+    # Adresse de l'API : un faux Cloudinary local pour les parcours e2e, en local et en CI
+    # seulement (refusée ailleurs).
+    cloudinary_api_base: str = "https://api.cloudinary.com"
+    cloudinary_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
+
     # --- Inscription libre-service (lot 30, ADR 0118) ---
     # Éteinte par défaut : routes publiques en 404, aucun lien « Créer ma boutique ».
     signup_enabled: bool = False
@@ -385,6 +396,37 @@ class Settings(BaseSettings):
         if problem is not None:
             raise ValueError(problem)
         return self
+
+    @field_validator(
+        "cloudinary_cloud_name", "cloudinary_api_key", "cloudinary_api_secret", mode="before"
+    )
+    @classmethod
+    def _empty_cloudinary_is_unset(cls, value: Any) -> Any:
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @model_validator(mode="after")
+    def _cloudinary_is_complete(self) -> "Settings":
+        """Refuse au démarrage un compte Cloudinary à moitié posé (ADR 0121)."""
+        values = (self.cloudinary_cloud_name, self.cloudinary_api_key, self.cloudinary_api_secret)
+        if any(value is None for value in values) and not all(value is None for value in values):
+            raise ValueError(
+                "COGES_CLOUDINARY_CLOUD_NAME, COGES_CLOUDINARY_API_KEY et "
+                "COGES_CLOUDINARY_API_SECRET vont ensemble : posez les trois, ou aucune."
+            )
+        if (
+            self.cloudinary_api_base != "https://api.cloudinary.com"
+            and self.env not in DEVELOPMENT_ENVS
+        ):
+            raise ValueError(
+                "COGES_CLOUDINARY_API_BASE n'est accepté qu'en local et en CI "
+                f"(COGES_ENV vaut « {self.env} »)."
+            )
+        return self
+
+    @property
+    def photos_enabled(self) -> bool:
+        """Les photos des articles sont configurées (ADR 0121)."""
+        return self.cloudinary_api_secret is not None
 
     @property
     def push_enabled(self) -> bool:

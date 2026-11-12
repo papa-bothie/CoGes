@@ -55,6 +55,22 @@ export const labels = {
     submit: "Enregistrer le nouveau mot de passe",
     done: "Mot de passe changé. Vos autres appareils sont déconnectés : reconnectez-les avec le nouveau.",
   },
+  /** Photo d'un article (prompt 36, bloc I, ADR 0121). */
+  photo: {
+    title: "Photo de l'article",
+    none: "Pas encore de photo.",
+    take: "Prendre une photo",
+    choose: "Choisir une image",
+    change: "Changer la photo",
+    remove: "Retirer",
+    preview: (name: string) => `Photo de ${name}`,
+    hint: "Une photo nette, de face. PNG, JPEG ou WebP, 5 Mo au plus.",
+    saved: "Photo enregistrée.",
+    removed: "Photo retirée.",
+    tooLarge: "Image trop lourde (5 Mo au plus).",
+    unsupported: "Format non pris en charge : une photo PNG, JPEG ou WebP.",
+    pending: "La photo sera ajoutée à l'enregistrement de l'article.",
+  },
   /** Notifications sur le téléphone (Web Push, prompt 36, bloc N, ADR 0120). */
   push: {
     menu: "Notifications sur le téléphone",

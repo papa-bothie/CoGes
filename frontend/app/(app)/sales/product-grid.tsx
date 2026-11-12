@@ -195,7 +195,7 @@ export function ProductGrid({
                     "disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-border",
                   )}
                 >
-                  <ProductSquare name={product.name} size="grand" />
+                  <ProductSquare name={product.name} size="grand" photo={product.photo} />
                   <span className="flex w-full min-w-0 flex-col">
                     <span className="leading-tight font-bold">{product.name}</span>
                     <ProductHint text={hints.get(product.id)} name={product.name} />

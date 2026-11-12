@@ -46,6 +46,8 @@ E2E_ADMIN_MFA_SECRET=COGESEXADMINQMFAQSECRETQAAAAAAAA
 # jeton lu par Playwright (frontend-admin/playwright.config.ts).
 E2E_ACCESS_DIR="$ROOT/.e2e-access"
 E2E_ACCESS_PORT="${E2E_ACCESS_PORT:-8199}"
+# Faux Cloudinary des photos d'articles (ADR 0121), comme le jeu de clés d'Access.
+E2E_CLOUDINARY_PORT="${E2E_CLOUDINARY_PORT:-8198}"
 MAQUETTE_API_PORT="${MAQUETTE_API_PORT:-8101}"
 MAQUETTE_FRONT_PORT="${MAQUETTE_FRONT_PORT:-3101}"
 # Le moment des captures de la maquette v2 (ADR 0065), repris de app/seed_maquette.py.
@@ -197,7 +199,15 @@ SQL
     python3 -m http.server "$E2E_ACCESS_PORT" --bind 127.0.0.1 \
       --directory "$E2E_ACCESS_DIR" >/dev/null 2>&1 &
     certs_server=$!
-    trap 'kill "$certs_server" 2>/dev/null || true' EXIT
+    # Photos d'articles (ADR 0121) : un faux Cloudinary local, jamais le vrai compte.
+    (cd "$ROOT/backend" && exec uv run python -m tests.helpers.fake_cloudinary \
+      "$E2E_CLOUDINARY_PORT") >/dev/null 2>&1 &
+    cloudinary_server=$!
+    trap 'kill "$certs_server" "$cloudinary_server" 2>/dev/null || true' EXIT
+    export COGES_CLOUDINARY_CLOUD_NAME=coges-e2e
+    export COGES_CLOUDINARY_API_KEY=100000000000001
+    export COGES_CLOUDINARY_API_SECRET=faux-secret-cloudinary-e2e-0000
+    export COGES_CLOUDINARY_API_BASE="http://127.0.0.1:$E2E_CLOUDINARY_PORT"
     trap 'exit 143' TERM INT
     export COGES_ACCESS_TEAM_DOMAIN=coges-test.cloudflareaccess.com
     export COGES_ACCESS_AUD="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

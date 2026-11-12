@@ -3,7 +3,9 @@
 import { BackLink } from "@/components/back-link";
 import { ErrorState } from "@/components/error-state";
 import { PageHeader } from "@/components/page-header";
+import { PhotoField, usePhotosEnabled } from "@/components/products/photo-field";
 import { Skeleton } from "@/components/ui/skeleton";
+import { usePermission } from "@/hooks/use-permission";
 import { useProduct } from "@/lib/api/queries/products";
 import { labels } from "@/lib/labels";
 
@@ -11,6 +13,8 @@ import { ProductForm } from "../../product-form";
 
 export function EditProductView({ productId }: { productId: string }) {
   const product = useProduct(productId);
+  const canEdit = usePermission("products:update");
+  const photos = usePhotosEnabled();
   if (product.isError) {
     return <ErrorState error={product.error} onRetry={() => void product.refetch()} />;
   }
@@ -23,6 +27,9 @@ export function EditProductView({ productId }: { productId: string }) {
         fallback={{ href: `/products/${productId}`, label: product.data.name }}
       />
       <PageHeader title={labels.products.editTitle(product.data.name)} />
+      {photos && canEdit && (
+        <PhotoField name={product.data.name} photo={product.data.photo} productId={productId} />
+      )}
       <ProductForm product={product.data} />
     </>
   );

@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { PhotoField, usePhotosEnabled } from "@/components/products/photo-field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCompanyLocale } from "@/hooks/use-me";
 import { Can, usePermission } from "@/hooks/use-permission";
@@ -35,6 +36,7 @@ import type { Schemas } from "@/lib/api/schema";
 import { compareDecimal, subtractDecimal } from "@/lib/decimal";
 import { formatAmount, formatDateLong, formatQty } from "@/lib/format";
 import { labels } from "@/lib/labels";
+import { photoUrl } from "@/lib/photo";
 import { wholeUnits } from "@/lib/payment-amount";
 import { historyKind, historyPhrase, historyQty, historyWhen } from "@/lib/stock-history";
 import { qtyWithUnit } from "@/lib/units";
@@ -102,6 +104,8 @@ export function ProductDetailView({ productId }: { productId: string }) {
   const [more, setMore] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const canSeeHistory = usePermission("inventory:read");
+  const canEditPhoto = usePermission("products:update");
+  const photos = usePhotosEnabled();
 
   const product = useQuery({
     queryKey: queryKeys.products.detail(productId),
@@ -158,15 +162,27 @@ export function ProductDetailView({ productId }: { productId: string }) {
       </Link>
 
       <div className="flex flex-wrap items-center gap-4">
-        <span
-          aria-hidden
-          className={cn(
-            "flex size-[72px] shrink-0 items-center justify-center rounded-tuile text-3xl font-extrabold text-blanc",
-            SQUARE_TONES[(articleTone(data.name) - 1) % SQUARE_TONES.length],
-          )}
-        >
-          {data.name.trim().charAt(0).toLocaleUpperCase("fr-FR")}
-        </span>
+        {data.photo ? (
+          // eslint-disable-next-line @next/next/no-img-element -- image Cloudinary, à la bonne taille
+          <img
+            src={photoUrl(data.photo, 144)}
+            alt=""
+            aria-hidden
+            width={72}
+            height={72}
+            className="size-[72px] shrink-0 rounded-tuile bg-voile object-cover"
+          />
+        ) : (
+          <span
+            aria-hidden
+            className={cn(
+              "flex size-[72px] shrink-0 items-center justify-center rounded-tuile text-3xl font-extrabold text-blanc",
+              SQUARE_TONES[(articleTone(data.name) - 1) % SQUARE_TONES.length],
+            )}
+          >
+            {data.name.trim().charAt(0).toLocaleUpperCase("fr-FR")}
+          </span>
+        )}
         <div className="flex-[1_1_240px]">
           <h1 className="text-titre-page leading-[1.45] tracking-[-0.01em]">{data.name}</h1>
           <p className="text-lg text-muted-foreground">{t.subtitle(shelf ?? null, unit)}</p>
@@ -217,6 +233,26 @@ export function ProductDetailView({ productId }: { productId: string }) {
 
       {editing && <PriceEditor product={data} onDone={() => setEditing(false)} />}
       <DeleteProductDialog product={deleting ? data : null} onClose={() => setDeleting(false)} />
+
+      {(data.photo || (photos && canEditPhoto)) && (
+        <section className="flex flex-wrap items-start gap-5 rounded-carte border border-border bg-card p-carte">
+          {data.photo && (
+            // eslint-disable-next-line @next/next/no-img-element -- image Cloudinary, largeur adaptée
+            <img
+              src={photoUrl(data.photo, 960, "entiere")}
+              alt={labels.photo.preview(data.name)}
+              width={data.photo.width}
+              height={data.photo.height}
+              className="h-auto max-h-[420px] w-full max-w-[480px] rounded-champ bg-voile object-contain"
+            />
+          )}
+          {photos && canEditPhoto && (
+            <div className="min-w-0 flex-[1_1_280px]">
+              <PhotoField name={data.name} photo={data.photo} productId={data.id} />
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
         <Tile

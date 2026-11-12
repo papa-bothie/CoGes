@@ -41,6 +41,9 @@ IMPORTS_PREFIX = f"{API_PREFIX}/imports"
 #: refuse lui-même au-delà de 2 Mo exactement, avec le message « Image trop lourde ».
 LOGO_PATH = f"{API_PREFIX}/companies/me/logo"
 LOGO_BODY_BYTES = 2 * 1024 * 1024 + 64 * 1024
+#: Photo d'un article (ADR 0121) : 5 Mo d'image, plus l'enveloppe multipart.
+PHOTO_PATH = re.compile(rf"^{API_PREFIX}/products/[0-9a-fA-F-]{{36}}/photo$")
+PHOTO_BODY_BYTES = 5 * 1024 * 1024 + 64 * 1024
 LOGIN_PATH = f"{API_PREFIX}/auth/login"
 #: Les deux connexions, commerçante et administration (ADR 0089), partagent le plafond
 #: bas par adresse IP.
@@ -90,6 +93,8 @@ class BodySizeLimitMiddleware:
             limit = settings.max_import_bytes
         elif path == LOGO_PATH:
             limit = max(LOGO_BODY_BYTES, settings.max_body_bytes)
+        elif PHOTO_PATH.match(path):
+            limit = max(PHOTO_BODY_BYTES, settings.max_body_bytes)
         else:
             limit = settings.max_body_bytes
         declared = Headers(scope=scope).get("content-length")

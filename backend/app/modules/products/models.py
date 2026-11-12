@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, Numeric, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, Numeric, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -39,6 +39,11 @@ class Product(IdentifiedTenantBase):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Photo chez Cloudinary (ADR 0121) : les quatre ensemble, ou aucune.
+    photo_public_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    photo_version: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    photo_width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    photo_height: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class ProductPrice(IdentifiedTenantBase):

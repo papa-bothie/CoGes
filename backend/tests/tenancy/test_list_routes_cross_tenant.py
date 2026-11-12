@@ -140,6 +140,8 @@ READ_ROUTES: dict[str, tuple[str, dict[str, str]]] = {
     "/api/v1/payments": (TENANT, {}),
     "/api/v1/products": (TENANT, {}),
     "/api/v1/products/category-counts": (TENANT, {}),
+    # Photos disponibles ou non (ADR 0121) : un réglage du serveur, le même partout.
+    "/api/v1/products/photos/config": (TENANT, {}),
     "/api/v1/roles": (TENANT, {}),
     "/api/v1/roles/abilities": (TENANT, {}),
     "/api/v1/sales": (TENANT, {"include_drafts": "true"}),

@@ -183,6 +183,11 @@ services:
       COGES_VAPID_PUBLIC_KEY: ${COGES_VAPID_PUBLIC_KEY:-}
       COGES_VAPID_PRIVATE_KEY: ${COGES_VAPID_PRIVATE_KEY:-}
       COGES_VAPID_SUBJECT: ${COGES_VAPID_SUBJECT:-}
+      # Photos des articles (ADR 0121) : les trois ensemble ou aucune ; vides, photo
+      # indisponible. L'API dépose les images, le worker supprime et balaie.
+      COGES_CLOUDINARY_CLOUD_NAME: ${COGES_CLOUDINARY_CLOUD_NAME:-}
+      COGES_CLOUDINARY_API_KEY: ${COGES_CLOUDINARY_API_KEY:-}
+      COGES_CLOUDINARY_API_SECRET: ${COGES_CLOUDINARY_API_SECRET:-}
     networks:
       edge: { aliases: ["${COGES_STACK:?}-api"] }
       data: {}
@@ -224,6 +229,11 @@ services:
       COGES_VAPID_PUBLIC_KEY: ${COGES_VAPID_PUBLIC_KEY:-}
       COGES_VAPID_PRIVATE_KEY: ${COGES_VAPID_PRIVATE_KEY:-}
       COGES_VAPID_SUBJECT: ${COGES_VAPID_SUBJECT:-}
+      # Photos des articles (ADR 0121) : les trois ensemble ou aucune ; vides, photo
+      # indisponible. L'API dépose les images, le worker supprime et balaie.
+      COGES_CLOUDINARY_CLOUD_NAME: ${COGES_CLOUDINARY_CLOUD_NAME:-}
+      COGES_CLOUDINARY_API_KEY: ${COGES_CLOUDINARY_API_KEY:-}
+      COGES_CLOUDINARY_API_SECRET: ${COGES_CLOUDINARY_API_SECRET:-}
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
     volumes: [ml-artifacts:/var/lib/coges/ml]
     networks: [data, jobs]

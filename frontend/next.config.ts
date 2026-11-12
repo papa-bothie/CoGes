@@ -21,21 +21,30 @@ const isDev = process.env.NODE_ENV !== "production";
 // nécessaire sans nonce. Tout le reste est confiné à la même origine.
 // 'wasm-unsafe-eval' : le moteur WebAssembly du lecteur de code-barres (iPhone, Firefox ;
 // ADR 0106) ne compile pas sans lui ; il n'ouvre ni `eval` ni `new Function`.
-const contentSecurityPolicy = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : "'wasm-unsafe-eval'"}`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self'",
-  `connect-src 'self'${isDev ? " ws:" : ""}`,
-  // Application installable (ADR 0102) : le worker et le manifeste viennent de la même origine.
-  "worker-src 'self'",
-  "manifest-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-].join("; ");
+function contentSecurityPolicy(imageHosts: string): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'unsafe-inline' ${isDev ? "'unsafe-eval'" : "'wasm-unsafe-eval'"}`,
+    "style-src 'self' 'unsafe-inline'",
+    `img-src 'self' data: blob:${imageHosts}`,
+    "font-src 'self'",
+    `connect-src 'self'${isDev ? " ws:" : ""}`,
+    // Application installable (ADR 0102) : le worker et le manifeste viennent de la même origine.
+    "worker-src 'self'",
+    "manifest-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+  ].join("; ");
+}
+
+// Photos des articles (ADR 0121) : les images publiques de Cloudinary, et rien d'autre,
+// pour l'application. La vitrine et les textes légaux gardent une CSP sans aucun tiers
+// (ADR 0115, 0117) : la dernière règle qui pose l'en-tête l'emporte.
+const appPolicy = contentSecurityPolicy(" https://res.cloudinary.com");
+const publicPolicy = contentSecurityPolicy("");
+const PUBLIC_PAGES = ["/", "/conditions", "/confidentialite"];
 
 const nextConfig: NextConfig = {
   // Le front des parcours e2e tourne à côté de celui de développement, dans son propre
@@ -67,7 +76,7 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: [
-          { key: "Content-Security-Policy", value: contentSecurityPolicy },
+          { key: "Content-Security-Policy", value: appPolicy },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -76,6 +85,10 @@ const nextConfig: NextConfig = {
           { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
         ],
       },
+      ...PUBLIC_PAGES.map((source) => ({
+        source,
+        headers: [{ key: "Content-Security-Policy", value: publicPolicy }],
+      })),
     ];
   },
 };

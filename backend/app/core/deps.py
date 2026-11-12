@@ -234,6 +234,20 @@ def require_permissions(*codes: str) -> Callable[[TenantSession], TenantSession]
     return dependency
 
 
+def require_any_permission(*codes: str) -> Callable[[TenantSession], TenantSession]:
+    """Exige **l'une** de ces permissions ; le service affine (photo d'article, ADR 0121)."""
+
+    def dependency(tenant: CurrentTenant) -> TenantSession:
+        if not any(tenant.ctx.has_permission(code) for code in codes):
+            raise PermissionDeniedError(
+                "Vous n'avez pas la permission d'effectuer cette action.",
+                details={"required_permission": codes[0]},
+            )
+        return tenant
+
+    return dependency
+
+
 def require_ops_token(request: Request) -> None:
     """Exige le jeton d'exploitation `COGES_OPS_TOKEN` (ADR 0077).
 

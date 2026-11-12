@@ -38,6 +38,7 @@ from app.workers.tasks import (
     ml_train,
     notifications,
     platform,
+    products,
     reconcile,
 )
 from tests.conftest import (
@@ -60,6 +61,8 @@ FAN_OUT: dict[str, Callable[[str], Any]] = {
     beat.ML_TRAIN: ml_train.train,
     beat.ML_INFER: ml_infer.infer,
     beat.SWEEP_EXPORTS: exports.sweep,
+    # Photos orphelines (ADR 0121) : le dossier d'une seule entreprise, sous son contexte.
+    beat.SWEEP_PHOTOS: products.sweep_photos,
     # Fin des essais (ADR 0091) : la tâche de nuit décide sous le rôle de la plateforme,
     # puis prévient chaque entreprise dans son propre contexte.
     beat.SUBSCRIPTIONS_DAILY: lambda company: platform.trial_notice(

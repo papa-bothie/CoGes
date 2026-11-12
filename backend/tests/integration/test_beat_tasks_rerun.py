@@ -30,6 +30,7 @@ from app.workers.tasks import (
     ml_train,
     notifications,
     platform,
+    products,
     reconcile,
     system,
 )
@@ -71,6 +72,7 @@ def test_every_scheduled_task_is_covered_here() -> None:
         "platform.subscriptions_daily",
         "platform.support_sessions_close",
         "signup.maintenance",
+        "products.sweep_photos_all",
     }
     assert {entry["task"] for entry in BEAT_SCHEDULE.values()} == covered
 
@@ -223,3 +225,13 @@ def test_scan_due_debts_rerun_does_not_notify_twice(company_alpha: DemoCompany) 
     """Le dédoublonnage de 24 h fait de la relance un geste sans effet."""
     _, second = _twice(lambda: notifications.scan_due_debts(str(company_alpha.company_id)))
     assert second == 0
+
+
+def test_the_photo_sweep_reruns_harmlessly(company_alpha: DemoCompany) -> None:
+    """Balayage des photos (ADR 0121) : sans compte Cloudinary, rien à faire, deux fois.
+
+    Relancé avec un compte, une image déjà supprimée n'est plus listée : la seconde passe
+    ne supprime rien (prouvé avec un faux Cloudinary dans `test_product_photos.py`).
+    """
+    assert _twice(products.sweep_photos_all) == (0, 0)
+    assert _twice(lambda: products.sweep_photos(str(company_alpha.company_id))) == (0, 0)

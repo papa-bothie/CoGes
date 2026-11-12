@@ -24,6 +24,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.core.config import get_settings
 from app.core.money import Amount, Quantity, Rate, UnitCost
 from app.core.validation import reject_explicit_nulls
 
@@ -78,6 +79,51 @@ type CostPrice = Annotated[UnitCost, Field(ge=Decimal("0"))]
 type ReorderPoint = Annotated[Quantity, Field(ge=Decimal("0"))]
 
 
+class ProductPhoto(BaseModel):
+    """Où lire la photo chez Cloudinary (ADR 0121). Jamais de secret : une image publique.
+
+    Le navigateur compose l'adresse `https://res.cloudinary.com/<cloud_name>/image/upload/
+    <transformation>/v<version>/<public_id>` et choisit sa taille. `null` partout quand
+    les photos ne sont pas configurées : l'article garde son carré coloré.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    cloud_name: str
+    public_id: str
+    version: int
+    width: int
+    height: int
+
+
+class PhotoConfig(BaseModel):
+    """Les photos sont-elles disponibles ? Sans compte Cloudinary : non, sans erreur."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+
+
+def photo_of(product: Product) -> ProductPhoto | None:
+    """La photo de l'article, si elle existe et si le compte est configuré."""
+    cloud_name = get_settings().cloudinary_cloud_name
+    if (
+        cloud_name is None
+        or product.photo_public_id is None
+        or product.photo_version is None
+        or product.photo_width is None
+        or product.photo_height is None
+    ):
+        return None
+    return ProductPhoto(
+        cloud_name=cloud_name,
+        public_id=product.photo_public_id,
+        version=product.photo_version,
+        width=product.photo_width,
+        height=product.photo_height,
+    )
+
+
 class ProductRead(BaseModel):
     """Fiche produit, augmentée de son prix courant."""
 
@@ -99,6 +145,8 @@ class ProductRead(BaseModel):
     #: donc non vendable — un cas que la création rend impossible.
     unit_price: SellingPrice | None
     cost_price: CostPrice | None
+    #: Photo de l'article (ADR 0121), `null` sans photo.
+    photo: ProductPhoto | None = None
 
     @classmethod
     def build(cls, product: Product, price: ProductPrice | None) -> ProductRead:
@@ -118,6 +166,7 @@ class ProductRead(BaseModel):
             created_at=product.created_at,
             unit_price=None if price is None else price.unit_price,
             cost_price=None if price is None else price.cost_price,
+            photo=photo_of(product),
         )
 
 
@@ -145,6 +194,8 @@ class ProductSummary(BaseModel):
     #: confirmation et ne le relit jamais ensuite (§ 4.5).
     default_tax_rate: TaxRate
     reorder_point: ReorderPoint | None
+    #: Photo (ADR 0121) : la liste du Stock la montre en vignette.
+    photo: ProductPhoto | None = None
 
 
 class ProductCreate(BaseModel):

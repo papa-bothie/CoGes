@@ -373,6 +373,15 @@ REGISTRY: dict[tuple[str, str], Critical | Exempt] = {
     ("POST", "/api/v1/auth/logout"): Exempt("révocation de session, idempotente par nature"),
     # Web Push (ADR 0120) : un abonnement d'appareil n'est pas une donnée de gestion ; le
     # navigateur le renvoie à chaque ouverture de l'écran, l'arrêt est idempotent.
+    # Photo d'un article (ADR 0121) : exige un compte Cloudinary, absent de cette suite.
+    # L'échec au COMMIT est prouvé à part, avec un faux Cloudinary
+    # (`test_product_photos.py::test_a_refused_commit_neither_changes_the_article_nor_…`).
+    ("PUT", "/api/v1/products/{product_id}/photo"): Exempt(
+        "dépôt chez Cloudinary ; COMMIT refusé prouvé par test_product_photos.py"
+    ),
+    ("DELETE", "/api/v1/products/{product_id}/photo"): Exempt(
+        "exige une photo déposée ; COMMIT refusé prouvé par test_product_photos.py"
+    ),
     ("POST", "/api/v1/notifications/push/subscriptions"): Exempt(
         "abonnement d'un appareil, renvoyé par le navigateur, sans donnée de gestion"
     ),

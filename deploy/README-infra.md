@@ -504,6 +504,16 @@ navigateurs (Google, Mozilla, Apple, Microsoft) par le réseau `jobs`, qui sort 
 Internet. Révision 0041 (`push_subscriptions`), sans rôle nouveau. Guide :
 `docs/runbooks/notifications.md`.
 
+## Photos des articles (Cloudinary, ADR 0121)
+
+Facultatives : sans `COGES_CLOUDINARY_CLOUD_NAME`, `COGES_CLOUDINARY_API_KEY` et
+`COGES_CLOUDINARY_API_SECRET` (les trois ensemble, `check_runtime_env.py`), la photo est
+indisponible, sans erreur. `api` (dépôt) et `worker` (suppression, balayage de nuit à
+04 h 45) les reçoivent ; le worker sort par `jobs`, l'API par le réseau `edge`. Le navigateur
+lit les images de `https://res.cloudinary.com`, seul hôte ajouté à `img-src`. Révision 0042
+(colonnes `photo_*` sur `products`). Les images ne sont **pas** dans la sauvegarde chiffrée.
+Guide : `docs/runbooks/photos.md`.
+
 ## Sauvegarde externe chiffrée (ADR 0084)
 
 Guide complet : `docs/runbooks/sauvegarde.md`. Chaque nuit à 02 h 15 UTC, GitHub Actions

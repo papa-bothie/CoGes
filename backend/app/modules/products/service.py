@@ -14,29 +14,49 @@ la façade `categories.service`.
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
+import httpx
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import cloudinary, queue
 from app.core.audit import AuditAction, audit_critical
 from app.core.codes import CODE_ATTEMPTS, format_code, internal_ean13
-from app.core.errors import BusinessRuleError, NotFoundError, constraint_name, sqlstate
+from app.core.config import get_settings
+from app.core.errors import (
+    BusinessRuleError,
+    CogesError,
+    NotFoundError,
+    PermissionDeniedError,
+    constraint_name,
+    sqlstate,
+)
 from app.core.search import normalise_term
-from app.core.tenancy import TenantContext
+from app.core.tenancy import TenantContext, on_commit
 from app.modules.categories import service as categories_service
 from app.modules.companies import service as companies_service
 from app.modules.products.models import Product, ProductPrice
+from app.modules.products.photo import (
+    MAX_PHOTO_UPLOAD_BYTES,
+    PhotoUnsupportedFormatError,
+    normalize_photo,
+)
 from app.modules.products.repository import ProductPriceRepository, ProductRepository
 from app.modules.products.schemas import (
     CurrentPrice,
+    PhotoConfig,
     ProductCreate,
     ProductPriceCreate,
+    ProductRead,
     ProductSummary,
     ProductUpdate,
+    photo_of,
 )
 
 #: Préfixe des références attribuées par le serveur : `ART-0001` (ADR 0066).
@@ -212,6 +232,7 @@ def _summary(product: Product) -> ProductSummary:
         is_stock_tracked=product.is_stock_tracked,
         default_tax_rate=product.default_tax_rate,
         reorder_point=product.reorder_point,
+        photo=photo_of(product),
     )
 
 
@@ -514,6 +535,8 @@ def delete_product(
     before = {"is_active": product.is_active, "deleted_at": product.deleted_at}
     product.is_active = False
     product.deleted_at = datetime.now(UTC)
+    # L'image part avec l'article : supprimée chez Cloudinary après le COMMIT (ADR 0121).
+    _drop_photo_after_commit(session, ctx, product)
     _flush_guarded(session, product)
 
     audit_critical(
@@ -588,3 +611,204 @@ def change_price(
         ip_address=ip_address,
     )
     return price
+
+
+# --------------------------------------------------------------- photos (ADR 0121)
+
+#: Tâche du worker qui supprime une image chez Cloudinary, après le COMMIT.
+DELETE_PHOTO_TASK = "products.delete_photo"
+#: Une image de moins d'un jour n'est jamais balayée : son article est peut-être en train
+#: de la recevoir (dépôt fait, COMMIT pas encore).
+SWEEP_GRACE = timedelta(hours=24)
+
+
+class PhotoUnavailableError(BusinessRuleError):
+    code = "photo_unavailable"
+    default_message = "Les photos des articles ne sont pas disponibles."
+
+
+class PhotoNotFoundError(NotFoundError):
+    code = "photo_not_found"
+    default_message = "Cet article n'a pas de photo."
+
+
+class PhotoStorageError(CogesError):
+    code = "photo_storage_unavailable"
+    status_code = 503
+    default_message = "La photo n'a pas pu être enregistrée. Réessayez dans un instant."
+
+
+#: Lu au plus depuis l'envoi : un octet de plus que la limite, pour la reconnaître.
+MAX_PHOTO_READ_BYTES = MAX_PHOTO_UPLOAD_BYTES + 1
+
+
+def read_product(session: Session, ctx: TenantContext, product: Product) -> ProductRead:
+    """La fiche telle que l'API la rend, avec son prix courant."""
+    return ProductRead.build(product, ProductPriceRepository(session, ctx).current(product.id))
+
+
+def photo_config() -> PhotoConfig:
+    return PhotoConfig(enabled=get_settings().photos_enabled)
+
+
+def cloudinary_account() -> cloudinary.CloudinaryAccount | None:
+    """Le compte du propriétaire, ou `None` : photos indisponibles, sans erreur."""
+    settings = get_settings()
+    if (
+        settings.cloudinary_cloud_name is None
+        or settings.cloudinary_api_key is None
+        or settings.cloudinary_api_secret is None
+    ):
+        return None
+    return cloudinary.CloudinaryAccount(
+        cloud_name=settings.cloudinary_cloud_name,
+        api_key=settings.cloudinary_api_key,
+        api_secret=settings.cloudinary_api_secret.get_secret_value(),
+        api_base=settings.cloudinary_api_base,
+    )
+
+
+def photo_folder(company_id: UUID) -> str:
+    """Dossier d'une entreprise : par environnement, la préprod ne touche pas la prod."""
+    return f"coges-{get_settings().env}/{company_id}"
+
+
+def http_client() -> httpx.Client:
+    """Client HTTP vers Cloudinary ; remplacé par un faux dans les tests."""
+    return httpx.Client(timeout=get_settings().cloudinary_timeout_seconds)
+
+
+def _photo_state(product: Product) -> dict[str, Any]:
+    return {
+        "photo_public_id": product.photo_public_id,
+        "photo_version": product.photo_version,
+        "photo_width": product.photo_width,
+        "photo_height": product.photo_height,
+    }
+
+
+def _drop_photo_after_commit(session: Session, ctx: TenantContext, product: Product) -> None:
+    """Vide les colonnes de la photo et fait supprimer l'image une fois le COMMIT passé."""
+    old = product.photo_public_id
+    if old is None:
+        return
+    product.photo_public_id = None
+    product.photo_version = None
+    product.photo_width = None
+    product.photo_height = None
+    company_id = str(ctx.company_id)
+
+    def _enqueue() -> None:
+        # Sans Redis, l'image reste orpheline : le balayage de nuit la retrouvera.
+        queue.enqueue(DELETE_PHOTO_TASK, company_id=company_id, public_id=old)
+
+    on_commit(session, _enqueue)
+
+
+def may_set_photo(ctx: TenantContext, product: Product) -> bool:
+    """`products:update`, ou `products:create` pour un article encore sans photo."""
+    if ctx.has_permission("products:update"):
+        return True
+    return ctx.has_permission("products:create") and product.photo_public_id is None
+
+
+def set_photo(
+    session: Session,
+    ctx: TenantContext,
+    product_id: UUID,
+    content: bytes | None,
+    *,
+    ip_address: str | None = None,
+) -> Product:
+    """Ajoute ou change la photo : vérifiée, ré-encodée, déposée, puis écrite en base.
+
+    Le dépôt précède l'écriture : si la transaction échoue ensuite, l'image déposée n'est
+    nommée par aucun article, et le balayage de nuit la supprime.
+    """
+    # L'article d'abord : celui d'une autre entreprise est introuvable, quoi qu'on envoie.
+    product = get_product(session, ctx, product_id)
+    account = cloudinary_account()
+    if account is None:
+        raise PhotoUnavailableError()
+    if not may_set_photo(ctx, product):
+        raise PermissionDeniedError()
+    if not content:
+        raise PhotoUnsupportedFormatError()
+    photo = normalize_photo(content)
+
+    public_id = f"{photo_folder(ctx.company_id)}/{secrets.token_urlsafe(16)}"
+    try:
+        with http_client() as client:
+            uploaded = cloudinary.upload(account, photo.jpeg, public_id=public_id, client=client)
+    except cloudinary.CloudinaryError as exc:
+        raise PhotoStorageError() from exc
+
+    before = _photo_state(product)
+    _drop_photo_after_commit(session, ctx, product)
+    product.photo_public_id = uploaded.public_id
+    product.photo_version = uploaded.version
+    product.photo_width = photo.width
+    product.photo_height = photo.height
+    _flush_guarded(session, product)
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.UPDATE,
+        entity_table="products",
+        entity_id=product.id,
+        before=before,
+        after={
+            **_photo_state(product),
+            "photo": "added" if before["photo_public_id"] is None else "changed",
+        },
+        ip_address=ip_address,
+    )
+    return product
+
+
+def remove_photo(
+    session: Session, ctx: TenantContext, product_id: UUID, *, ip_address: str | None = None
+) -> Product:
+    """Retire la photo : colonnes vidées, image supprimée chez Cloudinary après le COMMIT."""
+    product = get_product(session, ctx, product_id)
+    if product.photo_public_id is None:
+        raise PhotoNotFoundError()
+    before = _photo_state(product)
+    _drop_photo_after_commit(session, ctx, product)
+    _flush_guarded(session, product)
+    audit_critical(
+        session,
+        ctx,
+        action=AuditAction.UPDATE,
+        entity_table="products",
+        entity_id=product.id,
+        before=before,
+        after={**_photo_state(product), "photo": "removed"},
+        ip_address=ip_address,
+    )
+    return product
+
+
+def delete_stored_photo(public_id: str) -> None:
+    """Supprime une image chez Cloudinary (tâche du worker). Lève si Cloudinary échoue."""
+    account = cloudinary_account()
+    if account is None:
+        return
+    with http_client() as client:
+        cloudinary.destroy(account, public_id, client=client)
+
+
+def referenced_photos(session: Session, ctx: TenantContext) -> set[str]:
+    """Images nommées par un article de l'entreprise, supprimé ou non."""
+    return ProductRepository(session, ctx).photo_public_ids()
+
+
+def orphan_photos(
+    stored: Sequence[cloudinary.StoredImage], referenced: set[str], *, now: datetime
+) -> list[str]:
+    """Images du dossier qu'aucun article ne nomme, déposées depuis plus d'un jour."""
+    return [
+        image.public_id
+        for image in stored
+        if image.public_id not in referenced and now - image.created_at > SWEEP_GRACE
+    ]
