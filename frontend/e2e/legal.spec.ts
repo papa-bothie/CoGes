@@ -53,7 +53,8 @@ test.describe("textes publics", () => {
     }
   });
 
-  test("lisible sur téléphone, en clair et en sombre : aucun défilement de la page", async ({
+  // Pages toujours claires (prompt 39, ADR 0123), même ouvertes depuis l'application en sombre.
+  test("lisible sur téléphone, appareil en clair ou en sombre : aucun défilement de la page", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 360, height: 780 });
@@ -65,6 +66,7 @@ test.describe("textes publics", () => {
           () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
         );
         expect(overflow, `${path} (${scheme})`).toBeLessThanOrEqual(0);
+        await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
         // Le tableau défile dans son cadre, accessible au clavier.
         await expect(page.getByRole("region").first()).toHaveAttribute("tabindex", "0");
         await axe(page);

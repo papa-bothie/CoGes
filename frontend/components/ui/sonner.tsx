@@ -11,11 +11,12 @@ import {
 } from "lucide-react";
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme();
+  // Pages d'entrée toujours claires (ADR 0123) : le thème forcé l'emporte.
+  const { theme = "system", forcedTheme } = useTheme();
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={(forcedTheme ?? theme) as ToasterProps["theme"]}
       className="toaster group"
       icons={{
         success: <CircleCheckIcon className="size-4" />,

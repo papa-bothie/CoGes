@@ -20,7 +20,7 @@ export function HeroTitle({ className }: { className?: string }) {
     <h1 id="titre" className={className}>
       <span className="sr-only">{title}</span>
       <span aria-hidden className="block">
-        <span className={cn(styles.zone, "text-primary dark:text-marque")} data-zone="titre">
+        <span className={cn(styles.zone, "text-primary")} data-zone="titre">
           {rotation.mots.map((mot) => (
             <span key={mot} className={styles.mot} data-mot={mot}>
               {mot}

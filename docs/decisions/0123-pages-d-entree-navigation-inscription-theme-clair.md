@@ -53,3 +53,47 @@ Ni l'authentification ni l'inscription ne changent (`proxy.ts`, `coges_known`, a
   vérifient la mise en page à 1280 et à 360 px : panneau à gauche ou au-dessus, colonne
   ≤ 440 px, titre et premier champ dans le premier écran du téléphone, aucun défilement de
   côté, clavier, axe.
+
+## Bloc C — pages d'entrée toujours claires
+### Options envisagées
+1. **`forcedTheme="light"` de next-themes selon le chemin (retenue)** : `app/providers.tsx`
+   lit `usePathname()` et force le clair quand `isAlwaysLight` (`lib/theme/always-light.ts`)
+   le dit. Le script en ligne de next-themes reçoit `forcedTheme` dès le rendu serveur et
+   l'applique avant le premier affichage : aucun éclair sombre. Il **n'écrit rien** dans
+   `localStorage` (`theme`) : la personne retrouve son sombre dès qu'elle quitte ces pages,
+   y compris par une navigation sans rechargement.
+2. Conteneur `.papier` autour de ces pages : il remettrait les jetons clairs, mais
+   `@custom-variant dark (&:is(.dark *))` laisserait actives toutes les classes `dark:` sous
+   `html.dark` (le logo sombre de `brand.tsx`, par exemple). Écartée.
+3. Écrire `light` dans le stockage : cela effacerait le choix de la personne. Écartée.
+
+### Décision
+- Liste exacte (testée) : `/`, `/login`, `/inscription`, `/verification`,
+  `/verification/<jeton>`, `/conditions`, `/confidentialite`. `/cgu` et `/cgv` redirigent
+  avant tout rendu. Ne sont pas concernés : `/acceptation`, `/password`, `/support`,
+  `/hors-ligne`, toutes les pages connectées, l'application installée et `frontend-admin/`,
+  qui suivent toujours le thème choisi ou celui de l'appareil.
+- Les deux textes légaux sont des pages publiques à une seule apparence : une personne
+  connectée en sombre qui les ouvre depuis le menu du compte les voit claires, puis retrouve
+  le sombre en revenant (e2e). Leur Markdown (titres, tableaux, liens) garde le contraste AA
+  du clair, vérifié par axe.
+- Chaque page de la liste exporte `viewport = ALWAYS_LIGHT_VIEWPORT` :
+  `<meta name="color-scheme" content="light">` (formulaires natifs et barre de défilement
+  claires, pas d'inversion par le « sombre forcé » des navigateurs mobiles) et
+  `<meta name="theme-color" content="#fbf8f3">` (fond papier, `BRAND_COLORS.background`, choix
+  du propriétaire). next-themes pose en plus `style="color-scheme: light"` sur `<html>`. Les
+  pages connectées n'ont pas de `theme-color` (inchangé).
+- `components/ui/sonner.tsx` prend `forcedTheme ?? theme` : un message de la connexion
+  n'est pas sombre sur une page claire.
+- Code mort retiré : variantes `dark:` du hero, du titre animé, du dernier appel et de la
+  pastille des pages légales, et `.papier` des illustrations unDraw (inutile sur une page
+  claire). Les classes `dark:` du logo (`brand.tsx`) restent : le logo sert aussi dans
+  l'application.
+- Tests : `lib/theme/always-light.test.ts` (liste exacte, `/dashboard` et `/parametres`
+  exclus, `viewport` exporté par chaque page) ; `e2e/entree-claire.spec.ts` avec un appareil
+  en sombre et `theme=dark` stocké : aucune classe `dark` posée depuis le premier octet, fond
+  papier, contraste AA, `color-scheme` et `theme-color`, champs clairs, stockage intact,
+  `/dashboard` sombre après connexion et après rechargement. Vérifié rouge sans
+  `forcedTheme`. Les tests du lot 38 qui mesuraient la vitrine en sombre vérifient
+  maintenant qu'elle reste identique (contraste du mot relayé) ou ne passent plus qu'en clair
+  (CLS).

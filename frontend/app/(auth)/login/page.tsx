@@ -6,8 +6,12 @@ import { LegalLinks } from "@/components/legal/legal-links";
 import { ButtonLink } from "@/components/vitrine/links";
 import { signupConfig } from "@/lib/signup/config";
 import { labels } from "@/lib/labels";
+import { ALWAYS_LIGHT_VIEWPORT } from "@/lib/theme/always-light";
 
 import { LoginForm } from "./login-form";
+
+/** Toujours claire, quel que soit le thème (prompt 39, ADR 0123). */
+export const viewport = ALWAYS_LIGHT_VIEWPORT;
 
 export const metadata: Metadata = { title: labels.login.pageTitle };
 

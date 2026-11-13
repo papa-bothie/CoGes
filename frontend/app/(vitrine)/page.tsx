@@ -14,7 +14,11 @@ import { vitrine, whatsappLink } from "@/content/vitrine";
 import { texte } from "@/content/vitrine-texte";
 import { labels } from "@/lib/labels";
 import { signupConfig } from "@/lib/signup/config";
+import { ALWAYS_LIGHT_VIEWPORT } from "@/lib/theme/always-light";
 import { cn } from "@/lib/utils";
+
+/** Toujours claire, quel que soit le thème (prompt 39, ADR 0123). */
+export const viewport = ALWAYS_LIGHT_VIEWPORT;
 
 /**
  * Page d'accueil publique (prompt 37, ADR 0115). `proxy.ts` ne la montre qu'à un visiteur
@@ -105,10 +109,7 @@ function SectionTitle({
   );
 }
 
-/**
- * Les illustrations (unDraw) gardent leurs couleurs de papier clair, en sombre aussi :
- * `.papier` reprend les jetons clairs (comme la facture A4, ADR 0112).
- */
+/** Les illustrations (unDraw) sur leur panneau de papier clair (la vitrine est toujours claire). */
 function Illustration({
   src,
   width,
@@ -123,7 +124,7 @@ function Illustration({
   /** Apparition au défilement (jamais pour l'illustration du hero). */
   appear?: "gauche" | "droite";
 }) {
-  const panel = cn("papier rounded-carte bg-voile p-6 md:p-8", className);
+  const panel = cn("rounded-carte bg-voile p-6 md:p-8", className);
   return (
     <div {...(appear ? revele(0, appear, panel) : { className: panel })}>
       <Image
@@ -162,10 +163,8 @@ export default async function VitrinePage() {
           >
             {/* Rien n'entre en fondu dans le hero : tout est là au premier affichage (LCP). */}
             <div className={cn(motion.pause, "space-y-6")}>
-              <HeroTitle className="text-[34px] leading-[1.1] font-extrabold tracking-[-0.01em] text-marque md:text-[44px] lg:text-[52px] dark:text-foreground" />
-              <p className="max-w-xl text-lg text-encre-2 md:text-xl dark:text-muted-foreground">
-                {t.hero.lead}
-              </p>
+              <HeroTitle className="text-[34px] leading-[1.1] font-extrabold tracking-[-0.01em] text-marque md:text-[44px] lg:text-[52px]" />
+              <p className="max-w-xl text-lg text-encre-2 md:text-xl">{t.hero.lead}</p>
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 {signup.enabled ? (
                   <>
@@ -409,7 +408,7 @@ export default async function VitrinePage() {
                 {...revele(
                   0,
                   "monte",
-                  "flex flex-col items-start gap-6 rounded-carte bg-marque p-8 text-primary-foreground md:flex-row md:items-center md:justify-between md:p-12 dark:bg-ventes-teinte dark:text-foreground",
+                  "flex flex-col items-start gap-6 rounded-carte bg-marque p-8 text-primary-foreground md:flex-row md:items-center md:justify-between md:p-12",
                 )}
               >
                 <div className="space-y-2">

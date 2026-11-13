@@ -49,7 +49,7 @@ export function LegalPage({ slug }: { slug: LegalSlug }) {
       >
         <article className="mx-auto max-w-[72ch] space-y-4 text-base leading-relaxed text-encre-2 md:text-lg">
           <header className="space-y-3 pb-2">
-            <p className="inline-flex rounded-full bg-ventes-teinte px-3 py-1 text-mini font-bold text-marque dark:text-foreground">
+            <p className="inline-flex rounded-full bg-ventes-teinte px-3 py-1 text-mini font-bold text-marque">
               <time dateTime={document.version}>{t.version(displayVersion(document.version))}</time>
             </p>
             <h1 className="text-[30px] leading-tight font-extrabold text-foreground md:text-[40px]">
