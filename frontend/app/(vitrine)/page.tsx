@@ -171,25 +171,24 @@ export default async function VitrinePage() {
                   <>
                     <ButtonLink
                       href="/inscription"
-                      className={cn(motion.eclat, "min-h-bouton text-libelle")}
+                      className={cn(motion.eclat, "min-h-bouton w-full text-libelle sm:w-auto")}
                     >
                       {labels.signup.cta}
                     </ButtonLink>
-                    <WhatsAppLink variant="borde" className="min-h-bouton text-libelle">
+                    <WhatsAppLink
+                      variant="borde"
+                      className="min-h-bouton w-full text-libelle sm:w-auto"
+                    >
                       {t.hero.whatsapp}
                     </WhatsAppLink>
                   </>
                 ) : (
-                  <WhatsAppLink className={cn(motion.eclat, "min-h-bouton text-libelle")}>
+                  <WhatsAppLink
+                    className={cn(motion.eclat, "min-h-bouton w-full text-libelle sm:w-auto")}
+                  >
                     {t.hero.whatsapp}
                   </WhatsAppLink>
                 )}
-                <a
-                  href="#comment"
-                  className="inline-flex min-h-bouton items-center justify-center rounded-bouton border-2 border-input bg-card px-5 text-libelle font-bold text-foreground outline-none hover:bg-voile focus-visible:ring-3 focus-visible:ring-ring/60"
-                >
-                  {t.hero.howItWorks}
-                </a>
               </div>
               <p className="font-semibold text-success-ink">{t.hero.trial}</p>
             </div>
@@ -236,8 +235,9 @@ export default async function VitrinePage() {
           {/* Fonctionnalités */}
           <section
             id="fonctionnalites"
+            tabIndex={-1}
             aria-labelledby="titre-fonctionnalites"
-            className="scroll-mt-20 py-16 md:py-24"
+            className="scroll-mt-20 py-16 outline-none md:py-24"
           >
             <div className="mx-auto max-w-page px-4 md:px-marge-page">
               <SectionTitle
@@ -280,8 +280,9 @@ export default async function VitrinePage() {
           {/* Aperçu */}
           <section
             id="comment"
+            tabIndex={-1}
             aria-labelledby="titre-apercu"
-            className="scroll-mt-20 bg-ventes-teinte py-16 md:py-24"
+            className="scroll-mt-20 bg-ventes-teinte py-16 outline-none md:py-24"
           >
             <div className="mx-auto max-w-page px-4 md:px-marge-page">
               <SectionTitle id="titre-apercu" title={t.preview.title} lead={t.preview.lead} />
@@ -362,8 +363,9 @@ export default async function VitrinePage() {
           {/* Questions fréquentes : <details> natif, sans JavaScript. */}
           <section
             id="questions"
+            tabIndex={-1}
             aria-labelledby="titre-questions"
-            className="scroll-mt-20 bg-card py-16 md:py-24"
+            className="scroll-mt-20 bg-card py-16 outline-none md:py-24"
           >
             <div className="mx-auto grid max-w-page gap-10 px-4 md:px-marge-page lg:grid-cols-[1fr_1.4fr]">
               <div>

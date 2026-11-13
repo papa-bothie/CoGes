@@ -192,6 +192,12 @@ test.describe("vitrine : mini-caisse du hero (A9)", () => {
   test("trois articles un par un, le total, puis « Encaissé », une seule fois", async ({
     page,
   }) => {
+    // Les lignes jouent dès 0,5 s : sous charge, la première avait fini (et quitté
+    // `getAnimations`) avant que le test ne la mette en pause. Horloge des animations
+    // ralentie vingt fois le temps de la prendre en main ; `seek` place ensuite chaque instant.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Animation.enable");
+    await cdp.send("Animation.setPlaybackRate", { playbackRate: 0.05 });
     await ready(page);
     // Moins de 5 s en tout (WCAG 2.2.2 : rien à mettre en pause), puis plus rien.
     const ends = await page.evaluate(() =>
