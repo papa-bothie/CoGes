@@ -158,7 +158,7 @@ export const texte = {
     phoneAlt:
       "CoGes sur téléphone : l'accueil d'une épicerie de démonstration, avec le bouton « Nouvelle vente », le montant vendu aujourd'hui, l'argent dans la caisse, ce que les clients doivent, les articles à surveiller et les dernières ventes.",
     desktopAlt:
-      "CoGes sur ordinateur : l'écran « Nouvelle vente » d'une épicerie de démonstration, avec la recherche par nom ou code-barres, les rayons, les articles et leur prix, et à droite le panier, le total et le choix du paiement (espèces, Wave, Orange Money).",
+      "CoGes sur ordinateur : l'écran « Nouvelle vente » d'une épicerie de démonstration, avec la recherche par nom ou code-barres, les rayons, les articles avec leur photo et leur prix, et à droite le panier, le total et le choix du paiement (espèces, Wave, Orange Money).",
     phoneCaption: "Sur téléphone : l'accueil",
     desktopCaption: "Sur ordinateur : la caisse",
   },
