@@ -105,8 +105,9 @@ Ni l'authentification ni l'inscription ne changent (`proxy.ts`, `coges_known`, a
   et des marques pour un usage commercial. Les photos sont publiées telles quelles, filigrane
   compris. **Retirer la capture si cet accord tombe.**
 - Elles sont rangées dans `frontend/e2e/photos-demo/<référence de la démo>.jpg` (JPEG à
-  85 %, 230 Ko en tout). Correspondances : riz 25 kg, huile 5 L, bouillon (boîte et unité),
-  sucre, soda, allumettes, bougies, café Touba, chocolat, savon.
+  85 %, 270 Ko en tout). Correspondances : riz 25 kg, huile 5 L, bouillon (boîte et unité),
+  sucre, soda, boisson énergisante, allumettes, bougies, café Touba, chocolat, charbon de bois,
+  savon.
 - `e2e/captures-vitrine.spec.ts` passe par le **vrai chemin** : `PUT /products/{id}/photo` du
   gérant de la démo, vers le faux Cloudinary de l'API des parcours (ADR 0121). Le navigateur
   reçoit le fichier local à la place de `res.cloudinary.com`, sans réseau. Les photos sont
@@ -114,6 +115,7 @@ Ni l'authentification ni l'inscription ne changent (`proxy.ts`, `coges_known`, a
   photo (vérifié en base).
 - La nouvelle `public/vitrine/apercu-ordinateur.webp` (59 Ko) **remplace** l'ancienne, et
   l'image de partage (`partage.png`, refaite à partir de la même capture) suit. La grille,
-  classée par ordre alphabétique, montre six vignettes photo et trois carrés colorés : c'est
-  le vrai rendu d'une boutique dont tous les articles n'ont pas de photo. La capture du
+  classée par ordre alphabétique, montre une photo sur chacun des huit articles visibles
+  (boisson énergisante et charbon de bois ajoutés le 2026-11-13, même accord). Le délai du
+  test passe à 2 minutes pour les douze envois. La capture du
   téléphone ne change pas. Le texte de remplacement cite désormais les photos.

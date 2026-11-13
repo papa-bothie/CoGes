@@ -81,6 +81,8 @@ test.describe("captures de la vitrine", () => {
   test.use({ colorScheme: "light" });
 
   test("ordinateur : la caisse, avec les photos des articles", async ({ page, request }) => {
+    // Une douzaine d'envois de photos, puis le premier rendu de la caisse.
+    test.setTimeout(120_000);
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/login");
     await loginThroughUi(page, DEMO);
