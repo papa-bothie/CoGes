@@ -3,6 +3,7 @@ import { texte } from "@/content/vitrine-texte";
 
 import { ButtonLink, WhatsAppLink } from "./links";
 import { MobileMenu } from "./mobile-menu";
+import { NAV_LINKS } from "./nav-links";
 import styles from "./vitrine.module.css";
 
 const t = texte.nav;
@@ -26,21 +27,20 @@ export function VitrineHeader() {
           <span className="sr-only">{t.home}</span>
         </a>
         <nav aria-label="Principal" className="hidden items-center gap-1 md:flex">
-          <a
-            href="#fonctionnalites"
-            className="flex min-h-cible items-center rounded-mini px-3 font-semibold hover:bg-voile"
-          >
-            {t.features}
-          </a>
-          <a
-            href="#questions"
-            className="flex min-h-cible items-center rounded-mini px-3 font-semibold hover:bg-voile"
-          >
-            {t.questions}
-          </a>
+          {NAV_LINKS.map(({ anchor, label }) => (
+            <a
+              key={anchor}
+              href={`#${anchor}`}
+              className="flex min-h-cible items-center rounded-mini px-3 font-semibold outline-none hover:bg-voile focus-visible:ring-3 focus-visible:ring-ring/60"
+            >
+              {label}
+            </a>
+          ))}
         </nav>
         <div className="flex items-center gap-2">
-          <WhatsAppLink variant="borde" className="hidden md:inline-flex">
+          {/* De 768 à 1023 px, trois liens et WhatsApp ne tiennent pas sur une ligne : WhatsApp
+              reste dans le hero, le menu du téléphone et le pied de page (prompt 39). */}
+          <WhatsAppLink variant="borde" className="hidden lg:inline-flex">
             {t.whatsapp}
           </WhatsAppLink>
           <ButtonLink href="/login" className="px-4">

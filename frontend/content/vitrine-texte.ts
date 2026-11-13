@@ -34,6 +34,7 @@ export const texte = {
   },
   nav: {
     features: "Fonctionnalités",
+    howItWorks: "Comment ça marche",
     questions: "Questions",
     login: "Se connecter",
     whatsapp: "WhatsApp",
@@ -73,7 +74,6 @@ export const texte = {
     },
     lead: "Vous vendez, CoGes compte : ce qui est vendu, ce qui reste en rayon, ce qui est dans la caisse et qui vous doit quoi. En francs CFA, sur téléphone ou ordinateur.",
     whatsapp: "Écrire sur WhatsApp",
-    howItWorks: "Voir comment ça marche",
     trial: `Chaque nouvelle boutique commence par ${TRIAL_DAYS} jours d'essai gratuit.`,
   },
   problems: {

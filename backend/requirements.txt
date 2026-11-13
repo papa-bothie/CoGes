@@ -54,7 +54,7 @@ cryptography==50.0.2
     #   pyjwt
 defusedxml==0.7.1
     # via coges-backend
-dnspython==2.9.0
+dnspython==2.9.2
     # via email-validator
 email-validator==2.3.0
     # via pydantic

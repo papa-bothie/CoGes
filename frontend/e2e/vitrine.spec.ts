@@ -238,3 +238,83 @@ test.describe("vitrine : accessibilité et téléphone", () => {
     await expect(page.locator("details").first()).toHaveAttribute("open", "");
   });
 });
+
+/** Le haut de la section visée est sous l'en-tête collant, jamais caché derrière. */
+async function expectSectionBelowHeader(page: Page, id: string) {
+  const section = page.locator(`#${id}`);
+  await expect(section).toBeFocused();
+  await expect
+    .poll(async () => {
+      const header = await page.getByRole("banner").boundingBox();
+      const target = await section.boundingBox();
+      if (!header || !target) return Number.NaN;
+      // Arrivé (à quelques pixels près) juste sous l'en-tête.
+      return Math.round(target.y - (header.y + header.height));
+    })
+    .toBeGreaterThanOrEqual(0);
+  const top = await section.evaluate((node) => node.getBoundingClientRect().top);
+  expect(top).toBeLessThan(120);
+  await expect(section.getByRole("heading", { level: 2 })).toBeInViewport();
+}
+
+test.describe("vitrine : « Comment ça marche » dans la navigation (prompt 39, bloc N)", () => {
+  test("ordinateur : trois liens dans l'ordre, la section arrive sous l'en-tête", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const nav = page.getByRole("navigation", { name: "Principal" });
+    await expect(nav.getByRole("link")).toHaveText([
+      "Fonctionnalités",
+      "Comment ça marche",
+      "Questions",
+    ]);
+    await nav.getByRole("link", { name: "Comment ça marche" }).click();
+    await expect(page).toHaveURL(/#comment$/);
+    await expectSectionBelowHeader(page, "comment");
+    await nav.getByRole("link", { name: "Questions" }).click();
+    await expectSectionBelowHeader(page, "questions");
+  });
+
+  test("téléphone : le menu mène à la section et se referme", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.goto("/");
+    await page.getByRole("button", { name: "Menu" }).click();
+    const menu = page.getByRole("navigation", { name: "Menu" });
+    await expect(menu.getByRole("link")).toHaveText([
+      "Fonctionnalités",
+      "Comment ça marche",
+      "Questions",
+      /WhatsApp/,
+    ]);
+    await menu.getByRole("link", { name: "Comment ça marche" }).click();
+    await expect(menu).toBeHidden();
+    await expectSectionBelowHeader(page, "comment");
+  });
+
+  test("le hero n'a plus qu'un bouton principal ; WhatsApp à pleine largeur sur téléphone", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const hero = page.locator("section[aria-labelledby=titre]");
+    await expect(hero.getByRole("link", { name: /comment ça marche/i })).toHaveCount(0);
+    await expect(hero.locator("a.bg-primary")).toHaveCount(1);
+    const whatsapp = hero.getByRole("link", { name: /Écrire sur WhatsApp/ });
+    const desktop = await whatsapp.boundingBox();
+    expect(desktop!.width).toBeLessThan(400);
+
+    await page.setViewportSize({ width: 360, height: 740 });
+    const column = await hero.locator("div").first().boundingBox();
+    const phone = await whatsapp.boundingBox();
+    expect(Math.round(phone!.width)).toBe(Math.round(column!.width));
+  });
+
+  test("768 px : l'en-tête tient sur une ligne, sans défilement horizontal", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 900 });
+    await page.goto("/");
+    const banner = await page.getByRole("banner").boundingBox();
+    expect(banner!.height).toBeLessThanOrEqual(73);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+    ).toBeLessThanOrEqual(0);
+  });
+});
