@@ -1,9 +1,9 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
-import { DEMO, loginThroughUi } from "./fixtures";
+import { DEMO, loginThroughUi, managerToken } from "./fixtures";
 import { settle } from "./screens";
 
 /**
@@ -26,18 +26,78 @@ async function hidePendingBanner(page: Page) {
     .evaluateAll((nodes) => nodes.forEach((node) => node.closest("[role=status], div")?.remove()));
 }
 
+/**
+ * Photos des articles de la démo pour la capture de la caisse (prompt 39, bloc P, ADR 0123) :
+ * `e2e/photos-demo/<référence>.jpg`, fournies par le propriétaire avec l'accord de leurs
+ * ayants droit. Elles passent par le vrai chemin (`PUT /products/{id}/photo`, vers le faux
+ * Cloudinary de l'API des parcours) ; le navigateur reçoit ensuite le fichier local à la place
+ * de `res.cloudinary.com`, sans réseau. Retirées après la capture : la démo des autres
+ * parcours reste sans photo.
+ */
+const PHOTOS = join(__dirname, "photos-demo");
+
+async function withDemoPhotos(
+  page: Page,
+  request: APIRequestContext,
+  capture: () => Promise<void>,
+): Promise<void> {
+  const headers = { Authorization: `Bearer ${await managerToken(request, DEMO)}` };
+  const byPublicId = new Map<string, Buffer>();
+  const placed: string[] = [];
+  try {
+    for (const file of readdirSync(PHOTOS).filter((name) => name.endsWith(".jpg"))) {
+      const sku = file.replace(/\.jpg$/, "");
+      const found = await request.get(`/api/v1/products?search=${encodeURIComponent(sku)}`, {
+        headers,
+      });
+      const product = (await found.json()).items.find((item: { sku: string }) => item.sku === sku);
+      expect(product, sku).toBeTruthy();
+      const body = readFileSync(join(PHOTOS, file));
+      const saved = await request.put(`/api/v1/products/${product.id}/photo`, {
+        headers,
+        multipart: { file: { name: file, mimeType: "image/jpeg", buffer: body } },
+      });
+      expect(saved.ok(), `${sku} → ${saved.status()}`).toBeTruthy();
+      byPublicId.set((await saved.json()).photo.public_id, body);
+      placed.push(product.id);
+    }
+    await page.route("https://res.cloudinary.com/**", (route) => {
+      const url = route.request().url();
+      const body = [...byPublicId].find(([id]) => url.endsWith(`/${id}`))?.[1];
+      return body
+        ? route.fulfill({ status: 200, contentType: "image/jpeg", body })
+        : route.fulfill({ status: 404 });
+    });
+    await capture();
+  } finally {
+    for (const id of placed) {
+      await request.delete(`/api/v1/products/${id}/photo`, { headers });
+    }
+  }
+}
+
 test.describe("captures de la vitrine", () => {
   test.skip(!OUT, "VITRINE_CAPTURES non défini");
   test.use({ colorScheme: "light" });
 
-  test("ordinateur : la caisse", async ({ page }) => {
+  test("ordinateur : la caisse, avec les photos des articles", async ({ page, request }) => {
+    // Une douzaine d'envois de photos, puis le premier rendu de la caisse.
+    test.setTimeout(120_000);
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/login");
     await loginThroughUi(page, DEMO);
     await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
-    await page.goto("/sales/new");
-    await settle(page);
-    await page.screenshot({ path: `${OUT}/ordinateur.png`, animations: "disabled" });
+    await withDemoPhotos(page, request, async () => {
+      await page.goto("/sales/new");
+      await settle(page);
+      // Toutes les vignettes visibles chargées avant la capture.
+      await page.waitForFunction(() =>
+        [...document.images]
+          .filter((image) => image.getClientRects().length > 0)
+          .every((image) => image.complete && image.naturalWidth > 0),
+      );
+      await page.screenshot({ path: `${OUT}/ordinateur.png`, animations: "disabled" });
+    });
   });
 
   test("téléphone : l'accueil", async ({ browser }) => {

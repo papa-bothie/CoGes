@@ -97,3 +97,25 @@ Ni l'authentification ni l'inscription ne changent (`proxy.ts`, `coges_known`, a
   `forcedTheme`. Les tests du lot 38 qui mesuraient la vitrine en sombre vérifient
   maintenant qu'elle reste identique (contraste du mot relayé) ou ne passent plus qu'en clair
   (CLS).
+
+## Bloc P — capture de la caisse avec les photos des articles
+- Les photos sont fournies par le propriétaire. Elles portent le filigrane d'un site
+  marchand et des marques connues. Le prompt demandait d'éviter ce genre d'image ; le
+  propriétaire a confirmé, par AskUserQuestion le 2026-11-13, avoir l'accord écrit du site
+  et des marques pour un usage commercial. Les photos sont publiées telles quelles, filigrane
+  compris. **Retirer la capture si cet accord tombe.**
+- Elles sont rangées dans `frontend/e2e/photos-demo/<référence de la démo>.jpg` (JPEG à
+  85 %, 270 Ko en tout). Correspondances : riz 25 kg, huile 5 L, bouillon (boîte et unité),
+  sucre, soda, boisson énergisante, allumettes, bougies, café Touba, chocolat, charbon de bois,
+  savon.
+- `e2e/captures-vitrine.spec.ts` passe par le **vrai chemin** : `PUT /products/{id}/photo` du
+  gérant de la démo, vers le faux Cloudinary de l'API des parcours (ADR 0121). Le navigateur
+  reçoit le fichier local à la place de `res.cloudinary.com`, sans réseau. Les photos sont
+  retirées après la capture (`DELETE`), si bien que la démo des autres parcours reste sans
+  photo (vérifié en base).
+- La nouvelle `public/vitrine/apercu-ordinateur.webp` (59 Ko) **remplace** l'ancienne, et
+  l'image de partage (`partage.png`, refaite à partir de la même capture) suit. La grille,
+  classée par ordre alphabétique, montre une photo sur chacun des huit articles visibles
+  (boisson énergisante et charbon de bois ajoutés le 2026-11-13, même accord). Le délai du
+  test passe à 2 minutes pour les douze envois. La capture du
+  téléphone ne change pas. Le texte de remplacement cite désormais les photos.
