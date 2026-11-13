@@ -87,6 +87,7 @@ test("chemin e-mail : lien, boutique prête, connexion, tableau de bord vide, pr
     route.fulfill({ status: 202, json: { path: "email", message: "Vérifiez votre boîte." } }),
   );
 
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/inscription");
   // Rien dans l'adresse, et la case d'abord.
   const submit = page.getByRole("button", { name: "Créer ma boutique" });
@@ -103,7 +104,7 @@ test("chemin e-mail : lien, boutique prête, connexion, tableau de bord vide, pr
   await axe(page);
 
   await page.goto(signupLink(email));
-  await expect(page.getByRole("heading", { name: "Votre boutique est prête" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "Votre boutique est prête" })).toBeFocused({
     timeout: 30_000,
   });
   // Le jeton ne reste pas dans l'adresse.
@@ -134,6 +135,63 @@ test("chemin e-mail : lien, boutique prête, connexion, tableau de bord vide, pr
   await page.goto("/dashboard");
   await expect(page.getByRole("region", { name: "Pour bien démarrer" })).toHaveCount(0);
 });
+
+/** Mise en page partagée avec la connexion (prompt 39, bloc S, ADR 0123). */
+async function expectEntreeLayout(page: Page, width: number) {
+  const panel = page.locator("[data-entree-panneau]");
+  const column = page.locator("[data-entree-colonne]");
+  await expect(panel.getByText("Votre boutique, simplement.")).toBeVisible();
+  const box = (await column.boundingBox())!;
+  expect(box.width).toBeLessThanOrEqual(440);
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+  const panelBox = (await panel.boundingBox())!;
+  if (width >= 768) {
+    // Panneau vert à gauche, colonne à droite.
+    expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(box.x);
+  } else {
+    // Sur téléphone, le panneau est au-dessus et le titre reste dans le premier écran.
+    expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(box.y);
+    const title = (await page.getByRole("heading", { level: 1 }).boundingBox())!;
+    expect(title.y + title.height).toBeLessThan(page.viewportSize()!.height);
+  }
+}
+
+for (const width of [1280, 360] as const) {
+  test(`mise en page de la connexion à ${width} px : panneau, colonne de 440 px, lien vers la connexion`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width === 360 ? 740 : 800 });
+    await page.goto("/inscription");
+    await expectEntreeLayout(page, width);
+    if (width === 360) {
+      await expect(page.getByLabel("Nom de la boutique")).toBeInViewport();
+    }
+    const already = page
+      .locator("[data-entree-colonne]")
+      .getByRole("link", { name: "Se connecter" });
+    await expect(already).toHaveAttribute("href", "/login");
+    await expect(page.getByText("J'ai déjà un compte")).toBeVisible();
+    // Champ piège : hors écran et hors du parcours clavier, inchangé.
+    const trap = page.getByLabel("Site web");
+    await expect(trap).toHaveAttribute("tabindex", "-1");
+    expect((await trap.boundingBox())?.x ?? -1).toBeLessThan(0);
+    // Clavier seul : le premier arrêt du formulaire est le nom de la boutique.
+    await page.getByRole("heading", { level: 1 }).focus();
+    await page.keyboard.press("Tab");
+    await expect(page.getByLabel("Nom de la boutique")).toBeFocused();
+    await axe(page);
+
+    await page.goto("/verification");
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Ce lien ne marche plus" }),
+    ).toBeFocused();
+    await expectEntreeLayout(page, width);
+    await axe(page);
+  });
+}
 
 // L'activation par l'équipe, puis la connexion par le numéro : `frontend-admin/e2e`.
 test("chemin sans e-mail : demande reçue, et la connexion dit qu'elle attend l'équipe", async ({

@@ -4,10 +4,11 @@
  * tant qu'ils ne sont pas arrêtés, l'essai à sa durée réelle (ADR 0091). `vitrine-texte.test.ts`
  * refuse les promesses interdites.
  */
+import { TRIAL_DAYS } from "@/lib/trial";
+
 import { vitrine } from "./vitrine";
 
-/** Durée de l'essai, fixée en base par l'ADR 0091 (trigger `companies_start_trial`). */
-export const TRIAL_DAYS = 30;
+export { TRIAL_DAYS };
 
 export type Rubrique = "ventes" | "stock" | "argent" | "clients" | "conseils" | "depenses";
 export type IconName =
