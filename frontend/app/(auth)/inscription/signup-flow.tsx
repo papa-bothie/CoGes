@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { fieldClasses } from "@/components/kit/rubrique";
 import { LegalConsent } from "@/components/legal/legal-consent";
+import { ButtonLink } from "@/components/vitrine/links";
 import { PasswordField } from "@/components/password-field";
 import { errorMessage, isApiError } from "@/lib/api/errors";
 import { labels } from "@/lib/labels";
@@ -288,15 +289,12 @@ function SignupForm({
           </p>
         )}
       </form>
-      <p className="text-lg text-encre-2">
-        {t.already}{" "}
-        <Link
-          href="/login"
-          className="font-bold text-success-ink underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-        >
+      <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
+        <p className="text-lg text-encre-2">{t.alreadyAccount}</p>
+        <ButtonLink href="/login" variant="borde">
           {t.login}
-        </Link>
-      </p>
+        </ButtonLink>
+      </div>
     </div>
   );
 }

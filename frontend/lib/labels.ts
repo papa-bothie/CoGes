@@ -3,6 +3,8 @@
  * Les messages d'erreur **métier** viennent de l'API (déjà en français) : ils ne sont pas
  * dupliqués ici.
  */
+import { TRIAL_DAYS } from "@/lib/trial";
+
 export const labels = {
   app: {
     name: "CoGes",
@@ -151,7 +153,14 @@ export const labels = {
   signup: {
     cta: "Créer ma boutique",
     pageTitle: "Créer ma boutique",
-    intro: "Quelques informations, et votre boutique est prête à vendre. 30 jours d'essai gratuit.",
+    intro: "Quelques informations, et votre boutique est prête à vendre.",
+    /** Panneau vert de l'inscription et de la vérification (prompt 39, bloc S). */
+    panel: {
+      tagline: "Votre boutique, simplement.",
+      pitch: `Créez votre boutique en quelques minutes : ${TRIAL_DAYS} jours d'essai gratuit.`,
+      pills: ["Ventes", "Stock", "Dettes", "Argent"] as const,
+    },
+    alreadyAccount: "J'ai déjà un compte",
     shopName: "Nom de la boutique",
     shopNameHint: "Comme vos clients la connaissent, par exemple « Épicerie Awa ».",
     fullName: "Votre nom",
@@ -172,7 +181,6 @@ export const labels = {
     emailInvalid: "Cette adresse e-mail n'est pas valide.",
     submit: "Créer ma boutique",
     consentHint: "Cochez la case des conditions pour continuer.",
-    already: "Vous avez déjà une boutique ?",
     login: "Se connecter",
     // Écran « Vérifiez votre e-mail »
     checkTitle: "Vérifiez votre e-mail",

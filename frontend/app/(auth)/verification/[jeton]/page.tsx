@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { BrandLogo } from "@/components/brand/brand";
+import { EntreeLayout } from "@/components/auth/entree-layout";
+import { LegalLinks } from "@/components/legal/legal-links";
 import { labels } from "@/lib/labels";
 import { signupConfig } from "@/lib/signup/config";
 
@@ -19,11 +20,9 @@ export default async function VerificationPage({ params }: { params: Promise<{ j
   if (!config.enabled) notFound();
   const { jeton } = await params;
   return (
-    <main className="flex min-h-dvh justify-center bg-background px-4 py-10">
-      <div className="w-full max-w-[480px] space-y-6">
-        <BrandLogo className="h-auto w-[200px]" />
-        <VerifyLink token={jeton} />
-      </div>
-    </main>
+    <EntreeLayout panel={labels.signup.panel}>
+      <VerifyLink token={jeton} />
+      <LegalLinks />
+    </EntreeLayout>
   );
 }
