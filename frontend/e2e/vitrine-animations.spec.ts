@@ -165,7 +165,11 @@ test.describe("vitrine : titre qui change de mot", () => {
     expect(await states()).toEqual(["paused"]);
   });
 
-  test("le mot relayé a un contraste AA, en clair et en sombre", async ({ page }) => {
+  // La vitrine n'a plus de rendu sombre (prompt 39, ADR 0123) : même couleur et même
+  // contraste quand l'appareil est en sombre.
+  test("le mot relayé a un contraste AA, et le même si l'appareil est en sombre", async ({
+    page,
+  }) => {
     for (const scheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto("/");
@@ -249,11 +253,10 @@ test.describe("vitrine : mini-caisse du hero (A9)", () => {
 });
 
 test.describe("vitrine : aucun décalage de mise en page", () => {
-  for (const scheme of ["light", "dark"] as const) {
+  // Toujours claire (prompt 39, ADR 0123) : plus de passe en sombre à mesurer.
+  for (const scheme of ["light"] as const) {
     for (const [width, height] of WIDTHS) {
-      test(`CLS = 0 à ${width} px (${scheme === "light" ? "clair" : "sombre"})`, async ({
-        page,
-      }) => {
+      test(`CLS = 0 à ${width} px`, async ({ page }) => {
         await page.emulateMedia({ colorScheme: scheme });
         await page.setViewportSize({ width, height });
         await ready(page);

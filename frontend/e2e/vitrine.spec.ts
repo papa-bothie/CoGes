@@ -182,7 +182,10 @@ test.describe("vitrine : commerçant de retour", () => {
 
 test.describe("vitrine : accessibilité et téléphone", () => {
   for (const scheme of ["light", "dark"] as const) {
-    test(`axe AA sans violation (${scheme === "light" ? "clair" : "sombre"})`, async ({ page }) => {
+    // Appareil en sombre : la vitrine reste claire (prompt 39, ADR 0123), axe le vérifie aussi.
+    test(`axe AA sans violation (appareil en ${scheme === "light" ? "clair" : "sombre"})`, async ({
+      page,
+    }) => {
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto("/");
       await scrollThrough(page);

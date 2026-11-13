@@ -46,6 +46,15 @@ Next 16 · TypeScript strict · Tailwind 4 · shadcn/ui · TanStack Query · ope
   infinie, tout mouvement sous `prefers-reduced-motion: no-preference`, CLS 0. Les
   e2e (`e2e/vitrine-animations.spec.ts`) placent les animations à l'instant voulu par
   `animation.currentTime`, car `page.clock` ne pilote pas les animations CSS.
+- **Pages d'entrée** (prompt 39, ADR 0123) : la vitrine, `/login`, `/inscription`,
+  `/verification` et les deux textes légaux sont **toujours claires**. `app/providers.tsx`
+  passe `forcedTheme="light"` à next-themes quand `lib/theme/always-light.ts` reconnaît le
+  chemin (liste exacte, testée). Rien n'est écrit dans le stockage : le thème de la personne
+  revient dans l'application. Chacune de ces pages exporte `viewport = ALWAYS_LIGHT_VIEWPORT`
+  (`color-scheme: light`, `theme-color` au fond papier). Une nouvelle page publique s'ajoute
+  aux deux endroits. Connexion, inscription et vérification partagent
+  `components/auth/entree-layout.tsx` (panneau vert et colonne de 440 px). La navigation de
+  la vitrine vient de `components/vitrine/nav-links.ts`.
 
 ## Commandes
 
