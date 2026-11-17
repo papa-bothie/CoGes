@@ -1,0 +1,339 @@
+# CoGes « sur site » (ADR 0124) : tout CoGes sur UN PC, base comprise, sur http://localhost.
+# Un client, une société, un poste : le navigateur du PC lui-même. Aucun service externe.
+#
+# Trois endroits séparés (docs/runbooks/sur-site.md) :
+#   1. ce dossier (compose, Caddyfile, scripts) : remplaçable par une version plus récente ;
+#   2. les réglages du client (coges.env), rangés AILLEURS, passés par --env-file ;
+#   3. les données : les volumes nommés en bas de ce fichier.
+#
+#   docker compose --env-file <réglages>/coges.env -f docker-compose.yml --profile tools run --rm migrate
+#   docker compose --env-file <réglages>/coges.env -f docker-compose.yml up -d
+#
+# Réseaux :
+#   • interne (172.31.80.0/24, SANS SORTIE) : tous les services. Aucun conteneur ne peut
+#     joindre Internet ; l'API ne croit X-Forwarded-For que venu de ce sous-réseau.
+#   • bord : Caddy seul, pour publier son port sur la boucle locale du PC (127.0.0.1).
+#     Rien n'est joignable depuis le réseau du magasin.
+#
+# Mémoire : Docker Desktop ne donne par défaut que la moitié de la RAM (4 Go sur 8). Les
+# plafonds des services continus totalisent 2 736 Mo, PostgreSQL compris (test : moins de 3 Go).
+#
+# Le DSN de coges_owner n'existe que dans le service ponctuel `migrate` (profil `tools`,
+# jamais lancé par `up`) : exception assumée au garde-fou 2 de l'ADR 0042, limitée au sur
+# site, où les migrations se jouent sur place. Aucun service continu ne le reçoit (test).
+
+# Nom du projet Docker : distinct de celui du poste de développement (« coges »).
+name: coges-onprem
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+x-app-env: &app-env
+  # Cookies Secure (acceptés sur http://localhost, contexte sûr), secrets réels exigés,
+  # documentation de l'API fermée.
+  COGES_ENV: production
+  COGES_REDIS_URL: redis://:${COGES_REDIS_PASSWORD:?COGES_REDIS_PASSWORD manque dans coges.env}@redis:6379/0
+  COGES_JWT_SECRET: ${COGES_JWT_SECRET:?COGES_JWT_SECRET manque dans coges.env}
+  # PostgreSQL local, sans pooler externe : pool SQLAlchemy ordinaire.
+  COGES_DB_POOLER: none
+  # Services facultatifs éteints (lot 1) : ni Sentry, ni pings, ni SMTP, ni Web Push, ni
+  # Cloudinary, ni Cloudflare Access. Le réseau n'a de toute façon aucune sortie.
+  COGES_SENTRY_DSN: ""
+  COGES_JOB_PING_URLS: ""
+
+x-healthcheck: &healthcheck
+  interval: 60s
+  timeout: 15s
+  retries: 3
+  start_period: 60s
+
+x-service: &service
+  restart: unless-stopped
+  logging: *logging
+  # Relancé par `autoheal` quand il devient « unhealthy » (ADR 0077).
+  labels: { autoheal: "true" }
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  # ------------------------------------------------------------------ bord
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    logging: *logging
+    labels: { autoheal: "true" }
+    security_opt: ["no-new-privileges:true"]
+    # Le seul port publié, sur la boucle locale seulement.
+    ports:
+      - "127.0.0.1:${COGES_HTTP_PORT:-80}:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./maintenance.html:/srv/maintenance/maintenance.html:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [bord, interne]
+    mem_limit: 64m
+    healthcheck:
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      # L'interface d'administration de Caddy, locale au conteneur : Caddy lui-même, pas
+      # le front (un front arrêté ne doit pas faire relancer Caddy).
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+
+  # Relance les conteneurs « unhealthy » étiquetés `autoheal=true`.
+  autoheal:
+    # Figée par condensat : elle lit le socket Docker (ADR 0088).
+    image: willfarrell/autoheal:1.2.0@sha256:31f580ef0279eaced5b38d631b08c474d70d8403c1c2fdd6ddcf2e879d5f3f7c
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: 30
+      AUTOHEAL_START_PERIOD: 120
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    network_mode: none
+    mem_limit: 32m
+
+  # ------------------------------------------------------------------ données
+  # Version majeure de la production (ADR 0095), version mineure figée. Aucun port publié.
+  postgres:
+    <<: *service
+    image: postgres:18.7-alpine
+    # Laisse PostgreSQL finir ses écritures à l'arrêt du PC ou de Docker Desktop.
+    stop_grace_period: 60s
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${COGES_POSTGRES_PASSWORD:?COGES_POSTGRES_PASSWORD manque dans coges.env}
+      POSTGRES_DB: postgres
+      # Tri intégré à PostgreSQL (C.UTF-8) : il ne dépend pas du système de l'image, donc
+      # aucun index à reconstruire quand l'image change. Fixé à la création, pour toujours.
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8 --locale=C.UTF-8
+      # Lus une seule fois, à la création du volume, par postgres-init/01-roles.sql.
+      COGES_OWNER_PASSWORD: ${COGES_OWNER_PASSWORD:?COGES_OWNER_PASSWORD manque dans coges.env}
+      COGES_APP_PASSWORD: ${COGES_APP_PASSWORD:?COGES_APP_PASSWORD manque dans coges.env}
+      COGES_RELAY_PASSWORD: ${COGES_RELAY_PASSWORD:?COGES_RELAY_PASSWORD manque dans coges.env}
+      COGES_ANALYTICS_PASSWORD: ${COGES_ANALYTICS_PASSWORD:?COGES_ANALYTICS_PASSWORD manque dans coges.env}
+      COGES_PLATFORM_PASSWORD: ${COGES_PLATFORM_PASSWORD:?COGES_PLATFORM_PASSWORD manque dans coges.env}
+    # Réglages modestes pour un PC de 8 Go partagé avec Windows.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=256MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=48MB
+      - -c
+      - max_connections=60
+    shm_size: 160m
+    volumes:
+      # L'image 18 range ses données sous /var/lib/postgresql/18/docker.
+      - pgdata:/var/lib/postgresql
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    networks: [interne]
+    mem_limit: 512m
+    healthcheck:
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+      # Par TCP : pendant l'amorçage, le serveur provisoire n'écoute que son socket local ;
+      # la base n'est dite prête qu'une fois les rôles et `coges` créés.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d coges"]
+
+  # File Celery, cache, limitation de débit. `noeviction` : la file ne doit jamais être
+  # évincée (ADR 0077). 128 Mo sous un plafond de 224 Mo : place pour la réécriture de l'AOF.
+  redis:
+    <<: *service
+    image: redis:7.4.2-alpine
+    environment:
+      REDISCLI_AUTH: ${COGES_REDIS_PASSWORD:?COGES_REDIS_PASSWORD manque dans coges.env}
+    command:
+      - sh
+      - -c
+      - >-
+        exec redis-server
+        --requirepass "$$REDISCLI_AUTH"
+        --maxmemory 128mb
+        --maxmemory-policy noeviction
+        --appendonly yes
+        --rename-command FLUSHALL ""
+        --rename-command FLUSHDB ""
+        --rename-command CONFIG ""
+        --rename-command DEBUG ""
+        --rename-command SHUTDOWN ""
+        --rename-command MODULE ""
+    volumes: [redis-data:/data]
+    networks: [interne]
+    mem_limit: 224m
+    healthcheck:
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+
+  # ------------------------------------------------------------------ application
+  # Les mêmes images que la production, au même registre public : aucun `docker login`.
+  front:
+    <<: *service
+    image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/front:${COGES_IMAGE_TAG:?COGES_IMAGE_TAG manque dans coges.env}
+    environment:
+      # Lue à l'exécution par le serveur Next (ADR 0122). Une seule pile ici : « api ».
+      COGES_API_URL: http://api:8000
+    # Fichiers statiques des versions précédentes, gardés 14 jours (ADR 0102).
+    volumes: [front-static:/srv/front/.next/static]
+    networks: [interne]
+    mem_limit: 320m
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
+  api:
+    <<: *service
+    image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/api:${COGES_IMAGE_TAG:?COGES_IMAGE_TAG manque dans coges.env}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      <<: *app-env
+      COGES_DATABASE_URL_APP: postgresql+psycopg://coges_app:${COGES_APP_PASSWORD:?}@postgres:5432/coges
+      COGES_DATABASE_URL_PLATFORM: postgresql+psycopg://coges_app_platform:${COGES_PLATFORM_PASSWORD:?}@postgres:5432/coges
+      COGES_TRUST_PROXY_HEADERS: "true"
+      COGES_FORWARDED_ALLOW_IPS: 172.31.80.0/24
+      COGES_API_WORKERS: ${COGES_API_WORKERS:-1}
+      # L'adresse que tape le navigateur du PC : http://localhost, avec le port s'il n'est
+      # pas 80 (COGES_PUBLIC_URL et COGES_HTTP_PORT vont ensemble, contrôle des réglages).
+      COGES_CORS_ORIGINS: ${COGES_PUBLIC_URL:-http://localhost}
+      COGES_MERCHANT_URL: ${COGES_PUBLIC_URL:-http://localhost}
+      # Exigée par l'API hors local et ci (ADR 0105), même sans administration sur le poste.
+      COGES_MFA_ENCRYPTION_KEY: ${COGES_MFA_ENCRYPTION_KEY:?COGES_MFA_ENCRYPTION_KEY manque dans coges.env}
+      COGES_SIGNUP_ENABLED: "false"
+      # Bilan des workers (ADR 0077) : vide, la route répond 404.
+      COGES_OPS_TOKEN: ${COGES_OPS_TOKEN:-}
+    networks: [interne]
+    mem_limit: 500m
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=5).status == 200 else 1)"]
+
+  # Consommateurs : agrégats, alertes, audit secondaire, exports, ML (ADR 0035).
+  worker:
+    <<: *service
+    # Celery termine sa tâche en cours avant de s'arrêter (ADR 0088).
+    stop_grace_period: 120s
+    image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/worker:${COGES_IMAGE_TAG:?COGES_IMAGE_TAG manque dans coges.env}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      <<: *app-env
+      COGES_DATABASE_URL_APP: postgresql+psycopg://coges_app:${COGES_APP_PASSWORD:?}@postgres:5432/coges
+      COGES_DATABASE_URL_ANALYTICS: postgresql+psycopg://coges_analytics:${COGES_ANALYTICS_PASSWORD:?}@postgres:5432/coges
+      # Fin des essais (ADR 0091) : la tâche de nuit des abonnements en a besoin.
+      COGES_DATABASE_URL_PLATFORM: postgresql+psycopg://coges_app_platform:${COGES_PLATFORM_PASSWORD:?}@postgres:5432/coges
+      COGES_ML_ARTIFACTS_DIR: /var/lib/coges/ml
+      COGES_MERCHANT_URL: ${COGES_PUBLIC_URL:-http://localhost}
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=1"]
+    volumes: [ml-artifacts:/var/lib/coges/ml]
+    networks: [interne]
+    mem_limit: 700m
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "python", "-m", "app.workers.health", "worker"]
+
+  # Planificateur : un seul exemplaire, sinon chaque batch partirait deux fois.
+  beat:
+    <<: *service
+    stop_grace_period: 120s
+    image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/worker:${COGES_IMAGE_TAG:?COGES_IMAGE_TAG manque dans coges.env}
+    depends_on: [worker]
+    environment:
+      <<: *app-env
+      COGES_DATABASE_URL_APP: postgresql+psycopg://coges_app:${COGES_APP_PASSWORD:?}@postgres:5432/coges
+    command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=info", "--schedule=/var/lib/coges/beat/celerybeat-schedule"]
+    volumes: [beat-state:/var/lib/coges/beat]
+    networks: [interne]
+    mem_limit: 224m
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "python", "-m", "app.workers.health", "beat"]
+
+  # Relais de l'outbox sous `coges_relay` (ADR 0032).
+  relay:
+    <<: *service
+    stop_grace_period: 120s
+    image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/worker:${COGES_IMAGE_TAG:?COGES_IMAGE_TAG manque dans coges.env}
+    depends_on: [worker]
+    environment:
+      <<: *app-env
+      COGES_DATABASE_URL_RELAY: postgresql+psycopg://coges_relay:${COGES_RELAY_PASSWORD:?}@postgres:5432/coges
+    command: ["python", "-m", "app.workers.relay"]
+    networks: [interne]
+    mem_limit: 160m
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "python", "-m", "app.workers.health", "relay"]
+
+  # ------------------------------------------------------------------ outils ponctuels
+  # Jamais lancés par `up` (profil `tools`) : `run --rm migrate`, `run --rm cli …`.
+
+  # Migrations, jouées sur place. Le SEUL service à recevoir le DSN de coges_owner.
+  migrate:
+    profiles: [tools]
+    image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/worker:${COGES_IMAGE_TAG:?COGES_IMAGE_TAG manque dans coges.env}
+    restart: "no"
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      COGES_ENV: production
+      # Requis par la configuration hors local et ci (ADR 0087), jamais utilisé par Alembic.
+      COGES_JWT_SECRET: ${COGES_JWT_SECRET:?COGES_JWT_SECRET manque dans coges.env}
+      COGES_DATABASE_URL_OWNER: postgresql+psycopg://coges_owner:${COGES_OWNER_PASSWORD:?}@postgres:5432/coges
+    command: ["alembic", "upgrade", "head"]
+    networks: [interne]
+    mem_limit: 384m
+
+  # Commandes d'administration (create-company…). Sans le DSN propriétaire.
+  cli:
+    profiles: [tools]
+    image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/worker:${COGES_IMAGE_TAG:?COGES_IMAGE_TAG manque dans coges.env}
+    restart: "no"
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      <<: *app-env
+      COGES_DATABASE_URL_APP: postgresql+psycopg://coges_app:${COGES_APP_PASSWORD:?}@postgres:5432/coges
+      COGES_DATABASE_URL_PLATFORM: postgresql+psycopg://coges_app_platform:${COGES_PLATFORM_PASSWORD:?}@postgres:5432/coges
+      COGES_MFA_ENCRYPTION_KEY: ${COGES_MFA_ENCRYPTION_KEY:?COGES_MFA_ENCRYPTION_KEY manque dans coges.env}
+    entrypoint: ["python", "-m", "app.cli"]
+    networks: [interne]
+    mem_limit: 384m
+
+networks:
+  # Sans sortie : aucun conteneur ne joint Internet (ADR 0124). Sous-réseau fixe, distinct
+  # de ceux du VPS (172.30.0.0/24 et 172.30.1.0/28).
+  interne:
+    internal: true
+    ipam:
+      config: [{ subnet: 172.31.80.0/24 }]
+  # Caddy seul : Docker ne publie pas de port depuis un réseau interne.
+  bord: {}
+
+volumes:
+  pgdata:
+  redis-data:
+  ml-artifacts:
+  beat-state:
+  front-static:
+  caddy-data:
+  caddy-config:

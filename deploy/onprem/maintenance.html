@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Un instant · CoGes</title>
+<!--
+  Page servie par Caddy quand le site ou l'API ne répond pas (502, 503, 504), ADR 0085.
+  Autonome : aucun fichier, aucune police ni aucun script extérieur (le front peut être
+  arrêté). Même ton que l'écran d'incident du front ; couleurs reprises des jetons de la
+  maquette v2, clair et sombre selon le système.
+-->
+<style>
+  /* Jetons --coges-* de la maquette v2 (papier, carte, bordure, encre, sourdine, vert-action). */
+  :root {
+    --fond: #FBF8F3; --carte: #FFFFFF; --texte: #1E2320; --doux: #5B625E;
+    --filet: #ECE6DC; --marque: #117A3C; --marque-texte: #FFFFFF;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fond: #111612; --carte: #19201b; --texte: #eef1ec; --doux: #a3aca5;
+      --filet: #29322c; --marque: #34b36a; --marque-texte: #08140c;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: grid; place-items: center; padding: 24px;
+    background: var(--fond); color: var(--texte);
+    font: 17px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 28rem; text-align: center; }
+  .rond {
+    width: 64px; height: 64px; margin: 0 auto 16px; border-radius: 50%;
+    display: grid; place-items: center; background: var(--carte); border: 1px solid var(--filet);
+  }
+  h1 { font-size: 1.6rem; line-height: 1.3; margin: 0 0 8px; }
+  p { margin: 0 0 20px; color: var(--doux); font-size: 1.1rem; }
+  a {
+    display: inline-block; min-height: 48px; padding: 12px 24px; border-radius: 12px;
+    background: var(--marque); color: var(--marque-texte); font-weight: 700; text-decoration: none;
+  }
+  a:focus-visible { outline: 3px solid var(--texte); outline-offset: 3px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="rond" aria-hidden="true">
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="10"/>
+    </svg>
+  </div>
+  <h1>CoGes revient dans un instant</h1>
+  <p>Un souci de notre côté. Vos données sont en sécurité. Réessayez dans un instant.</p>
+  <a href="/dashboard">Réessayer</a>
+</main>
+</body>
+</html>

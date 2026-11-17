@@ -1,0 +1,75 @@
+# Caddy « sur site » (ADR 0124) : un seul site, http://localhost, sur le PC du client.
+#   /api/v1/platform/*  → 404 (aucune administration de la plateforme sur le poste)
+#   /api/v1/*           → API FastAPI
+#   le reste            → front Next.js
+# Aucun certificat, aucun appel à Let's Encrypt : rien ne sort du PC. Le navigateur traite
+# http://localhost comme un contexte sûr (cookies Secure, service worker).
+#
+# X-Forwarded-For : comme sur le VPS, Caddy ne croit aucun en-tête venu du client et
+# transmet l'adresse du pair ; l'API lit l'entrée la plus à droite.
+{
+	# HTTPS automatique coupé : ni certificat, ni redirection, ni requête sortante.
+	auto_https off
+	# Journal des requêtes : ni corps, ni cookie, ni jeton.
+	log {
+		output stdout
+		format json
+	}
+	servers {
+		timeouts {
+			read_header 10s
+			idle 2m
+		}
+	}
+}
+
+(entetes) {
+	header {
+		# Les en-têtes du VPS, SANS HSTS : le site est servi en HTTP sur la boucle locale.
+		# L'API en envoie un quand COGES_ENV vaut production : il est retiré ici.
+		-Strict-Transport-Security
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(self), microphone=(), geolocation=()"
+		-Server
+		-Via
+	}
+}
+
+http://localhost {
+	encode zstd gzip
+	import entetes
+	log {
+		output stdout
+		format filter {
+			# Ni la chaîne de requête : les recherches y portent des noms et des
+			# téléphones de clients (ADR 0088).
+			request>uri regexp "\?.*$" ""
+			request>headers>Cookie delete
+			request>headers>Authorization delete
+			request>headers>Idempotency-Key delete
+			resp_headers>Set-Cookie delete
+		}
+	}
+	# Corps de requête bornés aussi à l'entrée (l'API garde ses propres limites, ADR 0042).
+	request_body {
+		max_size 25MB
+	}
+	handle /api/v1/platform/* {
+		respond 404
+	}
+	handle /api/v1/* {
+		reverse_proxy api:8000
+	}
+	handle {
+		reverse_proxy front:3000
+	}
+	# Site ou API arrêté : page de maintenance autonome, statut d'origine gardé (ADR 0085).
+	handle_errors 502 503 504 {
+		import entetes
+		root * /srv/maintenance
+		rewrite * /maintenance.html
+		file_server
+	}
+}
