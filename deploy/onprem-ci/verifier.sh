@@ -5,8 +5,8 @@
 #   deploy/onprem-ci/verifier.sh
 #
 # Il suit le guide docs/runbooks/sur-site.md, dans le même ordre : réglages, contrôle,
-# migrations, démarrage, société, navigateur ; puis redémarrage, changement de version et
-# arrêt brutal de PostgreSQL. Il ne touche ni au poste de développement (projet Docker
+# migrations, démarrage, société, licence (ADR 0125), navigateur ; puis la tâche de nuit à
+# +45 jours, redémarrage, changement de version et arrêt brutal de PostgreSQL. Il ne touche ni au poste de développement (projet Docker
 # « coges-onprem », à part) ni à aucun fichier du dépôt.
 #
 # Variables :
@@ -27,6 +27,9 @@ if [ "$port" = 80 ]; then url=http://localhost; else url="http://localhost:$port
 
 slug=boutique-test
 email=gerant@boutique.example
+# Société témoin, jamais licenciée : la tâche de nuit doit la suspendre (ADR 0125).
+witness=boutique-temoin
+witness_email=gerant@temoin.example
 ONPREM_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_hex(12))')
 export ONPREM_PASSWORD
 
@@ -135,6 +138,34 @@ title "Société (service ponctuel cli)"
 dc --profile tools run --rm -T cli create-company --name "Boutique Test" --slug "$slug" \
   --manager-email "$email" --manager-name "Awa Test" --password "$ONPREM_PASSWORD"
 
+license_status() { # identifiant → fichier de sortie
+  dc --profile tools run --rm -T cli license-status --slug "$1" | tee "$work/licence-$1.txt"
+}
+expect_line() { # fichier, ligne attendue
+  grep -qF -- "$2" "$1" || fail "« $2 » absent de $(basename "$1")"
+}
+
+title "Licence (service ponctuel cli) : abonnement actif, sans fin"
+contract=$(date -u +%d/%m/%Y)
+maintenance=$(date -u -d '+1 year' +%d/%m/%Y)
+dc --profile tools run --rm -T cli activate-license --slug "$slug" --plan business \
+  --note "Contrat du $contract, maintenance jusqu'au $maintenance" | tee "$work/activation.txt"
+expect_line "$work/activation.txt" "Licence activée."
+again=$(dc --profile tools run --rm -T cli activate-license --slug "$slug" --plan business)
+grep -qF "rien à faire" <<<"$again" || fail "la licence rejouée a encore écrit : $again"
+license_status "$slug"
+expect_line "$work/licence-$slug.txt" "Accès            : actif"
+expect_line "$work/licence-$slug.txt" "Fin de période   : sans fin"
+expect_line "$work/licence-$slug.txt" "maintenance jusqu'au $maintenance"
+if dc --profile tools run --rm -T cli activate-license --slug inconnue --plan business \
+    >/dev/null 2>&1; then
+  fail "une licence est acceptée pour une société inconnue"
+fi
+
+title "Société témoin, sans licence"
+dc --profile tools run --rm -T cli create-company --name "Boutique Temoin" --slug "$witness" \
+  --manager-email "$witness_email" --manager-name "Témoin" --password "$ONPREM_PASSWORD"
+
 title "Ce que voit le PC : $url"
 wait_for_code "$url/" 200 60
 wait_for_code "$url/api/v1/health" 200 30
@@ -209,6 +240,25 @@ noise=$(dc logs --no-log-prefix --since "$since" worker beat relay 2>&1 \
 done_tasks=$(dc logs --no-log-prefix --since "$since" worker 2>&1 | grep -c 'succeeded' || true)
 [ "$done_tasks" -ge "$count" ] || fail "$done_tasks tâche(s) réussie(s) pour $count déclenchée(s)"
 echo "OK — $count tâches déclenchées, $done_tasks exécutions réussies, journaux propres."
+
+title "Tâche de nuit des abonnements à +45 jours : seule la société sans licence est suspendue"
+# Dans le conteneur worker, qui tient le DSN de la plateforme ; la tâche est appelée
+# directement (synchrone), avec la date de son paramètre `now`.
+later=$(date -u -d '+45 days' +%Y-%m-%dT%H:%M:%S+00:00)
+dc exec -T worker python -c '
+import sys
+from app.workers.tasks.platform import subscriptions_daily
+print(f"{subscriptions_daily(sys.argv[1])} avis : essais finis ou proches de leur fin")' "$later"
+data_are_there "$sales"  # la société licenciée se connecte toujours
+license_status "$slug"
+expect_line "$work/licence-$slug.txt" "Accès            : actif"
+license_status "$witness"
+expect_line "$work/licence-$witness.txt" "Accès            : suspendu"
+refused=$(curl -s --max-time 10 -H 'Content-Type: application/json' \
+  -d "{\"company_slug\":\"$witness\",\"email\":\"$witness_email\",\"password\":\"$ONPREM_PASSWORD\"}" \
+  -w ' %{http_code}' "$url/api/v1/auth/login")
+grep -q 'company_suspended.* 403$' <<<"$refused" || fail "connexion du témoin : $refused"
+echo "OK — licenciée acceptée, témoin refusé (403 company_suspended)."
 
 title "Arrêt puis redémarrage (down, up, sans -v) : les données sont là"
 dc down

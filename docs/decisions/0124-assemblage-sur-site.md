@@ -203,3 +203,10 @@ sur ce principe.
   le refusera tant que son prompt ne prévoit pas la dérogation, à demander au propriétaire.
 - Windows n'est pas testé par la CI : liste des vérifications à faire sur la machine dans
   `docs/prompt-sur-site/README.md`.
+
+## Complément (lot 2, ADR 0125) : dérogation étroite au contrôle des chemins protégés
+
+`check_protected_paths.py` accepte désormais les fichiers de sa table `DEROGATIONS`, et
+seulement si le diff n'y retire **aucune** ligne (`git diff --numstat`). Pour le lot 2 :
+`backend/app/cli.py` et `backend/app/modules/platform/service.py`, rien d'autre ; un
+test épingle la table. Tout autre chemin protégé reste refusé, comme ci-dessus.

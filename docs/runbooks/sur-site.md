@@ -153,11 +153,66 @@ coges --profile tools run --rm cli create-company --name "Boutique Diallo" --slu
 - `--slug` : le « code de la boutique » tapé à la connexion (lettres minuscules, chiffres, tirets).
 - `--manager-phone` ou `--manager-email` (l'un des deux au moins).
 - Le mot de passe du gérant est demandé deux fois, sans s'afficher (12 caractères au moins).
+  **Il ne s'écrit jamais dans la ligne de commande** : n'ajoutez pas `--password`, il
+  resterait dans l'historique de PowerShell.
 
-Une période d'essai de 30 jours démarre, comme en ligne : c'est attendu dans ce lot (la
-licence est le sujet du lot 2).
+**Précaution du terminal interactif sous Windows.** `coges … run` ouvre d'office un
+terminal interactif (l'équivalent du `-it` de `docker run`) : c'est ce qui permet de taper
+le mot de passe sans qu'il s'affiche. Pour que cela marche :
 
-## 9. Ouvrir CoGes
+- lancez la commande dans une **vraie fenêtre PowerShell** ou dans le Terminal Windows,
+  pas dans PowerShell ISE, ni dans la console d'un éditeur, ni à travers un script ;
+- n'ajoutez **jamais** `-T` (ni `-it`, qui n'existe pas pour `docker compose run`) ;
+- si le message `GetPassWarning: Can not control echo on the terminal` apparaît, ou si
+  les caractères tapés s'affichent : **Ctrl+C**, rien n'est créé ; changez de fenêtre et
+  relancez.
+
+À ce moment, une période d'essai de 30 jours démarre, comme en ligne. L'étape suivante
+la remplace par la licence.
+
+## 9. Poser la licence
+
+La licence achetée par le client : l'abonnement devient **actif, sans date de fin**
+(ADR 0125). Elle se pose ici, sur le PC, sans l'administration de la plateforme.
+
+```powershell
+coges --profile tools run --rm cli activate-license --slug boutique-diallo --plan business --note "Contrat du 17/11/2026, maintenance jusqu'au 17/11/2027"
+```
+
+- `--plan` : l'offre achetée, `starter` (3 comptes), `business` (7) ou `premium` (10).
+  L'offre fixe le **nombre de comptes actifs** ; les écrans sont les mêmes.
+- `--note` : écrivez-y **la date du contrat et celle de fin de maintenance**. Elle est
+  gardée dans le journal et relue par `license-status`.
+
+Réponse attendue :
+
+```
+Entreprise       : Boutique Diallo (boutique-diallo)
+Offre            : Business (business)
+Comptes          : 1 actif(s) sur 7 au plus
+Abonnement       : essai → actif, sans fin
+Accès            : essai → actif
+Licence activée.
+```
+
+Refus possibles (rien n'est changé) :
+
+| Message | Ce qu'il faut faire |
+|---|---|
+| `Entreprise introuvable : « … »` | vérifier le code de la boutique (`--slug` de l'étape 8) |
+| `Offre inconnue ou non proposée : …` | `starter`, `business` ou `premium`, en minuscules |
+| `Offre refusée : … Désactivez-en N …` | trop de comptes actifs pour cette offre : en désactiver N dans Réglages → Personnes, ou choisir une offre plus grande |
+
+## 10. Vérifier la licence
+
+```powershell
+coges --profile tools run --rm cli license-status --slug boutique-diallo
+```
+
+Les lignes à lire : `Accès : actif`, `Fin de période : sans fin`, et `Dernière licence`
+avec la date et la note. Cette commande n'écrit rien : on peut la lancer à tout moment.
+
+## 11. Ouvrir CoGes
 
 Dans Edge ou Chrome, sur ce PC : **http://localhost**
 
@@ -166,6 +221,34 @@ du gérant. À la première connexion, CoGes demande d'accepter les conditions d
 
 `http://localhost` ne s'ouvre **que depuis ce PC** : c'est voulu. Depuis un autre appareil
 du magasin, l'adresse ne répond pas.
+
+## Premier démarrage : l'ordre à suivre
+
+Les étapes 1 à 11 ci-dessus, dans cet ordre, sans en sauter : **réglages remplis** (2) →
+**contrôle des réglages** (5) → **migrations** (6) → **démarrage** (7) → **société** (8)
+→ **licence** (9) → **vérification** (10) → **connexion du gérant** (11). Le script
+d'installation du lot 3 les enchaînera ; d'ici là, on les tape.
+
+## Changer d'offre
+
+Le client achète une offre plus grande (ou plus petite) : relancez la commande de
+l'étape 9 avec la nouvelle offre et une note qui dit pourquoi.
+
+```powershell
+coges --profile tools run --rm cli activate-license --slug boutique-diallo --plan premium --note "Avenant du 02/03/2027 : passage à Premium"
+```
+
+- Une offre plus petite est refusée tant que la société a plus de comptes actifs que son
+  plafond (le message dit combien désactiver).
+- Relancée avec **la même offre**, la commande répond `Licence déjà active, offre … : rien
+  à faire.` et n'écrit rien.
+
+## Ce qui se passe si on oublie la licence
+
+Sans l'étape 9, la société reste en essai. Au **31ᵉ jour**, la tâche de nuit la suspend :
+la connexion répond que l'accès est suspendu (les données restent, rien n'est effacé).
+Il suffit alors de poser la licence (étape 9) : l'accès revient tout de suite, sans
+redémarrer. Aucun e-mail n'est envoyé (pas de messagerie sur site).
 
 ---
 
@@ -321,7 +404,6 @@ Puis reprenez à l'étape 6. Les mots de passe de `coges.env` peuvent alors chan
 
 | Sujet | Lot | En attendant |
 |---|---|---|
-| Licence (`activate-license`) : abonnement sans date de fin | 2 | l'essai de 30 jours démarre normalement |
 | Installation en une commande (script Windows) | 3 | ce guide, pas à pas |
 | Sauvegarde et restauration locales | 4 | **aucune sauvegarde** : ne pas y mettre de données réelles sans copie |
 | Mises à jour à distance et retour arrière automatique | 5 | « Mettre à jour à la main » ci-dessus |
@@ -335,8 +417,10 @@ pas sur le poste (`/api/v1/platform/*` répond 404).
 
 `deploy/onprem-ci/verifier.sh` joue ce guide de bout en bout sur un poste Linux ou dans le
 workflow « Sur site » : réglages, contrôle, migrations (deux fois), démarrage, société,
-parcours Chromium (connexion, rechargement, service worker, vente), tâches planifiées,
-arrêt et redémarrage, changement de version, arrêt brutal de PostgreSQL.
+licence et `license-status`, parcours Chromium (connexion, rechargement, service worker,
+vente), tâches planifiées, tâche de nuit des abonnements à +45 jours (la société licenciée se connecte toujours, une
+société témoin sans licence est suspendue), arrêt et redémarrage, changement de version,
+arrêt brutal de PostgreSQL.
 
 ```bash
 ONPREM_REGISTRY=coges-local ONPREM_PORT=8080 deploy/onprem-ci/verifier.sh

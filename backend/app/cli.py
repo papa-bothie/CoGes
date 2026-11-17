@@ -38,11 +38,20 @@ Téléphone perdu et aucun autre administrateur pour réinitialiser la double
 authentification (ADR 0105) : dernier recours sur le serveur.
 
     python -m app.cli reset-platform-mfa --email equipe@example.test
+
+Licence sur site (ADR 0125) : sur le PC d'un client, sans administration de la
+plateforme, l'abonnement devient actif et sans fin. Relancer avec une autre offre change
+d'offre ; `license-status` relit l'état sans rien écrire.
+
+    python -m app.cli activate-license --slug boutique-diallo --plan business \
+        --note "Contrat du 17/11/2026, maintenance jusqu'au 17/11/2027"
+    python -m app.cli license-status --slug boutique-diallo
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import getpass
 import json
 import sys
@@ -53,6 +62,7 @@ from uuid import UUID, uuid4
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from app.core import errors as core_errors
 from app.core.config import REPO_ROOT
 from app.core.errors import ValidationFailedError
 from app.core.tenancy import TenantContext, tenant_transaction
@@ -201,6 +211,95 @@ def run_intelligence(company_id: UUID, *, as_of: str | None, retrain: bool) -> l
     return report
 
 
+#: Statuts d'abonnement et d'accès, en mots (licence sur site, ADR 0125).
+STATUS_WORDS = {
+    "trial": "essai",
+    "active": "actif",
+    "past_due": "en retard",
+    "suspended": "suspendu",
+}
+
+#: Codes de sortie de la licence : 0 fait (ou rien à faire), 3 entreprise introuvable,
+#: 4 offre inconnue ou non proposée (ou note trop longue), 5 offre trop petite.
+EXIT_COMPANY_NOT_FOUND = 3
+EXIT_PLAN_REFUSED = 4
+EXIT_DOWNGRADE_REFUSED = 5
+
+
+def _words(status: str) -> str:
+    return STATUS_WORDS.get(status, status)
+
+
+def _day(moment: dt.datetime | None) -> str:
+    return moment.astimezone(dt.UTC).strftime("%d/%m/%Y") if moment else "—"
+
+
+def _license_lines(result: platform_service.LicenseResult) -> list[str]:
+    if not result.changed:
+        return [f"Licence déjà active, offre {result.plan_code} : rien à faire."]
+    cap = f"sur {result.max_users} au plus" if result.max_users is not None else "sans plafond"
+    return [
+        f"Entreprise       : {result.company_name} ({result.slug})",
+        f"Offre            : {result.plan_name} ({result.plan_code})",
+        f"Comptes          : {result.active_users} actif(s) {cap}",
+        f"Abonnement       : {_words(result.status_before)} → "
+        f"{_words(result.status_after)}, sans fin",
+        f"Accès            : {_words(result.access_before)} → {_words(result.access_after)}",
+        "Licence activée.",
+    ]
+
+
+def _status_lines(status: platform_service.LicenseStatus) -> list[str]:
+    cap = f"{status.max_users} comptes au plus" if status.max_users is not None else "sans plafond"
+    if status.last_license_at is None:
+        last = "aucune"
+    else:
+        moment = status.last_license_at.astimezone(dt.UTC).strftime("%d/%m/%Y %H:%M UTC")
+        last = f"{moment} — {status.last_license_note or 'sans note'}"
+    end = _day(status.current_period_end) if status.current_period_end else "sans fin"
+    return [
+        f"Entreprise       : {status.company_name} ({status.slug})",
+        f"Accès            : {_words(status.access)}",
+        f"Abonnement       : {_words(status.subscription_status)}",
+        f"Offre            : {status.plan_name} ({status.plan_code}), {cap}",
+        f"Comptes actifs   : {status.active_users}",
+        f"Fin d'essai      : {_day(status.trial_ends_at)}",
+        f"Fin de période   : {end}",
+        f"Dernière licence : {last}",
+    ]
+
+
+def run_license_command(args: argparse.Namespace) -> int:
+    """`activate-license` et `license-status` : sortie en mots, refus sur la sortie
+    d'erreur avec un code non nul."""
+    try:
+        if args.command == "activate-license":
+            lines = _license_lines(
+                platform_service.activate_license(
+                    slug=args.slug, plan_code=args.plan, note=args.note
+                )
+            )
+        else:
+            lines = _status_lines(platform_service.license_status(slug=args.slug))
+    except core_errors.NotFoundError:
+        message = f"Entreprise introuvable : « {args.slug} » (identifiant de connexion)."
+        print(message, file=sys.stderr)
+        return EXIT_COMPANY_NOT_FOUND
+    except platform_service.PlanDowngradeTooManyUsersError as exc:
+        print(f"Offre refusée : {exc.message}", file=sys.stderr)
+        return EXIT_DOWNGRADE_REFUSED
+    except ValidationFailedError as exc:
+        if "plan_code" in exc.details:
+            message = f"Offre inconnue ou non proposée : {args.plan}."
+        else:
+            message = exc.message
+        print(message, file=sys.stderr)
+        return EXIT_PLAN_REFUSED
+    for line in lines:
+        print(line)
+    return 0
+
+
 #: Contrat versionné : `frontend/types/` en est généré, jamais écrit à la main.
 OPENAPI_PATH = REPO_ROOT / "backend" / "openapi.json"
 
@@ -275,6 +374,23 @@ def build_parser() -> argparse.ArgumentParser:
         "generate-vapid-keys",
         help="Tirer une paire de clés VAPID (notifications sur le téléphone, ADR 0120)",
     )
+
+    license_cmd = subparsers.add_parser(
+        "activate-license",
+        help="Licence sur site : abonnement actif sans fin, sans l'administration (ADR 0125)",
+    )
+    license_cmd.add_argument("--slug", required=True, help="Identifiant de connexion")
+    license_cmd.add_argument(
+        "--plan", required=True, help="Code de l'offre achetée : starter, business, premium"
+    )
+    license_cmd.add_argument(
+        "--note", default=None, help="Texte libre : date du contrat, fin de maintenance…"
+    )
+
+    license_state = subparsers.add_parser(
+        "license-status", help="État de la licence d'une entreprise, sans rien écrire"
+    )
+    license_state.add_argument("--slug", required=True, help="Identifiant de connexion")
 
     openapi = subparsers.add_parser(
         "export-openapi", help="Écrire le contrat OpenAPI versionné (source des types du front)"
@@ -363,6 +479,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Aucun compte actif : {args.email}")
             return 1
         print(f"Compte coupé, sessions révoquées : {args.email}")
+
+    if args.command in ("activate-license", "license-status"):
+        return run_license_command(args)
 
     if args.command == "export-openapi":
         Path(args.output).write_text(openapi_document(), encoding="utf-8")

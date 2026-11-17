@@ -1286,6 +1286,223 @@ def _iso(moment: datetime | None) -> str | None:
     return moment.isoformat() if moment else None
 
 
+# ------------------------------------------------- licence sur site (ADR 0125)
+#
+# Sur le PC d'un client, l'administration de la plateforme n'existe pas. La licence est
+# un abonnement `active` **sans fin de période** : la tâche de nuit ne suit que les
+# essais, elle ne le suspendra jamais. Ces deux fonctions ne sont appelées que par la
+# commande `python -m app.cli activate-license` / `license-status` (test d'architecture) :
+# sans elle, rien ne change. Aucun compte de l'équipe n'agit : `actor_id=None`, comme la
+# tâche de nuit.
+
+#: Raison écrite au journal de la plateforme ; elle désigne aussi les lignes de licence.
+LICENSE_REASON = "licence sur site"
+
+#: Longueur maximale de la note libre (date du contrat, fin de maintenance…).
+LICENSE_NOTE_MAX = 500
+
+#: Taille de page de la recherche par identifiant de connexion.
+_SLUG_PAGE = 100
+
+
+@dataclass(frozen=True, slots=True)
+class LicenseResult:
+    """Ce que la commande a fait, pour l'afficher en mots."""
+
+    company_id: UUID
+    company_name: str
+    slug: str
+    plan_code: str
+    plan_name: str
+    #: `None` : sans plafond.
+    max_users: int | None
+    active_users: int
+    status_before: str
+    status_after: str
+    access_before: str
+    access_after: str
+    #: Faux : licence déjà active sur cette offre, rien écrit.
+    changed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class LicenseStatus:
+    company_name: str
+    slug: str
+    access: str
+    subscription_status: str
+    plan_code: str
+    plan_name: str
+    max_users: int | None
+    active_users: int
+    trial_ends_at: datetime | None
+    current_period_end: datetime | None
+    last_license_at: datetime | None
+    last_license_note: str | None
+
+
+def _company_by_slug(session: Session, slug: str) -> CompanyRow:
+    """L'entreprise vivante dont l'identifiant de connexion est exactement `slug`.
+
+    Passe par la recherche de l'administration (colonnes déjà accordées au rôle) puis
+    garde l'égalité stricte : un identifiant qui en contient un autre ne le désigne pas.
+    """
+    wanted = slug.strip().lower()
+    if not wanted:
+        raise NotFoundError("Entreprise introuvable.", details={"slug": slug})
+    directory = CompanyDirectory(session)
+    page = 1
+    while True:
+        rows, total = directory.search(search=wanted, page=page, page_size=_SLUG_PAGE)
+        for row in rows:
+            if row.slug.lower() == wanted:
+                return row
+        if page * _SLUG_PAGE >= total:
+            raise NotFoundError("Entreprise introuvable.", details={"slug": slug})
+        page += 1
+
+
+def _license_note(note: str | None) -> str | None:
+    cleaned = note.strip() if note else ""
+    if len(cleaned) > LICENSE_NOTE_MAX:
+        raise ValidationFailedError(
+            f"La note fait au plus {LICENSE_NOTE_MAX} caractères.",
+            details={"length": len(cleaned)},
+        )
+    return cleaned or None
+
+
+def activate_license(*, slug: str, plan_code: str, note: str | None = None) -> LicenseResult:
+    """Pose la licence sur site : abonnement `active` sans fin, offre `plan_code`, accès
+    rendu. Une transaction, sous `coges_app_platform`, verrous dans l'ordre de `_lock`.
+
+    Même offre sur une licence déjà active : rien n'est écrit (`changed` faux). Une offre
+    plus petite que le nombre de comptes actifs est refusée comme dans l'administration.
+    Aucun message au gérant (pas de SMTP sur site) ; audit critique sans secret.
+    """
+    cleaned_note = _license_note(note)
+    with platform_transaction() as session:
+        company = _company_by_slug(session, slug)
+        access, subscription = _lock(session, company.id)
+        repository = SubscriptionRepository(session)
+        plan = repository.plan_by_code(plan_code.strip().lower())
+        if plan is None or not plan.is_orderable:
+            raise ValidationFailedError(
+                "Cette offre n'est pas proposée.", details={"plan_code": plan_code}
+            )
+        current = repository.plan(subscription.plan_id)
+        active = repository.active_users(company.id)
+        before = {
+            "plan": current.code,
+            "status": subscription.status,
+            "current_period_end": _iso(subscription.current_period_end),
+        }
+        after = {"plan": plan.code, "status": "active", "current_period_end": None}
+        access_after = ACCESS_OF["active"]
+
+        def result(changed: bool) -> LicenseResult:
+            return LicenseResult(
+                company_id=company.id,
+                company_name=company.name,
+                slug=company.slug,
+                plan_code=plan.code,
+                plan_name=plan.name,
+                max_users=plan.max_users,
+                active_users=active,
+                status_before=str(before["status"]),
+                status_after="active",
+                access_before=access,
+                access_after=access_after,
+                changed=changed,
+            )
+
+        if before == after and access == access_after:
+            return result(False)
+        if plan.id != current.id and plan.max_users is not None and active > plan.max_users:
+            raise PlanDowngradeTooManyUsersError(active_users=active, max_users=plan.max_users)
+
+        if before != after:
+            # `trial_ends_at` reste tel quel : la contrainte ne l'exige que pour un essai,
+            # et la date garde la trace de l'essai d'origine.
+            subscription.plan_id = plan.id
+            subscription.status = "active"
+            subscription.current_period_end = None
+            subscription.updated_at = datetime.now(UTC)
+            session.flush()
+            _audit(
+                session,
+                actor_id=None,
+                action="update",
+                entity_table="subscriptions",
+                entity_id=subscription.id,
+                target_company_id=company.id,
+                diff={
+                    "before": before,
+                    "after": after,
+                    "reason": LICENSE_REASON,
+                    "note": cleaned_note,
+                },
+            )
+        _set_access(
+            session,
+            company.id,
+            before=access,
+            after=access_after,
+            actor_id=None,
+            reason=LICENSE_REASON,
+            notify_manager=False,
+        )
+        return result(True)
+
+
+def license_status(*, slug: str) -> LicenseStatus:
+    """État de la licence d'une entreprise, en lecture seule (support, CI)."""
+    with platform_transaction() as session:
+        company = _company_by_slug(session, slug)
+        repository = SubscriptionRepository(session)
+        subscription = repository.get(company.id)
+        if subscription is None:
+            raise NotFoundError("Abonnement introuvable.", details={"slug": slug})
+        plan = repository.plan(subscription.plan_id)
+        last_at: datetime | None = None
+        last_note: str | None = None
+        reader = AuditReader(session)
+        page = 1
+        while last_at is None:
+            rows, total = reader.search(
+                actor_id=None,
+                action="update",
+                company_id=company.id,
+                entity_id=subscription.id,
+                start=None,
+                stop=None,
+                page=page,
+                page_size=_SLUG_PAGE,
+            )
+            for row in rows:
+                diff = row.diff if isinstance(row.diff, dict) else {}
+                if row.entity_table == "subscriptions" and diff.get("reason") == LICENSE_REASON:
+                    last_at, last_note = row.occurred_at, diff.get("note")
+                    break
+            if page * _SLUG_PAGE >= total:
+                break
+            page += 1
+        return LicenseStatus(
+            company_name=company.name,
+            slug=company.slug,
+            access=company.status,
+            subscription_status=subscription.status,
+            plan_code=plan.code,
+            plan_name=plan.name,
+            max_users=plan.max_users,
+            active_users=repository.active_users(company.id),
+            trial_ends_at=subscription.trial_ends_at,
+            current_period_end=subscription.current_period_end,
+            last_license_at=last_at,
+            last_license_note=last_note,
+        )
+
+
 # ------------------------------------------------------------- la tâche de nuit
 
 
