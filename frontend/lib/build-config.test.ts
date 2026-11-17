@@ -19,9 +19,24 @@ describe("identifiant de build de l'image du front", () => {
   });
 
   it.each([
-    ["deploy.yml", /NEXT_DEPLOYMENT_ID=\$\{\{ steps\.version\.outputs\.version \}\}/],
+    ["deploy.yml", /NEXT_DEPLOYMENT_ID=\$\{\{ steps\.version\.outputs\.deployment_id \}\}/],
     ["ci.yml", /NEXT_DEPLOYMENT_ID=ci-\$\{\{ github\.sha \}\}/],
   ])("%s passe l'identifiant à l'image du front", (workflow, pattern) => {
     expect(read("..", ".github", "workflows", workflow)).toMatch(pattern);
   });
+
+  // Next refuse un `deploymentId` hors de [A-Za-z0-9_-] : une étiquette v0.1.0 cassait l'image.
+  // La sortie `deployment_id` est la version, points remplacés par des tirets.
+  it.each(["v0.1.0", "v1.2.3-rc.1", "0123456789ab"])(
+    "deploy.yml : la version %s donne un deployment_id permis",
+    (version) => {
+      const workflow = read("..", ".github", "workflows", "deploy.yml");
+      expect(workflow).toContain('echo "deployment_id=${version//./-}" >> "$GITHUB_OUTPUT"');
+      const accepted = workflow.match(/if ! \[\[ "\$version" =~ (\S+) \]\]/)?.[1];
+      expect(accepted).toBeDefined();
+      expect(version).toMatch(new RegExp(accepted as string));
+      // Même effet que ${version//./-} en bash.
+      expect(version.replaceAll(".", "-")).toMatch(/^[A-Za-z0-9_-]+$/);
+    },
+  );
 });

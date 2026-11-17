@@ -93,6 +93,8 @@ jobs:
             sha="$GITHUB_SHA"
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          # Next n'accepte dans `deploymentId` que [A-Za-z0-9_-] : v0.1.0 devient v0-1-0.
+          echo "deployment_id=${version//./-}" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "Version : \`$version\` (commit \`$sha\`)" >> "$GITHUB_STEP_SUMMARY"
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -131,7 +133,7 @@ jobs:
           provenance: false
           tags: ${{ env.REGISTRY }}/front:${{ steps.version.outputs.version }},${{ env.REGISTRY }}/front:${{ steps.version.outputs.sha }}
           # Identifiant de build du service worker et de `deploymentId` (ADR 0102).
-          build-args: NEXT_DEPLOYMENT_ID=${{ steps.version.outputs.version }}
+          build-args: NEXT_DEPLOYMENT_ID=${{ steps.version.outputs.deployment_id }}
           cache-from: type=gha,scope=front
           cache-to: type=gha,mode=max,scope=front
       # Administration de la plateforme (ADR 0089) : image à part, jamais dans le front.
