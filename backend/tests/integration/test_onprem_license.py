@@ -73,11 +73,28 @@ def _audits(platform_session_factory: sessionmaker[Any], company_id: UUID) -> li
         )
 
 
-def _night(now: datetime, company_id: UUID) -> list[int]:
-    """La tâche de nuit à `now` ; les paliers vus pour cette entreprise seulement."""
+def _night(company_id: UUID) -> list[int]:
+    """La tâche de nuit, maintenant ; les paliers vus pour cette entreprise seulement."""
     return [
-        n.days for n in platform_service.run_subscription_day(now) if n.company_id == company_id
+        n.days
+        for n in platform_service.run_subscription_day(datetime.now(UTC))
+        if n.company_id == company_id
     ]
+
+
+def _days_later(
+    platform_session_factory: sessionmaker[Any], company_id: UUID, days: int
+) -> list[int]:
+    """La nuit du jour `days` de cette entreprise : sa fin d'essai (30 jours après la
+    création) est reculée de `days` jours, et la tâche tourne maintenant.
+
+    Avancer `now` de la tâche suspendrait **toutes** les entreprises en essai de la base
+    de test, dont celles que la suite partage ; les tests de l'essai font de même.
+    """
+    created = subscription_row(platform_session_factory, company_id).started_at
+    ends = created + timedelta(days=30) - timedelta(days=days)
+    set_subscription(platform_session_factory, company_id, trial_ends_at=ends)
+    return _night(company_id)
 
 
 def _activate(shop: DemoCompany, plan: str = "premium", note: str | None = None) -> Any:
@@ -123,9 +140,9 @@ def test_a_licensed_company_is_never_suspended_by_the_night(
     days: int,
 ) -> None:
     _activate(shop)
-    later = datetime.now(UTC) + timedelta(days=days)
-    for moment in (later - timedelta(days=24), later - timedelta(days=1), later):
-        assert _night(moment, shop.company_id) == []  # ni avertissement ni suspension
+    for day in (days - 24, days - 1, days):
+        # ni avertissement ni suspension
+        assert _days_later(platform_session_factory, shop.company_id, day) == []
     row = subscription_row(platform_session_factory, shop.company_id)
     assert (row.status, row.current_period_end) == ("active", None)
     assert _access(platform_session_factory, shop.company_id) == "active"
@@ -136,7 +153,7 @@ def test_without_licence_the_same_company_is_suspended_on_day_31(
     platform_session_factory: sessionmaker[Any], shop: DemoCompany
 ) -> None:
     """Contrôle témoin : sans `activate_license`, la tâche de nuit suspend."""
-    assert _night(datetime.now(UTC) + timedelta(days=31), shop.company_id) == [0]
+    assert _days_later(platform_session_factory, shop.company_id, 31) == [0]
     assert subscription_row(platform_session_factory, shop.company_id).status == "suspended"
     assert _access(platform_session_factory, shop.company_id) == "suspended"
 
@@ -193,7 +210,7 @@ def test_a_suspended_company_gets_its_access_back_silently(
     shop: DemoCompany,
     enqueued: list[tuple[str, dict[str, Any]]],
 ) -> None:
-    assert _night(datetime.now(UTC) + timedelta(days=31), shop.company_id) == [0]
+    assert _days_later(platform_session_factory, shop.company_id, 31) == [0]
     before = len(_audits(platform_session_factory, shop.company_id))
 
     result = _activate(shop, "business", note="Contrat du 17/11/2026")
@@ -311,7 +328,7 @@ def test_licensing_a_leaves_b_on_trial_and_followed_by_the_night(
     assert after_b == before_b
     assert _access(platform_session_factory, other.company_id) == "trial"
     assert _audits(platform_session_factory, other.company_id) == []
-    assert _night(datetime.now(UTC) + timedelta(days=31), other.company_id) == [0]
+    assert _days_later(platform_session_factory, other.company_id, 31) == [0]
     assert _access(platform_session_factory, shop.company_id) == "active"
 
 
@@ -404,8 +421,10 @@ def test_the_status_reads_every_field_and_writes_nothing(
     )
 
 
-def test_the_status_of_a_suspended_company(shop: DemoCompany) -> None:
-    _night(datetime.now(UTC) + timedelta(days=31), shop.company_id)
+def test_the_status_of_a_suspended_company(
+    platform_session_factory: sessionmaker[Any], shop: DemoCompany
+) -> None:
+    _days_later(platform_session_factory, shop.company_id, 31)
     status = platform_service.license_status(slug=shop.slug)
     assert (status.access, status.subscription_status) == ("suspended", "suspended")
 
