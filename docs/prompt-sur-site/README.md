@@ -7,13 +7,14 @@ utilisateurs actuels ne voient aucune différence.
 | Lot | Contenu | Résultat attendu | État |
 |---|---|---|---|
 | 1 | Assemblage : compose, Caddyfile, réglages, contrôle, migrations locales (`01-assemblage.md`) | CoGes démarre sur `http://localhost` | ✅ code et CI Linux (ADR 0124) ; **à vérifier sur Windows** par le propriétaire |
-| 2 | Commande `activate-license` et premier démarrage | Une société créée, licence activée | ⬜ |
+| 2 | Commande `activate-license` et premier démarrage (`02-licence.md`) | Une société créée, licence activée | ✅ code et CI Linux (ADR 0125) ; **à vérifier sur Windows** |
 | 3 | Script d'installation Windows | Installation en une commande | ⬜ |
 | 4 | Sauvegarde et restauration locales | Une panne simulée, données retrouvées | ⬜ |
 | 5 | Mises à jour à distance et retour arrière | Passage d'une version à la suivante sans se déplacer | ⬜ |
 | 6 | Support à distance et journaux | Intervention sans se déplacer | ⬜ |
 
-Guide d'installation : `docs/runbooks/sur-site.md`. Décision : `docs/decisions/0124-assemblage-sur-site.md`.
+Guide d'installation : `docs/runbooks/sur-site.md`. Décisions : `docs/decisions/0124-assemblage-sur-site.md`,
+`docs/decisions/0125-licence-sur-site.md`.
 
 ## Où sont les fichiers
 
@@ -22,7 +23,9 @@ Guide d'installation : `docs/runbooks/sur-site.md`. Décision : `docs/decisions/
 | `deploy/onprem/` | ce qui est livré au client, autonome : compose, Caddyfile, amorçage des rôles, modèle de réglages, contrôles |
 | `deploy/onprem-ci/` | vérification de bout en bout (`verifier.sh`, parcours Chromium, relecture des données) ; jamais livré |
 | `.github/workflows/onprem.yml` | workflow « Sur site », à part de la CI et du déploiement |
-| `backend/tests/unit/test_onprem_*.py` | tests sur les fichiers versionnés |
+| `backend/tests/unit/test_onprem_*.py` | tests sur les fichiers versionnés (dont la table des dérogations) |
+| `backend/app/cli.py`, `backend/app/modules/platform/service.py` | `activate-license` et `license-status` (lot 2, ajouts seulement, dérogation de `check_protected_paths.py`) |
+| `backend/tests/integration/test_onprem_license.py`, `tests/architecture/test_onprem_license_is_cli_only.py` | la licence en base, et appelée par la seule commande |
 
 ## Lot 1 — à vérifier sur la machine Windows
 
@@ -59,3 +62,18 @@ en suivant `docs/runbooks/sur-site.md` :
 12. **Veille de Windows** : le PC mis en veille puis réveillé, CoGes répond de nouveau.
 
 À rapporter : ce qui marche, les messages d'erreur exacts, la mémoire utilisée.
+
+## Lot 2 — à vérifier sur la machine Windows
+
+Avec des images qui contiennent la commande (étiquette `vX.Y.Z` après la fusion), en
+suivant les étapes 8 à 11 de `docs/runbooks/sur-site.md` dans une fenêtre PowerShell :
+
+1. **Créer la société** sans `--password` : le mot de passe est demandé deux fois et ne
+   s'affiche pas (aucun `GetPassWarning`). Essayer aussi depuis le Terminal Windows.
+2. **Activer la licence** (`activate-license`, offre achetée, note avec la date du contrat
+   et la fin de maintenance) : la réponse dit `Licence activée.` ; relancée, `rien à faire`.
+3. **`license-status`** : `Accès : actif`, `Fin de période : sans fin`, la note relue avec
+   ses accents.
+4. **Connexion du gérant** sur `http://localhost`.
+
+À rapporter : la sortie exacte des trois commandes et tout message d'erreur.

@@ -469,3 +469,81 @@ def test_the_comparison_reads_git_against_the_base_branch(tmp_path: Path) -> Non
     refused = subprocess.run(run, cwd=tmp_path, capture_output=True, text=True, check=False)
     assert refused.returncode == 1
     assert "deploy/vps/Caddyfile est un chemin protégé" in refused.stderr
+
+
+# ------------------------------------------------- dérogations (lot 2, ADR 0125)
+
+#: La table exacte du lot 2 : l'élargir doit faire échouer ce test (revue du propriétaire).
+LOT_2_DEROGATIONS = {"backend/app/cli.py", "backend/app/modules/platform/service.py"}
+
+
+def test_the_derogation_table_is_exactly_the_one_of_lot_2() -> None:
+    assert set(paths.DEROGATIONS) == LOT_2_DEROGATIONS
+    for reason, lot in paths.DEROGATIONS.values():
+        assert reason.strip() and lot == "lot 2"
+
+
+def test_a_derogated_file_with_additions_only_passes() -> None:
+    numstat = {"backend/app/cli.py": (40, 0), "docs/runbooks/sur-site.md": (12, 3)}
+    assert paths.refusals(numstat) == []
+
+
+@pytest.mark.parametrize("deleted", [1, 7])
+def test_a_derogated_file_with_a_line_removed_or_changed_is_refused(deleted: int) -> None:
+    # Une ligne modifiée compte pour une suppression et un ajout dans --numstat.
+    refused = paths.refusals({"backend/app/modules/platform/service.py": (60, deleted)})
+    assert len(refused) == 1
+    assert "backend/app/modules/platform/service.py" in refused[0]
+    assert f"{deleted} ligne(s) supprimée(s)" in refused[0]
+
+
+def test_a_derogated_binary_or_unknown_count_is_refused() -> None:
+    assert paths.refusals({"backend/app/cli.py": (None, None)})
+
+
+def test_a_protected_path_outside_the_table_stays_refused() -> None:
+    refused = paths.refusals(
+        {"backend/app/modules/platform/repository.py": (3, 0), "backend/app/cli.py": (5, 0)}
+    )
+    assert len(refused) == 1 and "repository.py est un chemin protégé" in refused[0]
+
+
+def test_the_paths_mode_without_git_never_trusts_a_derogated_file(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Sans git, le nombre de lignes supprimées est inconnu : la dérogation ne joue pas."""
+    assert paths.main(["--paths", "backend/app/cli.py"]) == 1
+    assert "backend/app/cli.py" in capsys.readouterr().err
+
+
+def test_the_derogation_reads_git_numstat_against_the_base(tmp_path: Path) -> None:
+    """Sur un vrai dépôt : ajouts dans cli.py acceptés, une ligne retirée refusée."""
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@example.test", *args],
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
+        )
+
+    cli_file = tmp_path / "backend" / "app" / "cli.py"
+    cli_file.parent.mkdir(parents=True)
+    cli_file.write_text("un\ndeux\n")
+    git("init", "-b", "main")
+    git("add", ".")
+    git("commit", "-m", "base")
+    git("checkout", "-b", "feat/sur-site-licence")
+    cli_file.write_text("un\ndeux\ntrois\n")
+    git("commit", "-am", "ajout")
+    script = str(ONPREM / "check_protected_paths.py")
+    run = ["python3", script, "--base", "main"]
+    accepted = subprocess.run(run, cwd=tmp_path, capture_output=True, text=True, check=False)
+    assert accepted.returncode == 0, accepted.stderr
+
+    cli_file.write_text("un\nDEUX\ntrois\n")  # une ligne existante modifiée
+    git("commit", "-am", "modification interdite")
+    refused = subprocess.run(run, cwd=tmp_path, capture_output=True, text=True, check=False)
+    assert refused.returncode == 1
+    assert "backend/app/cli.py" in refused.stderr
+    assert "1 ligne(s) supprimée(s)" in refused.stderr

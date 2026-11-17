@@ -127,7 +127,7 @@ libre-service. Le contrôle refuse qu'on les pose. Les seize tâches planifiées
 ### Budget mémoire
 
 Docker Desktop ne donne par défaut que la moitié de la mémoire (4 Go sur 8). Plafonds des
-services continus : 2 736 Mo (test : moins de 3 Go).
+services continus : 2 832 Mo (test : moins de 3 Go ; beat porté à 320 Mo par l'ADR 0125).
 
 | Service | Plafond | Mesuré au repos | Mesuré pendant une vente |
 |---|---|---|---|
@@ -136,11 +136,11 @@ services continus : 2 736 Mo (test : moins de 3 Go).
 | api (1 processus) | 500 Mo | 147 Mo | 124 Mo |
 | front | 320 Mo | 67 Mo | 76 Mo |
 | redis (`maxmemory` 128 Mo) | 224 Mo | 6 Mo | 4 Mo |
-| beat | 224 Mo | 111 Mo | 142 Mo |
+| beat | 320 Mo (224 Mo jusqu'à l'ADR 0125) | 111 Mo | 142 Mo |
 | relay | 160 Mo | 74 Mo | 70 Mo |
 | caddy | 64 Mo | 20 Mo | 26 Mo |
 | autoheal | 32 Mo | 1 Mo | 1 Mo |
-| **Total** | **2 736 Mo** | **≈ 780 Mo** | **≈ 750 Mo** |
+| **Total** | **2 832 Mo** | **≈ 780 Mo** | **≈ 750 Mo** |
 
 Mesures `docker stats` sur un poste Linux, base presque vide ; à refaire sous Docker
 Desktop, et avec un historique de ventes (le worker monte pendant les calculs de nuit).
@@ -203,3 +203,10 @@ sur ce principe.
   le refusera tant que son prompt ne prévoit pas la dérogation, à demander au propriétaire.
 - Windows n'est pas testé par la CI : liste des vérifications à faire sur la machine dans
   `docs/prompt-sur-site/README.md`.
+
+## Complément (lot 2, ADR 0125) : dérogation étroite au contrôle des chemins protégés
+
+`check_protected_paths.py` accepte désormais les fichiers de sa table `DEROGATIONS`, et
+seulement si le diff n'y retire **aucune** ligne (`git diff --numstat`). Pour le lot 2 :
+`backend/app/cli.py` et `backend/app/modules/platform/service.py`, rien d'autre ; un
+test épingle la table. Tout autre chemin protégé reste refusé, comme ci-dessus.

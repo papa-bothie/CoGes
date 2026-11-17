@@ -16,7 +16,7 @@
 #     Rien n'est joignable depuis le réseau du magasin.
 #
 # Mémoire : Docker Desktop ne donne par défaut que la moitié de la RAM (4 Go sur 8). Les
-# plafonds des services continus totalisent 2 736 Mo, PostgreSQL compris (test : moins de 3 Go).
+# plafonds des services continus totalisent 2 832 Mo, PostgreSQL compris (test : moins de 3 Go).
 #
 # Le DSN de coges_owner n'existe que dans le service ponctuel `migrate` (profil `tools`,
 # jamais lancé par `up`) : exception assumée au garde-fou 2 de l'ADR 0042, limitée au sur
@@ -258,7 +258,9 @@ services:
     command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=info", "--schedule=/var/lib/coges/beat/celerybeat-schedule"]
     volumes: [beat-state:/var/lib/coges/beat]
     networks: [interne]
-    mem_limit: 224m
+    # 320 Mo : à 224 Mo, beat touchait son plafond au démarrage (avec le Python de son
+    # bilan de santé) et la CI l'a vu tué en 137 (ADR 0125, « Budget mémoire »).
+    mem_limit: 320m
     healthcheck:
       <<: *healthcheck
       test: ["CMD", "python", "-m", "app.workers.health", "beat"]
