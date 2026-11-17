@@ -89,6 +89,25 @@ Parade : `test_the_derogation_table_is_exactly_the_one_of_lot_2` épingle la lis
 et le propriétaire relit la table à la revue. Un lot suivant qui aurait besoin d'une
 dérogation la remplace par la sienne, avec l'accord du propriétaire ; sinon il la vide.
 
+## Budget mémoire : beat porté à 320 Mo (amende 0124)
+
+Le job « Sur site » de la PR n° 93 a échoué au démarrage : `beat` redémarrait en code 137
+dix secondes après son lancement, et `docker compose up --wait` l'a vu « unhealthy ». Le lot 2
+ne change ni le compose ni ce que `beat` charge ; la cause existait déjà au lot 1 :
+
+- au lot 1 (ADR 0124), `beat` était mesuré à 111 Mo au repos et 142 Mo pendant une vente ;
+  sur les runs verts de `main` et de la PR n° 92, la CI le mesure déjà à **174 Mo** ;
+- sur le poste, pendant `verifier.sh`, le groupe de contrôle de `beat` atteint son plafond
+  (`memory.peak` = 224 Mo, compteur `max` à 348), sans être tué cette fois. Son bilan de santé
+  lance un second Python (`python -m app.workers.health beat`) dans le même conteneur.
+- mémoire anonyme seule (`memory.stat`, une prise par seconde, scénario complet) : **193 Mo**
+  au repos, pics de **222 à 249 Mo** au démarrage et à chaque bilan de santé. Au-dessus de
+  224 Mo, le noyau tue le processus : c'est le 137 de la CI.
+
+Décision du propriétaire : plafond de `beat` à **320 Mo** (≈ 70 Mo de marge au-dessus du plus
+haut pic vu ; 288 Mo passait le scénario mais n'en laissait que ≈ 39). Les plafonds des services
+continus passent de 2 736 à **2 832 Mo**, toujours sous 3 Go (test inchangé). Le compose de production (`deploy/vps/`) n'est pas touché.
+
 ## Ce que la licence ne fait pas
 
 - **Elle ne protège pas** contre un client qui modifierait la base : le PC lui appartient.
