@@ -14,7 +14,7 @@ ADR 0042. Guides : `docs/runbooks/vps.md`, `docs/runbooks/deploiement.md`,
 | Worker, beat, relais, ML | conteneurs `worker`, `beat`, `relay` | idem | `backend/Dockerfile.worker` |
 | Redis 7 | conteneur `redis`, réseau interne, `noeviction` | son propre Redis | `deploy/vps/docker-compose.yml` |
 | PostgreSQL 18 | **Neon** offre payante (Francfort, `coges-prod-eu`), `sslmode=require` | branche Neon de préprod | `deploy/postgres/init/01-roles.sql` |
-| Images | `ghcr.io/papa-bothie/coges/{front,api,worker,bundle}` (privé) | mêmes images | `.github/workflows/deploy.yml` |
+| Images | `ghcr.io/papa-bothie/coges/{front,api,worker,bundle}` (lisibles sans compte, constaté le 2026-11-16) | mêmes images | `.github/workflows/deploy.yml` |
 | Migrations Alembic | job « Déployer » de GitHub Actions (`coges_owner`) | idem | `.github/workflows/deploy.yml` |
 | Système du VPS | Ubuntu 24.04, ufw, fail2ban, Docker | même machine | `deploy/vps/bootstrap.sh` |
 | Erreurs | Sentry (offre Developer) | idem | `app/core/observability.py` |
@@ -25,6 +25,28 @@ workflow ne déploie sur Vercel. Le propriétaire supprime les projets Vercel un
 production stable.
 
 Aucun service payant n'est ouvert sans accord explicite.
+
+## Installation sur site (ADR 0124)
+
+Tout CoGes sur le PC d'un client, base comprise, sur `http://localhost` : un assemblage
+**à part**, qui ne modifie aucun fichier du VPS. Guide : `docs/runbooks/sur-site.md` ; lots :
+`docs/prompt-sur-site/README.md`.
+
+| Composant | Sur site | Fichier |
+|---|---|---|
+| Entrée | Caddy, `http://localhost`, port publié sur `127.0.0.1` seulement, HTTPS automatique coupé | `deploy/onprem/Caddyfile` |
+| Application | les images `front`, `api`, `worker` de la production, au registre public | `deploy/onprem/docker-compose.yml` |
+| PostgreSQL 18 | conteneur `postgres:18.7-alpine`, volume nommé, aucun port publié, tri intégré `C.UTF-8` | `deploy/onprem/postgres-init/01-roles.sql` |
+| Redis 7 | conteneur, `noeviction`, 128 Mo | `deploy/onprem/docker-compose.yml` |
+| Réseau | interne, sans sortie ; Caddy seul sur un second réseau | idem |
+| Migrations | service ponctuel `migrate` (profil `tools`), seul à recevoir le DSN de `coges_owner` | idem |
+| Réglages | `coges.env` hors du dossier du programme, contrôlé par `check_onprem_env.py` | `deploy/onprem/coges.env.example` |
+| Vérification | workflow « Sur site », `deploy/onprem-ci/verifier.sh` | `.github/workflows/onprem.yml` |
+
+Le DSN propriétaire sur le poste est une exception au garde-fou 2 de l'ADR 0042, limitée
+au sur site. `postgres-init/01-roles.sql` suit `deploy/postgres/init/01-roles.sql` : un
+rôle ajouté à l'un s'ajoute à l'autre (test de parité). Les branches `feat/sur-site-*` ne
+modifient aucun chemin protégé (`deploy/onprem/check_protected_paths.py`).
 
 ## Développement local
 

@@ -1,0 +1,4 @@
+# Fins de ligne LF dans ce dossier seulement (ADR 0124) : un script ou un fichier de
+# réglages en CRLF, extrait sous Windows, casse le conteneur qui le lit. Posé ICI, pas à la
+# racine, pour ne renormaliser aucun autre fichier du dépôt.
+* text=auto eol=lf
