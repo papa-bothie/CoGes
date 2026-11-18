@@ -64,8 +64,8 @@ d'entrée, la tâche planifiée et les tests).
   si la frappe ne peut pas être cachée, getpass s'arrête **avant** de lire au lieu de lire
   en clair. Dans les deux cas, arrêt net avec « Cette console ne peut pas cacher la frappe
   du mot de passe (GetPassWarning) », **sans repli** : aucun `--password`, un seul essai.
-  Après : `license-status` relu, quelle que soit la sortie. Jamais
-  `--password`, jamais de fichier de mot de passe.
+  Après : `license-status` relu, quelle que soit la sortie. Jamais de fichier de mot de
+  passe.
 - **Journal** à nous (`Write-Log`, pas `Start-Transcript`), chaque ligne passée par
   `Mask-Secrets` (valeurs lues dans `coges.env`). Un seul appel à docker, `Invoke-Docker`,
   qui sépare la réponse (sortie standard) de la progression de compose (sortie d'erreur).
