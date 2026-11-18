@@ -74,7 +74,7 @@ réglages, la base et la société, répond « rien à faire » pour la licence,
 | `Le contrôle des réglages refuse coges.env` | corriger chaque ligne `REFUS`, puis `-Action Reparer` |
 | `Le service … ne démarre pas` | lire les 40 lignes affichées, puis `-Action Reparer` |
 | `Le mot de passe du gérant doit se taper dans une vraie fenêtre` | relancer dans PowerShell ou le Terminal Windows |
-| `GetPassWarning` ou les caractères s'affichent | Ctrl + C (rien n'est créé), relancer dans une autre fenêtre |
+| `Cette console ne peut pas cacher la frappe du mot de passe (GetPassWarning)` | rien n'est créé : relancer dans une fenêtre PowerShell ou le Terminal Windows ouverts directement |
 
 Les autres actions, depuis `C:\CoGes\programme\windows\` :
 
@@ -235,7 +235,7 @@ Au bout d'une à deux minutes, chaque ligne de `coges ps` doit dire `Up … (hea
 ## 8. Créer la société et son gérant
 
 ```powershell
-coges --profile tools run --rm cli create-company --name "Boutique Diallo" --slug boutique-diallo --manager-name "Awa Diallo" --manager-phone "77 123 45 67"
+coges --profile tools run --rm -e PYTHONWARNINGS=error::getpass.GetPassWarning cli create-company --name "Boutique Diallo" --slug boutique-diallo --manager-name "Awa Diallo" --manager-phone "77 123 45 67"
 ```
 
 - `--slug` : le « code de la boutique » tapé à la connexion (lettres minuscules, chiffres, tirets).
@@ -251,9 +251,10 @@ le mot de passe sans qu'il s'affiche. Pour que cela marche :
 - lancez la commande dans une **vraie fenêtre PowerShell** ou dans le Terminal Windows,
   pas dans PowerShell ISE, ni dans la console d'un éditeur, ni à travers un script ;
 - n'ajoutez **jamais** `-T` (ni `-it`, qui n'existe pas pour `docker compose run`) ;
-- si le message `GetPassWarning: Can not control echo on the terminal` apparaît, ou si
-  les caractères tapés s'affichent : **Ctrl+C**, rien n'est créé ; changez de fenêtre et
-  relancez.
+- `-e PYTHONWARNINGS=error::getpass.GetPassWarning` fait **s'arrêter** la commande, avant
+  toute lecture, si la console ne peut pas cacher la frappe : le message se termine par
+  `GetPassWarning: Can not control echo on the terminal`, rien n'est créé ; changez de
+  fenêtre et relancez. Si les caractères tapés s'affichent malgré tout : **Ctrl+C**.
 
 À ce moment, une période d'essai de 30 jours démarre, comme en ligne. L'étape suivante
 la remplace par la licence.

@@ -358,6 +358,32 @@ Describe 'Société et licence (docker remplacé)' {
         $arguments = Get-CogesCompanyArgument $script:Given
         $arguments | Should -Not -Contain '--password'
         ($arguments -join ' ') | Should -Match 'create-company --name Boutique Diallo --slug boutique-diallo --manager-name Awa Diallo --manager-phone 77 123 45 67'
+        ($arguments -join ' ') | Should -Match 'run --rm -e PYTHONWARNINGS=error::getpass.GetPassWarning cli create-company'
+    }
+
+    It 'conteneur sans terminal : arrêt GetPassWarning, create-company jamais lancé' {
+        Mock Assert-CogesConsole {}
+        Mock Invoke-Docker {
+            $script:Calls.Add($Arguments)
+            if ($Arguments -contains 'license-status') { return New-DockerResult 3 @('Entreprise introuvable : boutique-diallo') }
+            New-DockerResult 1 @()
+        }
+        { New-CogesCompany -Paths $script:Paths -Answers $script:Given 6>$null } | Should -Throw '*GetPassWarning*'
+        ($script:Calls | Where-Object { $_ -contains 'create-company' }) | Should -BeNullOrEmpty
+        ($script:Calls[1] -join ' ') | Should -Match 'run --rm --entrypoint test cli -t 0'
+    }
+
+    It 'GetPassWarning dans create-company : un seul essai, aucun repli' {
+        Mock Assert-CogesConsole {}
+        Mock Invoke-Docker {
+            $script:Calls.Add($Arguments)
+            if ($Arguments -contains 'license-status') { return New-DockerResult 3 @('Entreprise introuvable : boutique-diallo') }
+            if ($Arguments -contains 'create-company') { return New-DockerResult 1 @() }
+            New-DockerResult 0 @()
+        }
+        { New-CogesCompany -Paths $script:Paths -Answers $script:Given 6>$null } | Should -Throw '*GetPassWarning*'
+        @($script:Calls | Where-Object { $_ -contains 'create-company' }).Count | Should -Be 1
+        foreach ($call in $script:Calls) { $call | Should -Not -Contain '--password' }
     }
 
     It 'société déjà créée : rien n''est créé, « on continue »' {

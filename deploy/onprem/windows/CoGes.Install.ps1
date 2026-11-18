@@ -1170,10 +1170,27 @@ function Assert-CogesConsole {
     }
 }
 
+# Python change l'avertissement GetPassWarning en erreur : si la console ne peut pas cacher
+# la frappe, getpass s'arrête AVANT de lire, au lieu de lire en clair. Aucun secret ici.
+$script:CogesNoEchoGuard = 'PYTHONWARNINGS=error::getpass.GetPassWarning'
+
+function Test-CogesContainerTerminal {
+    <# Le conteneur reçoit-il un vrai terminal (test -t 0) ? Sans lui, getpass ne cache rien. #>
+    param([Parameter(Mandatory)] $Paths)
+    $result = Invoke-CogesCompose -Paths $Paths -Arguments @('--profile', 'tools', 'run', '--rm', '--entrypoint', 'test', 'cli', '-t', '0') -Interactive
+    return ($result.ExitCode -eq 0)
+}
+
+function Stop-CogesNoEcho {
+    <# Saisie sans écho impossible : arrêt net, jamais de repli (le mot de passe ne passe par aucun argument). #>
+    Stop-CogesStep -Probleme 'Cette console ne peut pas cacher la frappe du mot de passe (GetPassWarning). Rien n''a été créé.' `
+        -QuoiFaire 'Relancez la même commande dans une fenêtre PowerShell ou le Terminal Windows ouverts directement (pas dans ISE, VS Code, une session à distance sans terminal ni à travers un autre script).'
+}
+
 function Get-CogesCompanyArgument {
-    <# Les arguments de create-company. JAMAIS --password : la commande le demande elle-même. #>
+    <# Les arguments de create-company : aucun mot de passe, la commande le demande elle-même par getpass. #>
     param([Parameter(Mandatory)] $Answers)
-    $arguments = @('--profile', 'tools', 'run', '--rm', 'cli', 'create-company',
+    $arguments = @('--profile', 'tools', 'run', '--rm', '-e', $script:CogesNoEchoGuard, 'cli', 'create-company',
         '--name', $Answers.NomBoutique, '--slug', $Answers.CodeBoutique, '--manager-name', $Answers.NomGerant)
     if ($Answers.TelephoneGerant) { $arguments += @('--manager-phone', $Answers.TelephoneGerant) }
     if ($Answers.EmailGerant) { $arguments += @('--manager-email', $Answers.EmailGerant) }
@@ -1192,17 +1209,17 @@ function New-CogesCompany {
         Stop-CogesStep -Probleme 'L''état de la société ne se lit pas (license-status).' -QuoiFaire 'Relancez -Action Reparer ; si l''échec revient, envoyez le journal à CoGes.'
     }
     Assert-CogesConsole
+    if (-not (Test-CogesContainerTerminal -Paths $Paths)) { Stop-CogesNoEcho }
     Write-CogesLine '  Le mot de passe du gérant va être demandé deux fois (12 caractères au moins). Il ne s''affiche pas pendant la frappe.'
-    Write-CogesLine '  Si « GetPassWarning » ou « Can not control echo » apparaît, ou si les caractères s''affichent : Ctrl + C. Rien n''est créé ; relancez dans une autre fenêtre PowerShell.' -Kind Attention
     # Console du technicien passée telle quelle (ni l'entrée ni la sortie redirigées) :
-    # docker compose run ouvre un terminal, getpass y lit sans écho.
+    # docker compose run ouvre un terminal, getpass y lit sans écho. Un seul essai.
     $created = Invoke-CogesCompose -Paths $Paths -Arguments (Get-CogesCompanyArgument $Answers) -Interactive
     Write-Log -Message ('create-company : code {0}' -f $created.ExitCode)
     # Quelle que soit la sortie, on relit.
     $after = Get-CogesLicenseStatus -Paths $Paths -Slug $Answers.CodeBoutique
     if ($after.ExitCode -ne 0) {
         Stop-CogesStep -Probleme 'La société n''a pas été créée.' `
-            -QuoiFaire 'Lisez le message ci-dessus (mot de passe trop court, saisies différentes, code déjà pris…), puis relancez la même commande.'
+            -QuoiFaire 'Lisez le message ci-dessus : mot de passe trop court, saisies différentes ou code déjà pris, relancez la même commande ; « GetPassWarning », la console ne cache pas la frappe, relancez dans une fenêtre PowerShell ou le Terminal Windows ouverts directement.'
     }
     Write-CogesLine ('  Société {0} créée.' -f $Answers.CodeBoutique) -Kind Ok
 }

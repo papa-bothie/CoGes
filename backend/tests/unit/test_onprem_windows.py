@@ -46,7 +46,10 @@ def test_no_secret_ever_reaches_a_transcript_or_a_command_line(path: Path) -> No
     assert "Start-Transcript" not in code  # enregistrerait ce que le technicien tape
     assert "Invoke-Expression" not in code and "| iex" not in code
     assert "Get-Random" not in code  # secrets : RandomNumberGenerator seulement
-    assert "'--password'" not in code  # create-company demande le mot de passe elle-même
+    assert "--password" not in code  # create-company demande le mot de passe elle-même (getpass)
+    if path.name == "CoGes.Install.ps1":
+        # Saisie sans écho impossible : getpass s'arrête au lieu de lire en clair.
+        assert "PYTHONWARNINGS=error::getpass.GetPassWarning" in code
 
 
 def test_settings_are_written_without_bom() -> None:

@@ -90,7 +90,9 @@ contient `activate-license` (`v0.1.0` n'a pas d'images sur ghcr.io) :
 2. **Installation complète** : durée totale, message final, `http://localhost` s'ouvre,
    connexion du gérant.
 3. **Le mot de passe du gérant** : demandé sans écho, aucun `GetPassWarning`, depuis
-   PowerShell **et** le Terminal Windows.
+   PowerShell **et** le Terminal Windows. Depuis PowerShell ISE ou la console de VS Code :
+   le script s'arrête avec « Cette console ne peut pas cacher la frappe… », sans rien
+   créer ni demander le mot de passe autrement.
 4. **`coges.env`** : créé sans BOM, accessible à l'utilisateur seulement (`icacls
    C:\CoGes\reglages\coges.env`), les deux lignes `PORT`/`URL` bonnes.
 5. **Port 80 occupé exprès** (un serveur quelconque) : bascule sur 8080, le programme qui le
