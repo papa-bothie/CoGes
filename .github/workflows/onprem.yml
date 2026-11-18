@@ -123,3 +123,84 @@ jobs:
           name: onprem-echec
           path: ${{ runner.temp }}/onprem-echec.png
           if-no-files-found: ignore
+
+  # Script d'installation Windows (ADR 0126) : analyse et tests Pester sous Linux (pwsh).
+  # Docker n'y est jamais appelé : Invoke-Docker est remplacé par les tests.
+  onprem-powershell:
+    name: Sur site — script Windows (pwsh sous Linux, analyse et Pester)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      # Versions figées ; PowerShell Gallery seulement.
+      - name: Pester et PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
+          Install-Module PSScriptAnalyzer -RequiredVersion 1.23.0 -Scope CurrentUser -Force
+      # Erreurs et avertissements bloquants ; règles écartées justifiées dans le fichier de
+      # réglages (deploy/onprem-ci/, jamais livré). La syntaxe est vérifiée pour 5.1.
+      - name: Analyse (PSScriptAnalyzer)
+        shell: pwsh
+        run: |
+          $found = Invoke-ScriptAnalyzer -Path deploy/onprem/windows -Recurse -Settings deploy/onprem-ci/PSScriptAnalyzerSettings.psd1
+          $found | Format-Table RuleName, Severity, ScriptName, Line, Message -AutoSize -Wrap | Out-String -Width 220 | Write-Host
+          if ($found) { Write-Host "::error::$(@($found).Count) constat(s) de PSScriptAnalyzer"; exit 1 }
+      # Le vrai check_onprem_env.py relit les réglages écrits par le script (python3 du runner).
+      - name: Tests Pester (pwsh)
+        shell: pwsh
+        run: |
+          Import-Module Pester -RequiredVersion 5.7.1
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'deploy/onprem/windows/tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $config
+
+  # Les mêmes tests sous Windows : Windows PowerShell 5.1 (celui de Windows 11) ET pwsh.
+  # C'est ce qui attrape le BOM, les accents, Join-Path et les droits icacls.
+  # Pas de Docker ici : les runners Windows n'exécutent pas les conteneurs Linux (pas de
+  # WSL 2 ni de Docker Desktop). L'installation réelle se vérifie sur un vrai PC (liste
+  # « Lot 3 — à vérifier sur la machine Windows », docs/prompt-sur-site/README.md).
+  onprem-windows:
+    name: Sur site — script Windows (Windows PowerShell 5.1 et pwsh)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      # 5.1 n'a que Pester 3.4 en standard : la 5.7.1 s'installe à côté.
+      - name: Pester (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+          Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force | Out-Null
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
+      - name: Tests Pester (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          $PSVersionTable.PSVersion.ToString()
+          Import-Module Pester -RequiredVersion 5.7.1
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'deploy/onprem/windows/tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $config
+      - name: Pester (pwsh)
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
+      - name: Tests Pester (pwsh)
+        shell: pwsh
+        run: |
+          $PSVersionTable.PSVersion.ToString()
+          Import-Module Pester -RequiredVersion 5.7.1
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'deploy/onprem/windows/tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $config

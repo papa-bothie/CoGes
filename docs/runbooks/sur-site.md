@@ -7,7 +7,93 @@ fois les images téléchargées, et rien n'est joignable depuis le réseau du ma
 Il est écrit pour quelqu'un qui débute : chaque commande se copie telle quelle dans
 **PowerShell** (menu Démarrer, taper « PowerShell », Entrée).
 
-> Lot 1 sur 6. Ce qui n'existe pas encore est listé à la fin (« Ce qui n'existe pas encore »).
+> Lots 1 à 3 sur 6. Ce qui n'existe pas encore est listé à la fin (« Ce qui n'existe pas encore »).
+
+## Installer en une commande (lot 3, ADR 0126)
+
+Le script `installer.ps1` enchaîne les étapes 1 à 11 ci-dessous. Dans une fenêtre
+**PowerShell** (menu Démarrer, « PowerShell », Entrée ; pas PowerShell ISE ni un éditeur),
+avec le compte Windows qui a Docker Desktop, sans droits d'administrateur, tapez ces **deux
+lignes** en remplaçant `vX.Y.Z` par la version donnée par CoGes (deux fois) :
+
+```powershell
+Invoke-WebRequest https://raw.githubusercontent.com/papa-bothie/CoGes/vX.Y.Z/deploy/onprem/windows/installer.ps1 -OutFile $env:TEMP\coges-install.ps1 -UseBasicParsing
+powershell -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\coges-install.ps1 -Version vX.Y.Z
+```
+
+Le fichier est d'abord enregistré : on peut le lire avant de le lancer. La version doit avoir
+ses images publiées (`ghcr.io/papa-bothie/coges/{front,api,worker}:vX.Y.Z`) et contenir la
+licence sur site (lot 2) ; le script le vérifie.
+
+**Ce qu'il demande, une seule fois** : le nom de la boutique, son code (proposé à partir du
+nom), le nom du gérant, son téléphone ou son e-mail, l'offre (`starter` 3 comptes,
+`business` 7, `premium` 10) et la note du contrat (date du contrat et fin de maintenance,
+obligatoire). Puis un récapitulatif : tapez `OUI`. Plus tard, après la création des
+réglages, il s'arrête jusqu'à ce que vous tapiez `COPIE-FAITE` : copiez
+`C:\CoGes\reglages\coges.env` dans le gestionnaire de mots de passe de CoGes **à ce
+moment-là**. Enfin, la commande de création de la société demande le **mot de passe du
+gérant** deux fois, sans l'afficher.
+
+**Ce qu'il fait, dans l'ordre du guide** : contrôle du PC (Windows 11 64 bits, 8 Go, 20 Go
+libres, virtualisation, Docker Desktop en moteur Linux, accès au groupe `docker-users`,
+Internet, version publiée et contenant la licence) ; pose du programme dans
+`C:\CoGes\programme\` (seulement `deploy/onprem/` de la version) ; réglages (8 mots de
+passe et la clé tirés au hasard, jamais affichés, fichier lisible par ce compte seulement) ;
+port 80, ou 8080 si 80 est pris (le programme qui le tient est nommé) ; images, contrôle des
+réglages, migrations, démarrage (attente des neuf services, 5 minutes au plus) ; société,
+licence et `license-status` ; `http://localhost` en 200 et l'administration en 404. Puis :
+la commande `coges` dans toute nouvelle fenêtre (`C:\CoGes\bin\coges.cmd`, ajouté au PATH
+de l'utilisateur), le raccourci « CoGes » sur le Bureau, la tâche planifiée « CoGes -
+démarrage » (à l'ouverture de session, elle attend Docker puis lance `coges up -d`), et
+l'ouverture de CoGes dans le navigateur.
+
+Chaque étape est écrite dans `C:\CoGes\journaux\installation-AAAAMMJJ-HHMMSS.log`
+(étapes, durées, codes de sortie, erreurs de Docker), **jamais** un mot de passe ni une
+valeur de `coges.env`.
+
+**Ce qu'il ne fait pas** : installer Docker Desktop (sa licence dépend de la taille du
+client : à vérifier avant), activer la virtualisation dans le BIOS, changer les réglages de
+Docker Desktop (il dit seulement s'il faut cocher « Start Docker Desktop when you sign
+in »), ouvrir un port ou le pare-feu, sauvegarder (lot 4).
+
+**Relancer ne casse rien** : `Installer` relancé sur le même PC garde le programme, les
+réglages, la base et la société, répond « rien à faire » pour la licence, et reprend là où un
+échec l'avait arrêté. Il ne garde aucun fichier d'état : il regarde ce qui est là.
+
+| Message d'échec (début) | Quoi faire |
+|---|---|
+| `Ce PC n'est pas sous Windows 11 64 bits` · `il en faut 8 au moins` · `il en faut 20 au moins` | un autre PC, ou de la mémoire / de la place |
+| `La virtualisation est désactivée` | l'activer dans le BIOS (Intel VT-x, AMD-V ou SVM) |
+| `Docker Desktop n'est pas installé` | l'installer (lien affiché), moteur WSL 2 |
+| `Docker Desktop est installé mais son moteur ne tourne pas` | l'ouvrir, attendre « Engine running » |
+| `Docker refuse l'accès à ce compte Windows` | ajouter le compte au groupe `docker-users`, rouvrir la session |
+| `Docker Desktop tourne avec des conteneurs Windows` | « Switch to Linux containers… » |
+| `https://… ne répond pas depuis ce PC` | Internet, ou faire autoriser `github.com`, `ghcr.io` et `pkg-containers.githubusercontent.com` |
+| `La version … n'existe pas` | vérifier la version donnée par CoGes |
+| `La version … est antérieure à la licence sur site` | prendre une version plus récente |
+| `Le contrôle des réglages refuse coges.env` | corriger chaque ligne `REFUS`, puis `-Action Reparer` |
+| `Le service … ne démarre pas` | lire les 40 lignes affichées, puis `-Action Reparer` |
+| `Le mot de passe du gérant doit se taper dans une vraie fenêtre` | relancer dans PowerShell ou le Terminal Windows |
+| `Cette console ne peut pas cacher la frappe du mot de passe (GetPassWarning)` | rien n'est créé : relancer dans une fenêtre PowerShell ou le Terminal Windows ouverts directement |
+
+Les autres actions, depuis `C:\CoGes\programme\windows\` :
+
+```powershell
+# Voir l'état (n'écrit rien) : version, services, adresse, licence, disque, dernier journal
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action Etat
+# Reprendre les contrôles, la base et le démarrage sans rien recréer (après un échec, une mise à jour de Docker)
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action Reparer
+# Changer de port : -Action Reparer -Port 8080 ; de version : -Action Reparer -Version vX.Y.Z
+# Retirer CoGes en GARDANT les réglages et les données (Installer les retrouve)
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action Desinstaller
+```
+
+`-Action Desinstaller -EffacerLesDonnees` efface aussi les données, après avoir fait
+retaper le code de la boutique puis `EFFACER` : **sur un PC d'essai seulement** (aucune
+sauvegarde tant que le lot 4 n'existe pas). `-Simulation` sur n'importe quelle action annonce
+chaque étape sans rien écrire ni lancer.
+
+Les étapes manuelles ci-dessous restent le **secours** si le script ne peut pas aller au bout.
 
 ## Ce qu'il faut
 
@@ -92,6 +178,8 @@ qu'à la toute première mise en route : ne les changez plus ensuite.
 
 Pour ne pas retaper les deux chemins à chaque commande, définissez ce raccourci. Il vaut
 pour la fenêtre PowerShell en cours : **à refaire à chaque nouvelle fenêtre**.
+(Après le script d'installation, inutile : `C:\CoGes\bin\coges.cmd` fait la même chose
+dans toute nouvelle fenêtre.)
 
 ```powershell
 function coges { docker compose --env-file C:\CoGes\reglages\coges.env -f C:\CoGes\programme\docker-compose.yml @args }
@@ -147,7 +235,7 @@ Au bout d'une à deux minutes, chaque ligne de `coges ps` doit dire `Up … (hea
 ## 8. Créer la société et son gérant
 
 ```powershell
-coges --profile tools run --rm cli create-company --name "Boutique Diallo" --slug boutique-diallo --manager-name "Awa Diallo" --manager-phone "77 123 45 67"
+coges --profile tools run --rm -e PYTHONWARNINGS=error::getpass.GetPassWarning cli create-company --name "Boutique Diallo" --slug boutique-diallo --manager-name "Awa Diallo" --manager-phone "77 123 45 67"
 ```
 
 - `--slug` : le « code de la boutique » tapé à la connexion (lettres minuscules, chiffres, tirets).
@@ -163,9 +251,10 @@ le mot de passe sans qu'il s'affiche. Pour que cela marche :
 - lancez la commande dans une **vraie fenêtre PowerShell** ou dans le Terminal Windows,
   pas dans PowerShell ISE, ni dans la console d'un éditeur, ni à travers un script ;
 - n'ajoutez **jamais** `-T` (ni `-it`, qui n'existe pas pour `docker compose run`) ;
-- si le message `GetPassWarning: Can not control echo on the terminal` apparaît, ou si
-  les caractères tapés s'affichent : **Ctrl+C**, rien n'est créé ; changez de fenêtre et
-  relancez.
+- `-e PYTHONWARNINGS=error::getpass.GetPassWarning` fait **s'arrêter** la commande, avant
+  toute lecture, si la console ne peut pas cacher la frappe : le message se termine par
+  `GetPassWarning: Can not control echo on the terminal`, rien n'est créé ; changez de
+  fenêtre et relancez. Si les caractères tapés s'affichent malgré tout : **Ctrl+C**.
 
 À ce moment, une période d'essai de 30 jours démarre, comme en ligne. L'étape suivante
 la remplace par la licence.
@@ -226,8 +315,7 @@ du magasin, l'adresse ne répond pas.
 
 Les étapes 1 à 11 ci-dessus, dans cet ordre, sans en sauter : **réglages remplis** (2) →
 **contrôle des réglages** (5) → **migrations** (6) → **démarrage** (7) → **société** (8)
-→ **licence** (9) → **vérification** (10) → **connexion du gérant** (11). Le script
-d'installation du lot 3 les enchaînera ; d'ici là, on les tape.
+→ **licence** (9) → **vérification** (10) → **connexion du gérant** (11).
 
 ## Changer d'offre
 
@@ -404,7 +492,6 @@ Puis reprenez à l'étape 6. Les mots de passe de `coges.env` peuvent alors chan
 
 | Sujet | Lot | En attendant |
 |---|---|---|
-| Installation en une commande (script Windows) | 3 | ce guide, pas à pas |
 | Sauvegarde et restauration locales | 4 | **aucune sauvegarde** : ne pas y mettre de données réelles sans copie |
 | Mises à jour à distance et retour arrière automatique | 5 | « Mettre à jour à la main » ci-dessus |
 | Support à distance et journaux | 6 | sur place, `coges logs` |
