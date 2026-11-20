@@ -6,12 +6,15 @@ utilisateurs actuels ne voient aucune différence.
 
 | Lot | Contenu | Résultat attendu | État |
 |---|---|---|---|
-| 1 | Assemblage : compose, Caddyfile, réglages, contrôle, migrations locales (`01-assemblage.md`) | CoGes démarre sur `http://localhost` | ✅ code et CI Linux (ADR 0124) ; **à vérifier sur Windows** par le propriétaire |
-| 2 | Commande `activate-license` et premier démarrage (`02-licence.md`) | Une société créée, licence activée | ✅ code et CI Linux (ADR 0125) ; **à vérifier sur Windows** |
-| 3 | Script d'installation Windows (`03-script-installation.md`) | Installation en une commande | ✅ code et tests (ADR 0126) ; **à vérifier sur Windows** |
+| 1 | Assemblage : compose, Caddyfile, réglages, contrôle, migrations locales (`01-assemblage.md`) | CoGes démarre sur `http://localhost` | ✅ code et CI Linux (ADR 0124) ; vérifié sur Windows le 20/11/2026, v0.2.0 |
+| 2 | Commande `activate-license` et premier démarrage (`02-licence.md`) | Une société créée, licence activée | ✅ code et CI Linux (ADR 0125) ; vérifié sur Windows le 20/11/2026, v0.2.0 |
+| 3 | Script d'installation Windows (`03-script-installation.md`) | Installation en une commande | ✅ code et tests (ADR 0126) ; vérifié sur Windows le 20/11/2026, v0.2.0 |
 | 4 | Sauvegarde et restauration locales | Une panne simulée, données retrouvées | ⬜ |
 | 5 | Mises à jour à distance et retour arrière | Passage d'une version à la suivante sans se déplacer | ⬜ |
 | 6 | Support à distance et journaux | Intervention sans se déplacer | ⬜ |
+
+Lots 1 à 3 vérifiés sur un vrai PC Windows 11 le 20/11/2026, avec la version v0.2.0, en suivant
+le guide de test : les 16 vérifications passent.
 
 Guide d'installation : `docs/runbooks/sur-site.md`. Décisions : `docs/decisions/0124-assemblage-sur-site.md`,
 `docs/decisions/0125-licence-sur-site.md`, `docs/decisions/0126-installation-windows-sur-site.md`.
@@ -29,6 +32,8 @@ Guide d'installation : `docs/runbooks/sur-site.md`. Décisions : `docs/decisions
 | `backend/tests/integration/test_onprem_license.py`, `tests/architecture/test_onprem_license_is_cli_only.py` | la licence en base, et appelée par la seule commande |
 
 ## Lot 1 — à vérifier sur la machine Windows
+
+> **Vérifié sur Windows 11 le 20/11/2026, avec v0.2.0.**
 
 La CI tourne sous Linux. Reste à constater, sur un PC Windows 11 avec Docker Desktop (WSL 2),
 en suivant `docs/runbooks/sur-site.md` :
@@ -66,6 +71,8 @@ en suivant `docs/runbooks/sur-site.md` :
 
 ## Lot 2 — à vérifier sur la machine Windows
 
+> **Vérifié sur Windows 11 le 20/11/2026, avec v0.2.0.**
+
 Avec des images qui contiennent la commande (étiquette `vX.Y.Z` après la fusion), en
 suivant les étapes 8 à 11 de `docs/runbooks/sur-site.md` dans une fenêtre PowerShell :
 
@@ -80,6 +87,8 @@ suivant les étapes 8 à 11 de `docs/runbooks/sur-site.md` dans une fenêtre Pow
 À rapporter : la sortie exacte des trois commandes et tout message d'erreur.
 
 ## Lot 3 — à vérifier sur la machine Windows
+
+> **Vérifié sur Windows 11 le 20/11/2026, avec v0.2.0.**
 
 La CI joue les tests Pester sous Windows PowerShell 5.1 et pwsh, sans Docker (les runners
 Windows n'exécutent pas les conteneurs Linux). Reste à constater sur un PC Windows 11 de
