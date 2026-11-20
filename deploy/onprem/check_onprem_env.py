@@ -67,6 +67,12 @@ RUNTIME_DSNS: dict[str, str] = {
 OWNER_DSN = "COGES_DATABASE_URL_OWNER"
 #: Le seul service qui reçoit le DSN propriétaire : ponctuel, jamais lancé par `up`.
 OWNER_SERVICES = frozenset({"migrate"})
+#: Sauvegarde (ADR 0127) : les seuls services qui partagent le réseau du conteneur
+#: `postgres` (connexion en superutilisateur sur 127.0.0.1, en confiance locale, sans mot
+#: de passe). Ponctuels, sans port, sans aucun mot de passe ni DSN.
+BACKUP_SERVICES = frozenset({"sauvegarde-pg", "sauvegarde-py"})
+#: Le mot de passe du superutilisateur ne sort jamais du service `postgres`.
+SUPERUSER_SECRETS = frozenset({"POSTGRES_PASSWORD", "PGPASSWORD", "COGES_POSTGRES_PASSWORD"})
 #: Les seuls hôtes de données : les services du compose, sur le réseau interne.
 DATABASE_HOST = "postgres"
 REDIS_HOST = "redis"
@@ -353,6 +359,39 @@ def rendered_violations(config: dict[str, Any], *, source: str) -> list[str]:
                         f"{where} : COGES_REDIS_URL vise « {host or 'aucun'} », hors du "
                         "réseau interne"
                     )
+
+        for key in sorted(SUPERUSER_SECRETS & set(env)):
+            if name != DATABASE_HOST:
+                found.append(
+                    f"{where} : reçoit {key} : le mot de passe du superutilisateur reste dans "
+                    "le service postgres"
+                )
+        network_mode = str(service.get("network_mode") or "")
+        shared = network_mode.startswith(("service:", "container:"))
+        if shared and (name not in BACKUP_SERVICES or network_mode != f"service:{DATABASE_HOST}"):
+            found.append(
+                f"{where} : partage le réseau d'un autre conteneur ({network_mode}) : "
+                "seuls les services de sauvegarde partagent celui de postgres"
+            )
+        if name in BACKUP_SERVICES:
+            if service.get("profiles") != ["tools"]:
+                found.append(
+                    f"{where} : service de sauvegarde lancé par `up` (profil tools attendu)"
+                )
+            if network_mode != f"service:{DATABASE_HOST}":
+                found.append(f"{where} : doit partager le réseau de postgres (et rien d'autre)")
+            secrets = sorted(
+                key
+                for key, value in env.items()
+                if "PASSWORD" in key
+                or "SECRET" in key
+                or key.startswith("COGES_DATABASE_URL")
+                or "://" in value
+            )
+            if secrets:
+                found.append(
+                    f"{where} : ne reçoit aucun mot de passe ni DSN ({', '.join(secrets)})"
+                )
 
         if "COGES_ENV" in env and env["COGES_ENV"] != "production":
             found.append(f"{where} : COGES_ENV vaut « {env['COGES_ENV']} », pas production")

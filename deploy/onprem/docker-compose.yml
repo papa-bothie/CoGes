@@ -321,6 +321,46 @@ services:
     networks: [interne]
     mem_limit: 384m
 
+  # Sauvegarde et restauration (ADR 0127), lancées par le script Windows. Les deux partagent
+  # le réseau du conteneur `postgres` (donc le réseau interne, sans sortie, sans port) et
+  # s'y connectent en superutilisateur sur 127.0.0.1, en confiance locale : AUCUN mot de
+  # passe ne leur est donné. Le dump en clair ne vit que dans le volume `sauvegarde-travail`.
+  # pg_dump et pg_restore : l'image de la base (pas de Python).
+  sauvegarde-pg:
+    profiles: [tools]
+    image: postgres:18.7-alpine
+    restart: "no"
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
+    network_mode: service:postgres
+    depends_on:
+      postgres: { condition: service_healthy }
+    entrypoint: ["sh", "/srv/onprem/sauvegarde/pg.sh"]
+    volumes:
+      - ./sauvegarde:/srv/onprem/sauvegarde:ro
+      - sauvegarde-travail:/travail
+    mem_limit: 256m
+
+  # Chiffrement, manifeste, vérification, bascule : l'image worker (Python, cryptography,
+  # psycopg ; pas les outils PostgreSQL). En root : écrit dans le dossier des sauvegardes
+  # monté par le script (`run -v …:/sortie`). La clé privée n'arrive que par l'entrée standard.
+  sauvegarde-py:
+    profiles: [tools]
+    image: ${COGES_IMAGE_REGISTRY:-ghcr.io/papa-bothie/coges}/worker:${COGES_IMAGE_TAG:?COGES_IMAGE_TAG manque dans coges.env}
+    restart: "no"
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
+    user: "0:0"
+    network_mode: service:postgres
+    depends_on:
+      postgres: { condition: service_healthy }
+    entrypoint: ["python", "-I"]
+    working_dir: /srv/onprem/sauvegarde
+    volumes:
+      - ./sauvegarde:/srv/onprem/sauvegarde:ro
+      - sauvegarde-travail:/travail
+    mem_limit: 256m
+
 networks:
   # Sans sortie : aucun conteneur ne joint Internet (ADR 0124). Sous-réseau fixe, distinct
   # de ceux du VPS (172.30.0.0/24 et 172.30.1.0/28).
@@ -339,3 +379,5 @@ volumes:
   front-static:
   caddy-data:
   caddy-config:
+  # Dump en clair le temps de le chiffrer ou de le restaurer, vidé ensuite (ADR 0127).
+  sauvegarde-travail:
