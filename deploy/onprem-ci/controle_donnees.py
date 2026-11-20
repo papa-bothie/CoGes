@@ -5,7 +5,7 @@ compte ses ventes confirmées. Lancé par deploy/onprem-ci/verifier.sh après ch
 redémarrage, changement de version ou arrêt brutal de PostgreSQL.
 
 Usage : python3 controle_donnees.py --url http://localhost --slug S --email E
-        --min-sales 1        (mot de passe : variable ONPREM_PASSWORD)
+        --min-sales 1 [--exact]   (mot de passe : variable ONPREM_PASSWORD)
 Bibliothèque standard seulement.
 """
 
@@ -35,6 +35,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--slug", required=True)
     parser.add_argument("--email", required=True)
     parser.add_argument("--min-sales", type=int, default=1)
+    # Après une restauration (ADR 0127) : exactement le nombre de ventes de la sauvegarde.
+    parser.add_argument("--exact", action="store_true")
     args = parser.parse_args(argv)
     password = os.environ.get("ONPREM_PASSWORD")
     if not password:
@@ -49,6 +51,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if company.get("slug") != args.slug:
         print(f"ÉCHEC — société attendue « {args.slug} », lue « {company.get('slug')} »")
+        return 1
+    if args.exact and sales["total"] != args.min_sales:
+        print(f"ÉCHEC — {sales['total']} vente(s), exactement {args.min_sales} attendue(s)")
         return 1
     if sales["total"] < args.min_sales:
         print(f"ÉCHEC — {sales['total']} vente(s), {args.min_sales} attendue(s) au moins")
