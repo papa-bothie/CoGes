@@ -24,7 +24,9 @@ OWNER_DSN = "COGES_DATABASE_URL_OWNER"
 #: Services lancés par `up`, qui tournent en continu.
 CONTINUOUS = {"caddy", "autoheal", "postgres", "redis", "front", "api", "worker", "beat", "relay"}
 #: Services ponctuels (profil `tools`).
-TOOLS = {"migrate", "cli"}
+TOOLS = {"migrate", "cli", "sauvegarde-pg", "sauvegarde-py"}
+#: Sauvegarde (ADR 0127) : dans le réseau du conteneur postgres, donc sur `interne`.
+BACKUP = {"sauvegarde-pg", "sauvegarde-py"}
 
 
 def _compose() -> dict[str, Any]:
@@ -130,8 +132,10 @@ def test_the_images_are_the_ones_of_the_vps_compose() -> None:
     services = _services()
     for name in ("front", "api", "worker", "beat", "relay", "redis", "caddy", "autoheal"):
         assert _image(services[name]) == _image(vps[name]), name
-    for name in TOOLS:
+    for name in TOOLS - {"sauvegarde-pg"}:
         assert _image(services[name]) == _image(vps["worker"])
+    # pg_dump et pg_restore : l'image de la base elle-même, déjà sur le PC (ADR 0127).
+    assert services["sauvegarde-pg"]["image"] == services["postgres"]["image"]
     assert not any("/admin:" in s["image"] or "/bundle:" in s["image"] for s in services.values())
     assert not any("build" in service for service in services.values())
     # Étiquette obligatoire : pas de défaut, donc jamais `latest` par oubli.
@@ -181,6 +185,10 @@ def test_no_container_can_reach_the_internet() -> None:
             assert service["network_mode"] == "none"
         elif name == "caddy":
             assert sorted(service["networks"]) == ["bord", "interne"]
+        elif name in BACKUP:
+            assert service["network_mode"] == "service:postgres", name
+            assert "networks" not in service, name
+            assert compose["services"]["postgres"]["networks"] == ["interne"]
         else:
             assert service["networks"] == ["interne"], name
 

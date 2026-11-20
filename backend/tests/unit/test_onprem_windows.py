@@ -26,7 +26,9 @@ def test_the_expected_scripts_are_there() -> None:
         "installer.ps1",
         "CoGes.Install.ps1",
         "demarrage.ps1",
+        "sauvegarde.ps1",
         "tests/CoGes.Install.Tests.ps1",
+        "tests/CoGes.Backup.Tests.ps1",
     }
 
 
@@ -63,7 +65,10 @@ def test_settings_are_written_without_bom() -> None:
 def test_docker_is_called_by_one_function_only() -> None:
     code = (WINDOWS / "CoGes.Install.ps1").read_text(encoding="utf-8-sig")
     calls = re.findall(r"(?m)^(?!\s*#).*?(?:&\s*docker\b|-FilePath 'docker')", code)
-    assert len(calls) == 2, calls  # Invoke-Docker : console passée, ou sortie lue
+    # Invoke-Docker : console passée, sortie lue, ou sortie lue avec un texte sur l'entrée
+    # standard (la clé privée de la restauration, ADR 0127 : jamais un argument).
+    assert len(calls) == 3, calls
+    assert sum("$InputText | & docker" in call for call in calls) == 1
     # Jamais « down -v » : les volumes ne s'effacent que par -EffacerLesDonnees.
     assert not re.search(r"'down'[^)\n]*'-v'", code)
 
@@ -75,3 +80,21 @@ def test_the_workflow_runs_pester_on_linux_and_on_windows_powershell() -> None:
     assert "runs-on: windows-latest" in workflow
     assert "shell: powershell" in workflow  # Windows PowerShell 5.1
     assert "Invoke-ScriptAnalyzer" in workflow
+
+
+def test_the_private_key_never_goes_through_an_argument_or_the_environment() -> None:
+    """Restauration (ADR 0127) : la clé privée passe par l'entrée standard du conteneur,
+    jamais par `-e` (visible par `docker inspect`), ni par un fichier copié sur le PC."""
+    code = (WINDOWS / "CoGes.Install.ps1").read_text(encoding="utf-8-sig")
+    restore = code[
+        code.index("function Restore-CogesBackup") : code.index(
+            "function Invoke-CogesCleanOldDatabase"
+        )
+    ]
+    assert "-InputText $key" in restore
+    assert "'-e'" not in restore and "COGES_CLE" not in restore
+    tool = code[
+        code.index("function Get-CogesToolArgument") : code.index("function Invoke-CogesTool ")
+    ]
+    assert "'-e'" not in tool
+    assert "Set-Clipboard" not in code and "clip.exe" not in code

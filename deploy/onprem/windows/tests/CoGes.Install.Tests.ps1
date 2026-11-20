@@ -460,6 +460,11 @@ Describe 'Pose du programme' {
             'CoGes-1.2.3/deploy/onprem/check_onprem_env.py'            = "print('OK')`n"
             'CoGes-1.2.3/deploy/onprem/postgres-init/01-roles.sql'     = "CREATE ROLE x;`n"
             'CoGes-1.2.3/deploy/onprem/windows/installer.ps1'          = "# installeur`n"
+            'CoGes-1.2.3/deploy/onprem/windows/sauvegarde.ps1'         = "# tâche de sauvegarde`n"
+            'CoGes-1.2.3/deploy/onprem/sauvegarde/pg.sh'               = "#!/bin/sh`n"
+            'CoGes-1.2.3/deploy/onprem/sauvegarde/coffre.py'           = "print()`n"
+            'CoGes-1.2.3/deploy/onprem/sauvegarde/base.py'             = "print()`n"
+            'CoGes-1.2.3/deploy/onprem/sauvegarde/verify_restore.py'   = "print()`n"
             'CoGes-1.2.3/deploy/onprem/__pycache__/check.cpython-312.pyc' = 'binaire'
         }
     }
@@ -475,7 +480,7 @@ Describe 'Pose du programme' {
         $archive = Join-Path $TestDrive 'bon.zip'
         New-TestArchive -Path $archive -Files $script:Good
         $count = Install-Programme -Archive $archive -Racine $racine -Version 'v1.2.3'
-        $count | Should -Be 7
+        $count | Should -Be 12
         $paths = Get-CogesPath $racine
         Test-CogesProgramme -Paths $paths -Version 'v1.2.3' | Should -BeTrue
         Test-CogesProgramme -Paths $paths -Version 'v1.2.4' | Should -BeFalse
@@ -528,7 +533,8 @@ Describe 'Point d''entrée' {
                 'licence sur site dans cette version', 'Pose du programme v1.2.3', 'Choix du port', 'création de',
                 'COPIE-FAITE', 'Téléchargement des images', 'Contrôle des réglages', 'migrations', 'Démarrage de CoGes',
                 'Société boutique-diallo', 'Licence business', 'Dernier contrôle', 'Commande « coges »',
-                'Raccourci « CoGes »', 'Tâche planifiée', 'Simulation terminée')) {
+                'Raccourci « CoGes »', 'Tâche planifiée', 'Clé de sauvegarde', 'CoGes - sauvegarde', 'Première sauvegarde',
+                'clé USB de sauvegarde', 'Simulation terminée')) {
             $out | Should -BeLike ('*' + $step + '*')
         }
     }
