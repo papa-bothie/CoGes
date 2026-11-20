@@ -6,7 +6,9 @@
 #
 # Il suit le guide docs/runbooks/sur-site.md, dans le même ordre : réglages, contrôle,
 # migrations, démarrage, société, licence (ADR 0125), navigateur ; puis la tâche de nuit à
-# +45 jours, redémarrage, changement de version et arrêt brutal de PostgreSQL. Il ne touche ni au poste de développement (projet Docker
+# +45 jours, redémarrage, changement de version et arrêt brutal de PostgreSQL ; enfin la
+# sauvegarde et la restauration (ADR 0127), jouées par le vrai script Windows sous pwsh :
+# panne simulée (down -v, réglages neufs), données retrouvées. Il ne touche ni au poste de développement (projet Docker
 # « coges-onprem », à part) ni à aucun fichier du dépôt.
 #
 # Variables :
@@ -14,6 +16,7 @@
 #   ONPREM_PORT                   port local (défaut 80)
 #   ONPREM_SKIP_BROWSER=1         sans le parcours Chromium
 #   ONPREM_KEEP=1                 garder la pile et ses volumes à la fin
+#   ONPREM_PWSH                   PowerShell 7 (défaut : pwsh, présent sur les runners GitHub)
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -316,5 +319,169 @@ dc up -d --wait --wait-timeout 300
 wait_for_code "$url/api/v1/health/ready" 200 90
 data_are_there "$sales"
 all_healthy
+
+title "Sauvegarde (ADR 0127) : le vrai script Windows, sous pwsh"
+pwsh_bin=${ONPREM_PWSH:-pwsh}
+command -v "$pwsh_bin" >/dev/null || fail "PowerShell 7 introuvable ($pwsh_bin)"
+# Les trois endroits du guide, comme sur le PC : programme, réglages, et C:\CoGes\sauvegardes.
+racine="$work/racine"
+mkdir -p "$racine" "$work/cles" "$work/usb"
+ln -s "$onprem" "$racine/programme"
+ln -s "$settings" "$racine/reglages"
+coges_ps() { "$pwsh_bin" -NoProfile -File "$onprem/windows/installer.ps1" -Racine "$racine" -NonInteractif -SansNotification "$@"; }
+# La paire de clés, tirée « chez le technicien » (commande du guide) : la privée hors du PC.
+docker run --rm --network none --user "$(id -u):$(id -g)" -v "$onprem/sauvegarde:/srv/onprem/sauvegarde:ro" \
+  -v "$work/cles:/cles" --entrypoint python "$registry/worker:$next_tag" -I \
+  /srv/onprem/sauvegarde/coffre.py paire --prive /cles/boutique-test.cle --publique /cles/boutique-test.pub
+"$pwsh_bin" -NoProfile -Command ". '$onprem/windows/CoGes.Install.ps1'; \$script:CogesState.NonInteractif = \$true;
+  Set-CogesBackupKey -Paths (Get-CogesPath '$racine') -Options @{ ClePublique = '$work/cles/boutique-test.pub' } -Slug '$slug'"
+[ -f "$settings/cle-publique-sauvegarde.txt" ] || fail "clé publique non posée"
+printf '%s\n' "$slug" > "$work/usb/COGES-SAUVEGARDE.txt"
+mkdir -p "$work/cle-sans-repere"
+
+table_counts() {
+  dc exec -T postgres psql -U postgres -d coges -XAt -c "
+    SELECT 'companies', count(*) FROM companies UNION ALL SELECT 'users', count(*) FROM users
+    UNION ALL SELECT 'sales', count(*) FROM sales UNION ALL SELECT 'payments', count(*) FROM payments
+    UNION ALL SELECT 'inventory_movements', count(*) FROM inventory_movements
+    UNION ALL SELECT 'products', count(*) FROM products UNION ALL SELECT 'subscriptions', count(*) FROM subscriptions
+    UNION ALL SELECT 'audit_logs', count(*) FROM audit_logs"
+}
+before_counts=$(table_counts)
+sales_total=$(dc exec -T postgres psql -U postgres -d coges -XAt -c "SELECT count(*) FROM sales WHERE status = 'confirmed'")
+
+# Mémoire de la sauvegarde avec restauration d'essai, pendant que CoGes tourne.
+( while :; do docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' 2>/dev/null; sleep 1; done ) > "$work/memoire.txt" &
+sampler=$!
+start=$SECONDS
+COGES_DISQUES_ESSAI="$work/cle-sans-repere:$work/usb" coges_ps -Action Sauvegarder -Essai | tee "$work/sauvegarde.txt"
+backup_seconds=$((SECONDS - start))
+kill "$sampler" 2>/dev/null || true
+wait "$sampler" 2>/dev/null || true
+backup=$(find "$racine/sauvegardes" -maxdepth 1 -name 'coges-*.coges' | sort | tail -1)
+[ -n "$backup" ] && [ -f "$backup.sha256" ] && [ -f "$backup.manifest.json" ] || fail "sauvegarde absente"
+name=$(basename "$backup")
+[ -f "$work/usb/CoGes/$name" ] || fail "pas de copie sur le disque préparé"
+[ -z "$(ls -A "$work/cle-sans-repere")" ] || fail "un disque sans repère a été écrit"
+cmp -s "$backup" "$work/usb/CoGes/$name" || fail "copie hors du PC différente"
+grep -q '"dernier_essai_ok": *true' "$racine/sauvegardes/etat.json" || fail "restauration d'essai non réussie"
+if head -c 5 "$backup" | grep -q PGDMP; then fail "sauvegarde en clair"; fi
+[ -z "$(find "$work" -name '*.dump' 2>/dev/null)" ] || fail "un dump en clair est resté sur le disque"
+leftover=$(dc --profile tools run --rm -T --entrypoint sh sauvegarde-pg -c 'ls -A /travail' 2>/dev/null)
+[ -z "$leftover" ] || fail "volume de travail non vidé : $leftover"
+echo "OK — $name ($(stat -c %s "$backup") o) en ${backup_seconds} s, essai réussi, copie relue, aucun dump en clair."
+echo "Mémoire au plus haut pendant la sauvegarde et l'essai :"
+LC_ALL=C awk '$1 ~ /^coges-onprem-/ { sub(/-run-[0-9a-f]+$/, "", $1); split($2, a, /[A-Za-z]+/); unit = substr($2, length(a[1]) + 1); v = a[1] + 0;
+       if (unit == "GiB") v *= 1024; else if (unit == "KiB") v /= 1024; else if (unit == "B") v /= 1048576;
+       if (v > max[$1]) max[$1] = v }
+     END { for (n in max) printf "  %-45s %7.1f MiB\n", n, max[n] }' "$work/memoire.txt" | sort
+
+title "La clé privée ne paraît pas dans « docker inspect » (entrée standard seulement)"
+secret=$(sed 's/^COGES-CLE-PRIVEE-1://' "$work/cles/boutique-test.cle")
+mkfifo "$work/cle.fifo"
+dc --profile tools run --rm -T -v "$racine/sauvegardes:/entree:ro" sauvegarde-py coffre.py dechiffrer \
+  "/entree/$name" /travail/inspection.dump < "$work/cle.fifo" > "$work/inspection.txt" 2>&1 &
+reader=$!
+exec 7>"$work/cle.fifo"
+for _ in $(seq 1 60); do
+  running=$(docker ps -q --filter label=com.docker.compose.project=coges-onprem --filter label=com.docker.compose.service=sauvegarde-py)
+  [ -n "$running" ] && break
+  sleep 1
+done
+[ -n "$running" ] || fail "le conteneur de déchiffrement n'a pas démarré"
+if docker inspect "$running" | grep -qF -- "$secret"; then fail "la clé privée paraît dans docker inspect"; fi
+cat "$work/cles/boutique-test.cle" >&7
+exec 7>&-
+wait "$reader" || fail "déchiffrement par l'entrée standard : $(cat "$work/inspection.txt")"
+dc --profile tools run --rm -T sauvegarde-pg vider >/dev/null
+echo "OK — conteneur inspecté pendant qu'il attendait la clé : rien."
+
+title "Panne simulée : down -v, réglages neufs, installation neuve, puis Restaurer"
+dc --profile tools down -v --remove-orphans
+# Un PC neuf : tous les mots de passe et clés de coges.env changent (le fichier perdu).
+python3 - "$env_file" <<'PY'
+import base64, re, secrets, sys
+path = sys.argv[1]
+lines = []
+for line in open(path, encoding="utf-8").read().splitlines():
+    match = re.fullmatch(r"(COGES_[A-Z_]*(PASSWORD|SECRET))=.*", line)
+    if match:
+        line = f"{match.group(1)}={secrets.token_hex(32)}"
+    elif line.startswith("COGES_MFA_ENCRYPTION_KEY="):
+        line = "COGES_MFA_ENCRYPTION_KEY=" + base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip("=")
+    lines.append(line)
+open(path, "w", encoding="utf-8", newline="\n").write("\n".join(lines) + "\n")
+PY
+dc --profile tools config --format json > "$work/rendu-2.json"
+python3 "$onprem/check_onprem_env.py" --env-file "$env_file" --rendered "$work/rendu-2.json"
+dc --profile tools run --rm migrate > "$work/migrate-neuf.log" 2>&1
+dc up -d --wait --wait-timeout 300
+# Comme l'installation du lot 3 : la société et sa licence, base vide.
+dc --profile tools run --rm -T cli create-company --name "Boutique Test" --slug "$slug" \
+  --manager-email "$email" --manager-name "Awa Test" --password "$(python3 -c 'import secrets; print(secrets.token_hex(12))')"
+dc --profile tools run --rm -T cli activate-license --slug "$slug" --plan starter >/dev/null
+start=$SECONDS
+coges_ps -Action Restaurer -Fichier "$work/usb/CoGes/$name" -Cle "$work/cles/boutique-test.cle" -ConfirmerRestauration \
+  | tee "$work/restauration.txt"
+restore_seconds=$((SECONDS - start))
+after_counts=$(table_counts)
+[ "$(grep -v '^audit_logs' <<<"$before_counts")" = "$(grep -v '^audit_logs' <<<"$after_counts")" ] \
+  || fail "lignes différentes après restauration : $before_counts / $after_counts"
+python3 "$ci/controle_donnees.py" --url "$url" --slug "$slug" --email "$email" --min-sales "$sales_total" --exact
+license_status "$slug"
+expect_line "$work/licence-$slug.txt" "Accès            : actif"
+expect_line "$work/licence-$slug.txt" "Fin de période   : sans fin"
+expect_line "$work/licence-$slug.txt" "maintenance jusqu'au $maintenance"
+old_db=$(dc exec -T postgres psql -U postgres -XAt -c "SELECT datname FROM pg_database WHERE datname LIKE 'coges_avant_%'")
+[ -n "$old_db" ] || fail "l'ancienne base n'est pas gardée"
+all_healthy
+echo "OK — restaurée en ${restore_seconds} s avec des réglages neufs : mêmes lignes, licence revenue, ancienne base gardée ($old_db)."
+
+title "Fichier modifié d'un octet : refusé, rien n'a changé"
+mkdir -p "$work/abime"
+cp "$work/usb/CoGes/$name"* "$work/abime/"
+printf '\x00' | dd of="$work/abime/$name" bs=1 seek=100 conv=notrunc status=none
+if coges_ps -Action Restaurer -Fichier "$work/abime/$name" -Cle "$work/cles/boutique-test.cle" -ConfirmerRestauration > "$work/abime.txt"; then
+  fail "un fichier abîmé a été restauré"
+fi
+grep -q 'sha256' "$work/abime.txt" || fail "message du refus : $(cat "$work/abime.txt")"
+python3 "$ci/controle_donnees.py" --url "$url" --slug "$slug" --email "$email" --min-sales "$sales_total" --exact
+echo "OK — refusé à l'empreinte."
+
+title "Sauvegarde d'une révision inconnue du programme : refusée"
+mkdir -p "$work/future"
+cp "$work/usb/CoGes/$name"* "$work/future/"
+python3 - "$work/future/$name.manifest.json" <<'PY'
+import json, sys
+data = json.load(open(sys.argv[1], encoding="utf-8"))
+data["alembic_revision"], data["coges_version"] = "9999", "v9.9.9"
+json.dump(data, open(sys.argv[1], "w", encoding="utf-8"))
+PY
+if coges_ps -Action Restaurer -Fichier "$work/future/$name" -Cle "$work/cles/boutique-test.cle" -ConfirmerRestauration > "$work/future.txt"; then
+  fail "une sauvegarde plus récente que le programme a été restaurée"
+fi
+grep -q "Installez d'abord la version v9.9.9" "$work/future.txt" || fail "message du refus : $(cat "$work/future.txt")"
+echo "OK — « installez d'abord la version v9.9.9 »."
+
+title "Échec après la bascule (simulé) : retour automatique à l'ancienne base"
+if COGES_ESSAI_ECHEC_APRES_BASCULE=1 coges_ps -Action Restaurer -Fichier "$work/usb/CoGes/$name" \
+    -Cle "$work/cles/boutique-test.cle" -ConfirmerRestauration > "$work/retour.txt"; then
+  fail "l'échec simulé n'a pas été vu"
+fi
+grep -q "ancienne base est remise en place" "$work/retour.txt" || fail "message du retour : $(cat "$work/retour.txt")"
+wait_for_code "$url/api/v1/health/ready" 200 90
+python3 "$ci/controle_donnees.py" --url "$url" --slug "$slug" --email "$email" --min-sales "$sales_total" --exact
+all_healthy
+echo "OK — base d'avant remise, CoGes répond."
+
+title "État, puis nettoyage des anciennes bases (code de la boutique)"
+coges_ps -Action Etat -CodeBoutique "$slug" | tee "$work/etat.txt"
+grep -q "Ancienne base gardée" "$work/etat.txt" || fail "Etat ne signale pas l'ancienne base"
+grep -q "Dernière sauvegarde : " "$work/etat.txt" || fail "Etat ne dit pas la dernière sauvegarde"
+coges_ps -Action NettoyerAncienneBase -CodeBoutique "$slug"
+left=$(dc exec -T postgres psql -U postgres -XAt -c "SELECT count(*) FROM pg_database WHERE datname ~ '^coges_(avant|echec)_'")
+[ "$left" = 0 ] || fail "$left ancienne(s) base(s) restante(s)"
+[ -z "$(find "$racine/journaux" -type f -exec grep -lF -- "$secret" {} +)" ] || fail "la clé privée est dans un journal"
+echo "OK — anciennes bases supprimées ; sauvegarde ${backup_seconds} s, restauration ${restore_seconds} s."
 
 title "Vérification sur site réussie"

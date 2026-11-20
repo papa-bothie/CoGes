@@ -15,7 +15,8 @@
     Une fois installé, le script est aussi dans C:\CoGes\programme\windows\installer.ps1.
 
 .PARAMETER Action
-    Installer (défaut), Reparer, Etat ou Desinstaller.
+    Installer (défaut), Reparer, Etat, Desinstaller ; sauvegarde (ADR 0127) : Sauvegarder,
+    Restaurer, PreparerDisque, NettoyerAncienneBase.
 .PARAMETER Version
     La version de CoGes, vX.Y.Z (obligatoire pour Installer ; Reparer garde celle des réglages si absente).
 .PARAMETER Simulation
@@ -29,11 +30,30 @@
 .PARAMETER CopieFaite
     En -NonInteractif : confirme que coges.env est copié dans le gestionnaire de mots de passe.
 .PARAMETER EffacerLesDonnees
-    Avec Desinstaller : efface aussi les volumes (données). Demande le code de la boutique.
+    Avec Desinstaller : efface aussi les volumes (données), après une sauvegarde de moins d'une
+    heure. Demande le code de la boutique.
+.PARAMETER Fichier
+    Avec Restaurer : la sauvegarde (coges-….coges, avec ses .sha256 et .manifest.json à côté).
+.PARAMETER Cle
+    Avec Restaurer : le fichier de la clé PRIVÉE du client (lue, jamais copiée sur le PC).
+.PARAMETER Lecteur
+    Avec PreparerDisque (et Installer) : la clé USB ou le disque de sauvegarde, par ex. E:.
+.PARAMETER ClePublique
+    Installer, Reparer : le fichier de la clé publique de sauvegarde tirée chez CoGes.
+.PARAMETER LecteurCle
+    Installer, Reparer sans -ClePublique : le disque amovible où écrire la clé privée tirée ici.
+.PARAMETER CleCopiee
+    En -NonInteractif : confirme que la clé privée est rangée chez CoGes.
+.PARAMETER ConfirmerRestauration
+    En -NonInteractif : confirme RESTAURER.
+.PARAMETER Essai
+    Avec Sauvegarder : fait aussi la restauration d'essai.
+.PARAMETER SansNotification
+    Aucune notification Windows (essais).
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Installer', 'Reparer', 'Etat', 'Desinstaller')] [string] $Action = 'Installer',
+    [ValidateSet('Installer', 'Reparer', 'Etat', 'Desinstaller', 'Sauvegarder', 'Restaurer', 'PreparerDisque', 'NettoyerAncienneBase')] [string] $Action = 'Installer',
     [string] $Version = '',
     [switch] $Simulation,
     [string] $Racine = 'C:\CoGes',
@@ -47,7 +67,16 @@ param(
     [string] $TelephoneGerant = '',
     [string] $EmailGerant = '',
     [string] $Offre = '',
-    [string] $NoteContrat = ''
+    [string] $NoteContrat = '',
+    [string] $Fichier = '',
+    [string] $Cle = '',
+    [string] $Lecteur = '',
+    [string] $ClePublique = '',
+    [string] $LecteurCle = '',
+    [switch] $CleCopiee,
+    [switch] $ConfirmerRestauration,
+    [switch] $Essai,
+    [switch] $SansNotification
 )
 
 Set-StrictMode -Version Latest

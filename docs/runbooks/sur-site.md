@@ -7,7 +7,8 @@ fois les images téléchargées, et rien n'est joignable depuis le réseau du ma
 Il est écrit pour quelqu'un qui débute : chaque commande se copie telle quelle dans
 **PowerShell** (menu Démarrer, taper « PowerShell », Entrée).
 
-> Lots 1 à 3 sur 6. Ce qui n'existe pas encore est listé à la fin (« Ce qui n'existe pas encore »).
+> Lots 1 à 4 sur 6. Ce qui n'existe pas encore est listé à la fin (« Ce qui n'existe pas encore »).
+> Sauvegarde et restauration : section « Sauvegarde et restauration » (lot 4, ADR 0127).
 
 ## Installer en une commande (lot 3, ADR 0126)
 
@@ -54,7 +55,8 @@ valeur de `coges.env`.
 **Ce qu'il ne fait pas** : installer Docker Desktop (sa licence dépend de la taille du
 client : à vérifier avant), activer la virtualisation dans le BIOS, changer les réglages de
 Docker Desktop (il dit seulement s'il faut cocher « Start Docker Desktop when you sign
-in »), ouvrir un port ou le pare-feu, sauvegarder (lot 4).
+in »), ouvrir un port ou le pare-feu. Il pose la sauvegarde automatique et en fait une
+première (lot 4, « Sauvegarde et restauration »).
 
 **Relancer ne casse rien** : `Installer` relancé sur le même PC garde le programme, les
 réglages, la base et la société, répond « rien à faire » pour la licence, et reprend là où un
@@ -88,9 +90,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\i
 powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action Desinstaller
 ```
 
-`-Action Desinstaller -EffacerLesDonnees` efface aussi les données, après avoir fait
-retaper le code de la boutique puis `EFFACER` : **sur un PC d'essai seulement** (aucune
-sauvegarde tant que le lot 4 n'existe pas). `-Simulation` sur n'importe quelle action annonce
+`-Action Desinstaller -EffacerLesDonnees` efface aussi les données : il exige d'abord une
+sauvegarde bonne de moins d'une heure (faite sur place si besoin) et dit où elle est, puis
+fait retaper le code de la boutique et `EFFACER`. Ces données ne reviennent qu'avec
+`-Action Restaurer` et la **clé privée** du client. `-Simulation` sur n'importe quelle action annonce
 chaque étape sans rien écrire ni lancer.
 
 Les étapes manuelles ci-dessous restent le **secours** si le script ne peut pas aller au bout.
@@ -358,7 +361,7 @@ Services : `caddy` (entrée), `front` (écrans), `api`, `worker` et `beat` (tâc
 et de nuit), `relay` (événements), `redis`, `postgres` (la base).
 
 > **Jamais `coges down -v`** : le `-v` efface les volumes, donc **toutes les données** du
-> client. Tant que la sauvegarde locale n'existe pas (lot 4), rien ne les ramènerait.
+> client. Seule une sauvegarde (section « Sauvegarde et restauration ») les ramènerait.
 
 Après un redémarrage du PC, Docker Desktop relance CoGes tout seul (si l'option « Start
 Docker Desktop when you sign in » est cochée, et après l'ouverture de la session Windows).
@@ -418,9 +421,10 @@ coges up -d
 **Attention : une migration déjà jouée ne se défait pas.** La règle de CoGes est qu'une
 migration reste compatible avec la version précédente de l'application : revenir en
 arrière fonctionne donc d'une version à la précédente. Au-delà, ou en cas de doute, il
-faudrait restaurer une sauvegarde faite avant la mise à jour, ce qui est le sujet du lot 4.
-Tant qu'il n'existe pas, n'installez une nouvelle version chez un client qu'après l'avoir
-essayée sur un PC de test.
+faut restaurer une sauvegarde faite avant la mise à jour : lancez `-Action Sauvegarder` juste
+avant de changer de version, puis `-Action Restaurer` (section « Sauvegarde et restauration »)
+avec la version d'avant réinstallée. N'installez une nouvelle version chez un client qu'après
+l'avoir essayée sur un PC de test.
 
 ---
 
@@ -488,11 +492,122 @@ Puis reprenez à l'étape 6. Les mots de passe de `coges.env` peuvent alors chan
 
 ---
 
+## Sauvegarde et restauration (lot 4, ADR 0127)
+
+### Ce qui se fait tout seul
+
+- **Deux sauvegardes par jour**, à **13 h 00** et à **20 h 30**, par la tâche planifiée
+  « CoGes - sauvegarde » (posée par `Installer` et `Reparer`). Si le PC était éteint à
+  l'heure prévue, elle se fait au démarrage suivant ; au démarrage aussi si la dernière a plus
+  de 20 heures. CoGes reste ouvert pendant ce temps (aucune coupure).
+- Chaque sauvegarde est la **base entière**, **chiffrée** par la clé publique du client :
+  le PC peut chiffrer mais pas relire. Elle va dans `C:\CoGes\sauvegardes\` :
+  `coges-<code>-AAAAMMJJ-HHMM-<version>.coges`, avec `.sha256` (empreinte) et
+  `.manifest.json` (date, version, lignes comptées). Aucun fichier en clair ne touche le
+  disque du PC ni la clé USB.
+- Le PC garde les **14 dernières**, plus une par semaine sur 8 semaines, plus une par mois
+  sur 12 mois. Une sauvegarde ratée est marquée `.echec` et gardée pour l'enquête.
+- **Le dimanche** (ou au premier démarrage après), la sauvegarde est **restaurée pour
+  essai** dans une base temporaire, contrôlée comme celle de la production, puis effacée.
+- Pas sauvegardés : Redis (file d'attente, cache), Caddy, les fichiers statiques, l'état de
+  beat, les modèles de prévision (refaits chaque lundi nuit ; les prévisions elles-mêmes sont
+  en base). Ni `coges.env` : il reste dans le gestionnaire de mots de passe de CoGes.
+
+### La clé USB du client
+
+Le technicien prépare une clé USB (ou un disque externe) **pour cette boutique** :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action PreparerDisque -Lecteur E: -CodeBoutique boutique-diallo
+```
+
+Il écrit `COGES-SAUVEGARDE.txt` (le code de la boutique) à la racine de la clé, vérifie la
+place et y fait une première copie. Ensuite, **à chaque sauvegarde où la clé est branchée**,
+la dernière y est copiée dans `E:\CoGes\` puis relue ; la clé en garde 10. Une clé **sans**
+ce fichier (ou celle d'une autre boutique) n'est jamais touchée. Le commerçant n'a qu'à la
+brancher de temps en temps, et la ranger **hors du magasin**.
+
+### Ce que dit `Etat`
+
+`-Action Etat` ajoute : la dernière sauvegarde (date, taille), la dernière copie hors du PC,
+la dernière restauration d'essai (réussie ou non), le nombre de fichiers gardés, une ancienne
+base gardée après une restauration, et ce qu'il faut faire.
+
+### Quand Windows prévient
+
+Une notification « CoGes » ne s'affiche **que s'il faut agir** :
+
+| Message | Quoi faire |
+|---|---|
+| « CoGes n'a pas pu sauvegarder vos données depuis 2 jours… » | `-Action Etat`, puis `-Action Sauvegarder` ; lire `C:\CoGes\journaux\sauvegarde-*.log` |
+| « Branchez la clé CoGes… » | brancher la clé préparée ; la copie se fait à la sauvegarde suivante |
+| « Le disque du PC est presque plein… » | libérer de la place (moins de 5 Go libres) |
+| « La dernière sauvegarde ne se relit pas : appelez CoGes. » | `-Action Etat`, journal du jour, puis `-Action Sauvegarder -Essai` |
+
+### La clé de sauvegarde (une par client)
+
+La **clé privée** relit les sauvegardes : elle n'est **jamais** sur le PC du client. Rangez-la
+dans le gestionnaire de mots de passe de CoGes (fiche du client, à côté de `coges.env`), avec
+une copie hors ligne. **Perdue, aucune sauvegarde de ce client ne se relit.**
+
+De préférence, tirez la paire **chez CoGes**, sur un poste Linux avec Docker (image `worker`
+de la version installée, réseau coupé) :
+
+```bash
+mkdir -p ~/cles-coges && docker run --rm --network none --user "$(id -u):$(id -g)" \
+  -v "$PWD/deploy/onprem/sauvegarde:/srv/onprem/sauvegarde:ro" -v ~/cles-coges:/cles \
+  --entrypoint python ghcr.io/papa-bothie/coges/worker:vX.Y.Z -I \
+  /srv/onprem/sauvegarde/coffre.py paire --prive /cles/boutique-diallo.cle --publique /cles/boutique-diallo.pub
+```
+
+Puis, sur le PC : `-Action Installer … -ClePublique E:\boutique-diallo.pub` (ou `-Action
+Reparer -ClePublique …` sur un PC déjà installé). Seule la **publique** est posée, dans
+`C:\CoGes\reglages\cle-publique-sauvegarde.txt`.
+
+Sans `-ClePublique`, le script tire la paire sur place : la clé privée est écrite dans un
+fichier sur le **disque amovible** donné par `-LecteurCle E:` (jamais à l'écran, dans le
+journal ni dans le presse-papiers), puis il demande `COPIE-FAITE`. Rangez le fichier chez
+CoGes, puis effacez-le de la clé USB.
+
+### Restaurer (technicien)
+
+Sur le **même PC** (après une erreur, une panne) ou sur un **PC neuf** (installé d'abord
+par `-Action Installer`, même code de boutique) :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action Restaurer -Fichier E:\CoGes\coges-boutique-diallo-20261120-2030-v1.4.0.coges -Cle E:\boutique-diallo.cle
+```
+
+Dans l'ordre, chaque étape s'arrête au premier problème **sans rien changer** :
+
+1. empreinte et manifeste ; récapitulatif (boutique, date, version, ventes) ; taper `RESTAURER` ;
+2. version : une sauvegarde **plus récente** que le programme est refusée (« installez d'abord
+   la version vX.Y.Z », `-Action Reparer -Version vX.Y.Z`) ; plus ancienne, la base est mise
+   à jour après ;
+3. la base actuelle est **sauvegardée d'abord** ;
+4. la sauvegarde est déchiffrée **dans un conteneur** (la clé privée passe par l'entrée
+   standard, jamais copiée sur le PC), restaurée **à côté** (`coges_restauration`), contrôlée ;
+5. l'application s'arrête (page « CoGes revient dans un instant »), les bases sont échangées :
+   l'ancienne devient `coges_avant_AAAAMMJJ_HHMM` ;
+6. démarrage, licence relue (elle revient **avec** la base : ni `create-company` ni
+   `activate-license` à refaire), page d'accueil ;
+7. en cas d'échec après l'échange : **retour automatique** à l'ancienne base.
+
+Chacun se reconnecte avec le mot de passe qu'il avait au moment de la sauvegarde. Un
+`coges.env` neuf (PC neuf) convient : les rôles de la base viennent de l'installation, pas de
+la sauvegarde. L'ancienne base reste là tant qu'on ne lance pas `-Action
+NettoyerAncienneBase` (code de la boutique retapé) ; `Etat` la signale.
+
+`-Action Sauvegarder`, `Restaurer`, l'essai du dimanche, la tâche de démarrage et `Reparer`
+partagent un **verrou** (`C:\CoGes\coges.verrou`) : une action qui le trouve pris attend ou
+s'arrête en disant laquelle tourne. Un verrou laissé par un programme arrêté se libère seul.
+
+---
+
 ## Ce qui n'existe pas encore
 
 | Sujet | Lot | En attendant |
 |---|---|---|
-| Sauvegarde et restauration locales | 4 | **aucune sauvegarde** : ne pas y mettre de données réelles sans copie |
 | Mises à jour à distance et retour arrière automatique | 5 | « Mettre à jour à la main » ci-dessus |
 | Support à distance et journaux | 6 | sur place, `coges logs` |
 
@@ -507,7 +622,10 @@ workflow « Sur site » : réglages, contrôle, migrations (deux fois), démarra
 licence et `license-status`, parcours Chromium (connexion, rechargement, service worker,
 vente), tâches planifiées, tâche de nuit des abonnements à +45 jours (la société licenciée se connecte toujours, une
 société témoin sans licence est suspendue), arrêt et redémarrage, changement de version,
-arrêt brutal de PostgreSQL.
+arrêt brutal de PostgreSQL ; puis, par le vrai script Windows sous `pwsh` : sauvegarde avec
+restauration d'essai et copie sur un « disque » préparé, `down -v` et réglages neufs,
+restauration (mêmes lignes, licence revenue), fichier abîmé et révision inconnue refusés,
+échec simulé après la bascule (retour à l'ancienne base), nettoyage.
 
 ```bash
 ONPREM_REGISTRY=coges-local ONPREM_PORT=8080 deploy/onprem-ci/verifier.sh

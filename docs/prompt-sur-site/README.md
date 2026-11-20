@@ -6,22 +6,27 @@ utilisateurs actuels ne voient aucune différence.
 
 | Lot | Contenu | Résultat attendu | État |
 |---|---|---|---|
-| 1 | Assemblage : compose, Caddyfile, réglages, contrôle, migrations locales (`01-assemblage.md`) | CoGes démarre sur `http://localhost` | ✅ code et CI Linux (ADR 0124) ; **à vérifier sur Windows** par le propriétaire |
-| 2 | Commande `activate-license` et premier démarrage (`02-licence.md`) | Une société créée, licence activée | ✅ code et CI Linux (ADR 0125) ; **à vérifier sur Windows** |
-| 3 | Script d'installation Windows (`03-script-installation.md`) | Installation en une commande | ✅ code et tests (ADR 0126) ; **à vérifier sur Windows** |
-| 4 | Sauvegarde et restauration locales | Une panne simulée, données retrouvées | ⬜ |
+| 1 | Assemblage : compose, Caddyfile, réglages, contrôle, migrations locales (`01-assemblage.md`) | CoGes démarre sur `http://localhost` | ✅ code et CI Linux (ADR 0124) ; vérifié sur Windows le 20/11/2026, v0.2.0 |
+| 2 | Commande `activate-license` et premier démarrage (`02-licence.md`) | Une société créée, licence activée | ✅ code et CI Linux (ADR 0125) ; vérifié sur Windows le 20/11/2026, v0.2.0 |
+| 3 | Script d'installation Windows (`03-script-installation.md`) | Installation en une commande | ✅ code et tests (ADR 0126) ; vérifié sur Windows le 20/11/2026, v0.2.0 |
+| 4 | Sauvegarde et restauration locales (`04-sauvegarde-restauration.md`) | Une panne simulée, données retrouvées | ✅ code et CI (ADR 0127) ; **à vérifier sur Windows** |
 | 5 | Mises à jour à distance et retour arrière | Passage d'une version à la suivante sans se déplacer | ⬜ |
 | 6 | Support à distance et journaux | Intervention sans se déplacer | ⬜ |
 
+Lots 1 à 3 vérifiés sur un vrai PC Windows 11 le 20/11/2026, avec la version v0.2.0, en suivant
+le guide de test : les 16 vérifications passent.
+
 Guide d'installation : `docs/runbooks/sur-site.md`. Décisions : `docs/decisions/0124-assemblage-sur-site.md`,
-`docs/decisions/0125-licence-sur-site.md`, `docs/decisions/0126-installation-windows-sur-site.md`.
+`docs/decisions/0125-licence-sur-site.md`, `docs/decisions/0126-installation-windows-sur-site.md`,
+`docs/decisions/0127-sauvegarde-sur-site.md`.
 
 ## Où sont les fichiers
 
 | Dossier | Rôle |
 |---|---|
 | `deploy/onprem/` | ce qui est livré au client, autonome : compose, Caddyfile, amorçage des rôles, modèle de réglages, contrôles |
-| `deploy/onprem/windows/` | script d'installation Windows (lot 3) : `installer.ps1`, fonctions `CoGes.Install.ps1`, tâche `demarrage.ps1`, tests Pester |
+| `deploy/onprem/windows/` | script d'installation Windows (lot 3) : `installer.ps1`, fonctions `CoGes.Install.ps1`, tâches `demarrage.ps1` et `sauvegarde.ps1` (lot 4), tests Pester |
+| `deploy/onprem/sauvegarde/` | sauvegarde (lot 4) : chiffrement `coffre.py`, opérations de base `base.py`, `pg.sh`, copie fidèle de `verify_restore.py` |
 | `deploy/onprem-ci/` | vérification de bout en bout (`verifier.sh`, parcours Chromium, relecture des données) ; jamais livré |
 | `.github/workflows/onprem.yml` | workflow « Sur site », à part de la CI et du déploiement |
 | `backend/tests/unit/test_onprem_*.py` | tests sur les fichiers versionnés (dont la table des dérogations) |
@@ -29,6 +34,8 @@ Guide d'installation : `docs/runbooks/sur-site.md`. Décisions : `docs/decisions
 | `backend/tests/integration/test_onprem_license.py`, `tests/architecture/test_onprem_license_is_cli_only.py` | la licence en base, et appelée par la seule commande |
 
 ## Lot 1 — à vérifier sur la machine Windows
+
+> **Vérifié sur Windows 11 le 20/11/2026, avec v0.2.0.**
 
 La CI tourne sous Linux. Reste à constater, sur un PC Windows 11 avec Docker Desktop (WSL 2),
 en suivant `docs/runbooks/sur-site.md` :
@@ -66,6 +73,8 @@ en suivant `docs/runbooks/sur-site.md` :
 
 ## Lot 2 — à vérifier sur la machine Windows
 
+> **Vérifié sur Windows 11 le 20/11/2026, avec v0.2.0.**
+
 Avec des images qui contiennent la commande (étiquette `vX.Y.Z` après la fusion), en
 suivant les étapes 8 à 11 de `docs/runbooks/sur-site.md` dans une fenêtre PowerShell :
 
@@ -80,6 +89,8 @@ suivant les étapes 8 à 11 de `docs/runbooks/sur-site.md` dans une fenêtre Pow
 À rapporter : la sortie exacte des trois commandes et tout message d'erreur.
 
 ## Lot 3 — à vérifier sur la machine Windows
+
+> **Vérifié sur Windows 11 le 20/11/2026, avec v0.2.0.**
 
 La CI joue les tests Pester sous Windows PowerShell 5.1 et pwsh, sans Docker (les runners
 Windows n'exécutent pas les conteneurs Linux). Reste à constater sur un PC Windows 11 de
@@ -117,3 +128,35 @@ NTFS, la lecture de `settings-store.json` de Docker Desktop, la détection de la
 virtualisation quand WSL 2 tourne.
 
 À rapporter : durée, messages exacts d'erreur, mémoire utilisée.
+
+## Lot 4 — à vérifier sur la machine Windows
+
+La CI joue la sauvegarde et la restauration de bout en bout sous Linux, par le vrai script
+sous pwsh (`verifier.sh`), et les tests Pester sous Windows PowerShell 5.1 et pwsh sans
+Docker. Reste à constater sur le PC Windows 11 :
+
+1. Après `Installer`, la tâche « CoGes - sauvegarde » existe et la première sauvegarde est dans
+   `C:\CoGes\sauvegardes\` (taille, `.manifest.json`, `.sha256`).
+2. `-Action Sauvegarder` à la main, CoGes ouvert dans le navigateur pendant ce temps : aucune coupure.
+3. Clé USB préparée (`PreparerDisque`), puis débranchée et rebranchée : copie faite à la sauvegarde suivante ;
+   une clé **sans** repère reste intacte.
+4. PC éteint à l'heure prévue puis rallumé : rattrapage au démarrage.
+5. Toast « Branchez la clé CoGes » (forcer la date du dernier essai dans un PC de test) : il s'affiche, en
+   français, sans fenêtre noire.
+6. Restauration d'essai de la semaine : résultat dans `Etat`.
+7. **Panne simulée** : `Desinstaller -EffacerLesDonnees`, puis `Installer`, puis `Restaurer` depuis la clé USB :
+   la société, les ventes et la licence sont là ; connexion du gérant.
+8. Restauration sur un **deuxième PC** (si disponible) avec le même fichier et la clé privée.
+9. Fichier abîmé (un octet changé) : refusé, rien n'a changé.
+10. Aucun mot de passe ni clé dans `C:\CoGes\journaux\*.log`, et aucun fichier `.dump` en clair nulle part
+    sur le disque (`Get-ChildItem C:\ -Recurse -Filter *.dump`).
+
+Points propres à Windows que ni Linux ni la CI ne prouvent : la tâche planifiée à trois
+déclencheurs et `StartWhenAvailable` sans droits d'administrateur, la notification WinRT
+sous Windows PowerShell 5.1, la détection des disques amovibles (`DriveInfo`), le montage
+`-v C:\CoGes\sauvegardes:/sortie` par Docker Desktop, le texte de la clé privée passé à
+`docker compose run` par l'entrée standard depuis 5.1, la clé privée tirée sur place
+(`-LecteurCle`).
+
+À rapporter : durée d'une sauvegarde et d'une restauration, taille des fichiers, messages
+exacts d'erreur, mémoire utilisée.

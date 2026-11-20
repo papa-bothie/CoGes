@@ -51,10 +51,15 @@ $script:CogesProgrammeFiles = @(
     'maintenance.html',
     'coges.env.example',
     'check_onprem_env.py',
-    'postgres-init/01-roles.sql'
+    'postgres-init/01-roles.sql',
+    'sauvegarde/pg.sh',
+    'sauvegarde/coffre.py',
+    'sauvegarde/base.py',
+    'sauvegarde/verify_restore.py',
+    'windows/sauvegarde.ps1'
 )
 #: Lus par un conteneur Linux : un « \r » les casserait.
-$script:CogesLfFiles = @('Caddyfile', 'postgres-init/01-roles.sql')
+$script:CogesLfFiles = @('Caddyfile', 'postgres-init/01-roles.sql', 'sauvegarde/pg.sh')
 
 #: Offres et nombre de comptes actifs (révision 0028, ADR 0091).
 $script:CogesPlans = [ordered]@{ starter = 3; business = 7; premium = 10 }
@@ -550,7 +555,10 @@ function Invoke-Docker {
        quelle (progression du pull, mot de passe sans écho) ; sinon la sortie est lue. #>
     param(
         [Parameter(Mandatory)] [string[]] $Arguments,
-        [switch] $Interactive
+        [switch] $Interactive,
+        # Texte donné à l'entrée standard (clé privée de la restauration) : jamais un argument
+        # ni une variable d'environnement, donc absent de « docker inspect » et du journal.
+        [AllowNull()] [string] $InputText = $null
     )
     if ($script:CogesState.Simulation) {
         throw 'Invoke-Docker appelé en simulation : rien ne doit être lancé.'
@@ -576,7 +584,8 @@ function Invoke-Docker {
         else {
             # Sortie standard (réponse de la commande) et sortie d'erreur (progression de
             # compose, alembic…) gardées ensemble dans Output, la première seule dans Stdout.
-            $lines = @(& docker @Arguments 2>&1)
+            if ($null -ne $InputText) { $lines = @($InputText | & docker @Arguments 2>&1) }
+            else { $lines = @(& docker @Arguments 2>&1) }
             $code = $LASTEXITCODE
             foreach ($item in $lines) {
                 if ($item -is [Management.Automation.ErrorRecord]) {
@@ -1320,7 +1329,7 @@ function Install-CogesComfort {
 
 function Start-CogesAtLogon {
     <# La tâche planifiée : attend le moteur Docker (5 minutes au plus), puis up -d. #>
-    param([Parameter(Mandatory)] [string] $Racine, [int] $TimeoutSeconds = 300)
+    param([Parameter(Mandatory)] [string] $Racine, [int] $TimeoutSeconds = 300, [int] $LockWaitSeconds = 900)
     $paths = Get-CogesPath $Racine
     $script:CogesState.LogPath = Join-Path $paths.Journaux ('demarrage-{0}.log' -f (Get-Date).ToString('yyyyMMdd'))
     New-Item -ItemType Directory -Force -Path $paths.Journaux | Out-Null
@@ -1328,14 +1337,1271 @@ function Start-CogesAtLogon {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     while ((Get-Date) -lt $deadline) {
         if ((Invoke-Docker -Arguments @('version', '--format', '{{.Server.Os}}')).ExitCode -eq 0) {
-            $up = Invoke-CogesCompose -Paths $paths -Arguments @('up', '-d')
-            Write-Log -Message ('up -d : code {0}' -f $up.ExitCode)
-            return $up.ExitCode
+            # Une restauration en cours arrête l'application exprès : on l'attend (15 min), sinon rien.
+            try { $lock = Enter-CogesLock -Paths $paths -Action 'Démarrage' -WaitSeconds $LockWaitSeconds -IntervalSeconds 15 }
+            catch {
+                Write-Log -Message ('verrou pris, up -d non lancé : ' + $_.Exception.Message) -Level ATTENTION
+                return 1
+            }
+            try {
+                $up = Invoke-CogesCompose -Paths $paths -Arguments @('up', '-d')
+                Write-Log -Message ('up -d : code {0}' -f $up.ExitCode)
+                return $up.ExitCode
+            }
+            finally { Exit-CogesLock $lock }
         }
         Start-Sleep -Seconds 10
     }
     Write-Log -Message 'Le moteur Docker n''a pas répondu en 5 minutes : rien lancé.' -Level ECHEC
     return 1
+}
+
+# ---------------------------------------------------------------------------- lot 4 : sauvegarde (ADR 0127)
+#
+# Ce qui est binaire (dump, fichier chiffré) ne traverse JAMAIS un tube PowerShell : il reste
+# dans les conteneurs (volume sauvegarde-travail) ou passe par des fichiers. Le dump en clair
+# ne touche ni le dossier du PC ni la clé USB. Seule la clé privée (une ligne de texte) passe
+# par l'entrée standard du conteneur qui déchiffre, à la restauration ; jamais un argument,
+# une variable d'environnement, un fichier copié sur le PC, l'écran ou le journal.
+
+#: Heures des sauvegardes automatiques, et rattrapage au démarrage au-delà de 20 h.
+$script:CogesBackupSlots = @('13:00', '20:30')
+$script:CogesBackupCatchUpHours = 20
+$script:CogesBackupTaskName = 'CoGes - sauvegarde'
+#: Rétention sur le PC (14 dernières, 1 par semaine sur 8, 1 par mois sur 12) et sur le disque.
+$script:CogesKeepLast = 14
+$script:CogesKeepWeeks = 8
+$script:CogesKeepMonths = 12
+$script:CogesKeepOffsite = 10
+#: Place minimale laissée libre après une sauvegarde.
+$script:CogesMinFreeBytes = 2GB
+#: Taille minimale par rapport à la dernière bonne (comme la production, ADR 0088).
+$script:CogesMinRatio = 0.5
+#: Le repère d'un disque préparé par le technicien, à sa racine : il contient le code de la boutique.
+$script:CogesDiskMarker = 'COGES-SAUVEGARDE.txt'
+$script:CogesOffsiteFolder = 'CoGes'
+$script:CogesPrivatePrefix = 'COGES-CLE-PRIVEE-1:'
+$script:CogesPublicPrefix = 'COGES-CLE-PUBLIQUE-1:'
+#: Alertes : plus de 48 h sans bonne sauvegarde, 7 jours sans copie hors du PC, moins de 5 Go libres.
+$script:CogesAlertBackupHours = 48
+$script:CogesAlertOffsiteDays = 7
+$script:CogesAlertFreeBytes = 5GB
+#: Le verrou commun (sauvegarde, restauration, essai, démarrage, réparation).
+$script:CogesLockFile = 'coges.verrou'
+#: Notifications Windows : coupées par -SansNotification (tests, technicien).
+$script:CogesToastEnabled = $true
+
+$script:CogesBackupPattern = '^coges-(?<slug>[a-z0-9]+(?:-[a-z0-9]+)*)-(?<date>\d{8})-(?<time>\d{4}(?:\d{2})?)-(?<version>[A-Za-z0-9][A-Za-z0-9.-]*)\.coges$'
+
+function Get-CogesBackupPath {
+    <# Les endroits de la sauvegarde, à côté des trois du guide. #>
+    param([Parameter(Mandatory)] $Paths)
+    $folder = Join-Path $Paths.Racine 'sauvegardes'
+    return [pscustomobject]@{
+        Dossier     = $folder
+        Restauration = Join-Path $folder 'restauration'
+        Etat        = Join-Path $folder 'etat.json'
+        ClePublique = Join-Path $Paths.Reglages 'cle-publique-sauvegarde.txt'
+        Verrou      = Join-Path $Paths.Racine $script:CogesLockFile
+    }
+}
+
+# ---------------------------------------------------------------------------- noms et rétention (fonctions pures)
+
+function Get-CogesBackupName {
+    <# coges-<code-boutique>-AAAAMMJJ-HHMM-<version>.coges #>
+    param(
+        [Parameter(Mandatory)] [string] $Slug,
+        [Parameter(Mandatory)] [datetime] $Date,
+        [Parameter(Mandatory)] [string] $Version,
+        [switch] $WithSeconds
+    )
+    $format = 'yyyyMMdd-HHmm'
+    if ($WithSeconds) { $format = 'yyyyMMdd-HHmmss' }
+    return ('coges-{0}-{1}-{2}.coges' -f $Slug, $Date.ToString($format, [Globalization.CultureInfo]::InvariantCulture), $Version)
+}
+
+function ConvertFrom-CogesBackupName {
+    <# Le code, la date et la version d'un nom de sauvegarde ; $null pour tout autre nom. #>
+    param([AllowEmptyString()] [string] $Name)
+    if ($Name -cnotmatch $script:CogesBackupPattern) { return $null }
+    $stamp = $Matches['date'] + $Matches['time'].PadRight(6, '0')
+    $date = [datetime]::ParseExact($stamp, 'yyyyMMddHHmmss', [Globalization.CultureInfo]::InvariantCulture)
+    return [pscustomobject]@{ Name = $Name; Slug = $Matches['slug']; Date = $date; Version = $Matches['version'] }
+}
+
+function Select-CogesBackupToDelete {
+    <# Les noms à effacer : on garde les $Keep dernières, la plus récente de chacune des
+       $Weeks dernières semaines et de chacun des $Months derniers mois. La plus récente
+       n'est jamais effacée. Les éléments : Name et Date (bonnes sauvegardes seulement). #>
+    param(
+        [AllowEmptyCollection()] [object[]] $Items = @(),
+        [Parameter(Mandatory)] [datetime] $Now,
+        [int] $Keep = $script:CogesKeepLast,
+        [int] $Weeks = $script:CogesKeepWeeks,
+        [int] $Months = $script:CogesKeepMonths
+    )
+    $sorted = @($Items | Sort-Object -Property @{ Expression = 'Date'; Descending = $true }, @{ Expression = 'Name'; Descending = $true })
+    if ($sorted.Count -eq 0) { return @() }
+    $kept = @{}
+    for ($index = 0; $index -lt [Math]::Min([Math]::Max($Keep, 1), $sorted.Count); $index++) { $kept[$sorted[$index].Name] = $true }
+    $weekStart = $Now.Date.AddDays(-(([int]$Now.DayOfWeek + 6) % 7))
+    $weeksSeen = @{}
+    $monthsSeen = @{}
+    foreach ($item in $sorted) {
+        $date = [datetime]$item.Date
+        $monday = $date.Date.AddDays(-(([int]$date.DayOfWeek + 6) % 7))
+        $weekAge = [int](($weekStart - $monday).TotalDays / 7)
+        if ($weekAge -ge 0 -and $weekAge -lt $Weeks -and -not $weeksSeen.ContainsKey($weekAge)) {
+            $weeksSeen[$weekAge] = $true
+            $kept[$item.Name] = $true
+        }
+        $monthAge = ($Now.Year - $date.Year) * 12 + ($Now.Month - $date.Month)
+        if ($monthAge -ge 0 -and $monthAge -lt $Months -and -not $monthsSeen.ContainsKey($monthAge)) {
+            $monthsSeen[$monthAge] = $true
+            $kept[$item.Name] = $true
+        }
+    }
+    return @($sorted | Where-Object { -not $kept.ContainsKey($_.Name) } | ForEach-Object { $_.Name })
+}
+
+function Test-CogesBackupDue {
+    <# Faut-il sauvegarder maintenant ? Oui si la dernière bonne a plus de 20 h, ou si une
+       heure prévue (13 h 00, 20 h 30) est passée depuis la dernière bonne. #>
+    param(
+        [Parameter(Mandatory)] [datetime] $Now,
+        [AllowNull()] $LastGood,
+        [string[]] $Slots = $script:CogesBackupSlots,
+        [int] $CatchUpHours = $script:CogesBackupCatchUpHours
+    )
+    if ($null -eq $LastGood) { return $true }
+    $last = [datetime]$LastGood
+    if (($Now - $last).TotalHours -ge $CatchUpHours) { return $true }
+    $latestSlot = $null
+    foreach ($day in @($Now.Date.AddDays(-1), $Now.Date)) {
+        foreach ($slot in $Slots) {
+            $parts = $slot.Split(':')
+            $at = $day.AddHours([int]$parts[0]).AddMinutes([int]$parts[1])
+            if ($at -le $Now -and ($null -eq $latestSlot -or $at -gt $latestSlot)) { $latestSlot = $at }
+        }
+    }
+    return ($null -ne $latestSlot -and $last -lt $latestSlot)
+}
+
+function Test-CogesTrialDue {
+    <# La restauration d'essai : une fois par semaine, le dimanche ou au premier passage
+       après. Due si aucun essai réussi depuis le dernier dimanche 0 h. #>
+    param([Parameter(Mandatory)] [datetime] $Now, [AllowNull()] $LastSuccess)
+    $sunday = $Now.Date.AddDays(-([int]$Now.DayOfWeek))
+    if ($null -eq $LastSuccess) { return $true }
+    return ([datetime]$LastSuccess -lt $sunday)
+}
+
+function Test-CogesSizePlausible {
+    <# Non vide, et pas moins de la moitié de la dernière bonne (base vidée, dump coupé ?). #>
+    param([long] $Size, [long] $Previous = 0, [double] $Ratio = $script:CogesMinRatio)
+    if ($Size -le 0) { return $false }
+    if ($Previous -le 0) { return $true }
+    return ($Size -ge [Math]::Floor($Ratio * $Previous))
+}
+
+function Test-CogesEnoughSpace {
+    <# Après la sauvegarde prévue, il doit rester 2 Go libres. #>
+    param([long] $Free, [long] $Planned, [long] $Minimum = $script:CogesMinFreeBytes)
+    return (($Free - $Planned) -ge $Minimum)
+}
+
+function Get-CogesDiskMarkerState {
+    <# Le repère d'un disque : absent, autre (une autre boutique) ou ok. #>
+    # Sans type : un [string] changerait $null (pas de repère) en '' (repère vide).
+    param([AllowNull()] $MarkerText, [AllowEmptyCollection()] [string[]] $Slugs = @())
+    if ($null -eq $MarkerText) { return 'absent' }
+    $slug = ([string]$MarkerText -replace '^\uFEFF', '').Trim()
+    if ($slug -and (@($Slugs) -ccontains $slug)) { return 'ok' }
+    return 'autre'
+}
+
+function Get-CogesBackupAlert {
+    <# Ce qu'il faut dire au commerçant (rien si tout va bien). Mots simples, sans jargon. #>
+    param(
+        [Parameter(Mandatory)] [datetime] $Now,
+        [AllowNull()] $LastGood,
+        [AllowNull()] $LastOffsite,
+        [long] $FreeBytes = [long]::MaxValue,
+        [AllowNull()] $TrialOk
+    )
+    $alerts = New-Object System.Collections.Generic.List[object]
+    if ($null -eq $LastGood -or ($Now - [datetime]$LastGood).TotalHours -ge $script:CogesAlertBackupHours) {
+        $alerts.Add([pscustomobject]@{ Code = 'sauvegarde'; Texte = 'CoGes n''a pas pu sauvegarder vos données depuis 2 jours. Laissez le PC allumé et appelez CoGes si ce message revient.' })
+    }
+    if ($null -eq $LastOffsite -or ($Now - [datetime]$LastOffsite).TotalDays -ge $script:CogesAlertOffsiteDays) {
+        $alerts.Add([pscustomobject]@{ Code = 'cle'; Texte = 'Branchez la clé CoGes : vos données n''ont pas été copiées hors du PC depuis 7 jours.' })
+    }
+    if ($FreeBytes -lt $script:CogesAlertFreeBytes) {
+        $alerts.Add([pscustomobject]@{ Code = 'disque'; Texte = 'Le disque du PC est presque plein : CoGes ne pourra bientôt plus sauvegarder. Appelez CoGes.' })
+    }
+    if ($false -eq $TrialOk) {
+        $alerts.Add([pscustomobject]@{ Code = 'essai'; Texte = 'La dernière sauvegarde ne se relit pas : appelez CoGes.' })
+    }
+    return $alerts.ToArray()
+}
+
+# ---------------------------------------------------------------------------- clés (X25519, RFC 7748)
+
+function ConvertTo-CogesBase64Url {
+    param([Parameter(Mandatory)] [byte[]] $Bytes)
+    return [Convert]::ToBase64String($Bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+}
+
+function ConvertFrom-CogesBase64Url {
+    param([Parameter(Mandatory)] [string] $Text)
+    $padded = $Text.Replace('-', '+').Replace('_', '/')
+    $padded += '=' * ((4 - $padded.Length % 4) % 4)
+    return , [Convert]::FromBase64String($padded)
+}
+
+function Get-CogesX25519Public {
+    <# La clé publique X25519 d'une clé privée (RFC 7748, échelle de Montgomery). Windows
+       PowerShell 5.1 (.NET Framework) n'a pas X25519 : calcul en BigInteger, une fois par
+       installation. Vérifié contre le vecteur du § 6.1 (tests Pester et Python). #>
+    param([Parameter(Mandatory)] [byte[]] $Private)
+    if ($Private.Length -ne 32) { throw 'clé privée X25519 : 32 octets attendus' }
+    try { Add-Type -AssemblyName System.Numerics -ErrorAction Stop } catch { Write-Verbose 'System.Numerics déjà chargé' }
+    $k = [byte[]]$Private.Clone()
+    $k[0] = $k[0] -band 248
+    $k[31] = ($k[31] -band 127) -bor 64
+    $p = [Numerics.BigInteger]::Pow(2, 255) - 19
+    $a24 = New-Object Numerics.BigInteger 121665
+    $x1 = New-Object Numerics.BigInteger 9
+    $x2 = [Numerics.BigInteger]::One
+    $z2 = [Numerics.BigInteger]::Zero
+    $x3 = $x1
+    $z3 = [Numerics.BigInteger]::One
+    $swap = 0
+    for ($t = 254; $t -ge 0; $t--) {
+        # Le bit t du scalaire, lu dans les octets (petit-boutiste) : ni -shr ni -band sur un
+        # BigInteger, que Windows PowerShell 5.1 convertirait en Int64.
+        $bit = ([int]$k[[int][Math]::Floor($t / 8)] -shr ($t % 8)) -band 1
+        if ($swap -bxor $bit) { $tmp = $x2; $x2 = $x3; $x3 = $tmp; $tmp = $z2; $z2 = $z3; $z3 = $tmp }
+        $swap = $bit
+        $a = ($x2 + $z2) % $p
+        $aa = ($a * $a) % $p
+        $b = (($x2 - $z2) % $p + $p) % $p
+        $bb = ($b * $b) % $p
+        $e = (($aa - $bb) % $p + $p) % $p
+        $c = ($x3 + $z3) % $p
+        $d = (($x3 - $z3) % $p + $p) % $p
+        $da = ($d * $a) % $p
+        $cb = ($c * $b) % $p
+        $sum = ($da + $cb) % $p
+        $diff = (($da - $cb) % $p + $p) % $p
+        $x3 = ($sum * $sum) % $p
+        $z3 = ($x1 * (($diff * $diff) % $p)) % $p
+        $x2 = ($aa * $bb) % $p
+        $z2 = ($e * (($aa + ($a24 * $e) % $p) % $p)) % $p
+    }
+    if ($swap) { $x2 = $x3; $z2 = $z3 }
+    $u = ($x2 * [Numerics.BigInteger]::ModPow($z2, $p - 2, $p)) % $p
+    $raw = $u.ToByteArray()
+    $out = New-Object byte[] 32
+    [Array]::Copy($raw, $out, [Math]::Min(32, $raw.Length))
+    return , $out
+}
+
+function New-CogesKeyPair {
+    <# Une paire de clés de sauvegarde, en texte : COGES-CLE-PRIVEE-1:… et COGES-CLE-PUBLIQUE-1:… #>
+    $private = New-CogesRandomByte 32
+    $public = Get-CogesX25519Public $private
+    return [pscustomobject]@{
+        Private = $script:CogesPrivatePrefix + (ConvertTo-CogesBase64Url $private)
+        Public  = $script:CogesPublicPrefix + (ConvertTo-CogesBase64Url $public)
+    }
+}
+
+function Test-CogesKeyText {
+    <# Une ligne « COGES-CLE-PUBLIQUE-1:… » (ou PRIVEE) de 32 octets en base64 url-safe. #>
+    param([AllowEmptyString()] [AllowNull()] [string] $Text, [ValidateSet('Publique', 'Privee')] [string] $Kind)
+    if (-not $Text) { return $false }
+    $lines = @(($Text -replace '^\uFEFF', '') -split "`r?`n" | Where-Object { $_.Trim() })
+    if ($lines.Count -ne 1) { return $false }
+    $prefix = $script:CogesPublicPrefix
+    if ($Kind -eq 'Privee') { $prefix = $script:CogesPrivatePrefix }
+    $line = $lines[0].Trim()
+    if (-not $line.StartsWith($prefix, [StringComparison]::Ordinal)) { return $false }
+    $body = $line.Substring($prefix.Length)
+    if ($body -cnotmatch '^[A-Za-z0-9_-]{43}$') { return $false }
+    return ((ConvertFrom-CogesBase64Url $body).Length -eq 32)
+}
+
+function Read-CogesKeyFile {
+    <# Lit un fichier de clé (une ligne), refuse tout autre contenu. Jamais affiché. #>
+    param([Parameter(Mandatory)] [string] $Path, [ValidateSet('Publique', 'Privee')] [string] $Kind)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        Stop-CogesStep -Probleme ('Fichier de clé introuvable : {0}' -f $Path) -QuoiFaire 'Vérifiez le chemin (clé USB branchée ?), puis relancez.'
+    }
+    $text = [IO.File]::ReadAllText($Path)
+    if (-not (Test-CogesKeyText -Text $text -Kind $Kind)) {
+        $what = 'clé publique (COGES-CLE-PUBLIQUE-1:…)'
+        if ($Kind -eq 'Privee') { $what = 'clé privée (COGES-CLE-PRIVEE-1:…)' }
+        Stop-CogesStep -Probleme ('{0} n''est pas une {1}.' -f $Path, $what) -QuoiFaire 'Donnez le bon fichier, tel que tiré par CoGes, sans le modifier.'
+    }
+    return (($text -replace '^\uFEFF', '').Trim())
+}
+
+function Test-CogesExternalTarget {
+    <# Un disque ou un dossier HORS du PC pour la clé privée ou les copies : jamais sous C:\CoGes,
+       jamais le disque de Windows. #>
+    param([Parameter(Mandatory)] [string] $Path, [Parameter(Mandatory)] [string] $Racine)
+    $full = [IO.Path]::GetFullPath(($Path.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar))
+    $root = [IO.Path]::GetFullPath(($Racine.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar))
+    if ($full.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { return $false }
+    # Essais (Pester sous Windows, verifier.sh) : des dossiers nommés tiennent lieu de disques.
+    $trial = @(([string]$env:COGES_DISQUES_ESSAI) -split [IO.Path]::PathSeparator | Where-Object { $_ } |
+            ForEach-Object { [IO.Path]::GetFullPath(($_.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar)) })
+    if ($trial -contains $full) { return (Test-Path -LiteralPath $full -PathType Container) }
+    if (Test-CogesWindows) {
+        $system = ($env:SystemDrive + '\')
+        if ([IO.Path]::GetPathRoot($full) -ieq $system) { return $false }
+    }
+    return (Test-Path -LiteralPath $full -PathType Container)
+}
+
+function ConvertTo-CogesDriveRoot {
+    <# « E: », « E », « E:\ » → « E:\ » ; un dossier (essais sous Linux) reste tel quel. #>
+    param([Parameter(Mandatory)] [string] $Lecteur)
+    if ($Lecteur -match '^[A-Za-z]:?\\?$') { return ($Lecteur.Substring(0, 1).ToUpperInvariant() + ':\') }
+    return $Lecteur
+}
+
+function Set-CogesBackupKey {
+    <# La clé publique de sauvegarde de ce PC. -ClePublique : posée depuis le fichier tiré chez
+       le technicien (de préférence). Sinon, tirée ici : la clé PRIVÉE est écrite dans un
+       fichier sur le disque amovible -LecteurCle, jamais à l'écran, au journal ni au
+       presse-papiers, puis COPIE-FAITE est demandé. Rien à faire si la clé est déjà là. #>
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [hashtable] $Options, [Parameter(Mandatory)] [string] $Slug)
+    $backup = Get-CogesBackupPath $Paths
+    if ($Options.ClePublique) {
+        $text = Read-CogesKeyFile -Path $Options.ClePublique -Kind Publique
+        if ((Test-Path -LiteralPath $backup.ClePublique) -and ([IO.File]::ReadAllText($backup.ClePublique).Trim() -ceq $text)) {
+            Write-CogesLine '  Clé publique de sauvegarde déjà posée, rien à faire.' -Kind Ok
+            return
+        }
+        if (Test-Path -LiteralPath $backup.ClePublique) {
+            Write-CogesLine '  Clé publique remplacée : les sauvegardes déjà faites gardent l''ancienne clé privée.' -Kind Attention
+        }
+        New-Item -ItemType Directory -Force -Path $Paths.Reglages | Out-Null
+        [IO.File]::WriteAllText($backup.ClePublique, $text + "`n", (New-Object Text.UTF8Encoding $false))
+        Write-CogesLine '  Clé publique de sauvegarde posée (ce PC chiffre, il ne peut pas relire).' -Kind Ok
+        return
+    }
+    if (Test-Path -LiteralPath $backup.ClePublique) {
+        [void](Read-CogesKeyFile -Path $backup.ClePublique -Kind Publique)
+        Write-CogesLine '  Clé publique de sauvegarde présente, rien à faire.' -Kind Ok
+        return
+    }
+    $drive = $Options.LecteurCle
+    if (-not $drive) {
+        if ($script:CogesState.NonInteractif) {
+            Stop-CogesStep -Probleme 'Aucune clé de sauvegarde sur ce PC.' `
+                -QuoiFaire 'Donnez -ClePublique <fichier> (tiré chez CoGes), ou -LecteurCle E: (clé USB du technicien) pour la tirer ici.'
+        }
+        $drive = Read-Host 'Pas de clé de sauvegarde : lettre de la clé USB du technicien où écrire la clé PRIVÉE (ex. E:)'
+    }
+    $root = ConvertTo-CogesDriveRoot $drive
+    if (-not (Test-CogesExternalTarget -Path $root -Racine $Paths.Racine)) {
+        Stop-CogesStep -Probleme ('{0} n''est pas un disque amovible branché (ni C:, ni le dossier de CoGes).' -f $drive) `
+            -QuoiFaire 'Branchez la clé USB du technicien et donnez sa lettre (-LecteurCle E:), ou donnez -ClePublique <fichier>.'
+    }
+    $pair = New-CogesKeyPair
+    $file = Join-Path $root ('CoGes-cle-privee-{0}-{1}.txt' -f $Slug, (Get-Date).ToString('yyyyMMdd-HHmm'))
+    # CreateNew : jamais une clé existante écrasée. Le texte ne passe par aucune ligne affichée.
+    $stream = New-Object IO.FileStream ($file, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try {
+        $bytes = [Text.Encoding]::ASCII.GetBytes($pair.Private + "`n")
+        $stream.Write($bytes, 0, $bytes.Length)
+    }
+    finally { $stream.Dispose() }
+    $pair.Private = $null
+    New-Item -ItemType Directory -Force -Path $Paths.Reglages | Out-Null
+    [IO.File]::WriteAllText($backup.ClePublique, $pair.Public + "`n", (New-Object Text.UTF8Encoding $false))
+    Write-CogesLine ('  Clé PRIVÉE de sauvegarde écrite dans {0} (elle n''est pas sur ce PC).' -f $file) -Kind Attention
+    Write-CogesLine '  Rangez ce fichier dans le gestionnaire de mots de passe de CoGes (fiche du client), puis effacez-le de la clé USB. Sans lui, aucune sauvegarde de ce client ne se relit.' -Kind Attention
+    Confirm-CogesWord -Word 'COPIE-FAITE' -Prompt 'Clé privée rangée chez CoGes ?' -Given $Options.CleCopiee -Parameter 'CleCopiee'
+}
+
+# ---------------------------------------------------------------------------- verrou commun
+
+function Enter-CogesLock {
+    <# Le verrou de C:\CoGes : un fichier ouvert sans partage le temps de l'action. Le système
+       le libère quand le processus s'arrête, même tué : un verrou laissé par un processus mort
+       se reprend donc seul. Pris : attend $WaitSeconds, puis s'arrête avec un message clair. #>
+    param(
+        [Parameter(Mandatory)] $Paths,
+        [Parameter(Mandatory)] [string] $Action,
+        [int] $WaitSeconds = 0,
+        [int] $IntervalSeconds = 5
+    )
+    if ($script:CogesState.Simulation) { return $null }
+    $backup = Get-CogesBackupPath $Paths
+    New-Item -ItemType Directory -Force -Path $Paths.Racine | Out-Null
+    $info = $backup.Verrou + '.info'
+    $deadline = (Get-Date).AddSeconds($WaitSeconds)
+    while ($true) {
+        try {
+            $stream = New-Object IO.FileStream ($backup.Verrou, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+            $text = '{0} (processus {1}) depuis le {2}' -f $Action, $PID, (Get-Date).ToString('dd/MM/yyyy à HH:mm')
+            [IO.File]::WriteAllText($info, $text, (New-Object Text.UTF8Encoding $false))
+            Write-Log -Message ('verrou pris : ' + $Action)
+            return $stream
+        }
+        catch [IO.IOException] {
+            if ((Get-Date) -ge $deadline) {
+                $holder = 'une autre opération de CoGes'
+                if (Test-Path -LiteralPath $info) { try { $holder = [IO.File]::ReadAllText($info) } catch { Write-Verbose 'info du verrou illisible' } }
+                Stop-CogesStep -Probleme ('Une autre opération de CoGes est en cours : {0}.' -f $holder) `
+                    -QuoiFaire 'Attendez qu''elle finisse (une sauvegarde dure quelques minutes), puis relancez. Si rien ne tourne, redémarrez le PC : le verrou d''un programme arrêté se libère seul.'
+            }
+            Start-Sleep -Seconds $IntervalSeconds
+        }
+    }
+}
+
+function Exit-CogesLock {
+    param([AllowNull()] $Lock)
+    if ($null -ne $Lock) {
+        $Lock.Dispose()
+        Write-Log -Message 'verrou rendu'
+    }
+}
+
+# ---------------------------------------------------------------------------- état
+
+function Read-CogesBackupState {
+    <# Ce que les fichiers ne disent pas : dernière copie hors du PC, dernier essai, dernière erreur. #>
+    param([Parameter(Mandatory)] $Paths)
+    $file = (Get-CogesBackupPath $Paths).Etat
+    $state = @{}
+    if (Test-Path -LiteralPath $file) {
+        try {
+            $data = [IO.File]::ReadAllText($file) | ConvertFrom-Json
+            foreach ($property in $data.PSObject.Properties) { $state[$property.Name] = $property.Value }
+        }
+        catch { Write-Log -Message 'etat.json illisible : ignoré' -Level ATTENTION }
+    }
+    return $state
+}
+
+function Write-CogesBackupState {
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [hashtable] $Changes)
+    $state = Read-CogesBackupState $Paths
+    foreach ($key in $Changes.Keys) { $state[$key] = $Changes[$key] }
+    $file = (Get-CogesBackupPath $Paths).Etat
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $file) | Out-Null
+    $temporary = $file + '.nouveau'
+    [IO.File]::WriteAllText($temporary, ([pscustomobject]$state | ConvertTo-Json -Depth 4), (New-Object Text.UTF8Encoding $false))
+    Move-Item -LiteralPath $temporary -Destination $file -Force
+}
+
+function ConvertTo-CogesStateDate {
+    param([AllowNull()] $Value)
+    if ($null -eq $Value -or $Value -eq '') { return $null }
+    if ($Value -is [datetime]) { return $Value }
+    return [datetime]::Parse([string]$Value, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind)
+}
+
+function Get-CogesGoodBackup {
+    <# Les bonnes sauvegardes d'un dossier : un nom attendu, et le .sha256 et le .manifest.json
+       à côté. Jamais un .echec, jamais un autre fichier. Les plus récentes d'abord. #>
+    param([Parameter(Mandatory)] [string] $Folder)
+    if (-not (Test-Path -LiteralPath $Folder)) { return @() }
+    $items = foreach ($file in (Get-ChildItem -LiteralPath $Folder -File -Filter '*.coges' -ErrorAction SilentlyContinue)) {
+        $parsed = ConvertFrom-CogesBackupName $file.Name
+        if ($null -eq $parsed) { continue }
+        if (-not (Test-Path -LiteralPath ($file.FullName + '.sha256'))) { continue }
+        if (-not (Test-Path -LiteralPath ($file.FullName + '.manifest.json'))) { continue }
+        $parsed | Add-Member -NotePropertyName Path -NotePropertyValue $file.FullName
+        $parsed | Add-Member -NotePropertyName Size -NotePropertyValue $file.Length
+        $parsed
+    }
+    return @($items | Sort-Object -Property @{ Expression = 'Date'; Descending = $true }, @{ Expression = 'Name'; Descending = $true })
+}
+
+function Remove-CogesBackupFile {
+    <# Une sauvegarde et ses deux compagnons. #>
+    param([Parameter(Mandatory)] [string] $Path)
+    foreach ($suffix in @('', '.sha256', '.manifest.json')) {
+        if (Test-Path -LiteralPath ($Path + $suffix)) { Remove-Item -LiteralPath ($Path + $suffix) -Force }
+    }
+}
+
+function Get-CogesFileSha256 {
+    param([Parameter(Mandatory)] [string] $Path)
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Read-CogesSha256File {
+    <# « <empreinte>  <nom> » (format de sha256sum). #>
+    param([Parameter(Mandatory)] [string] $Path)
+    $text = [IO.File]::ReadAllText($Path).Trim()
+    return ($text -split '\s+')[0].ToLowerInvariant()
+}
+
+# ---------------------------------------------------------------------------- conteneurs
+
+function Get-CogesToolArgument {
+    <# Les arguments de compose pour un outil de sauvegarde : -T, montages, entrée standard
+       ouverte (-i par défaut de « run »). Aucun -e : rien ne passe par l'environnement. #>
+    param(
+        [Parameter(Mandatory)] [ValidateSet('sauvegarde-py', 'sauvegarde-pg')] [string] $Service,
+        [Parameter(Mandatory)] [string[]] $Arguments,
+        [AllowEmptyCollection()] [string[]] $Mounts = @()
+    )
+    $result = @('--profile', 'tools', 'run', '--rm', '-T')
+    foreach ($mount in $Mounts) { $result += @('-v', $mount) }
+    return ($result + @($Service) + $Arguments)
+}
+
+function Invoke-CogesTool {
+    <# Lance un outil ; un échec devient un message (la ligne « ÉCHEC — … » de l'outil). #>
+    param(
+        [Parameter(Mandatory)] $Paths,
+        [Parameter(Mandatory)] [string] $Service,
+        [Parameter(Mandatory)] [string[]] $Arguments,
+        [AllowEmptyCollection()] [string[]] $Mounts = @(),
+        [AllowNull()] [string] $InputText = $null,
+        [Parameter(Mandatory)] [string] $What
+    )
+    $composeArgs = Get-CogesToolArgument -Service $Service -Arguments $Arguments -Mounts $Mounts
+    $result = Invoke-Docker -Arguments (Get-CogesComposeArgument -Paths $Paths -Arguments $composeArgs) -InputText $InputText
+    if ($result.ExitCode -ne 0) {
+        $reason = @($result.Output | Where-Object { $_ -match '^\s*(ÉCHEC|ECHEC|pg_dump: error|pg_restore: error|error)' } | Select-Object -Last 1)
+        $detail = 'code ' + $result.ExitCode
+        if ($reason.Count -gt 0) { $detail = $reason[0].Trim() }
+        Stop-CogesStep -Probleme ('{0} : échec ({1}).' -f $What, $detail) `
+            -QuoiFaire 'Relancez ; si l''échec revient, envoyez le journal (C:\CoGes\journaux) à CoGes.'
+    }
+    return $result
+}
+
+function Get-CogesLastJson {
+    <# La dernière ligne JSON d'une sortie d'outil (après les lignes « Container … » de compose). #>
+    param([AllowEmptyCollection()] [string[]] $Lines)
+    $line = @($Lines | Where-Object { $_ -and ($_.Trim().StartsWith('{') -or $_.Trim().StartsWith('[')) }) | Select-Object -Last 1
+    if (-not $line) { return $null }
+    return ($line | ConvertFrom-Json)
+}
+
+function Get-CogesDockerMountPath {
+    <# Un dossier du PC tel que docker l'attend dans -v (C:\CoGes\sauvegardes, ou /tmp/… sous Linux). #>
+    param([Parameter(Mandatory)] [string] $Path)
+    return [IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+}
+
+# ---------------------------------------------------------------------------- bloc A : faire une sauvegarde
+
+function New-CogesBackup {
+    <# Une sauvegarde complète : manifeste, dump, chiffrement relu, contrôles, rétention, copie
+       hors du PC. Réutilisable (lot 5 : avant chaque mise à jour ; Desinstaller ; Restaurer).
+       L'appelant tient le verrou. Rend la sauvegarde (Path, Name, Size, Manifest). -Trial :
+       restauration d'essai du dump dans coges_verif avant de l'effacer (bloc D). #>
+    param(
+        [Parameter(Mandatory)] $Paths,
+        [switch] $Trial,
+        [switch] $SkipOffsite,
+        [Nullable[datetime]] $Now = $null
+    )
+    if ($null -eq $Now) { $Now = Get-Date }
+    $backup = Get-CogesBackupPath $Paths
+    if (-not (Test-Path -LiteralPath $backup.ClePublique)) {
+        Stop-CogesStep -Probleme 'Aucune clé publique de sauvegarde sur ce PC : rien ne peut être chiffré.' `
+            -QuoiFaire 'Lancez -Action Reparer -ClePublique <fichier> (ou -LecteurCle E: pour la tirer ici).'
+    }
+    $public = Read-CogesKeyFile -Path $backup.ClePublique -Kind Publique
+    $settings = Get-CogesSetting $Paths
+    $version = $settings['COGES_IMAGE_TAG']
+    New-Item -ItemType Directory -Force -Path $backup.Dossier | Out-Null
+    $folder = Get-CogesDockerMountPath $backup.Dossier
+    $mount = $folder + ':/sortie'
+    $file = $null
+    $stem = 'sauvegarde-' + $Now.ToString('yyyyMMddHHmmss')
+    $partialManifest = Join-Path $backup.Dossier ($stem + '.manifest.partiel')
+    try {
+        # 1. Lignes comptées AVANT le dump (comme backup.sh) : la base restaurée en aura au moins autant.
+        $info = Get-CogesLastJson (Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Manifeste (lignes comptées avant le dump)' `
+                -Arguments @('base.py', 'manifeste', '--sortie', ('/sortie/' + (Split-Path -Leaf $partialManifest)), '--version', $version) -Mounts @($mount)).Stdout
+        $previous = Get-CogesPreviousBackup -Folder $backup.Dossier -BaseId ([string]$info.base_id)
+        $slugs = @($info.boutiques)
+        $slug = 'sans-boutique'
+        if ($slugs.Count -gt 0) { $slug = [string]$slugs[0] }
+        $free = (New-Object IO.DriveInfo ([IO.Path]::GetPathRoot([IO.Path]::GetFullPath($backup.Dossier)))).AvailableFreeSpace
+        if (-not (Test-CogesEnoughSpace -Free $free -Planned ([long]$info.base_octets))) {
+            Stop-CogesStep -Probleme ('Pas assez de place sur le disque ({0:N1} Go libres, il en faut 2 de plus que la sauvegarde).' -f ($free / 1GB)) `
+                -QuoiFaire 'Libérez de la place sur le disque du PC (Corbeille, Téléchargements), puis relancez. Les sauvegardes existantes sont gardées.'
+        }
+        $name = Get-CogesBackupName -Slug $slug -Date $Now -Version $version
+        if (Test-Path -LiteralPath (Join-Path $backup.Dossier $name)) { $name = Get-CogesBackupName -Slug $slug -Date $Now -Version $version -WithSeconds }
+        $file = Join-Path $backup.Dossier $name
+        # 2. pg_dump dans le volume de travail, relu par pg_restore --list.
+        $dump = Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-pg' -What 'Copie de la base (pg_dump)' -Arguments @('dump', $stem)
+        $dumpLine = @($dump.Stdout | Where-Object { $_ -match '^dump \d+ ' }) | Select-Object -Last 1
+        $dumpParts = ([string]$dumpLine).Split(' ')
+        # 3. Chiffré vers le dossier du PC, puis relu et déchiffré dans le conteneur.
+        $sealed = Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Chiffrement' -Mounts @($mount) `
+            -Arguments @('coffre.py', 'chiffrer', '--publique', $public, ('/travail/' + $stem + '.dump'), ('/sortie/' + $name))
+        $sealedLine = @($sealed.Stdout | Where-Object { $_ -match '^chiffre \d+ ' }) | Select-Object -Last 1
+        $sealedParts = ([string]$sealedLine).Split(' ')
+        if (-not (Test-Path -LiteralPath $file)) {
+            Stop-CogesStep -Probleme 'Le fichier chiffré n''est pas dans le dossier des sauvegardes.' -QuoiFaire 'Relancez ; si l''échec revient, envoyez le journal à CoGes.'
+        }
+        # 4. Contrôles : taille (≥ 50 % de la dernière bonne), sha256 écrit puis relu, manifeste complet.
+        $size = (Get-Item -LiteralPath $file).Length
+        $previousSize = 0
+        if ($previous) { $previousSize = [long]$previous.Size }
+        if (-not (Test-CogesSizePlausible -Size $size -Previous $previousSize)) {
+            Stop-CogesStep -Probleme ('Sauvegarde trop petite : {0:N0} octets, moins de la moitié de la précédente ({1:N0}). Base vidée ou copie coupée ?' -f $size, $previousSize) `
+                -QuoiFaire 'N''effacez rien. Appelez CoGes : la sauvegarde précédente est gardée.'
+        }
+        $sha = Get-CogesFileSha256 $file
+        if ($sealedParts.Count -ge 3 -and $sealedParts[2] -ne $sha) {
+            Stop-CogesStep -Probleme 'L''empreinte du fichier chiffré a changé entre l''écriture et la relecture.' -QuoiFaire 'Vérifiez le disque du PC, puis relancez.'
+        }
+        [IO.File]::WriteAllText($file + '.sha256', ('{0}  {1}' -f $sha, $name) + "`n", (New-Object Text.UTF8Encoding $false))
+        if ((Read-CogesSha256File ($file + '.sha256')) -ne (Get-CogesFileSha256 $file)) {
+            Stop-CogesStep -Probleme 'L''empreinte relue ne correspond pas.' -QuoiFaire 'Vérifiez le disque du PC, puis relancez.'
+        }
+        $manifest = [IO.File]::ReadAllText($partialManifest) | ConvertFrom-Json
+        $additions = [ordered]@{
+            fichier = $name; octets = $size; sha256 = $sha
+            pg_dump_version = $dumpParts[2]; dump_octets = [long]$dumpParts[1]; dump_sha256 = $sealedParts[3]
+        }
+        foreach ($key in $additions.Keys) { $manifest | Add-Member -NotePropertyName $key -NotePropertyValue $additions[$key] -Force }
+        foreach ($key in @('alembic_revision', 'coges_version', 'server_version', 'pg_dump_version', 'tables', 'boutiques', 'dump_sha256')) {
+            if (-not $manifest.PSObject.Properties[$key] -or $null -eq $manifest.$key -or '' -eq $manifest.$key) {
+                Stop-CogesStep -Probleme ('Manifeste incomplet ({0} manque).' -f $key) -QuoiFaire 'Relancez ; si l''échec revient, envoyez le journal à CoGes.'
+            }
+        }
+        [IO.File]::WriteAllText($file + '.manifest.json', ($manifest | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding $false))
+        # 5. Bloc D : restauration d'essai du même dump (celui que le fichier chiffré redonne).
+        if ($Trial) { Invoke-CogesTrialRestore -Paths $Paths -Stem $stem -Mount $mount -ManifestName ($name + '.manifest.json') }
+    }
+    catch {
+        if ($file -and (Test-Path -LiteralPath $file)) {
+            # Gardée pour l'enquête, jamais comptée : ni « bonne », ni dans la rétention.
+            Move-Item -LiteralPath $file -Destination ($file + '.echec') -Force
+            foreach ($suffix in @('.sha256', '.manifest.json')) {
+                if (Test-Path -LiteralPath ($file + $suffix)) { Move-Item -LiteralPath ($file + $suffix) -Destination ($file + '.echec' + $suffix) -Force }
+            }
+        }
+        Write-CogesBackupState -Paths $Paths -Changes @{ derniere_erreur = $Now.ToString('o'); derniere_erreur_texte = (Mask-Secrets $_.Exception.Message) }
+        throw
+    }
+    finally {
+        # Le dump en clair ne reste jamais : volume vidé même après un échec (disque plein compris).
+        Clear-CogesWorkVolume -Paths $Paths
+        if (Test-Path -LiteralPath $partialManifest) { Remove-Item -LiteralPath $partialManifest -Force }
+    }
+    Write-CogesBackupState -Paths $Paths -Changes @{ derniere_bonne = $Now.ToString('o'); derniere_bonne_fichier = $name }
+    $removed = Invoke-CogesRetention -Folder $backup.Dossier -Now $Now
+    $result = [pscustomobject]@{ Path = $file; Name = $name; Size = $size; Slugs = $slugs; Manifest = $manifest; Removed = $removed; Offsite = @() }
+    if (-not $SkipOffsite) { $result.Offsite = @(Copy-CogesOffsite -Paths $Paths -Backup $result -Now $Now) }
+    return $result
+}
+
+function Get-CogesPreviousBackup {
+    <# La dernière bonne sauvegarde de la MÊME base (identifiant du serveur et de la base) : après
+       une installation neuve ou une restauration, la comparaison à 50 % repart de zéro. #>
+    param([Parameter(Mandatory)] [string] $Folder, [AllowEmptyString()] [string] $BaseId)
+    if (-not $BaseId) { return $null }
+    foreach ($item in @(Get-CogesGoodBackup $Folder)) {
+        try { $manifest = [IO.File]::ReadAllText($item.Path + '.manifest.json') | ConvertFrom-Json } catch { continue }
+        if ($manifest.PSObject.Properties['base_id'] -and [string]$manifest.base_id -eq $BaseId) { return $item }
+    }
+    return $null
+}
+
+function Clear-CogesWorkVolume {
+    <# Vide le volume sauvegarde-travail. N'échoue jamais (journal seulement) : appelé dans un finally. #>
+    param([Parameter(Mandatory)] $Paths)
+    try {
+        $result = Invoke-Docker -Arguments (Get-CogesComposeArgument -Paths $Paths -Arguments (Get-CogesToolArgument -Service 'sauvegarde-pg' -Arguments @('vider')))
+        if ($result.ExitCode -ne 0) { Write-Log -Message ('volume de travail : vidage en échec (code {0})' -f $result.ExitCode) -Level ATTENTION }
+    }
+    catch { Write-Log -Message ('volume de travail : ' + $_.Exception.Message) -Level ATTENTION }
+}
+
+function Invoke-CogesRetention {
+    <# Rétention sur le PC : seules les bonnes sauvegardes comptent ; la plus récente reste. #>
+    param([Parameter(Mandatory)] [string] $Folder, [Parameter(Mandatory)] [datetime] $Now)
+    $good = @(Get-CogesGoodBackup $Folder)
+    $doomed = @(Select-CogesBackupToDelete -Items $good -Now $Now)
+    foreach ($name in $doomed) {
+        Remove-CogesBackupFile (Join-Path $Folder $name)
+        Write-Log -Message ('rétention : ' + $name + ' effacée')
+    }
+    return $doomed
+}
+
+function Invoke-CogesTrialRestore {
+    <# Bloc D : le dump restauré dans coges_verif, vérifié (contrôles de la production), supprimé. #>
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [string] $Stem, [Parameter(Mandatory)] [string] $Mount, [Parameter(Mandatory)] [string] $ManifestName)
+    $started = Get-Date
+    try {
+        [void](Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Restauration d''essai (base vide)' -Arguments @('base.py', 'preparer', 'coges_verif'))
+        [void](Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-pg' -What 'Restauration d''essai (pg_restore)' -Arguments @('restaurer', $Stem, 'coges_verif'))
+        $checked = Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Restauration d''essai (contrôles)' -Mounts @($Mount + ':ro') `
+            -Arguments @('base.py', 'verifier', 'coges_verif', '--manifeste', ('/sortie/' + $ManifestName))
+        foreach ($line in $checked.Stdout) { Write-Log -Message ('essai : ' + $line) }
+        Write-CogesBackupState -Paths $Paths -Changes @{ dernier_essai = $started.ToString('o'); dernier_essai_ok = $true; dernier_essai_succes = $started.ToString('o') }
+        Write-CogesLine ('  Restauration d''essai : tout est vert ({0:N0} s).' -f ((Get-Date) - $started).TotalSeconds) -Kind Ok
+    }
+    catch {
+        Write-CogesBackupState -Paths $Paths -Changes @{ dernier_essai = $started.ToString('o'); dernier_essai_ok = $false }
+        Write-CogesLine ('  Restauration d''essai en échec : ' + $_.Exception.Message) -Kind Echec
+        Show-CogesToast 'La dernière sauvegarde ne se relit pas : appelez CoGes.'
+        # La sauvegarde elle-même reste bonne (chiffrée et relue) : l'essai ne la déclasse pas.
+    }
+    finally {
+        try { [void](Invoke-Docker -Arguments (Get-CogesComposeArgument -Paths $Paths -Arguments (Get-CogesToolArgument -Service 'sauvegarde-py' -Arguments @('base.py', 'supprimer', 'coges_verif')))) }
+        catch { Write-Log -Message ('coges_verif : ' + $_.Exception.Message) -Level ATTENTION }
+    }
+}
+
+# ---------------------------------------------------------------------------- bloc B : copie hors du PC
+
+function Get-CogesOffsiteRoot {
+    <# Les racines candidates : disques prêts, hors disque de Windows et hors C:\CoGes.
+       Sous Linux (essais), la variable COGES_DISQUES_ESSAI donne des dossiers. #>
+    param([Parameter(Mandatory)] $Paths)
+    if ($env:COGES_DISQUES_ESSAI) { return @($env:COGES_DISQUES_ESSAI -split [IO.Path]::PathSeparator | Where-Object { $_ }) }
+    if (-not (Test-CogesWindows)) { return @() }
+    return @([IO.DriveInfo]::GetDrives() | Where-Object { $_.IsReady -and $_.DriveType -in @('Removable', 'Fixed') } |
+            ForEach-Object { $_.RootDirectory.FullName } | Where-Object { Test-CogesExternalTarget -Path $_ -Racine $Paths.Racine })
+}
+
+function Copy-CogesOffsite {
+    <# Copie la sauvegarde sur chaque disque portant le repère de CETTE boutique, puis relit
+       (sha256). Garde les 10 dernières sur le disque ; la plus ancienne n'est effacée
+       qu'après la copie relue. Sans repère : rien n'est écrit. N'échoue jamais. #>
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] $Backup, [Parameter(Mandatory)] [datetime] $Now)
+    $done = @()
+    foreach ($root in (Get-CogesOffsiteRoot $Paths)) {
+        try {
+            $marker = Join-Path $root $script:CogesDiskMarker
+            $text = $null
+            if (Test-Path -LiteralPath $marker -PathType Leaf) { $text = [IO.File]::ReadAllText($marker) }
+            $state = Get-CogesDiskMarkerState -MarkerText $text -Slugs $Backup.Slugs
+            if ($state -ne 'ok') {
+                if ($state -eq 'autre') { Write-Log -Message ('disque {0} : repère d''une autre boutique, rien n''est écrit' -f $root) }
+                continue
+            }
+            $target = Join-Path $root $script:CogesOffsiteFolder
+            New-Item -ItemType Directory -Force -Path $target | Out-Null
+            $free = (New-Object IO.DriveInfo ([IO.Path]::GetPathRoot([IO.Path]::GetFullPath($target)))).AvailableFreeSpace
+            if ($free -lt ($Backup.Size + 64MB)) {
+                Write-CogesLine ('  Disque {0} : pas assez de place pour la copie.' -f $root) -Kind Attention
+                continue
+            }
+            $copy = Join-Path $target $Backup.Name
+            foreach ($suffix in @('.sha256', '.manifest.json', '')) {
+                Copy-Item -LiteralPath ($Backup.Path + $suffix) -Destination ($copy + $suffix + '.partiel') -Force
+            }
+            if ((Get-CogesFileSha256 ($copy + '.partiel')) -ne (Read-CogesSha256File ($Backup.Path + '.sha256'))) {
+                foreach ($suffix in @('.sha256', '.manifest.json', '')) { Remove-Item -LiteralPath ($copy + $suffix + '.partiel') -Force -ErrorAction SilentlyContinue }
+                Write-CogesLine ('  Disque {0} : la copie relue ne correspond pas, elle est retirée.' -f $root) -Kind Attention
+                continue
+            }
+            foreach ($suffix in @('.sha256', '.manifest.json', '')) { Move-Item -LiteralPath ($copy + $suffix + '.partiel') -Destination ($copy + $suffix) -Force }
+            $all = @(Get-CogesGoodBackup $target)
+            foreach ($old in ($all | Select-Object -Skip $script:CogesKeepOffsite)) { Remove-CogesBackupFile $old.Path }
+            Write-CogesBackupState -Paths $Paths -Changes @{ derniere_copie_hors_pc = $Now.ToString('o'); derniere_copie_disque = $root }
+            Write-CogesLine ('  Copie hors du PC : {0} (relue).' -f $copy) -Kind Ok
+            $done += $copy
+        }
+        catch {
+            Write-CogesLine ('  Disque {0} : copie impossible ({1}).' -f $root, $_.Exception.Message) -Kind Attention
+        }
+    }
+    return $done
+}
+
+# ---------------------------------------------------------------------------- bloc C : prévenir
+
+function Show-CogesToast {
+    <# Notification Windows (API WinRT de Windows PowerShell 5.1). Désactivable ; un échec
+       n'est jamais celui de la sauvegarde : journal seulement. #>
+    param([Parameter(Mandatory)] [string] $Text)
+    Write-Log -Message ('notification : ' + $Text) -Level ATTENTION
+    if (-not $script:CogesToastEnabled -or $script:CogesState.Simulation -or -not (Test-CogesWindows)) { return $false }
+    try {
+        $null = [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]
+        $null = [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime]
+        $escaped = [Security.SecurityElement]::Escape($Text)
+        $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+        $xml.LoadXml(('<toast><visual><binding template="ToastGeneric"><text>CoGes</text><text>{0}</text></binding></visual></toast>' -f $escaped))
+        # L'identifiant d'application de Windows PowerShell : aucun raccourci à poser.
+        $appId = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe'
+        [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show((New-Object Windows.UI.Notifications.ToastNotification $xml))
+        return $true
+    }
+    catch {
+        Write-Log -Message ('notification impossible : ' + $_.Exception.Message) -Level ATTENTION
+        return $false
+    }
+}
+
+function Get-CogesBackupSummary {
+    <# Ce que dit Etat, et ce que regardent les alertes. #>
+    param([Parameter(Mandatory)] $Paths)
+    $backup = Get-CogesBackupPath $Paths
+    $good = @(Get-CogesGoodBackup $backup.Dossier)
+    $state = Read-CogesBackupState $Paths
+    $free = [long]::MaxValue
+    try { $free = (New-Object IO.DriveInfo ([IO.Path]::GetPathRoot([IO.Path]::GetFullPath($Paths.Racine)))).AvailableFreeSpace } catch { Write-Verbose 'disque illisible' }
+    $trialOk = $null
+    if ($state.ContainsKey('dernier_essai_ok')) { $trialOk = [bool]$state['dernier_essai_ok'] }
+    $last = $null
+    if ($good.Count -gt 0) { $last = $good[0] }
+    return [pscustomobject]@{
+        Last          = $last
+        LastGood      = $(if ($last) { $last.Date } else { $null })
+        Count         = $good.Count
+        Failed        = @(Get-ChildItem -LiteralPath $backup.Dossier -Filter '*.echec' -File -ErrorAction SilentlyContinue).Count
+        LastOffsite   = ConvertTo-CogesStateDate $state['derniere_copie_hors_pc']
+        OffsiteDisk   = $state['derniere_copie_disque']
+        LastTrial     = ConvertTo-CogesStateDate $state['dernier_essai']
+        LastTrialOk   = $trialOk
+        LastTrialGood = ConvertTo-CogesStateDate $state['dernier_essai_succes']
+        Free          = $free
+        HasKey        = (Test-Path -LiteralPath $backup.ClePublique)
+    }
+}
+
+# ---------------------------------------------------------------------------- actions du lot 4
+
+function Invoke-CogesBackupAction {
+    <# -Action Sauvegarder : une sauvegarde à la main, CoGes ouvert pendant ce temps. #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
+        Justification = 'Lus dans le bloc de l''étape (Invoke-CogesStep), que l''analyse ne suit pas.')]
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [hashtable] $Options)
+    if (-not $script:CogesState.Simulation -and -not (Test-Path -LiteralPath $Paths.EnvFile)) {
+        Stop-CogesStep -Probleme ('CoGes n''est pas installé ici ({0} absent).' -f $Paths.EnvFile) -QuoiFaire 'Lancez -Action Installer.'
+    }
+    $lock = Enter-CogesLock -Paths $Paths -Action 'Sauvegarder'
+    try {
+        Invoke-CogesStep -Title 'Sauvegarde de la base (CoGes reste ouvert)' -Action {
+            $summary = Get-CogesBackupSummary $Paths
+            $trial = [bool]$Options.Essai -or (Test-CogesTrialDue -Now (Get-Date) -LastSuccess $summary.LastTrialGood)
+            $made = New-CogesBackup -Paths $Paths -Trial:$trial
+            Write-CogesLine ('  {0} ({1:N1} Mo), chiffrée et relue.' -f $made.Path, ($made.Size / 1MB)) -Kind Ok
+            if (@($made.Offsite).Count -eq 0) { Write-CogesLine '  Aucune clé CoGes branchée : pas de copie hors du PC cette fois.' -Kind Attention }
+        }
+    }
+    finally { Exit-CogesLock $lock }
+    if ($script:CogesState.Simulation) { Write-CogesLine 'Simulation terminée : rien n''a été écrit ni lancé.' -Kind Ok }
+}
+
+function Invoke-CogesScheduledBackup {
+    <# La tâche « CoGes - sauvegarde » : aux heures prévues et à l'ouverture de session.
+       Sans question ni fenêtre ; journal sauvegarde-AAAAMMJJ.log ; jamais d'exception. #>
+    param([Parameter(Mandatory)] [string] $Racine, [int] $LockWaitSeconds = 1800, [Nullable[datetime]] $Now = $null)
+    if ($null -eq $Now) { $Now = Get-Date }
+    $paths = Get-CogesPath $Racine
+    $script:CogesState.NonInteractif = $true
+    New-Item -ItemType Directory -Force -Path $paths.Journaux | Out-Null
+    $script:CogesState.LogPath = Join-Path $paths.Journaux ('sauvegarde-{0}.log' -f $Now.ToString('yyyyMMdd'))
+    if (-not (Test-Path -LiteralPath $paths.EnvFile)) { Write-Log -Message 'CoGes n''est pas installé : rien à faire.'; return 0 }
+    [void](Get-CogesSetting $paths)
+    $code = 0
+    $lock = $null
+    try {
+        $summary = Get-CogesBackupSummary $paths
+        $due = Test-CogesBackupDue -Now $Now -LastGood $summary.LastGood
+        $trial = Test-CogesTrialDue -Now $Now -LastSuccess $summary.LastTrialGood
+        if (-not $due -and -not $trial) { Write-Log -Message 'Rien à faire : la dernière sauvegarde est récente.' }
+        elseif ((Invoke-Docker -Arguments @('version', '--format', '{{.Server.Os}}')).ExitCode -ne 0) {
+            Write-Log -Message 'Docker ne répond pas : pas de sauvegarde cette fois.' -Level ATTENTION
+        }
+        else {
+            $lock = Enter-CogesLock -Paths $paths -Action 'Sauvegarde planifiée' -WaitSeconds $LockWaitSeconds -IntervalSeconds 30
+            $made = New-CogesBackup -Paths $paths -Trial:$trial
+            Write-Log -Message ('sauvegarde bonne : {0}' -f $made.Name) -Level OK
+        }
+    }
+    catch {
+        Write-Log -Message ('sauvegarde en échec : ' + $_.Exception.Message) -Level ECHEC
+        $code = 1
+    }
+    finally { Exit-CogesLock $lock }
+    try {
+        $summary = Get-CogesBackupSummary $paths
+        foreach ($alert in (Get-CogesBackupAlert -Now (Get-Date) -LastGood $summary.LastGood -LastOffsite $summary.LastOffsite -FreeBytes $summary.Free -TrialOk $summary.LastTrialOk)) {
+            [void](Show-CogesToast $alert.Texte)
+        }
+    }
+    catch { Write-Log -Message ('alertes : ' + $_.Exception.Message) -Level ATTENTION }
+    return $code
+}
+
+function Install-CogesBackupTask {
+    <# La tâche « CoGes - sauvegarde » : 13 h 00, 20 h 30 et à l'ouverture de session, comme
+       « CoGes - démarrage » (utilisateur courant, sans élévation, fenêtre cachée), et
+       StartWhenAvailable : une heure manquée (PC éteint) se rattrape au démarrage. #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
+        Justification = 'Lus dans le bloc de l''étape (Invoke-CogesStep), que l''analyse ne suit pas.')]
+    param([Parameter(Mandatory)] $Paths)
+    Invoke-CogesStep -Title ('Tâche planifiée « {0} » (13 h 00, 20 h 30 et au démarrage)' -f $script:CogesBackupTaskName) -Action {
+        $launcher = Join-Path $Paths.Programme 'windows\sauvegarde.ps1'
+        $argument = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" -Racine "{1}"' -f $launcher, $Paths.Racine
+        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argument
+        $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+        $triggers = @()
+        foreach ($slot in $script:CogesBackupSlots) { $triggers += New-ScheduledTaskTrigger -Daily -At $slot }
+        $logon = New-ScheduledTaskTrigger -AtLogOn -User $user
+        # Laisse Docker Desktop démarrer d'abord.
+        $logon.Delay = 'PT5M'
+        $triggers += $logon
+        $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
+        $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 2)
+        Register-ScheduledTask -TaskName $script:CogesBackupTaskName -Action $action -Trigger $triggers -Principal $principal -Settings $settings -Force | Out-Null
+    }
+}
+
+function Remove-CogesBackupTask {
+    Invoke-CogesStep -Title ('Tâche planifiée « {0} » retirée' -f $script:CogesBackupTaskName) -Action {
+        if (Get-ScheduledTask -TaskName $script:CogesBackupTaskName -ErrorAction SilentlyContinue) {
+            Unregister-ScheduledTask -TaskName $script:CogesBackupTaskName -Confirm:$false
+        }
+    }
+}
+
+function Invoke-CogesPrepareDisk {
+    <# -Action PreparerDisque -Lecteur E: (technicien) : repère, place, première copie. #>
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [hashtable] $Options)
+    if (-not $Options.Lecteur) {
+        Stop-CogesStep -Probleme 'Il manque le disque à préparer.' -QuoiFaire 'Relancez avec -Lecteur E: (la lettre de la clé USB ou du disque externe).'
+    }
+    $root = ConvertTo-CogesDriveRoot $Options.Lecteur
+    $slug = Read-CogesAnswer -Question 'Code de la boutique' -Parameter 'CodeBoutique' -Value $Options.CodeBoutique `
+        -Validate { param($v) Test-CogesSlug $v } -Rule 'minuscules, chiffres et tirets entre deux mots.'
+    if ($script:CogesState.Simulation) {
+        Write-CogesLine ('[simulation] Repère {0} écrit sur {1}, place vérifiée, première copie' -f $script:CogesDiskMarker, $root)
+        return
+    }
+    if (-not (Test-CogesExternalTarget -Path $root -Racine $Paths.Racine)) {
+        Stop-CogesStep -Probleme ('{0} n''est pas un disque branché hors du PC (ni C:, ni le dossier de CoGes).' -f $Options.Lecteur) `
+            -QuoiFaire 'Branchez la clé USB ou le disque externe, puis donnez sa lettre (-Lecteur E:).'
+    }
+    $marker = Join-Path $root $script:CogesDiskMarker
+    if (Test-Path -LiteralPath $marker) {
+        $state = Get-CogesDiskMarkerState -MarkerText ([IO.File]::ReadAllText($marker)) -Slugs @($slug)
+        if ($state -eq 'autre') {
+            Stop-CogesStep -Probleme ('Ce disque est déjà préparé pour une autre boutique ({0}).' -f ([IO.File]::ReadAllText($marker).Trim())) `
+                -QuoiFaire 'Utilisez un autre disque : une clé ne sert qu''à une boutique.'
+        }
+    }
+    $lock = Enter-CogesLock -Paths $Paths -Action 'PreparerDisque'
+    try {
+        $backup = Get-CogesBackupPath $Paths
+        $latest = @(Get-CogesGoodBackup $backup.Dossier) | Select-Object -First 1
+        $need = 1GB
+        if ($latest) { $need = [Math]::Max($need, 2 * [long]$latest.Size * $script:CogesKeepOffsite) }
+        $free = (New-Object IO.DriveInfo ([IO.Path]::GetPathRoot([IO.Path]::GetFullPath($root)))).AvailableFreeSpace
+        if ($free -lt $need) {
+            Stop-CogesStep -Probleme ('Pas assez de place sur {0} ({1:N1} Go libres, {2:N1} Go conseillés pour 10 sauvegardes).' -f $root, ($free / 1GB), ($need / 1GB)) `
+                -QuoiFaire 'Prenez une clé ou un disque plus grand.'
+        }
+        [IO.File]::WriteAllText($marker, $slug + "`n", (New-Object Text.UTF8Encoding $false))
+        Write-CogesLine ('  Repère {0} écrit ({1}).' -f $marker, $slug) -Kind Ok
+        $previous = $env:COGES_DISQUES_ESSAI
+        if (-not (Test-CogesWindows)) { $env:COGES_DISQUES_ESSAI = $root }
+        try {
+            if ($latest -and (@($latest.Slug) -contains $slug)) {
+                $copies = @(Copy-CogesOffsite -Paths $Paths -Backup ([pscustomobject]@{ Path = $latest.Path; Name = $latest.Name; Size = $latest.Size; Slugs = @($latest.Slug) }) -Now (Get-Date))
+            }
+            else {
+                $copies = @((New-CogesBackup -Paths $Paths).Offsite)
+            }
+        }
+        finally { $env:COGES_DISQUES_ESSAI = $previous }
+        if ($copies.Count -eq 0) { Stop-CogesStep -Probleme 'La première copie n''a pas pu être faite.' -QuoiFaire 'Lisez les lignes ci-dessus, puis relancez.' }
+        Write-CogesLine 'Disque prêt : à chaque sauvegarde où il est branché, CoGes y copie la dernière.' -Kind Ok
+    }
+    finally { Exit-CogesLock $lock }
+}
+
+# ---------------------------------------------------------------------------- bloc E : restaurer
+
+function Test-CogesRevisionKnown {
+    <# La révision de la sauvegarde doit être connue du programme installé : refus si elle est plus récente. #>
+    param([Parameter(Mandatory)] [string] $Revision, [AllowEmptyCollection()] [string[]] $Known = @())
+    return (@($Known) -ccontains $Revision)
+}
+
+function Read-CogesBackupFile {
+    <# Étape 1 : fichier lisible, sha256 bon, manifeste lu. Rien n'est changé. #>
+    param([Parameter(Mandatory)] [string] $Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        Stop-CogesStep -Probleme ('Sauvegarde introuvable : {0}' -f $Path) -QuoiFaire 'Vérifiez le chemin (clé USB branchée ?), puis relancez. Rien n''a changé.'
+    }
+    $name = Split-Path -Leaf $Path
+    if ($null -eq (ConvertFrom-CogesBackupName $name)) {
+        Stop-CogesStep -Probleme ('{0} n''a pas le nom d''une sauvegarde CoGes.' -f $name) -QuoiFaire 'Donnez un fichier coges-….coges, sans le renommer. Rien n''a changé.'
+    }
+    foreach ($suffix in @('.sha256', '.manifest.json')) {
+        if (-not (Test-Path -LiteralPath ($Path + $suffix))) {
+            Stop-CogesStep -Probleme ('{0} manque à côté de la sauvegarde.' -f ($name + $suffix)) -QuoiFaire 'Copiez les trois fichiers ensemble (.coges, .sha256, .manifest.json). Rien n''a changé.'
+        }
+    }
+    if ((Get-CogesFileSha256 $Path) -ne (Read-CogesSha256File ($Path + '.sha256'))) {
+        Stop-CogesStep -Probleme 'Empreinte (sha256) différente : le fichier est abîmé ou modifié.' -QuoiFaire 'Prenez une autre sauvegarde (le PC en garde plusieurs, la clé USB aussi). Rien n''a changé.'
+    }
+    try { $manifest = [IO.File]::ReadAllText($Path + '.manifest.json') | ConvertFrom-Json }
+    catch { Stop-CogesStep -Probleme 'Manifeste illisible.' -QuoiFaire 'Prenez une autre sauvegarde. Rien n''a changé.' }
+    $declared = Get-CogesManifestValue $manifest 'sha256'
+    if (-not (Get-CogesManifestValue $manifest 'alembic_revision') -or -not (Get-CogesManifestValue $manifest 'coges_version') -or ($declared -and $declared -ne (Read-CogesSha256File ($Path + '.sha256')))) {
+        Stop-CogesStep -Probleme 'Manifeste incomplet ou d''une autre sauvegarde.' -QuoiFaire 'Prenez une autre sauvegarde. Rien n''a changé.'
+    }
+    return $manifest
+}
+
+function Get-CogesManifestValue {
+    <# Un champ du manifeste, ou $default s'il manque (mode strict : jamais d'exception). #>
+    param([Parameter(Mandatory)] $Manifest, [Parameter(Mandatory)] [string] $Name, $Default = $null)
+    if ($null -ne $Manifest -and $Manifest.PSObject.Properties[$Name]) { return $Manifest.$Name }
+    return $Default
+}
+
+function Restore-CogesBackup {
+    <# -Action Restaurer -Fichier <chemin> -Cle <chemin> : chaque étape s'arrête au premier
+       problème sans avoir rien changé ; après la bascule, un échec ramène l'ancienne base. #>
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [hashtable] $Options)
+    if (-not $Options.Fichier) { Stop-CogesStep -Probleme 'Il manque la sauvegarde à restaurer.' -QuoiFaire 'Relancez avec -Fichier <chemin du .coges> et -Cle <fichier de la clé privée>.' }
+    if (-not $Options.Cle) { Stop-CogesStep -Probleme 'Il manque la clé privée.' -QuoiFaire 'Relancez avec -Cle <fichier de la clé privée de ce client> (gestionnaire de mots de passe de CoGes).' }
+    if ($script:CogesState.Simulation) {
+        foreach ($step in @('1. empreinte et manifeste, puis RESTAURER', '2. version', '3. sauvegarde de la base actuelle', '4. restauration à côté (coges_restauration) et contrôles',
+                '5. arrêt de l''application, bascule (ancienne base gardée)', '6. migrate si besoin, démarrage, licence, page d''accueil', '7. retour automatique en cas d''échec')) {
+            Write-CogesLine ('[simulation] ' + $step)
+        }
+        return
+    }
+    if (-not (Test-Path -LiteralPath $Paths.EnvFile)) {
+        Stop-CogesStep -Probleme 'CoGes n''est pas installé sur ce PC.' -QuoiFaire 'Lancez d''abord -Action Installer (PC neuf), puis -Action Restaurer.'
+    }
+    $settings = Get-CogesSetting $Paths
+    $backup = Get-CogesBackupPath $Paths
+    $lock = Enter-CogesLock -Paths $Paths -Action 'Restaurer'
+    try {
+        # 1. Fichier, empreinte, manifeste, clé : rien n'est changé.
+        $source = [IO.Path]::GetFullPath($Options.Fichier)
+        $manifest = Read-CogesBackupFile $source
+        $key = Read-CogesKeyFile -Path $Options.Cle -Kind Privee
+        $sales = Get-CogesManifestValue (Get-CogesManifestValue $manifest 'tables') 'sales' '?'
+        $boutiques = @(Get-CogesManifestValue $manifest 'boutiques' @())
+        Write-CogesLine 'Sauvegarde à restaurer' -Kind Titre
+        Write-CogesLine ('  Boutique   : {0}' -f ($boutiques -join ', '))
+        Write-CogesLine ('  Faite le   : {0}' -f (Get-CogesManifestValue $manifest 'cree_le' '?'))
+        Write-CogesLine ('  Version    : {0} (révision {1})' -f $manifest.coges_version, $manifest.alembic_revision)
+        Write-CogesLine ('  Ventes     : {0}' -f $sales)
+        Write-CogesLine 'La base actuelle sera sauvegardée, puis GARDÉE à côté (rien n''est effacé).' -Kind Attention
+        Confirm-CogesWord -Word 'RESTAURER' -Prompt 'Remplacer les données de ce PC par cette sauvegarde ?' -Given $Options.ConfirmerRestauration -Parameter 'ConfirmerRestauration'
+
+        # 2. Version : la révision doit être connue du programme installé.
+        $revisions = Get-CogesLastJson (Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Révisions du programme installé' -Arguments @('base.py', 'revisions')).Stdout
+        if (-not (Test-CogesRevisionKnown -Revision ([string]$manifest.alembic_revision) -Known @($revisions.connues))) {
+            Stop-CogesStep -Probleme ('Cette sauvegarde vient de CoGes {0}, plus récent que la version installée ({1}).' -f $manifest.coges_version, $settings['COGES_IMAGE_TAG']) `
+                -QuoiFaire ('Installez d''abord la version {0} (-Action Reparer -Version {0}), puis relancez la restauration. Rien n''a changé.' -f $manifest.coges_version)
+        }
+        $migrate = ([string]$manifest.alembic_revision -ne [string]$revisions.tete)
+        Write-CogesLine ('  Version : révision {0} connue de {1}{2}.' -f $manifest.alembic_revision, $settings['COGES_IMAGE_TAG'], $(if ($migrate) { ', la base sera mise à jour après' } else { '' })) -Kind Ok
+
+        # 3. La base actuelle d'abord, si elle existe et n'est pas vide.
+        $current = Get-CogesLastJson (Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Lecture de la base actuelle' -Arguments @('base.py', 'etat')).Stdout
+        if ($current.existe -and [int]$current.societes -gt 0) {
+            Write-CogesLine '» Sauvegarde de la base actuelle avant tout changement' -Kind Titre
+            $before = New-CogesBackup -Paths $Paths
+            Write-CogesLine ('  {0}' -f $before.Path) -Kind Ok
+        }
+
+        # 4. À côté : déchiffrée dans le conteneur (clé par l'entrée standard), restaurée dans
+        #    coges_restauration, vérifiée. Le fichier chiffré est copié dans le dossier des
+        #    sauvegardes (aucun montage d'un disque amovible) ; il reste chiffré.
+        New-Item -ItemType Directory -Force -Path $backup.Restauration | Out-Null
+        $name = Split-Path -Leaf $source
+        $local = Join-Path $backup.Restauration $name
+        if ($source -ne $local) {
+            foreach ($suffix in @('.sha256', '.manifest.json', '')) { Copy-Item -LiteralPath ($source + $suffix) -Destination ($local + $suffix) -Force }
+            if ((Get-CogesFileSha256 $local) -ne (Read-CogesSha256File ($local + '.sha256'))) {
+                Stop-CogesStep -Probleme 'La copie de la sauvegarde sur le PC ne correspond pas.' -QuoiFaire 'Vérifiez la clé USB et le disque, puis relancez. Rien n''a changé.'
+            }
+        }
+        $mount = (Get-CogesDockerMountPath $backup.Restauration) + ':/entree:ro'
+        try {
+            Invoke-CogesStep -Title 'Déchiffrement (dans le conteneur, la clé privée n''est pas copiée)' -Action {
+                [void](Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Déchiffrement' -Mounts @($mount) -InputText $key `
+                        -Arguments @('coffre.py', 'dechiffrer', ('/entree/' + $name), '/travail/restauration.dump'))
+            }
+            $key = $null
+            Invoke-CogesStep -Title 'Restauration à côté, dans coges_restauration' -Action {
+                [void](Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Base de restauration' -Arguments @('base.py', 'preparer', 'coges_restauration'))
+                [void](Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-pg' -What 'Restauration (pg_restore)' -Arguments @('restaurer', 'restauration', 'coges_restauration'))
+            }
+            Invoke-CogesStep -Title 'Contrôles de la base restaurée (ceux de la production)' -Action {
+                $checked = Invoke-Docker -Arguments (Get-CogesComposeArgument -Paths $Paths -Arguments (Get-CogesToolArgument -Service 'sauvegarde-py' -Mounts @($mount) `
+                            -Arguments @('base.py', 'verifier', 'coges_restauration', '--manifeste', ('/entree/' + $name + '.manifest.json'))))
+                foreach ($line in $checked.Stdout) { if ($line -notmatch '^\s*Container ') { Write-CogesLine ('  ' + $line) } }
+                if ($checked.ExitCode -ne 0) {
+                    [void](Invoke-Docker -Arguments (Get-CogesComposeArgument -Paths $Paths -Arguments (Get-CogesToolArgument -Service 'sauvegarde-py' -Arguments @('base.py', 'supprimer', 'coges_restauration'))))
+                    Stop-CogesStep -Probleme 'La base restaurée ne passe pas les contrôles (lignes ci-dessus).' -QuoiFaire 'Prenez une autre sauvegarde, ou envoyez le journal à CoGes. Rien n''a changé : la base actuelle est en place.'
+                }
+            }
+        }
+        finally { $key = $null; Clear-CogesWorkVolume -Paths $Paths }
+
+        # 5. Bascule : application arrêtée (Caddy montre la page de maintenance), renommage.
+        $stamp = (Get-Date).ToString('yyyyMMdd_HHmm')
+        [void](Invoke-CogesCompose -Paths $Paths -Arguments @('stop', 'front', 'api', 'worker', 'beat', 'relay'))
+        $switched = Get-CogesLastJson (Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Bascule' -Arguments @('base.py', 'bascule', $stamp)).Stdout
+        $old = $switched.ancienne
+        Write-CogesLine ('  Bascule faite ; ancienne base gardée : {0}.' -f $(if ($old) { $old } else { 'aucune' })) -Kind Ok
+        $slug = ''
+        if ($boutiques.Count -gt 0) { $slug = [string]$boutiques[0] }
+        try {
+            # 6. migrate si besoin, démarrage, licence, page d'accueil.
+            if ($env:COGES_ESSAI_ECHEC_APRES_BASCULE -eq '1') { throw 'échec simulé après la bascule (essai du retour automatique)' }
+            if ($migrate) {
+                $result = Invoke-CogesCompose -Paths $Paths -Arguments @('--profile', 'tools', 'run', '--rm', '-T', 'migrate')
+                if ($result.ExitCode -ne 0) { throw 'la mise à jour de la base restaurée (migrate) a échoué' }
+            }
+            $up = Invoke-CogesCompose -Paths $Paths -Arguments @('up', '-d', '--remove-orphans')
+            if ($up.ExitCode -ne 0) { throw 'le démarrage a échoué' }
+            Wait-CogesHealthy -Paths $Paths
+            if ($slug) {
+                $status = Get-CogesLicenseStatus -Paths $Paths -Slug $slug
+                if (-not (Test-CogesLicenseActive $status.Output)) { throw ('la licence de {0} ne se relit pas « actif, sans fin »' -f $slug) }
+                Write-CogesLine ('  Licence de {0} revenue avec la base : actif, sans fin.' -f $slug) -Kind Ok
+            }
+            Test-CogesSite -Url $settings['COGES_PUBLIC_URL']
+        }
+        catch {
+            # 7. Retour automatique à l'ancienne base.
+            $reason = $_.Exception.Message
+            if (-not $old) {
+                Stop-CogesStep -Probleme ('La restauration a échoué après la bascule ({0}), et ce PC n''avait pas d''ancienne base.' -f $reason) `
+                    -QuoiFaire 'Relancez -Action Reparer, puis envoyez le journal à CoGes.'
+            }
+            Write-CogesLine ('Échec après la bascule ({0}) : retour à l''ancienne base.' -f $reason) -Kind Echec
+            [void](Invoke-CogesCompose -Paths $Paths -Arguments @('stop', 'front', 'api', 'worker', 'beat', 'relay'))
+            [void](Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Retour à l''ancienne base' -Arguments @('base.py', 'retour', $stamp))
+            [void](Invoke-CogesCompose -Paths $Paths -Arguments @('up', '-d', '--remove-orphans'))
+            Wait-CogesHealthy -Paths $Paths
+            Stop-CogesStep -Probleme ('La restauration a échoué après la bascule ({0}). L''ancienne base est remise en place : CoGes fonctionne comme avant.' -f $reason) `
+                -QuoiFaire ('La base restaurée est gardée sous coges_echec_{0} pour l''enquête. Envoyez le journal à CoGes.' -f $stamp)
+        }
+        Write-CogesBackupState -Paths $Paths -Changes @{ derniere_restauration = (Get-Date).ToString('o'); derniere_restauration_fichier = $name; ancienne_base = $old }
+        Write-CogesLine ''
+        Write-CogesLine ('Restauration terminée : {0} ({1}).' -f $settings['COGES_PUBLIC_URL'], $slug) -Kind Ok
+        if ($old) { Write-CogesLine ('L''ancienne base est gardée ({0}) ; -Action NettoyerAncienneBase la supprime quand tout est vérifié.' -f $old) }
+        Write-CogesLine 'Chacun se reconnecte avec son mot de passe habituel (celui de la sauvegarde). Les prévisions se recalculent seules (lundi nuit).'
+        Remove-Item -LiteralPath $backup.Restauration -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    finally { Exit-CogesLock $lock }
+}
+
+function Invoke-CogesCleanOldDatabase {
+    <# -Action NettoyerAncienneBase : supprime les bases gardées après une restauration, après
+       le code de la boutique retapé. Jamais automatique. #>
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [hashtable] $Options)
+    if ($script:CogesState.Simulation) { Write-CogesLine '[simulation] Liste des anciennes bases, code de la boutique, suppression'; return }
+    [void](Get-CogesSetting $Paths)
+    $lock = Enter-CogesLock -Paths $Paths -Action 'NettoyerAncienneBase'
+    try {
+        $kept = @(Get-CogesLastJson (Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Anciennes bases' -Arguments @('base.py', 'bases')).Stdout)
+        if ($kept.Count -eq 0) { Write-CogesLine 'Aucune ancienne base : rien à faire.' -Kind Ok; return }
+        foreach ($base in $kept) { Write-CogesLine ('  {0} ({1:N1} Mo)' -f $base.nom, ($base.octets / 1MB)) }
+        $slug = Read-CogesAnswer -Question 'Pour supprimer ces bases, retapez le code de la boutique' -Parameter 'CodeBoutique' -Value $Options.CodeBoutique `
+            -Validate { param($v) Test-CogesSlug $v } -Rule 'minuscules, chiffres et tirets entre deux mots.'
+        if ((Get-CogesLicenseStatus -Paths $Paths -Slug $slug).ExitCode -ne 0) {
+            Stop-CogesStep -Probleme ('Aucune société « {0} » sur ce PC : rien n''est supprimé.' -f $slug) -QuoiFaire 'Relancez et retapez le code exact.'
+        }
+        foreach ($base in $kept) {
+            [void](Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What ('Suppression de ' + $base.nom) -Arguments @('base.py', 'supprimer', [string]$base.nom))
+            Write-CogesLine ('  {0} supprimée.' -f $base.nom) -Kind Ok
+        }
+        Write-CogesBackupState -Paths $Paths -Changes @{ ancienne_base = $null }
+    }
+    finally { Exit-CogesLock $lock }
+}
+
+function Show-CogesBackupState {
+    <# Les lignes du lot 4 dans Etat. #>
+    param([Parameter(Mandatory)] $Paths)
+    $summary = Get-CogesBackupSummary $Paths
+    if ($summary.Last) {
+        Write-CogesLine ('  Dernière sauvegarde : {0} ({1:N1} Mo)' -f $summary.Last.Date.ToString('dd/MM/yyyy HH:mm'), ($summary.Last.Size / 1MB))
+    }
+    else { Write-CogesLine '  Dernière sauvegarde : aucune' -Kind Attention }
+    $offsite = 'jamais'
+    if ($summary.LastOffsite) { $offsite = '{0} ({1})' -f $summary.LastOffsite.ToString('dd/MM/yyyy HH:mm'), $summary.OffsiteDisk }
+    Write-CogesLine ('  Copie hors du PC    : {0}' -f $offsite)
+    $trial = 'jamais'
+    if ($summary.LastTrial) {
+        $trial = '{0} ({1})' -f $summary.LastTrial.ToString('dd/MM/yyyy HH:mm'), $(if ($summary.LastTrialOk) { 'réussie' } else { 'EN ÉCHEC' })
+    }
+    Write-CogesLine ('  Restauration d''essai : {0}' -f $trial)
+    Write-CogesLine ('  Sauvegardes gardées : {0}{1}' -f $summary.Count, $(if ($summary.Failed) { ' (+ {0} en échec, gardées pour l''enquête)' -f $summary.Failed } else { '' }))
+    if (-not $summary.HasKey) { Write-CogesLine '  Clé de sauvegarde   : ABSENTE (-Action Reparer -ClePublique <fichier>)' -Kind Attention }
+    $state = Read-CogesBackupState $Paths
+    if ($state['ancienne_base']) { Write-CogesLine ('  Ancienne base gardée : {0} (-Action NettoyerAncienneBase)' -f $state['ancienne_base']) -Kind Attention }
+    foreach ($alert in (Get-CogesBackupAlert -Now (Get-Date) -LastGood $summary.LastGood -LastOffsite $summary.LastOffsite -FreeBytes $summary.Free -TrialOk $summary.LastTrialOk)) {
+        Write-CogesLine ('  À faire : ' + $alert.Texte) -Kind Attention
+    }
+}
+
+function Install-CogesBackupSetup {
+    <# Installer et Reparer : clé publique, tâche « CoGes - sauvegarde » ; Installer fait en
+       plus une première sauvegarde et propose de préparer un disque (facultatif). #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
+        Justification = 'Lus dans les blocs des étapes (Invoke-CogesStep), que l''analyse ne suit pas.')]
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [hashtable] $Options, [Parameter(Mandatory)] [string] $Slug, [switch] $FirstBackup)
+    Invoke-CogesStep -Title 'Clé de sauvegarde (le PC chiffre, seul CoGes relit)' -Action {
+        Set-CogesBackupKey -Paths $Paths -Options $Options -Slug $Slug
+    }
+    Install-CogesBackupTask -Paths $Paths
+    if (-not $FirstBackup) { return }
+    Invoke-CogesStep -Title 'Première sauvegarde' -Action {
+        $lock = Enter-CogesLock -Paths $Paths -Action 'Première sauvegarde'
+        try {
+            $made = New-CogesBackup -Paths $Paths -Trial
+            Write-CogesLine ('  {0} ({1:N1} Mo).' -f $made.Path, ($made.Size / 1MB)) -Kind Ok
+        }
+        finally { Exit-CogesLock $lock }
+    }
+    if ($script:CogesState.Simulation) {
+        Write-CogesLine '[simulation] Proposition de préparer une clé USB de sauvegarde (facultatif)'
+        return
+    }
+    $drive = $Options.Lecteur
+    if (-not $drive -and -not $script:CogesState.NonInteractif) {
+        $drive = Read-Host 'Préparer une clé USB de sauvegarde maintenant ? Sa lettre (ex. E:), ou Entrée pour passer'
+    }
+    if ($drive) {
+        $prepare = @{} + $Options
+        $prepare.Lecteur = $drive
+        $prepare.CodeBoutique = $Slug
+        Invoke-CogesPrepareDisk -Paths $Paths -Options $prepare
+    }
+    else { Write-CogesLine '  Clé USB : plus tard, -Action PreparerDisque -Lecteur E:.' }
+}
+
+function Get-CogesFreshBackup {
+    <# Desinstaller -EffacerLesDonnees : une sauvegarde bonne de moins d'une heure, faite ici si besoin. #>
+    param([Parameter(Mandatory)] $Paths)
+    $summary = Get-CogesBackupSummary $Paths
+    if ($summary.Last -and ((Get-Date) - $summary.Last.Date).TotalMinutes -lt 60) { return $summary.Last.Path }
+    Write-CogesLine 'Sauvegarde des données avant de les effacer…' -Kind Titre
+    $lock = Enter-CogesLock -Paths $Paths -Action 'Sauvegarde avant effacement'
+    try { return (New-CogesBackup -Paths $Paths).Path }
+    finally { Exit-CogesLock $lock }
 }
 
 # ---------------------------------------------------------------------------- actions
@@ -1446,6 +2712,7 @@ function Invoke-CogesInstall {
         Test-CogesSite -Url $url
     }
     Install-CogesComfort -Paths $Paths -Url $url
+    Install-CogesBackupSetup -Paths $Paths -Options $Options -Slug $answers.CodeBoutique -FirstBackup
     Write-CogesLine ''
     if ($script:CogesState.Simulation) {
         Write-CogesLine 'Simulation terminée : rien n''a été écrit ni lancé.' -Kind Ok
@@ -1471,6 +2738,22 @@ function Invoke-CogesRepair {
     $slug = Read-CogesAnswer -Question 'Code de la boutique' -Parameter 'CodeBoutique' -Value $Options.CodeBoutique `
         -Validate { param($v) Test-CogesSlug $v } -Rule 'minuscules, chiffres et tirets entre deux mots.'
     $changed = ($settings['COGES_IMAGE_TAG'] -ne $version)
+    # Jamais pendant une sauvegarde ou une restauration (verrou commun, ADR 0127).
+    $lock = Enter-CogesLock -Paths $Paths -Action 'Reparer'
+    try { Invoke-CogesRepairLocked -Paths $Paths -Options $Options -Version $version -Settings $settings -Slug $slug -Changed $changed }
+    finally { Exit-CogesLock $lock }
+}
+
+function Invoke-CogesRepairLocked {
+    <# Le corps de Reparer, verrou tenu. #>
+    param(
+        [Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [hashtable] $Options, [Parameter(Mandatory)] [string] $Version,
+        [Parameter(Mandatory)] $Settings, [Parameter(Mandatory)] [string] $Slug, [bool] $Changed
+    )
+    $version = $Version
+    $settings = $Settings
+    $slug = $Slug
+    $changed = $Changed
     Test-CogesPrerequisite -Version $version -Racine $Paths.Racine -AlreadyInstalled
     Invoke-CogesStep -Title ('Programme {0} : reposé s''il manque, est abîmé ou d''une autre version' -f $version) -Action {
         if (Test-CogesProgramme -Paths $Paths -Version $version) {
@@ -1513,6 +2796,7 @@ function Invoke-CogesRepair {
     }
     Invoke-CogesStep -Title 'Dernier contrôle de la page d''accueil' -Action { Test-CogesSite -Url $url }
     Install-CogesComfort -Paths $Paths -Url $url
+    Install-CogesBackupSetup -Paths $Paths -Options $Options -Slug $slug
     Write-CogesLine ''
     if ($script:CogesState.Simulation) { Write-CogesLine 'Simulation terminée : rien n''a été écrit ni lancé.' -Kind Ok }
     else { Write-CogesLine ('Réparation terminée : {0}' -f $url) -Kind Ok }
@@ -1553,6 +2837,7 @@ function Show-CogesState {
     Write-CogesLine ('  Disque libre     : {0:N1} Go sur {1}' -f ($drive.AvailableFreeSpace / 1GB), $drive.Name)
     $last = Get-ChildItem -LiteralPath $Paths.Journaux -Filter 'installation-*.log' -ErrorAction SilentlyContinue | Sort-Object Name | Select-Object -Last 1
     if ($last) { Write-CogesLine ('  Dernier journal  : {0}' -f $last.FullName) }
+    Show-CogesBackupState $Paths
 }
 
 function Invoke-CogesUninstall {
@@ -1579,8 +2864,10 @@ function Invoke-CogesUninstall {
         if ($status.ExitCode -ne 0) {
             Stop-CogesStep -Probleme ('Aucune société « {0} » sur ce PC : rien n''est effacé.' -f $slug) -QuoiFaire 'Relancez et retapez le code exact.'
         }
-        Write-CogesLine 'Il n''existe pas encore de sauvegarde sur site (lot 4) : rien ne ramènera ces données.' -Kind Echec
-        Confirm-CogesWord -Word 'EFFACER' -Prompt ('Effacer pour toujours les données de {0} ?' -f $slug)
+        # Une sauvegarde bonne de moins d'une heure d'abord (faite ici si besoin), puis seulement EFFACER.
+        $kept = Get-CogesFreshBackup -Paths $Paths
+        Write-CogesLine ('Sauvegarde gardée : {0} (chiffrée ; elle se restaure avec la clé privée de ce client, -Action Restaurer).' -f $kept) -Kind Attention
+        Confirm-CogesWord -Word 'EFFACER' -Prompt ('Effacer pour toujours les données de {0} de ce PC ?' -f $slug)
     }
     Invoke-CogesStep -Title 'Arrêt et suppression des conteneurs (les volumes de données restent)' -Action {
         if ($hasSettings -and (Test-Path -LiteralPath $Paths.Compose)) {
@@ -1596,6 +2883,7 @@ function Invoke-CogesUninstall {
             Unregister-ScheduledTask -TaskName $script:CogesTaskName -Confirm:$false
         }
     }
+    Remove-CogesBackupTask
     Invoke-CogesStep -Title 'Raccourci du Bureau retiré' -Action {
         $shortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'CoGes.url'
         if (Test-Path -LiteralPath $shortcut) { Remove-Item -LiteralPath $shortcut -Force }
@@ -1623,7 +2911,7 @@ function Invoke-CogesUninstall {
 function Invoke-CogesMain {
     <# Le point d'entrée commun : rend 0 (fait) ou 1 (échec expliqué). #>
     param(
-        [ValidateSet('Installer', 'Reparer', 'Etat', 'Desinstaller')] [string] $Action = 'Installer',
+        [ValidateSet('Installer', 'Reparer', 'Etat', 'Desinstaller', 'Sauvegarder', 'Restaurer', 'PreparerDisque', 'NettoyerAncienneBase')] [string] $Action = 'Installer',
         [string] $Version = '',
         [string] $Racine = 'C:\CoGes',
         [int] $Port = 0,
@@ -1637,9 +2925,19 @@ function Invoke-CogesMain {
         [string] $TelephoneGerant = '',
         [string] $EmailGerant = '',
         [string] $Offre = '',
-        [string] $NoteContrat = ''
+        [string] $NoteContrat = '',
+        [string] $Fichier = '',
+        [string] $Cle = '',
+        [string] $Lecteur = '',
+        [string] $ClePublique = '',
+        [string] $LecteurCle = '',
+        [switch] $CleCopiee,
+        [switch] $ConfirmerRestauration,
+        [switch] $Essai,
+        [switch] $SansNotification
     )
     $script:CogesState.Simulation = [bool]$Simulation
+    $script:CogesToastEnabled = -not [bool]$SansNotification
     $script:CogesState.NonInteractif = [bool]$NonInteractif
     $script:CogesState.LogPath = $null
     $script:CogesState.Output.Clear()
@@ -1648,6 +2946,8 @@ function Invoke-CogesMain {
         Version = $Version; Port = $Port; CopieFaite = [bool]$CopieFaite; EffacerLesDonnees = [bool]$EffacerLesDonnees
         NomBoutique = $NomBoutique; CodeBoutique = $CodeBoutique; NomGerant = $NomGerant
         TelephoneGerant = $TelephoneGerant; EmailGerant = $EmailGerant; Offre = $Offre; NoteContrat = $NoteContrat
+        Fichier = $Fichier; Cle = $Cle; Lecteur = $Lecteur; ClePublique = $ClePublique; LecteurCle = $LecteurCle
+        CleCopiee = [bool]$CleCopiee; ConfirmerRestauration = [bool]$ConfirmerRestauration; Essai = [bool]$Essai
     }
     try {
         if ($Port -and ($Port -lt 1 -or $Port -gt 65535)) {
@@ -1662,6 +2962,10 @@ function Invoke-CogesMain {
             'Reparer' { Invoke-CogesRepair -Paths $paths -Options $options }
             'Etat' { Show-CogesState -Paths $paths -Options $options }
             'Desinstaller' { Invoke-CogesUninstall -Paths $paths -Options $options }
+            'Sauvegarder' { Invoke-CogesBackupAction -Paths $paths -Options $options }
+            'Restaurer' { Restore-CogesBackup -Paths $paths -Options $options }
+            'PreparerDisque' { Invoke-CogesPrepareDisk -Paths $paths -Options $options }
+            'NettoyerAncienneBase' { Invoke-CogesCleanOldDatabase -Paths $paths -Options $options }
         }
         return 0
     }
