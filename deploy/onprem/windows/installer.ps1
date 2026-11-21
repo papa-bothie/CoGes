@@ -16,7 +16,8 @@
 
 .PARAMETER Action
     Installer (défaut), Reparer, Etat, Desinstaller ; sauvegarde (ADR 0127) : Sauvegarder,
-    Restaurer, PreparerDisque, NettoyerAncienneBase.
+    Restaurer, PreparerDisque, NettoyerAncienneBase ; mises à jour (ADR 0128) :
+    VerifierMiseAJour, MettreAJour, RevenirVersionPrecedente.
 .PARAMETER Version
     La version de CoGes, vX.Y.Z (obligatoire pour Installer ; Reparer garde celle des réglages si absente).
 .PARAMETER Simulation
@@ -54,10 +55,21 @@
     Avec Sauvegarder : fait aussi la restauration d'essai.
 .PARAMETER SansNotification
     Aucune notification Windows (essais).
+.PARAMETER Maintenant
+    Avec MettreAJour : sans attendre 30 minutes sans vente (boutique fermée, technicien présent).
+.PARAMETER Bureau
+    Lancé par le raccourci « Mettre CoGes à jour » : mots simples, OUI à taper, fenêtre qui attend Entrée.
+.PARAMETER ConfirmerRetour
+    En -NonInteractif, avec RevenirVersionPrecedente : confirme REVENIR.
+.PARAMETER HeureMiseAJour
+    Avec Installer ou Reparer : l'heure du soir des mises à jour (HH:MM, 21:30 par défaut) ; repose la tâche.
+.PARAMETER CanalMiseAJour
+    Avec Installer ou Reparer : stable (défaut) ou test (PC d'essai de CoGes).
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Installer', 'Reparer', 'Etat', 'Desinstaller', 'Sauvegarder', 'Restaurer', 'PreparerDisque', 'NettoyerAncienneBase')] [string] $Action = 'Installer',
+    [ValidateSet('Installer', 'Reparer', 'Etat', 'Desinstaller', 'Sauvegarder', 'Restaurer', 'PreparerDisque', 'NettoyerAncienneBase',
+        'VerifierMiseAJour', 'MettreAJour', 'RevenirVersionPrecedente')] [string] $Action = 'Installer',
     [string] $Version = '',
     [switch] $Simulation,
     [string] $Racine = 'C:\CoGes',
@@ -81,7 +93,12 @@ param(
     [switch] $ConfirmerRestauration,
     [switch] $RestaurerQuandMeme,
     [switch] $Essai,
-    [switch] $SansNotification
+    [switch] $SansNotification,
+    [switch] $Maintenant,
+    [switch] $Bureau,
+    [switch] $ConfirmerRetour,
+    [string] $HeureMiseAJour = '',
+    [string] $CanalMiseAJour = ''
 )
 
 Set-StrictMode -Version Latest
