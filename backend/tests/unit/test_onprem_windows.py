@@ -27,8 +27,10 @@ def test_the_expected_scripts_are_there() -> None:
         "CoGes.Install.ps1",
         "demarrage.ps1",
         "sauvegarde.ps1",
+        "mise-a-jour.ps1",
         "tests/CoGes.Install.Tests.ps1",
         "tests/CoGes.Backup.Tests.ps1",
+        "tests/CoGes.Update.Tests.ps1",
     }
 
 

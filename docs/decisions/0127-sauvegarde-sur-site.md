@@ -138,6 +138,29 @@ les fichiers ne disent pas.
 - Le scénario complet du workflow « Sur site » reste sous sa limite de 30 minutes (environ
   2 min de plus que le lot 3).
 
+## Corrections après le test Windows (21/11/2026, lot 5, bloc 0)
+
+Trois constats des vérifications sur le PC Windows 11, corrigés avant le lot 5 :
+
+- **Mauvaise sauvegarde restaurée.** Après `Desinstaller -EffacerLesDonnees` puis
+  `Installer`, la plus récente de la clé était celle de la base neuve et vide, restaurée
+  « avec succès » sans donnée. Désormais : les sauvegardes faites avant une action portent
+  sa raison à la fin du nom (`-avant-effacement`, `-avant-restauration`, `-avant-maj`,
+  `-avant-retour`, `-installation`), traitées comme les autres par la rétention et la copie ;
+  `Restaurer` sans `-Fichier` liste celles du PC et de la clé CoGes (date, version, ventes,
+  sociétés, origine, raison) et fait choisir par numéro ; une sauvegarde sans vente, ou avec
+  moins de ventes que la base actuelle (`base.py etat` compte les ventes), exige
+  `RESTAURER-QUAND-MEME` en disant combien seraient perdues (`-RestaurerQuandMeme` en
+  `-NonInteractif`).
+- **« échec (code 1) » quand Docker Desktop est arrêté.** `Assert-CogesDockerRunning`
+  (`Get-CogesDockerEngineProblem`) en tête de `Sauvegarder`, `Restaurer`, `PreparerDisque`,
+  `NettoyerAncienneBase` et `Desinstaller` : « Docker Desktop ne tourne pas : ouvrez-le et
+  attendez « Engine running », puis relancez. Rien n'a changé. » `Etat` le dit sans
+  s'arrêter. `Installer` et `Reparer` gardent leur contrôle des prérequis.
+- **Docker Desktop qui ne démarre plus.** Marche à suivre au dépannage du guide, avec
+  l'interdiction de « Clean / Purge data » et « Reset to factory defaults » ; `Etat` affiche
+  en rouge moins de 5 Go libres.
+
 ## Limites
 
 - Pas d'exécution réelle sur Windows en CI (les runners n'exécutent pas les conteneurs

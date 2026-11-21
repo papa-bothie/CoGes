@@ -461,6 +461,7 @@ Describe 'Pose du programme' {
             'CoGes-1.2.3/deploy/onprem/postgres-init/01-roles.sql'     = "CREATE ROLE x;`n"
             'CoGes-1.2.3/deploy/onprem/windows/installer.ps1'          = "# installeur`n"
             'CoGes-1.2.3/deploy/onprem/windows/sauvegarde.ps1'         = "# tâche de sauvegarde`n"
+            'CoGes-1.2.3/deploy/onprem/windows/mise-a-jour.ps1'        = "# tâche de mise à jour`n"
             'CoGes-1.2.3/deploy/onprem/sauvegarde/pg.sh'               = "#!/bin/sh`n"
             'CoGes-1.2.3/deploy/onprem/sauvegarde/coffre.py'           = "print()`n"
             'CoGes-1.2.3/deploy/onprem/sauvegarde/base.py'             = "print()`n"
@@ -480,7 +481,7 @@ Describe 'Pose du programme' {
         $archive = Join-Path $TestDrive 'bon.zip'
         New-TestArchive -Path $archive -Files $script:Good
         $count = Install-Programme -Archive $archive -Racine $racine -Version 'v1.2.3'
-        $count | Should -Be 12
+        $count | Should -Be 13
         $paths = Get-CogesPath $racine
         Test-CogesProgramme -Paths $paths -Version 'v1.2.3' | Should -BeTrue
         Test-CogesProgramme -Paths $paths -Version 'v1.2.4' | Should -BeFalse

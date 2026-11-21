@@ -16,7 +16,8 @@
 
 .PARAMETER Action
     Installer (défaut), Reparer, Etat, Desinstaller ; sauvegarde (ADR 0127) : Sauvegarder,
-    Restaurer, PreparerDisque, NettoyerAncienneBase.
+    Restaurer, PreparerDisque, NettoyerAncienneBase ; mises à jour (ADR 0128) :
+    VerifierMiseAJour, MettreAJour, RevenirVersionPrecedente.
 .PARAMETER Version
     La version de CoGes, vX.Y.Z (obligatoire pour Installer ; Reparer garde celle des réglages si absente).
 .PARAMETER Simulation
@@ -34,6 +35,7 @@
     heure. Demande le code de la boutique.
 .PARAMETER Fichier
     Avec Restaurer : la sauvegarde (coges-….coges, avec ses .sha256 et .manifest.json à côté).
+    Sans lui, la liste des sauvegardes du PC et de la clé CoGes branchée est proposée.
 .PARAMETER Cle
     Avec Restaurer : le fichier de la clé PRIVÉE du client (lue, jamais copiée sur le PC).
 .PARAMETER Lecteur
@@ -46,14 +48,28 @@
     En -NonInteractif : confirme que la clé privée est rangée chez CoGes.
 .PARAMETER ConfirmerRestauration
     En -NonInteractif : confirme RESTAURER.
+.PARAMETER RestaurerQuandMeme
+    En -NonInteractif : confirme RESTAURER-QUAND-MEME (sauvegarde sans vente, ou avec moins de
+    ventes que la base actuelle).
 .PARAMETER Essai
     Avec Sauvegarder : fait aussi la restauration d'essai.
 .PARAMETER SansNotification
     Aucune notification Windows (essais).
+.PARAMETER Maintenant
+    Avec MettreAJour : sans attendre 30 minutes sans vente (boutique fermée, technicien présent).
+.PARAMETER Bureau
+    Lancé par le raccourci « Mettre CoGes à jour » : mots simples, OUI à taper, fenêtre qui attend Entrée.
+.PARAMETER ConfirmerRetour
+    En -NonInteractif, avec RevenirVersionPrecedente : confirme REVENIR.
+.PARAMETER HeureMiseAJour
+    Avec Installer ou Reparer : l'heure du soir des mises à jour (HH:MM, 21:30 par défaut) ; repose la tâche.
+.PARAMETER CanalMiseAJour
+    Avec Installer ou Reparer : stable (défaut) ou test (PC d'essai de CoGes).
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Installer', 'Reparer', 'Etat', 'Desinstaller', 'Sauvegarder', 'Restaurer', 'PreparerDisque', 'NettoyerAncienneBase')] [string] $Action = 'Installer',
+    [ValidateSet('Installer', 'Reparer', 'Etat', 'Desinstaller', 'Sauvegarder', 'Restaurer', 'PreparerDisque', 'NettoyerAncienneBase',
+        'VerifierMiseAJour', 'MettreAJour', 'RevenirVersionPrecedente')] [string] $Action = 'Installer',
     [string] $Version = '',
     [switch] $Simulation,
     [string] $Racine = 'C:\CoGes',
@@ -75,8 +91,14 @@ param(
     [string] $LecteurCle = '',
     [switch] $CleCopiee,
     [switch] $ConfirmerRestauration,
+    [switch] $RestaurerQuandMeme,
     [switch] $Essai,
-    [switch] $SansNotification
+    [switch] $SansNotification,
+    [switch] $Maintenant,
+    [switch] $Bureau,
+    [switch] $ConfirmerRetour,
+    [string] $HeureMiseAJour = '',
+    [string] $CanalMiseAJour = ''
 )
 
 Set-StrictMode -Version Latest

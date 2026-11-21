@@ -17,8 +17,16 @@ qui l'on donne ici une connexion `psycopg` à la place de `psql` (absent de cett
     python base.py supprimer NOM                      coges_verif, coges_restauration, anciennes
     python base.py bascule HORODATAGE                 coges → coges_avant_H, restauration → coges
     python base.py retour HORODATAGE                  coges → coges_echec_H, coges_avant_H → coges
-    python base.py bases                              les anciennes bases gardées
-    python base.py etat                               coges existe-t-elle, avec une société ?
+    python base.py bases                              anciennes bases (hors copies de mise à jour)
+    python base.py etat                               coges existe-t-elle ; sociétés et ventes
+
+Mises à jour (lot 5, ADR 0128) : le retour arrière se fait SANS la clé privée (que le PC n'a
+pas), par une copie de la base dans le même PostgreSQL, faite application arrêtée.
+
+    python base.py copier HORODATAGE                  coges → copie coges_avant_maj_H (TEMPLATE)
+    python base.py remettre H --ecarter E             coges → coges_<E>_maj_H, copie → coges
+    python base.py copies                             les copies d'avant une mise à jour
+    python base.py compter [--depuis ISO]             sociétés, ventes, codes, dernière activité
 """
 
 from __future__ import annotations
@@ -41,6 +49,9 @@ VERSIONS = Path("/srv/coges/migrations/versions")
 MAIN = "coges"
 SCRATCH = re.compile(r"^(coges_restauration|coges_verif)$")
 KEPT = re.compile(r"^coges_(avant|echec)_\d{8}_\d{4,6}$")
+#: Copie d'avant une mise à jour, et base écartée par un retour arrière (lot 5).
+UPDATE_COPY = re.compile(r"^coges_avant_maj_\d{8}_\d{4,6}$")
+UPDATE_KEPT = re.compile(r"^coges_(echec|apres)_maj_\d{8}_\d{4,6}$")
 STAMP = re.compile(r"^\d{8}_\d{4,6}$")
 
 
@@ -173,7 +184,12 @@ def cmd_prepare(name: str) -> None:
 
 
 def cmd_drop(name: str) -> None:
-    if not (SCRATCH.match(name) or KEPT.match(name)):
+    if not (
+        SCRATCH.match(name)
+        or KEPT.match(name)
+        or UPDATE_COPY.match(name)
+        or UPDATE_KEPT.match(name)
+    ):
         raise BaseError(f"« {name} » ne se supprime pas par cette commande")
     with connect("postgres", autocommit=True) as conn:
         _terminate(conn, name)
@@ -219,24 +235,117 @@ def cmd_back(stamp: str) -> None:
     print(json.dumps({"remise": before, "ecartee": failed if MAIN in names else None}))
 
 
-def cmd_list() -> None:
+def _databases(pattern: re.Pattern[str]) -> list[dict[str, Any]]:
     with connect("postgres") as conn:
         rows = conn.execute(
-            "SELECT datname, pg_database_size(datname) FROM pg_database "
-            "WHERE datname ~ '^coges_(avant|echec)_' ORDER BY datname"
+            "SELECT datname, pg_database_size(datname) FROM pg_database ORDER BY datname"
         ).fetchall()
-    print(json.dumps([{"nom": name, "octets": int(size)} for name, size in rows]))
+    return [{"nom": name, "octets": int(size)} for name, size in rows if pattern.match(name)]
+
+
+#: Ce que NettoyerAncienneBase propose : les bases d'une restauration, et celles qu'un
+#: retour arrière a écartées. Jamais la copie d'avant une mise à jour : c'est elle qui permet
+#: de revenir à la version précédente pendant 7 jours, puis la tâche la supprime.
+LISTED = re.compile(r"^coges_((avant|echec)|(echec|apres)_maj)_\d{8}_\d{4,6}$")
+
+
+def cmd_list() -> None:
+    print(json.dumps(_databases(LISTED)))
+
+
+def cmd_copies() -> None:
+    print(json.dumps(_databases(UPDATE_COPY)))
+
+
+def cmd_copy(stamp: str) -> None:
+    """Copie de `coges` faite application arrêtée (aucune autre connexion à la base)."""
+    if not STAMP.match(stamp):
+        raise BaseError("horodatage AAAAMMJJ_HHMM attendu")
+    copy = f"coges_avant_maj_{stamp}"
+    with connect("postgres", autocommit=True) as conn:
+        names = {row[0] for row in conn.execute("SELECT datname FROM pg_database")}
+        if MAIN not in names:
+            raise BaseError("la base coges n'existe pas : rien à copier")
+        if copy in names:
+            raise BaseError(f"{copy} existe déjà")
+        _terminate(conn, MAIN)
+        conn.execute(
+            sql.SQL("CREATE DATABASE {} TEMPLATE {} OWNER coges_owner").format(
+                sql.Identifier(copy), sql.Identifier(MAIN)
+            )
+        )
+        size = int(conn.execute("SELECT pg_database_size(%s)", (copy,)).fetchone()[0])  # type: ignore[index]
+    print(json.dumps({"copie": copy, "octets": size}))
+
+
+def cmd_put_back(stamp: str, set_aside: str) -> None:
+    """La copie redevient `coges` ; la base en place est gardée sous coges_<E>_maj_H."""
+    if not STAMP.match(stamp):
+        raise BaseError("horodatage AAAAMMJJ_HHMM attendu")
+    if set_aside not in ("echec", "apres"):
+        raise BaseError("--ecarter echec ou apres attendu")
+    copy, aside = f"coges_avant_maj_{stamp}", f"coges_{set_aside}_maj_{stamp}"
+    with connect("postgres", autocommit=True) as conn:
+        names = {row[0] for row in conn.execute("SELECT datname FROM pg_database")}
+        if copy not in names:
+            raise BaseError(f"{copy} absente : retour impossible")
+        if aside in names:
+            raise BaseError(f"{aside} existe déjà")
+        _terminate(conn, MAIN, copy)
+        if MAIN in names:
+            _rename(conn, MAIN, aside)
+        _rename(conn, copy, MAIN)
+    print(json.dumps({"remise": copy, "ecartee": aside if MAIN in names else None}))
+
+
+def cmd_count(since: str | None) -> None:
+    """Ce que la mise à jour compare avant et après, et l'activité de vente (30 minutes)."""
+    result: dict[str, Any] = {
+        "existe": exists(MAIN),
+        "societes": 0,
+        "ventes": 0,
+        "boutiques": [],
+        "derniere_activite": None,
+        "ventes_depuis": None,
+    }
+    if result["existe"]:
+        with connect(MAIN) as conn:
+            if conn.execute("SELECT to_regclass('public.companies')").fetchone()[0]:  # type: ignore[index]
+                result["boutiques"] = [
+                    row[0] for row in conn.execute("SELECT slug FROM companies ORDER BY created_at")
+                ]
+                result["societes"] = len(result["boutiques"])
+            if conn.execute("SELECT to_regclass('public.sales')").fetchone()[0]:  # type: ignore[index]
+                count, last = conn.execute(
+                    "SELECT count(*), max(greatest(created_at, updated_at, "
+                    "coalesce(confirmed_at, created_at))) FROM sales"
+                ).fetchone()  # type: ignore[misc]
+                result["ventes"] = int(count)
+                result["derniere_activite"] = last.isoformat() if last else None
+                if since:
+                    result["ventes_depuis"] = int(
+                        conn.execute(
+                            "SELECT count(*) FROM sales WHERE created_at > %s::timestamptz",
+                            (since,),
+                        ).fetchone()[0]  # type: ignore[index]
+                    )
+    print(json.dumps(result))
 
 
 def cmd_state() -> None:
     present = exists(MAIN)
-    companies = 0
+    companies = sales = 0
     if present:
         with connect(MAIN) as conn:
             table = conn.execute("SELECT to_regclass('public.companies')").fetchone()
             if table and table[0]:
                 companies = int(conn.execute("SELECT count(*) FROM companies").fetchone()[0])  # type: ignore[index]
-    print(json.dumps({"existe": present, "societes": companies}))
+            # Même mesure que le manifeste (toutes les lignes de sales) : comparée à celle de
+            # la sauvegarde choisie avant de restaurer (lot 5, bloc 0).
+            table = conn.execute("SELECT to_regclass('public.sales')").fetchone()
+            if table and table[0]:
+                sales = int(conn.execute("SELECT count(*) FROM sales").fetchone()[0])  # type: ignore[index]
+    print(json.dumps({"existe": present, "societes": companies, "ventes": sales}))
 
 
 # ---------------------------------------------------------------------------- vérifier
@@ -361,6 +470,13 @@ def main(argv: list[str] | None = None) -> int:
         sub.add_parser(command).add_argument("horodatage")
     sub.add_parser("bases")
     sub.add_parser("etat")
+    sub.add_parser("copier").add_argument("horodatage")
+    back = sub.add_parser("remettre")
+    back.add_argument("horodatage")
+    back.add_argument("--ecarter", required=True, choices=("echec", "apres"))
+    sub.add_parser("copies")
+    count = sub.add_parser("compter")
+    count.add_argument("--depuis", default=None)
     args = parser.parse_args(argv)
     try:
         if args.command == "manifeste":
@@ -379,6 +495,14 @@ def main(argv: list[str] | None = None) -> int:
             cmd_back(args.horodatage)
         elif args.command == "bases":
             cmd_list()
+        elif args.command == "copies":
+            cmd_copies()
+        elif args.command == "copier":
+            cmd_copy(args.horodatage)
+        elif args.command == "remettre":
+            cmd_put_back(args.horodatage, args.ecarter)
+        elif args.command == "compter":
+            cmd_count(args.depuis)
         else:
             cmd_state()
     except (BaseError, psycopg.Error, OSError) as error:

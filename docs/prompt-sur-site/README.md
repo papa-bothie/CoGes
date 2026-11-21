@@ -10,7 +10,7 @@ utilisateurs actuels ne voient aucune différence.
 | 2 | Commande `activate-license` et premier démarrage (`02-licence.md`) | Une société créée, licence activée | ✅ code et CI Linux (ADR 0125) ; vérifié sur Windows le 20/11/2026, v0.2.0 |
 | 3 | Script d'installation Windows (`03-script-installation.md`) | Installation en une commande | ✅ code et tests (ADR 0126) ; vérifié sur Windows le 20/11/2026, v0.2.0 |
 | 4 | Sauvegarde et restauration locales (`04-sauvegarde-restauration.md`) | Une panne simulée, données retrouvées | ✅ code et CI (ADR 0127) ; **à vérifier sur Windows** |
-| 5 | Mises à jour à distance et retour arrière | Passage d'une version à la suivante sans se déplacer | ⬜ |
+| 5 | Mises à jour à distance et retour arrière (`05-mises-a-jour-a-distance.md`) | Passage d'une version à la suivante sans se déplacer | ✅ code et CI Linux (ADR 0128) ; **à vérifier sur Windows** |
 | 6 | Support à distance et journaux | Intervention sans se déplacer | ⬜ |
 
 Lots 1 à 3 vérifiés sur un vrai PC Windows 11 le 20/11/2026, avec la version v0.2.0, en suivant
@@ -18,7 +18,7 @@ le guide de test : les 16 vérifications passent.
 
 Guide d'installation : `docs/runbooks/sur-site.md`. Décisions : `docs/decisions/0124-assemblage-sur-site.md`,
 `docs/decisions/0125-licence-sur-site.md`, `docs/decisions/0126-installation-windows-sur-site.md`,
-`docs/decisions/0127-sauvegarde-sur-site.md`.
+`docs/decisions/0127-sauvegarde-sur-site.md`, `docs/decisions/0128-mises-a-jour-sur-site.md`.
 
 ## Où sont les fichiers
 
@@ -26,8 +26,9 @@ Guide d'installation : `docs/runbooks/sur-site.md`. Décisions : `docs/decisions
 |---|---|
 | `deploy/onprem/` | ce qui est livré au client, autonome : compose, Caddyfile, amorçage des rôles, modèle de réglages, contrôles |
 | `deploy/onprem/windows/` | script d'installation Windows (lot 3) : `installer.ps1`, fonctions `CoGes.Install.ps1`, tâches `demarrage.ps1` et `sauvegarde.ps1` (lot 4), tests Pester |
+| `deploy/onprem/canal/` | canal des mises à jour (lot 5) : `publier.py` (chez CoGes), `stable.json` et `test.json` écrits par lui |
 | `deploy/onprem/sauvegarde/` | sauvegarde (lot 4) : chiffrement `coffre.py`, opérations de base `base.py`, `pg.sh`, copie fidèle de `verify_restore.py` |
-| `deploy/onprem-ci/` | vérification de bout en bout (`verifier.sh`, parcours Chromium, relecture des données) ; jamais livré |
+| `deploy/onprem-ci/` | vérification de bout en bout (`verifier.sh`, `verifier-mises-a-jour.sh`, parcours Chromium, relecture des données) ; jamais livré |
 | `.github/workflows/onprem.yml` | workflow « Sur site », à part de la CI et du déploiement |
 | `backend/tests/unit/test_onprem_*.py` | tests sur les fichiers versionnés (dont la table des dérogations) |
 | `backend/app/cli.py`, `backend/app/modules/platform/service.py` | `activate-license` et `license-status` (lot 2, ajouts seulement, dérogation de `check_protected_paths.py`) |
@@ -160,3 +161,37 @@ sous Windows PowerShell 5.1, la détection des disques amovibles (`DriveInfo`), 
 
 À rapporter : durée d'une sauvegarde et d'une restauration, taille des fichiers, messages
 exacts d'erreur, mémoire utilisée.
+
+## Lot 5 — à vérifier sur la machine Windows
+
+La CI joue les mises à jour de bout en bout sous Linux (`verifier-mises-a-jour.sh` : registre
+local, trois versions, le vrai script sous pwsh) et les tests Pester sous Windows PowerShell 5.1
+et pwsh sans Docker. Il faut une étiquette publiée qui contient le lot 5, installée sur le PC
+d'essai (`-Action Reparer -Version vX.Y.Z`), puis une seconde étiquette publiée sur le canal
+`test` (`publier.py`, guide « Publier une version pour les clients ») :
+
+1. Canal `test` réglé sur le PC (`-Action Reparer -CanalMiseAJour test`) ; la nouvelle étiquette
+   publiée sur `test` est vue et téléchargée pendant qu'on vend, sans coupure (tâche « CoGes -
+   mise à jour » à 12 h ou 18 h, ou `-Action VerifierMiseAJour`).
+2. Application à l'heure prévue (heure avancée pour le test : `-Action Reparer -HeureMiseAJour
+   HH:MM`), puis `Etat` : nouvelle version.
+3. Une vente dans les 30 minutes : application repoussée au lendemain ; `Etat` dit pourquoi.
+4. `-Action MettreAJour -Maintenant` : durée de la coupure notée.
+5. Mise à jour ratée exprès (version de test cassée) : retour seul, données là, notification
+   affichée.
+6. Canal faux (digest ou empreinte modifiés dans `test.json`) : refusé, rien changé.
+7. `RevenirVersionPrecedente` : avertissement des ventes perdues, puis retour réussi.
+8. Bloc 0 : `Restaurer` sans `-Fichier` liste les sauvegardes ; une sauvegarde à 0 vente exige
+   `RESTAURER-QUAND-MEME` ; Docker arrêté ⇒ message clair.
+9. Trois jours d'attente (avancer `prete_le` dans `C:\CoGes\mises-a-jour\etat.json` sur le PC
+   d'essai) : raccourci « Mettre CoGes à jour » sur le Bureau et une notification par jour ; le
+   double-clic ouvre la fenêtre, `OUI`, mise à jour, message final, Entrée ; le raccourci
+   disparaît.
+
+Points propres à Windows que ni Linux ni la CI ne prouvent : les déclencheurs de la tâche
+(12 h, 18 h, ouverture de session +10 min, heure du soir) et `StartWhenAvailable`, l'heure de
+démarrage lue par `Get-CimInstance`, `File.Replace` puis `icacls` sur `coges.env`, la
+notification et le raccourci `.cmd` (accents du nom), un vrai ghcr.io (index OCI) et le cache de
+raw.githubusercontent.com (quelques minutes après la fusion).
+
+À rapporter : durée de chaque étape, messages exacts, ce que dit `Etat`.

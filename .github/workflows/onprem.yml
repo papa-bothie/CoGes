@@ -117,6 +117,16 @@ jobs:
           ONPREM_TAG: ci
           ONPREM_SCREENSHOT: ${{ runner.temp }}/onprem-echec.png
 
+      # Lot 5 (ADR 0128) : mises à jour par le vrai script Windows sous pwsh. Registre local
+      # (registry:2), trois versions faites des images ci-dessus (la troisième avec une
+      # migration cassée), canaux écrits par publier.py : canal faux refusé, mise à jour,
+      # retour à la main après une vente, retour automatique.
+      - name: Mises à jour (canal, application, retour arrière)
+        run: deploy/onprem-ci/verifier-mises-a-jour.sh
+        env:
+          ONPREM_REGISTRY: coges-ci
+          ONPREM_TAG: ci
+
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
