@@ -3540,6 +3540,12 @@ function Get-CogesArchiveSource {
     return ('{0}/{1}.zip' -f $script:CogesArchiveBase, $Version)
 }
 
+function Get-CogesUpdateMinFree {
+    <# 5 Go ; COGES_PLACE_MIN_ESSAI (octets) l'abaisse pour les essais sur un poste au disque plein. #>
+    if ($env:COGES_PLACE_MIN_ESSAI -match '^\d+$') { return [long]$env:COGES_PLACE_MIN_ESSAI }
+    return [long]$script:CogesUpdateMinFree
+}
+
 function Get-CogesFreeSpace {
     param([Parameter(Mandatory)] [string] $Path)
     return (New-Object IO.DriveInfo ([IO.Path]::GetPathRoot([IO.Path]::GetFullPath($Path)))).AvailableFreeSpace
@@ -3601,15 +3607,19 @@ function Save-CogesUpdate {
 
     # 2. Les trois images de CoGes : l'étiquette doit pointer vers le digest du canal, et l'image
     #    est tirée par ce digest (jamais par l'étiquette), puis étiquetée sur le PC.
-    foreach ($image in $script:CogesImageNames) {
+    #    Les trois étiquettes d'abord : un canal faux ne fait rien tirer du tout.
+    $missing = @($script:CogesImageNames | Where-Object { -not (Test-CogesImageDigest -Registry $registry -Image $_ -Version $version -Digest ([string]$Channel['images'][$_])) })
+    foreach ($image in $missing) {
         $digest = [string]$Channel['images'][$image]
-        if (Test-CogesImageDigest -Registry $registry -Image $image -Version $version -Digest $digest) { continue }
         try { $remote = Get-CogesRemoteDigest -Registry $registry -Image $image -Tag $version }
         catch { Stop-CogesStep -Probleme ('L''image {0} de {1} ne se lit pas sur le registre ({2}).' -f $image, $version, $_.Exception.Message) -QuoiFaire 'Rien n''a changé ; nouvel essai à la prochaine vérification.' }
         if ($remote -ne $digest) {
             Stop-CogesStep -Probleme ('L''étiquette {0} de l''image {1} ne pointe plus vers le digest du canal ({2} au lieu de {3}) : refusé.' -f $version, $image, $remote, $digest) `
                 -QuoiFaire 'Rien n''a changé. Prévenez CoGes : une étiquette a bougé après la publication du canal.'
         }
+    }
+    foreach ($image in $missing) {
+        $digest = [string]$Channel['images'][$image]
         $byDigest = '{0}/{1}@{2}' -f $registry, $image, $digest
         $pull = Invoke-Docker -Arguments @('pull', '--quiet', $byDigest)
         if ($pull.ExitCode -ne 0) { Stop-CogesStep -Probleme ('Le téléchargement de l''image {0} a échoué.' -f $image) -QuoiFaire 'Rien n''a changé ; ce qui est téléchargé est gardé, nouvel essai à la prochaine vérification.' }
@@ -3620,14 +3630,15 @@ function Save-CogesUpdate {
     }
     Write-CogesLine '  Images front, api et worker téléchargées, digests vérifiés.' -Kind Ok
 
-    # 3. Les images d'autres éditeurs que le nouveau compose demande (Caddy, PostgreSQL…).
+    # 3. Les images d'autres éditeurs que le nouveau compose demande (Caddy, PostgreSQL…),
+    #    seulement celles qui manquent : le plus souvent elles n'ont pas changé.
     $compose = Join-Path $staged 'docker-compose.yml'
-    $pull = Invoke-Docker -Arguments (@('compose', '--env-file', $Paths.EnvFile, '-f', $compose, '--profile', 'tools', 'pull', '--quiet') + $script:CogesThirdPartyServices)
+    $pull = Invoke-Docker -Arguments (@('compose', '--env-file', $Paths.EnvFile, '-f', $compose, '--profile', 'tools', 'pull', '--quiet', '--policy', 'missing') + $script:CogesThirdPartyServices)
     if ($pull.ExitCode -ne 0) { Stop-CogesStep -Probleme 'Les images d''accompagnement (Caddy, PostgreSQL, Redis) ne se téléchargent pas.' -QuoiFaire 'Rien n''a changé ; nouvel essai à la prochaine vérification.' }
 
     # 4. Place : 5 Go libres après le téléchargement (la copie de la base et la sauvegarde viennent ensuite).
     $free = Get-CogesFreeSpace $Paths.Racine
-    if ($free -lt $script:CogesUpdateMinFree) {
+    if ($free -lt (Get-CogesUpdateMinFree)) {
         Stop-CogesStep -Probleme ('Il ne reste que {0:N1} Go libres après le téléchargement ; la mise à jour en demande 5.' -f ($free / 1GB)) `
             -QuoiFaire 'Libérez de la place sur le disque du PC ; la mise à jour se fera ensuite. Rien n''a changé.'
     }
@@ -3934,7 +3945,7 @@ function Invoke-CogesUpdateLocked {
     }
     Assert-CogesDockerRunning
     $free = Get-CogesFreeSpace $Paths.Racine
-    if ($free -lt $script:CogesUpdateMinFree) {
+    if ($free -lt (Get-CogesUpdateMinFree)) {
         Stop-CogesStep -Probleme ('Il ne reste que {0:N1} Go libres ; la mise à jour en demande 5.' -f ($free / 1GB)) -QuoiFaire 'Libérez de la place sur le disque du PC, puis relancez. Rien n''a changé.'
     }
     $count = Get-CogesCount -Paths $Paths
@@ -4037,7 +4048,8 @@ function Invoke-CogesUpdateLocked {
     $minutes = [Math]::Max(1, [int][Math]::Ceiling($watch.Elapsed.TotalMinutes))
     Set-CogesVersionState -State $State -Version $Version -Changes @{ etat = 'appliquee'; appliquee_le = (Get-Date).ToString('o') }
     $State['derniere_maj'] = @{ de = $from; vers = $Version; le = $Now.ToString('o'); resultat = 'reussie'; copie = $context.Copy
-        copie_fin = $Now.AddDays($script:CogesKeepDays).ToString('o'); minutes = $minutes; sauvegarde = $backup.Name }
+        copie_fin = $Now.AddDays($script:CogesKeepDays).ToString('o'); minutes = $minutes; sauvegarde = $backup.Name
+        societes = [long]$context.Before.societes; ventes = [long]$context.Before.ventes }
     Write-CogesUpdateState -Paths $Paths -State $State
     if (Test-Path -LiteralPath $staged) { Remove-Item -LiteralPath $staged -Recurse -Force }
     Set-CogesUpdateShortcut -Paths $Paths -Present $false
@@ -4338,7 +4350,11 @@ function Invoke-CogesRollbackAction {
         [void](Get-CogesSetting $Paths)
         $up = Invoke-CogesCompose -Paths $Paths -Arguments @('up', '-d', '--remove-orphans')
         if ($up.ExitCode -ne 0) { Stop-CogesStep -Probleme ('Le démarrage de {0} a échoué.' -f $last['de']) -QuoiFaire ('Appelez CoGes. La base d''après est gardée sous coges_apres_maj_{0}, et la sauvegarde {1}.' -f $last['copie'], $backup.Name) }
+        # La base remise doit être celle de la mise à jour : mêmes sociétés et ventes qu'à ce moment-là.
         $reference = Get-CogesCount -Paths $Paths
+        if ($last.ContainsKey('ventes') -and $null -ne $last['ventes']) {
+            $reference = [pscustomobject]@{ societes = $last['societes']; ventes = $last['ventes']; boutiques = $reference.boutiques }
+        }
         Test-CogesUpdatedSite -Paths $Paths -Before $reference
         Install-CogesTasksAgain $Paths
         if (Test-Path -LiteralPath $after) { Remove-Item -LiteralPath $after -Recurse -Force }
