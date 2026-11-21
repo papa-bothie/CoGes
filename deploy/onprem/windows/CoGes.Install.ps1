@@ -61,6 +61,10 @@ $script:CogesProgrammeFiles = @(
 #: Lus par un conteneur Linux : un « \r » les casserait.
 $script:CogesLfFiles = @('Caddyfile', 'postgres-init/01-roles.sql', 'sauvegarde/pg.sh')
 
+#: Les actions qui appellent Docker et contrôlent d'abord son moteur (lot 5, bloc 0).
+#: Desinstaller le contrôle lui-même, après ses refus qui ne demandent pas Docker.
+$script:CogesDockerActions = @('Sauvegarder', 'Restaurer', 'PreparerDisque', 'NettoyerAncienneBase')
+
 #: Offres et nombre de comptes actifs (révision 0028, ADR 0091).
 $script:CogesPlans = [ordered]@{ starter = 3; business = 7; premium = 10 }
 
@@ -508,6 +512,46 @@ function Get-CogesDockerProblem {
     if ($text -match '(?i)access is denied|permission denied|acc\S*s refus') { return 'acces' }
     if ($text -match '(?i)cannot find the file specified|is the docker daemon running|error during connect|cannot connect to the docker|fichier sp\S*cifi\S* est introuvable|pipe.*docker_engine') { return 'eteint' }
     return 'autre'
+}
+
+#: Le message quand le moteur de Docker Desktop est arrêté (lot 5, bloc 0 : « échec (code 1) » avant).
+$script:CogesDockerStoppedText = 'Docker Desktop ne tourne pas : ouvrez-le et attendez « Engine running », puis relancez. Rien n''a changé.'
+
+function Get-CogesDockerEngineProblem {
+    <# $null si le moteur Linux de Docker répond ; sinon absent, acces, eteint ou windows. #>
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return 'absent' }
+    $result = Invoke-Docker -Arguments @('version', '--format', '{{.Server.Os}}')
+    if ($result.ExitCode -ne 0) {
+        $problem = Get-CogesDockerProblem $result.Output
+        if ($problem -eq 'acces') { return 'acces' }
+        return 'eteint'
+    }
+    if ((@($result.Stdout) | Select-Object -Last 1) -ne 'linux') { return 'windows' }
+    return $null
+}
+
+function Assert-CogesDockerRunning {
+    <# En tête de toute action qui appelle Docker : un message clair, avant de rien changer. #>
+    $problem = Get-CogesDockerEngineProblem
+    if ($null -eq $problem) { return }
+    switch ($problem) {
+        'absent' {
+            Stop-CogesStep -Probleme 'Docker Desktop n''est pas installé sur ce PC. Rien n''a changé.' `
+                -QuoiFaire ('Installez-le depuis ' + $script:CogesDockerDownload + ', puis relancez.')
+        }
+        'acces' {
+            Stop-CogesStep -Probleme 'Docker refuse l''accès à ce compte Windows. Rien n''a changé.' `
+                -QuoiFaire 'Ajoutez ce compte au groupe « docker-users », fermez la session Windows, rouvrez-la, puis relancez.'
+        }
+        'windows' {
+            Stop-CogesStep -Probleme 'Docker Desktop tourne avec des conteneurs Windows. Rien n''a changé.' `
+                -QuoiFaire 'Clic droit sur l''icône de Docker (près de l''horloge) > « Switch to Linux containers… », puis relancez.'
+        }
+        default {
+            Stop-CogesStep -Probleme $script:CogesDockerStoppedText `
+                -QuoiFaire 'Si « Engine running » ne vient pas, suivez « Docker Desktop ne démarre plus » dans le guide (jamais « Clean / Purge data » ni « Reset to factory defaults »).'
+        }
+    }
 }
 
 function Test-CogesPortInUseError {
@@ -1391,7 +1435,10 @@ $script:CogesLockFile = 'coges.verrou'
 #: Notifications Windows : coupées par -SansNotification (tests, technicien).
 $script:CogesToastEnabled = $true
 
-$script:CogesBackupPattern = '^coges-(?<slug>[a-z0-9]+(?:-[a-z0-9]+)*)-(?<date>\d{8})-(?<time>\d{4}(?:\d{2})?)-(?<version>[A-Za-z0-9][A-Za-z0-9.-]*)\.coges$'
+#: Les sauvegardes faites AVANT une action portent sa raison à la fin du nom (lot 5, bloc 0) :
+#: la plus récente d'une clé USB n'est plus confondue avec celle d'une base neuve et vide.
+$script:CogesBackupReasons = @('avant-effacement', 'avant-restauration', 'avant-maj', 'avant-retour', 'installation')
+$script:CogesBackupPattern = '^coges-(?<slug>[a-z0-9]+(?:-[a-z0-9]+)*)-(?<date>\d{8})-(?<time>\d{4}(?:\d{2})?)-(?<version>[A-Za-z0-9][A-Za-z0-9.-]*?)(?:-(?<raison>' + ($script:CogesBackupReasons -join '|') + '))?\.coges$'
 
 function Get-CogesBackupPath {
     <# Les endroits de la sauvegarde, à côté des trois du guide. #>
@@ -1409,16 +1456,20 @@ function Get-CogesBackupPath {
 # ---------------------------------------------------------------------------- noms et rétention (fonctions pures)
 
 function Get-CogesBackupName {
-    <# coges-<code-boutique>-AAAAMMJJ-HHMM-<version>.coges #>
+    <# coges-<code-boutique>-AAAAMMJJ-HHMM-<version>[-<raison>].coges #>
     param(
         [Parameter(Mandatory)] [string] $Slug,
         [Parameter(Mandatory)] [datetime] $Date,
         [Parameter(Mandatory)] [string] $Version,
-        [switch] $WithSeconds
+        [switch] $WithSeconds,
+        [AllowEmptyString()] [string] $Raison = ''
     )
+    if ($Raison -and ($script:CogesBackupReasons -cnotcontains $Raison)) { throw ('Raison de sauvegarde inconnue : ' + $Raison) }
     $format = 'yyyyMMdd-HHmm'
     if ($WithSeconds) { $format = 'yyyyMMdd-HHmmss' }
-    return ('coges-{0}-{1}-{2}.coges' -f $Slug, $Date.ToString($format, [Globalization.CultureInfo]::InvariantCulture), $Version)
+    $suffix = ''
+    if ($Raison) { $suffix = '-' + $Raison }
+    return ('coges-{0}-{1}-{2}{3}.coges' -f $Slug, $Date.ToString($format, [Globalization.CultureInfo]::InvariantCulture), $Version, $suffix)
 }
 
 function ConvertFrom-CogesBackupName {
@@ -1427,7 +1478,9 @@ function ConvertFrom-CogesBackupName {
     if ($Name -cnotmatch $script:CogesBackupPattern) { return $null }
     $stamp = $Matches['date'] + $Matches['time'].PadRight(6, '0')
     $date = [datetime]::ParseExact($stamp, 'yyyyMMddHHmmss', [Globalization.CultureInfo]::InvariantCulture)
-    return [pscustomobject]@{ Name = $Name; Slug = $Matches['slug']; Date = $date; Version = $Matches['version'] }
+    $reason = ''
+    if ($Matches.ContainsKey('raison')) { $reason = $Matches['raison'] }
+    return [pscustomobject]@{ Name = $Name; Slug = $Matches['slug']; Date = $date; Version = $Matches['version']; Raison = $reason }
 }
 
 function Select-CogesBackupToDelete {
@@ -1908,7 +1961,9 @@ function New-CogesBackup {
         [Parameter(Mandatory)] $Paths,
         [switch] $Trial,
         [switch] $SkipOffsite,
-        [Nullable[datetime]] $Now = $null
+        [Nullable[datetime]] $Now = $null,
+        # Sauvegarde faite avant une action : sa raison à la fin du nom (bloc 0 du lot 5).
+        [AllowEmptyString()] [string] $Raison = ''
     )
     if ($null -eq $Now) { $Now = Get-Date }
     $backup = Get-CogesBackupPath $Paths
@@ -1938,8 +1993,8 @@ function New-CogesBackup {
             Stop-CogesStep -Probleme ('Pas assez de place sur le disque ({0:N1} Go libres, il en faut 2 de plus que la sauvegarde).' -f ($free / 1GB)) `
                 -QuoiFaire 'Libérez de la place sur le disque du PC (Corbeille, Téléchargements), puis relancez. Les sauvegardes existantes sont gardées.'
         }
-        $name = Get-CogesBackupName -Slug $slug -Date $Now -Version $version
-        if (Test-Path -LiteralPath (Join-Path $backup.Dossier $name)) { $name = Get-CogesBackupName -Slug $slug -Date $Now -Version $version -WithSeconds }
+        $name = Get-CogesBackupName -Slug $slug -Date $Now -Version $version -Raison $Raison
+        if (Test-Path -LiteralPath (Join-Path $backup.Dossier $name)) { $name = Get-CogesBackupName -Slug $slug -Date $Now -Version $version -WithSeconds -Raison $Raison }
         $file = Join-Path $backup.Dossier $name
         # 2. pg_dump dans le volume de travail, relu par pg_restore --list.
         $dump = Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-pg' -What 'Copie de la base (pg_dump)' -Arguments @('dump', $stem)
@@ -2371,14 +2426,91 @@ function Get-CogesManifestValue {
     return $Default
 }
 
+function Get-CogesRestoreCandidate {
+    <# Les bonnes sauvegardes du PC et des disques CoGes branchés (dossier CoGes d'un disque qui
+       porte le repère), la plus récente d'abord. Chacune : Path, Name, Date, Origine, Version,
+       Ventes (nombre ou $null), Societes, Raison. Une même sauvegarde vue deux fois : celle du PC. #>
+    param([Parameter(Mandatory)] $Paths)
+    $sources = @(@{ Folder = (Get-CogesBackupPath $Paths).Dossier; Origine = 'PC' })
+    foreach ($root in (Get-CogesOffsiteRoot $Paths)) {
+        if (Test-Path -LiteralPath (Join-Path $root $script:CogesDiskMarker) -PathType Leaf) {
+            $sources += @{ Folder = (Join-Path $root $script:CogesOffsiteFolder); Origine = ('clé ' + $root) }
+        }
+    }
+    $seen = @{}
+    $found = foreach ($source in $sources) {
+        foreach ($item in @(Get-CogesGoodBackup $source.Folder)) {
+            if ($seen.ContainsKey($item.Name)) { continue }
+            $seen[$item.Name] = $true
+            $manifest = $null
+            try { $manifest = [IO.File]::ReadAllText($item.Path + '.manifest.json') | ConvertFrom-Json } catch { Write-Verbose 'manifeste illisible' }
+            $sales = Get-CogesManifestValue (Get-CogesManifestValue $manifest 'tables') 'sales'
+            $companies = Get-CogesManifestValue $manifest 'companies'
+            if ($null -eq $companies) { $companies = @(Get-CogesManifestValue $manifest 'boutiques' @()).Count }
+            [pscustomobject]@{
+                Path = $item.Path; Name = $item.Name; Date = $item.Date; Origine = $source.Origine; Raison = $item.Raison
+                Version = (Get-CogesManifestValue $manifest 'coges_version' $item.Version)
+                Ventes = $(if ($null -ne $sales) { [long]$sales } else { $null }); Societes = [int]$companies
+            }
+        }
+    }
+    return @($found | Sort-Object -Property @{ Expression = 'Date'; Descending = $true }, @{ Expression = 'Name'; Descending = $true })
+}
+
+function Format-CogesRestoreCandidate {
+    <# Une ligne de la liste : « 1. 21/11/2026 13:00  v0.3.0  12 ventes, 1 société  PC  (avant mise à jour) ». #>
+    param([Parameter(Mandatory)] $Candidate, [Parameter(Mandatory)] [int] $Number)
+    $reasons = @{ 'avant-effacement' = 'avant effacement'; 'avant-restauration' = 'avant restauration'; 'avant-maj' = 'avant mise à jour'
+        'avant-retour' = 'avant retour à la version précédente'; 'installation' = 'installation : base neuve' }
+    $sales = 'ventes : ?'
+    if ($null -ne $Candidate.Ventes) { $sales = '{0} vente(s)' -f $Candidate.Ventes }
+    $line = '{0,3}. {1}  {2,-8}  {3}, {4} société(s)  {5}' -f $Number, $Candidate.Date.ToString('dd/MM/yyyy HH:mm'), $Candidate.Version, $sales, $Candidate.Societes, $Candidate.Origine
+    if ($Candidate.Raison) { $line += '  (' + $reasons[$Candidate.Raison] + ')' }
+    return $line
+}
+
+function Select-CogesRestoreFile {
+    <# Restaurer sans -Fichier : la liste numérotée, puis le numéro choisi. #>
+    param([Parameter(Mandatory)] $Paths)
+    $candidates = @(Get-CogesRestoreCandidate $Paths)
+    if ($candidates.Count -eq 0) {
+        Stop-CogesStep -Probleme 'Aucune sauvegarde sur ce PC ni sur une clé CoGes branchée.' `
+            -QuoiFaire 'Branchez la clé CoGes du client (ou donnez le fichier : -Fichier <chemin du .coges>). Rien n''a changé.'
+    }
+    Write-CogesLine 'Sauvegardes trouvées (la plus récente en haut)' -Kind Titre
+    for ($index = 0; $index -lt $candidates.Count; $index++) { Write-CogesLine (Format-CogesRestoreCandidate -Candidate $candidates[$index] -Number ($index + 1)) }
+    $count = $candidates.Count
+    $answer = Read-CogesAnswer -Question 'Numéro de la sauvegarde à restaurer' -Parameter 'Fichier' -Value '' `
+        -Validate { param($v) ($v -match '^\s*\d+\s*$') -and [int]$v -ge 1 -and [int]$v -le $count } -Rule ('un numéro de 1 à {0}.' -f $count)
+    return $candidates[[int]$answer - 1].Path
+}
+
+function Get-CogesRestoreLoss {
+    <# Avertissement renforcé : la sauvegarde n'a aucune vente (ou on ne sait pas), ou moins que
+       la base actuelle. Rend le texte de l'avertissement, ou $null. #>
+    param([AllowNull()] $BackupSales, [long] $CurrentSales = 0)
+    if ($null -eq $BackupSales -or '' -eq $BackupSales -or '?' -eq $BackupSales) {
+        return 'Cette sauvegarde ne dit pas combien elle contient de ventes.'
+    }
+    $backup = [long]$BackupSales
+    if ($backup -eq 0) {
+        $text = 'Cette sauvegarde ne contient AUCUNE vente (base neuve ou vide ?).'
+        if ($CurrentSales -gt 0) { $text += (' Les {0} vente(s) de ce PC seraient perdues.' -f $CurrentSales) }
+        return $text
+    }
+    if ($backup -lt $CurrentSales) {
+        return ('Cette sauvegarde a {0} vente(s), la base de ce PC en a {1} : {2} vente(s) seraient perdues.' -f $backup, $CurrentSales, ($CurrentSales - $backup))
+    }
+    return $null
+}
+
 function Restore-CogesBackup {
     <# -Action Restaurer -Fichier <chemin> -Cle <chemin> : chaque étape s'arrête au premier
        problème sans avoir rien changé ; après la bascule, un échec ramène l'ancienne base. #>
     param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [hashtable] $Options)
-    if (-not $Options.Fichier) { Stop-CogesStep -Probleme 'Il manque la sauvegarde à restaurer.' -QuoiFaire 'Relancez avec -Fichier <chemin du .coges> et -Cle <fichier de la clé privée>.' }
     if (-not $Options.Cle) { Stop-CogesStep -Probleme 'Il manque la clé privée.' -QuoiFaire 'Relancez avec -Cle <fichier de la clé privée de ce client> (gestionnaire de mots de passe de CoGes).' }
     if ($script:CogesState.Simulation) {
-        foreach ($step in @('1. empreinte et manifeste, puis RESTAURER', '2. version', '3. sauvegarde de la base actuelle', '4. restauration à côté (coges_restauration) et contrôles',
+        foreach ($step in @('0. sans -Fichier : liste des sauvegardes du PC et de la clé CoGes, choix par numéro', '1. empreinte et manifeste, puis RESTAURER (RESTAURER-QUAND-MEME si des ventes seraient perdues)', '2. version', '3. sauvegarde de la base actuelle', '4. restauration à côté (coges_restauration) et contrôles',
                 '5. arrêt de l''application, bascule (ancienne base gardée)', '6. migrate si besoin, démarrage, licence, page d''accueil', '7. retour automatique en cas d''échec')) {
             Write-CogesLine ('[simulation] ' + $step)
         }
@@ -2391,8 +2523,16 @@ function Restore-CogesBackup {
     $backup = Get-CogesBackupPath $Paths
     $lock = Enter-CogesLock -Paths $Paths -Action 'Restaurer'
     try {
+        # 0. Sans -Fichier : la liste du PC et de la clé CoGes, choisie par numéro (bloc 0 du lot 5).
+        $chosen = $Options.Fichier
+        if (-not $chosen) {
+            if ($script:CogesState.NonInteractif) {
+                Stop-CogesStep -Probleme 'Il manque la sauvegarde à restaurer.' -QuoiFaire 'En mode -NonInteractif, passez -Fichier <chemin du .coges>. Rien n''a changé.'
+            }
+            $chosen = Select-CogesRestoreFile $Paths
+        }
         # 1. Fichier, empreinte, manifeste, clé : rien n'est changé.
-        $source = [IO.Path]::GetFullPath($Options.Fichier)
+        $source = [IO.Path]::GetFullPath($chosen)
         $manifest = Read-CogesBackupFile $source
         $key = Read-CogesKeyFile -Path $Options.Cle -Kind Privee
         $sales = Get-CogesManifestValue (Get-CogesManifestValue $manifest 'tables') 'sales' '?'
@@ -2403,7 +2543,18 @@ function Restore-CogesBackup {
         Write-CogesLine ('  Version    : {0} (révision {1})' -f $manifest.coges_version, $manifest.alembic_revision)
         Write-CogesLine ('  Ventes     : {0}' -f $sales)
         Write-CogesLine 'La base actuelle sera sauvegardée, puis GARDÉE à côté (rien n''est effacé).' -Kind Attention
-        Confirm-CogesWord -Word 'RESTAURER' -Prompt 'Remplacer les données de ce PC par cette sauvegarde ?' -Given $Options.ConfirmerRestauration -Parameter 'ConfirmerRestauration'
+        $current = Get-CogesLastJson (Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Lecture de la base actuelle' -Arguments @('base.py', 'etat')).Stdout
+        $currentSales = [long](Get-CogesManifestValue $current 'ventes' 0)
+        Write-CogesLine ('  Ventes sur ce PC aujourd''hui : {0}' -f $currentSales)
+        $loss = Get-CogesRestoreLoss -BackupSales $sales -CurrentSales $currentSales
+        if ($loss) {
+            Write-CogesLine ('ATTENTION : ' + $loss) -Kind Echec
+            Write-CogesLine 'Vérifiez la date et le nombre de ventes : la plus récente n''est pas toujours la bonne (une installation neuve fait aussi une sauvegarde).' -Kind Echec
+            Confirm-CogesWord -Word 'RESTAURER-QUAND-MEME' -Prompt 'Restaurer quand même cette sauvegarde ?' -Given $Options.RestaurerQuandMeme -Parameter 'RestaurerQuandMeme'
+        }
+        else {
+            Confirm-CogesWord -Word 'RESTAURER' -Prompt 'Remplacer les données de ce PC par cette sauvegarde ?' -Given $Options.ConfirmerRestauration -Parameter 'ConfirmerRestauration'
+        }
 
         # 2. Version : la révision doit être connue du programme installé.
         $revisions = Get-CogesLastJson (Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Révisions du programme installé' -Arguments @('base.py', 'revisions')).Stdout
@@ -2414,11 +2565,10 @@ function Restore-CogesBackup {
         $migrate = ([string]$manifest.alembic_revision -ne [string]$revisions.tete)
         Write-CogesLine ('  Version : révision {0} connue de {1}{2}.' -f $manifest.alembic_revision, $settings['COGES_IMAGE_TAG'], $(if ($migrate) { ', la base sera mise à jour après' } else { '' })) -Kind Ok
 
-        # 3. La base actuelle d'abord, si elle existe et n'est pas vide.
-        $current = Get-CogesLastJson (Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Lecture de la base actuelle' -Arguments @('base.py', 'etat')).Stdout
+        # 3. La base actuelle d'abord, si elle existe et n'est pas vide (lue à l'étape 1).
         if ($current.existe -and [int]$current.societes -gt 0) {
             Write-CogesLine '» Sauvegarde de la base actuelle avant tout changement' -Kind Titre
-            $before = New-CogesBackup -Paths $Paths
+            $before = New-CogesBackup -Paths $Paths -Raison 'avant-restauration'
             Write-CogesLine ('  {0}' -f $before.Path) -Kind Ok
         }
 
@@ -2571,7 +2721,7 @@ function Install-CogesBackupSetup {
     Invoke-CogesStep -Title 'Première sauvegarde' -Action {
         $lock = Enter-CogesLock -Paths $Paths -Action 'Première sauvegarde'
         try {
-            $made = New-CogesBackup -Paths $Paths -Trial
+            $made = New-CogesBackup -Paths $Paths -Trial -Raison 'installation'
             Write-CogesLine ('  {0} ({1:N1} Mo).' -f $made.Path, ($made.Size / 1MB)) -Kind Ok
         }
         finally { Exit-CogesLock $lock }
@@ -2600,7 +2750,7 @@ function Get-CogesFreshBackup {
     if ($summary.Last -and ((Get-Date) - $summary.Last.Date).TotalMinutes -lt 60) { return $summary.Last.Path }
     Write-CogesLine 'Sauvegarde des données avant de les effacer…' -Kind Titre
     $lock = Enter-CogesLock -Paths $Paths -Action 'Sauvegarde avant effacement'
-    try { return (New-CogesBackup -Paths $Paths).Path }
+    try { return (New-CogesBackup -Paths $Paths -Raison 'avant-effacement').Path }
     finally { Exit-CogesLock $lock }
 }
 
@@ -2818,23 +2968,32 @@ function Show-CogesState {
     Write-CogesLine ('  Programme        : {0}' -f (Get-CogesInstalledVersion $Paths))
     Write-CogesLine ('  Version réglée   : {0}' -f $settings['COGES_IMAGE_TAG'])
     Write-CogesLine ('  Adresse          : {0} (port {1})' -f $settings['COGES_PUBLIC_URL'], $settings['COGES_HTTP_PORT'])
-    $ps = Invoke-CogesCompose -Paths $Paths -Arguments @('ps', '-a', '--format', 'json')
-    $containers = @(ConvertFrom-CogesComposeStatus $ps.Stdout)
-    foreach ($service in $script:CogesServices) {
-        $container = @($containers | Where-Object { $_.Service -eq $service }) | Select-Object -First 1
-        $state = 'absent'
-        if ($container) { $state = ($container.State + ' ' + $container.Health).Trim() }
-        Write-CogesLine ('  {0,-16} : {1}' -f $service, $state)
-    }
-    $slug = Read-CogesAnswer -Question 'Code de la boutique (vide pour passer)' -Parameter 'CodeBoutique' -Value $Options.CodeBoutique -Optional `
-        -Validate { param($v) Test-CogesSlug $v } -Rule 'minuscules, chiffres et tirets entre deux mots.'
-    if ($slug) {
-        foreach ($line in (Get-CogesLicenseStatus -Paths $Paths -Slug $slug).Output) {
-            if ($line -and $line -notmatch '^\s*Container ') { Write-CogesLine ('  ' + $line) }
+    # Docker arrêté : on le dit, et on montre quand même ce que disent les fichiers.
+    $engine = Get-CogesDockerEngineProblem
+    if ($null -eq $engine) {
+        $ps = Invoke-CogesCompose -Paths $Paths -Arguments @('ps', '-a', '--format', 'json')
+        $containers = @(ConvertFrom-CogesComposeStatus $ps.Stdout)
+        foreach ($service in $script:CogesServices) {
+            $container = @($containers | Where-Object { $_.Service -eq $service }) | Select-Object -First 1
+            $state = 'absent'
+            if ($container) { $state = ($container.State + ' ' + $container.Health).Trim() }
+            Write-CogesLine ('  {0,-16} : {1}' -f $service, $state)
+        }
+        $slug = Read-CogesAnswer -Question 'Code de la boutique (vide pour passer)' -Parameter 'CodeBoutique' -Value $Options.CodeBoutique -Optional `
+            -Validate { param($v) Test-CogesSlug $v } -Rule 'minuscules, chiffres et tirets entre deux mots.'
+        if ($slug) {
+            foreach ($line in (Get-CogesLicenseStatus -Paths $Paths -Slug $slug).Output) {
+                if ($line -and $line -notmatch '^\s*Container ') { Write-CogesLine ('  ' + $line) }
+            }
         }
     }
-    $drive = New-Object IO.DriveInfo ([IO.Path]::GetPathRoot($Paths.Racine))
-    Write-CogesLine ('  Disque libre     : {0:N1} Go sur {1}' -f ($drive.AvailableFreeSpace / 1GB), $drive.Name)
+    else { Write-CogesLine ('  Docker           : ' + $script:CogesDockerStoppedText) -Kind Echec }
+    $drive = New-Object IO.DriveInfo ([IO.Path]::GetPathRoot([IO.Path]::GetFullPath($Paths.Racine)))
+    $freeKind = 'Info'
+    if ($drive.AvailableFreeSpace -lt $script:CogesAlertFreeBytes) { $freeKind = 'Echec' }
+    $freeText = '  Disque libre     : {0:N1} Go sur {1}' -f ($drive.AvailableFreeSpace / 1GB), $drive.Name
+    if ($freeKind -eq 'Echec') { $freeText += ' : MOINS DE 5 GO, libérez de la place (jamais « Clean / Purge data » dans Docker Desktop)' }
+    Write-CogesLine $freeText -Kind $freeKind
     $last = Get-ChildItem -LiteralPath $Paths.Journaux -Filter 'installation-*.log' -ErrorAction SilentlyContinue | Sort-Object Name | Select-Object -Last 1
     if ($last) { Write-CogesLine ('  Dernier journal  : {0}' -f $last.FullName) }
     Show-CogesBackupState $Paths
@@ -2848,6 +3007,7 @@ function Invoke-CogesUninstall {
     if ($erase -and $script:CogesState.NonInteractif) {
         Stop-CogesStep -Probleme 'L''effacement des données exige une personne devant le PC.' -QuoiFaire 'Relancez sans -NonInteractif.'
     }
+    if (-not $script:CogesState.Simulation) { Assert-CogesDockerRunning }
     $hasSettings = Test-Path -LiteralPath $Paths.EnvFile
     Write-CogesLine 'Désinstallation : les conteneurs, la tâche planifiée, le raccourci et la commande « coges » sont retirés.' -Kind Titre
     if ($erase) { Write-CogesLine 'ET LES DONNÉES (ventes, stock, clients…) seront effacées.' -Kind Echec }
@@ -2933,6 +3093,7 @@ function Invoke-CogesMain {
         [string] $LecteurCle = '',
         [switch] $CleCopiee,
         [switch] $ConfirmerRestauration,
+        [switch] $RestaurerQuandMeme,
         [switch] $Essai,
         [switch] $SansNotification
     )
@@ -2947,7 +3108,7 @@ function Invoke-CogesMain {
         NomBoutique = $NomBoutique; CodeBoutique = $CodeBoutique; NomGerant = $NomGerant
         TelephoneGerant = $TelephoneGerant; EmailGerant = $EmailGerant; Offre = $Offre; NoteContrat = $NoteContrat
         Fichier = $Fichier; Cle = $Cle; Lecteur = $Lecteur; ClePublique = $ClePublique; LecteurCle = $LecteurCle
-        CleCopiee = [bool]$CleCopiee; ConfirmerRestauration = [bool]$ConfirmerRestauration; Essai = [bool]$Essai
+        CleCopiee = [bool]$CleCopiee; ConfirmerRestauration = [bool]$ConfirmerRestauration; RestaurerQuandMeme = [bool]$RestaurerQuandMeme; Essai = [bool]$Essai
     }
     try {
         if ($Port -and ($Port -lt 1 -or $Port -gt 65535)) {
@@ -2957,6 +3118,8 @@ function Invoke-CogesMain {
         Initialize-CogesSession -Paths $paths -Simulation $Simulation -NonInteractif $NonInteractif -WriteLog ($Action -ne 'Etat')
         Write-CogesLine ('CoGes sur site — {0}' -f $Action) -Kind Titre
         if ($Simulation) { Write-CogesLine 'Mode simulation : chaque étape est annoncée, rien n''est écrit ni lancé.' }
+        # Installer et Reparer contrôlent Docker dans leurs prérequis ; Etat le dit sans s'arrêter.
+        if (-not $Simulation -and ($script:CogesDockerActions -contains $Action)) { Assert-CogesDockerRunning }
         switch ($Action) {
             'Installer' { Invoke-CogesInstall -Paths $paths -Options $options }
             'Reparer' { Invoke-CogesRepair -Paths $paths -Options $options }

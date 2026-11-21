@@ -34,6 +34,7 @@
     heure. Demande le code de la boutique.
 .PARAMETER Fichier
     Avec Restaurer : la sauvegarde (coges-….coges, avec ses .sha256 et .manifest.json à côté).
+    Sans lui, la liste des sauvegardes du PC et de la clé CoGes branchée est proposée.
 .PARAMETER Cle
     Avec Restaurer : le fichier de la clé PRIVÉE du client (lue, jamais copiée sur le PC).
 .PARAMETER Lecteur
@@ -46,6 +47,9 @@
     En -NonInteractif : confirme que la clé privée est rangée chez CoGes.
 .PARAMETER ConfirmerRestauration
     En -NonInteractif : confirme RESTAURER.
+.PARAMETER RestaurerQuandMeme
+    En -NonInteractif : confirme RESTAURER-QUAND-MEME (sauvegarde sans vente, ou avec moins de
+    ventes que la base actuelle).
 .PARAMETER Essai
     Avec Sauvegarder : fait aussi la restauration d'essai.
 .PARAMETER SansNotification
@@ -75,6 +79,7 @@ param(
     [string] $LecteurCle = '',
     [switch] $CleCopiee,
     [switch] $ConfirmerRestauration,
+    [switch] $RestaurerQuandMeme,
     [switch] $Essai,
     [switch] $SansNotification
 )

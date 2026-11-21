@@ -18,7 +18,7 @@ qui l'on donne ici une connexion `psycopg` à la place de `psql` (absent de cett
     python base.py bascule HORODATAGE                 coges → coges_avant_H, restauration → coges
     python base.py retour HORODATAGE                  coges → coges_echec_H, coges_avant_H → coges
     python base.py bases                              les anciennes bases gardées
-    python base.py etat                               coges existe-t-elle, avec une société ?
+    python base.py etat                               coges existe-t-elle ; sociétés et ventes
 """
 
 from __future__ import annotations
@@ -230,13 +230,18 @@ def cmd_list() -> None:
 
 def cmd_state() -> None:
     present = exists(MAIN)
-    companies = 0
+    companies = sales = 0
     if present:
         with connect(MAIN) as conn:
             table = conn.execute("SELECT to_regclass('public.companies')").fetchone()
             if table and table[0]:
                 companies = int(conn.execute("SELECT count(*) FROM companies").fetchone()[0])  # type: ignore[index]
-    print(json.dumps({"existe": present, "societes": companies}))
+            # Même mesure que le manifeste (toutes les lignes de sales) : comparée à celle de
+            # la sauvegarde choisie avant de restaurer (lot 5, bloc 0).
+            table = conn.execute("SELECT to_regclass('public.sales')").fetchone()
+            if table and table[0]:
+                sales = int(conn.execute("SELECT count(*) FROM sales").fetchone()[0])  # type: ignore[index]
+    print(json.dumps({"existe": present, "societes": companies, "ventes": sales}))
 
 
 # ---------------------------------------------------------------------------- vérifier

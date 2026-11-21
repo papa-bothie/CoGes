@@ -480,6 +480,34 @@ Docker : `coges up -d` le ramène.
 cumulés sont de 2,7 Go. Docker Desktop ne donne par défaut que la moitié de la mémoire du
 PC (4 Go sur 8) : c'est suffisant. Si le PC n'a que 8 Go, fermez les logiciels lourds.
 
+### « Docker Desktop ne tourne pas »
+
+Toute action du script qui a besoin de Docker le vérifie d'abord et s'arrête **sans rien
+changer** : « Docker Desktop ne tourne pas : ouvrez-le et attendez « Engine running », puis
+relancez. Rien n'a changé. » Ouvrez Docker Desktop par le menu Démarrer, attendez « Engine
+running » en bas à gauche, puis relancez la même commande. `-Action Etat` le dit aussi, et
+montre quand même ce qu'il lit dans les fichiers (sauvegardes, version).
+
+### Docker Desktop ne démarre plus (« Docker Desktop is unable to start »)
+
+> **Jamais** « Clean / Purge data » ni « Reset to factory defaults » (menu de dépannage de
+> Docker Desktop, l'icône d'insecte) : ils **effacent la base du client**. Pas non plus
+> « Uninstall » de Docker Desktop.
+
+Dans l'ordre, en relançant Docker Desktop après chaque étape :
+
+1. Quitter Docker Desktop : clic droit sur son icône près de l'horloge, « Quit Docker
+   Desktop ». Attendre une minute.
+2. Arrêter WSL : dans PowerShell, `wsl --shutdown`, puis rouvrir Docker Desktop.
+3. Place sur le disque : il faut plusieurs Go libres sur `C:` (`-Action Etat` affiche le
+   disque libre en rouge sous 5 Go). Vider la Corbeille et les Téléchargements.
+4. Redémarrer le PC (Démarrer > Marche/Arrêt > **Redémarrer**, pas « Arrêter »).
+5. Mettre WSL à jour : PowerShell **en administrateur**, `wsl --update`, puis redémarrer le PC.
+
+Si rien n'y fait, appelez CoGes avec une capture du message : les données sont dans le
+disque virtuel de Docker Desktop, et les sauvegardes dans `C:\CoGes\sauvegardes\` et sur la
+clé CoGes.
+
 ### Tout réinstaller sur un PC de test
 
 **Efface toutes les données** : à ne faire que sur un PC d'essai.
@@ -503,7 +531,10 @@ Puis reprenez à l'étape 6. Les mots de passe de `coges.env` peuvent alors chan
 - Chaque sauvegarde est la **base entière**, **chiffrée** par la clé publique du client :
   le PC peut chiffrer mais pas relire. Elle va dans `C:\CoGes\sauvegardes\` :
   `coges-<code>-AAAAMMJJ-HHMM-<version>.coges`, avec `.sha256` (empreinte) et
-  `.manifest.json` (date, version, lignes comptées). Aucun fichier en clair ne touche le
+  `.manifest.json` (date, version, lignes comptées). Une sauvegarde faite **avant une
+  action** le dit à la fin de son nom : `-avant-effacement`, `-avant-restauration`,
+  `-avant-maj`, `-avant-retour`, et `-installation` pour la première, celle d'une base
+  **neuve et vide**. Elles sont gardées, copiées et effacées comme les autres. Aucun fichier en clair ne touche le
   disque du PC ni la clé USB.
 - Le PC garde les **14 dernières**, plus une par semaine sur 8 semaines, plus une par mois
   sur 12 mois. Une sauvegarde ratée est marquée `.echec` et gardée pour l'enquête.
@@ -575,12 +606,25 @@ Sur le **même PC** (après une erreur, une panne) ou sur un **PC neuf** (instal
 par `-Action Installer`, même code de boutique) :
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action Restaurer -Fichier E:\CoGes\coges-boutique-diallo-20261120-2030-v1.4.0.coges -Cle E:\boutique-diallo.cle
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action Restaurer -Cle E:\boutique-diallo.cle
 ```
+
+Sans `-Fichier`, le script liste les sauvegardes du PC **et** de la clé CoGes branchée, la
+plus récente en haut, avec pour chacune la date, la version, le nombre de ventes et de
+sociétés, l'origine (PC ou clé) et la raison (« installation : base neuve »…), puis fait
+choisir **par numéro**. Avec `-Fichier <chemin du .coges>`, la sauvegarde est prise
+directement.
+
+> **La plus récente n'est pas toujours la bonne.** Après `Desinstaller -EffacerLesDonnees`
+> puis `Installer`, la dernière sauvegarde est celle de la base neuve et vide
+> (`-installation`, 0 vente). Regardez le nombre de ventes avant de choisir.
 
 Dans l'ordre, chaque étape s'arrête au premier problème **sans rien changer** :
 
-1. empreinte et manifeste ; récapitulatif (boutique, date, version, ventes) ; taper `RESTAURER` ;
+1. empreinte et manifeste ; récapitulatif (boutique, date, version, ventes de la sauvegarde
+   et de ce PC) ; taper `RESTAURER`. Si la sauvegarde n'a **aucune vente**, ou **moins de
+   ventes** que la base actuelle, le script dit combien seraient perdues et exige
+   `RESTAURER-QUAND-MEME` ;
 2. version : une sauvegarde **plus récente** que le programme est refusée (« installez d'abord
    la version vX.Y.Z », `-Action Reparer -Version vX.Y.Z`) ; plus ancienne, la base est mise
    à jour après ;

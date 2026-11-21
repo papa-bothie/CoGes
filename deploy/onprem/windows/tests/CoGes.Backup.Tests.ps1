@@ -37,14 +37,14 @@ BeforeAll {
 
     function New-FakeBackup {
         <# Une « bonne » sauvegarde dans un dossier : fichier, .sha256, .manifest.json. #>
-        param([string] $Folder, [string] $Name, [int] $Size = 100, [string] $BaseId = 'base-1')
+        param([string] $Folder, [string] $Name, [int] $Size = 100, [string] $BaseId = 'base-1', [int] $Sales = 12)
         New-Item -ItemType Directory -Force -Path $Folder | Out-Null
         $path = Join-Path $Folder $Name
         [IO.File]::WriteAllBytes($path, [byte[]](1..$Size | ForEach-Object { 7 }))
         $sha = Get-CogesFileSha256 $path
         [IO.File]::WriteAllText($path + '.sha256', ('{0}  {1}' -f $sha, $Name) + "`n")
         $manifest = @{ base_id = $BaseId; sha256 = $sha; alembic_revision = '0042'; coges_version = 'v1.4.0'; boutiques = @('boutique-diallo')
-            cree_le = '2026-11-20T13:00:00+00:00'; tables = @{ sales = 12 } }
+            cree_le = '2026-11-20T13:00:00+00:00'; tables = @{ sales = $Sales } }
         [IO.File]::WriteAllText($path + '.manifest.json', ($manifest | ConvertTo-Json -Depth 4))
         return $path
     }
@@ -56,6 +56,8 @@ BeforeAll {
         $script:FakeWork = $Work
         $script:FakeBehaviour = $Behaviour
         $script:DockerCalls = New-Object System.Collections.Generic.List[object]
+        # Le moteur répond (le contrôle du bloc 0 du lot 5 a ses propres tests).
+        Mock Get-CogesDockerEngineProblem { $null }
         Mock Invoke-Docker {
             $script:DockerCalls.Add([pscustomobject]@{ Arguments = @($Arguments); InputText = $InputText })
             $mounts = @{}
@@ -105,7 +107,11 @@ BeforeAll {
                 return New-DockerResult 0 @(('chiffre {0} {1} {2}' -f $size, $sha, ('ab' * 32)))
             }
             if ($joined -match 'base\.py revisions') { return New-DockerResult 0 @('{"tete": "0042", "connues": ["0041", "0042"]}') }
-            if ($joined -match 'base\.py etat') { return New-DockerResult 0 @('{"existe": true, "societes": 0}') }
+            if ($joined -match 'base\.py etat') {
+                $ventes = 0
+                if ($b.ContainsKey('Ventes')) { $ventes = $b.Ventes }
+                return New-DockerResult 0 @(('{{"existe": true, "societes": 0, "ventes": {0}}}' -f $ventes))
+            }
             if ($joined -match 'base\.py (preparer|supprimer|verifier)') { return New-DockerResult 0 @('OK') }
             if ($joined -match 'sauvegarde-pg restaurer') { return New-DockerResult 0 @('restauree') }
             if ($joined -match 'coffre\.py dechiffrer') { return New-DockerResult 0 @('dechiffre 14 abc') }
@@ -531,7 +537,8 @@ Describe 'Restaurer (docker remplacé)' {
         Install-FakeDocker -Work (Join-Path $TestDrive 'travail-r3')
         $given = New-TestRestoreInput
         Invoke-CogesMain -Action Restaurer -Racine $paths.Racine -Fichier $given.File -Cle $given.Key -NonInteractif -SansNotification 6>$null | Should -Be 1
-        $script:DockerCalls.Count | Should -Be 0
+        # Seule la lecture de la base actuelle (nombre de ventes) a eu lieu.
+        @($script:DockerCalls | Where-Object { ($_.Arguments -join ' ') -notmatch 'base\.py etat' }).Count | Should -Be 0
     }
 
     It 'la clé privée ne passe que par l''entrée standard : ni argument, ni -e, ni journal, ni écran' {
@@ -600,5 +607,151 @@ Describe 'La tâche planifiée « CoGes - sauvegarde »' {
         [IO.File]::ReadAllText($log[0].FullName) | Should -Match 'Docker ne répond pas'
         Test-Path -LiteralPath (Get-CogesBackupPath $paths).Dossier | Should -BeFalse
         Should -Invoke Show-CogesToast -ParameterFilter { $Text -like 'CoGes n''a pas pu sauvegarder*' } -Times 1
+    }
+}
+
+Describe 'Bloc 0 du lot 5 : la bonne sauvegarde, et Docker arrêté' {
+    It 'une sauvegarde faite avant une action porte sa raison, et se relit comme les autres' {
+        $name = Get-CogesBackupName -Slug 'boutique-diallo' -Date ([datetime]'2026-11-21 21:30') -Version 'v0.3.0' -Raison 'avant-maj'
+        $name | Should -BeExactly 'coges-boutique-diallo-20261121-2130-v0.3.0-avant-maj.coges'
+        $parsed = ConvertFrom-CogesBackupName $name
+        $parsed.Version | Should -BeExactly 'v0.3.0'
+        $parsed.Raison | Should -BeExactly 'avant-maj'
+        $parsed.Slug | Should -BeExactly 'boutique-diallo'
+        (ConvertFrom-CogesBackupName 'coges-b-20261121-2130-v0.3.0.coges').Raison | Should -BeExactly ''
+        { Get-CogesBackupName -Slug 'b' -Date (Get-Date) -Version 'v0.3.0' -Raison 'n-importe-quoi' } | Should -Throw '*inconnue*'
+    }
+
+    It '<raison> : reconnue' -ForEach @(@{ Raison = 'avant-effacement' }, @{ Raison = 'avant-restauration' }, @{ Raison = 'avant-maj' }, @{ Raison = 'avant-retour' }, @{ Raison = 'installation' }) {
+        $name = Get-CogesBackupName -Slug 'b' -Date ([datetime]'2026-11-21 10:00') -Version 'v1.4.0' -Raison $Raison
+        (ConvertFrom-CogesBackupName $name).Raison | Should -BeExactly $Raison
+    }
+
+    It 'New-CogesBackup -Raison : le nom l''annonce, la rétention et Get-CogesGoodBackup la comptent' {
+        $paths = New-TestInstall
+        Install-FakeDocker -Work (Join-Path $TestDrive 'travail-b0')
+        $made = New-CogesBackup -Paths $paths -Now ([datetime]'2026-11-21 21:30') -Raison 'avant-maj' 6>$null
+        $made.Name | Should -BeExactly 'coges-boutique-diallo-20261121-2130-v1.4.0-avant-maj.coges'
+        @(Get-CogesGoodBackup (Get-CogesBackupPath $paths).Dossier).Name | Should -Contain $made.Name
+    }
+
+    It 'avertissement renforcé : <cas>' -ForEach @(
+        @{ Cas = 'aucune vente'; Backup = 0; Current = 5; Expected = '*AUCUNE vente*5 vente(s)*perdues*' }
+        @{ Cas = 'moins que la base'; Backup = 3; Current = 10; Expected = '*3 vente(s)*10*7 vente(s) seraient perdues*' }
+        @{ Cas = 'nombre inconnu'; Backup = $null; Current = 4; Expected = '*ne dit pas*' }
+    ) {
+        Get-CogesRestoreLoss -BackupSales $Backup -CurrentSales $Current | Should -BeLike $Expected
+    }
+
+    It 'pas d''avertissement quand la sauvegarde a autant de ventes ou plus' {
+        Get-CogesRestoreLoss -BackupSales 12 -CurrentSales 12 | Should -BeNullOrEmpty
+        Get-CogesRestoreLoss -BackupSales 12 -CurrentSales 0 | Should -BeNullOrEmpty
+    }
+
+    It 'Restaurer sans -Fichier en -NonInteractif : refusé, rien n''est lancé' {
+        $paths = New-TestInstall
+        Install-FakeDocker -Work (Join-Path $TestDrive 'travail-b1')
+        $key = Join-Path $TestDrive 'cle-b1.txt'
+        [IO.File]::WriteAllText($key, (New-CogesKeyPair).Private + "`n")
+        Invoke-CogesMain -Action Restaurer -Racine $paths.Racine -Cle $key -NonInteractif -ConfirmerRestauration -SansNotification 6>$null | Should -Be 1
+        ($script:CogesState.Output -join "`n") | Should -Match 'passez -Fichier'
+        $script:DockerCalls.Count | Should -Be 0
+    }
+
+    It 'la liste : PC et clé CoGes, la plus récente en haut, avec version, ventes, sociétés, origine et raison' {
+        $paths = New-TestInstall
+        $usb = Join-Path $TestDrive 'usb-liste'
+        New-Item -ItemType Directory -Force -Path (Join-Path $usb 'CoGes') | Out-Null
+        [IO.File]::WriteAllText((Join-Path $usb $script:CogesDiskMarker), "boutique-diallo`n")
+        $folder = (Get-CogesBackupPath $paths).Dossier
+        [void](New-FakeBackup -Folder $folder -Name 'coges-boutique-diallo-20261120-1300-v1.4.0.coges' -Sales 40)
+        [void](New-FakeBackup -Folder (Join-Path $usb 'CoGes') -Name 'coges-boutique-diallo-20261121-0900-v1.4.0-installation.coges' -Sales 0)
+        # Vue sur le PC ET sur la clé : une seule ligne, celle du PC.
+        [void](New-FakeBackup -Folder (Join-Path $usb 'CoGes') -Name 'coges-boutique-diallo-20261120-1300-v1.4.0.coges' -Sales 40)
+        $previous = $env:COGES_DISQUES_ESSAI
+        $env:COGES_DISQUES_ESSAI = $usb
+        try { $list = @(Get-CogesRestoreCandidate $paths) }
+        finally { $env:COGES_DISQUES_ESSAI = $previous }
+        $list.Count | Should -Be 2
+        $list[0].Name | Should -BeLike '*20261121-0900*'
+        $list[0].Ventes | Should -Be 0
+        $list[0].Origine | Should -BeLike 'clé *'
+        $list[1].Origine | Should -BeExactly 'PC'
+        $list[1].Ventes | Should -Be 40
+        $line = Format-CogesRestoreCandidate -Candidate $list[0] -Number 1
+        $line | Should -Match '^\s+1\. 21/11/2026 09:00\s+v1\.4\.0\s+0 vente\(s\), 1 société\(s\)\s+clé '
+        $line | Should -Match 'installation : base neuve'
+    }
+
+    It 'la liste, puis le numéro tapé : c''est cette sauvegarde qui est lue' {
+        $paths = New-TestInstall
+        $folder = (Get-CogesBackupPath $paths).Dossier
+        $older = New-FakeBackup -Folder $folder -Name 'coges-boutique-diallo-20261120-1300-v1.4.0.coges'
+        [void](New-FakeBackup -Folder $folder -Name 'coges-boutique-diallo-20261121-1300-v1.4.0.coges')
+        $script:CogesState.NonInteractif = $false
+        Mock Read-Host { '2' }
+        try { $chosen = Select-CogesRestoreFile $paths 6>$null }
+        finally { $script:CogesState.NonInteractif = $true }
+        $chosen | Should -BeExactly $older
+        ($script:CogesState.Output -join "`n") | Should -Match '1\. 21/11/2026 13:00'
+    }
+
+    It 'sauvegarde à 0 vente, base actuelle à 5 : RESTAURER ne suffit pas, il faut RESTAURER-QUAND-MEME' {
+        $paths = New-TestInstall
+        Install-FakeDocker -Work (Join-Path $TestDrive 'travail-b2') -Behaviour @{ Ventes = 5 }
+        $folder = Join-Path $TestDrive 'usb-b2'
+        $file = New-FakeBackup -Folder $folder -Name 'coges-boutique-diallo-20261121-0900-v1.4.0-installation.coges' -Sales 0
+        $key = Join-Path $folder 'cle.txt'
+        [IO.File]::WriteAllText($key, (New-CogesKeyPair).Private + "`n")
+        $code = Invoke-CogesMain -Action Restaurer -Racine $paths.Racine -Fichier $file -Cle $key -NonInteractif -ConfirmerRestauration -SansNotification 6>$null
+        $code | Should -Be 1
+        $text = $script:CogesState.Output -join "`n"
+        $text | Should -Match 'AUCUNE vente'
+        $text | Should -Match 'Les 5 vente\(s\) de ce PC seraient perdues'
+        $text | Should -Match 'RESTAURER-QUAND-MEME'
+        @($script:DockerCalls | Where-Object { ($_.Arguments -join ' ') -match 'dechiffrer|bascule|preparer|dump' }).Count | Should -Be 0
+    }
+
+    It 'avec -RestaurerQuandMeme : la restauration continue' {
+        $paths = New-TestInstall
+        Install-FakeDocker -Work (Join-Path $TestDrive 'travail-b3') -Behaviour @{ Ventes = 5 }
+        $folder = Join-Path $TestDrive 'usb-b3'
+        $file = New-FakeBackup -Folder $folder -Name 'coges-boutique-diallo-20261121-0900-v1.4.0.coges' -Sales 0
+        $key = Join-Path $folder 'cle.txt'
+        [IO.File]::WriteAllText($key, (New-CogesKeyPair).Private + "`n")
+        Mock Invoke-CogesCompose { New-DockerResult 0 @() }
+        Mock Wait-CogesHealthy { }
+        Mock Get-CogesLicenseStatus { New-DockerResult 0 @('Accès : actif', 'Fin de période : sans fin') }
+        Mock Test-CogesSite { }
+        Mock Invoke-CogesTool -ParameterFilter { $Arguments -contains 'bascule' } { New-DockerResult 0 @('{"ancienne": "coges_avant_20261121_0900"}') }
+        $code = Invoke-CogesMain -Action Restaurer -Racine $paths.Racine -Fichier $file -Cle $key -NonInteractif -RestaurerQuandMeme -SansNotification 6>$null
+        ($script:CogesState.Output -join "`n") | Should -Not -Match 'ÉCHEC'
+        $code | Should -Be 0
+        @($script:DockerCalls | Where-Object { ($_.Arguments -join ' ') -match 'dechiffrer' }).Count | Should -Be 1
+    }
+
+    It 'Docker Desktop arrêté : <action> le dit en clair, avant de rien changer' -ForEach @(
+        @{ Action = 'Sauvegarder' }, @{ Action = 'Restaurer' }, @{ Action = 'NettoyerAncienneBase' }, @{ Action = 'PreparerDisque' }, @{ Action = 'Desinstaller' }) {
+        $paths = New-TestInstall
+        Mock Get-Command -ParameterFilter { $Name -eq 'docker' } { [pscustomobject]@{ Name = 'docker' } }
+        Mock Invoke-Docker { New-DockerResult 1 @('error during connect: Get "http://%2F%2F.%2Fpipe%2FdockerDesktopLinuxEngine/v1.47/version": open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.') }
+        $code = Invoke-CogesMain -Action $Action -Racine $paths.Racine -NonInteractif -Fichier 'x.coges' -Cle 'x.txt' -Lecteur 'E:' -CodeBoutique 'boutique-diallo' -SansNotification 6>$null
+        $code | Should -Be 1
+        $text = $script:CogesState.Output -join "`n"
+        $text | Should -Match ([regex]::Escape('Docker Desktop ne tourne pas : ouvrez-le et attendez « Engine running », puis relancez. Rien n''a changé.'))
+        $text | Should -Not -Match 'code 1'
+        Should -Invoke Invoke-Docker -Times 1 -Exactly
+        Test-Path -LiteralPath (Get-CogesBackupPath $paths).Dossier | Should -BeFalse
+    }
+
+    It 'Etat avec Docker arrêté : le message, puis ce que disent les fichiers' {
+        $paths = New-TestInstall
+        Mock Get-Command -ParameterFilter { $Name -eq 'docker' } { [pscustomobject]@{ Name = 'docker' } }
+        Mock Invoke-Docker { New-DockerResult 1 @('error during connect: is the docker daemon running?') }
+        Invoke-CogesMain -Action Etat -Racine $paths.Racine -NonInteractif -SansNotification 6>$null | Should -Be 0
+        $text = $script:CogesState.Output -join "`n"
+        $text | Should -Match 'Docker Desktop ne tourne pas'
+        $text | Should -Match 'Dernière sauvegarde'
+        Should -Invoke Invoke-Docker -Times 1 -Exactly
     }
 }
