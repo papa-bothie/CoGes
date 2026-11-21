@@ -1,0 +1,4 @@
+# Le canal des mises à jour sur site (ADR 0128) n'est pas signé : changer ce dossier change
+# la version installée chez tous les clients. Avec la protection de main (pull request et
+# revue des propriétaires de code exigées), aucun fichier n'y entre sans le propriétaire.
+/deploy/onprem/canal/ @papa-bothie

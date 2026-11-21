@@ -7,8 +7,9 @@ fois les images téléchargées, et rien n'est joignable depuis le réseau du ma
 Il est écrit pour quelqu'un qui débute : chaque commande se copie telle quelle dans
 **PowerShell** (menu Démarrer, taper « PowerShell », Entrée).
 
-> Lots 1 à 4 sur 6. Ce qui n'existe pas encore est listé à la fin (« Ce qui n'existe pas encore »).
+> Lots 1 à 5 sur 6. Ce qui n'existe pas encore est listé à la fin (« Ce qui n'existe pas encore »).
 > Sauvegarde et restauration : section « Sauvegarde et restauration » (lot 4, ADR 0127).
+> Mises à jour à distance : section « Mises à jour » (lot 5, ADR 0128).
 
 ## Installer en une commande (lot 3, ADR 0126)
 
@@ -46,7 +47,8 @@ licence et `license-status` ; `http://localhost` en 200 et l'administration en 4
 la commande `coges` dans toute nouvelle fenêtre (`C:\CoGes\bin\coges.cmd`, ajouté au PATH
 de l'utilisateur), le raccourci « CoGes » sur le Bureau, la tâche planifiée « CoGes -
 démarrage » (à l'ouverture de session, elle attend Docker puis lance `coges up -d`), et
-l'ouverture de CoGes dans le navigateur.
+l'ouverture de CoGes dans le navigateur. Enfin la tâche « CoGes - mise à jour » (lot 5,
+section « Mises à jour »).
 
 Chaque étape est écrite dans `C:\CoGes\journaux\installation-AAAAMMJJ-HHMMSS.log`
 (étapes, durées, codes de sortie, erreurs de Docker), **jamais** un mot de passe ni une
@@ -380,9 +382,14 @@ La réponse se termine par la version en cours d'exécution, par exemple
 
 ## Mettre à jour à la main
 
+> **Le secours.** Depuis le lot 5, les mises à jour se font seules (section « Mises à
+> jour »). Cette procédure sert quand le script ne peut pas aller au bout, ou pour installer
+> une première fois la version qui contient le lot 5 sur un PC plus ancien (le plus simple :
+> `-Action Reparer -Version vX.Y.Z`).
+
 Une seule ligne décide de la version : `COGES_IMAGE_TAG`. La mise à jour ne passe que par
 des connexions **sortantes** vers le registre public : aucun port à ouvrir sur le PC ni sur
-la box du client. (Le lot 5 automatisera cette procédure, à distance.)
+la box du client.
 
 1. **Notez la version actuelle** (commande ci-dessus), pour pouvoir revenir en arrière.
 2. Si CoGes fournit un nouveau dossier du programme pour cette version, remplacez **tout**
@@ -425,6 +432,151 @@ faut restaurer une sauvegarde faite avant la mise à jour : lancez `-Action Sauv
 avant de changer de version, puis `-Action Restaurer` (section « Sauvegarde et restauration »)
 avec la version d'avant réinstallée. N'installez une nouvelle version chez un client qu'après
 l'avoir essayée sur un PC de test.
+
+---
+
+## Mises à jour (lot 5, ADR 0128)
+
+### Ce qui se passe seul
+
+Le PC **va chercher** la version à installer : aucun port ouvert, aucune connexion entrante.
+La tâche planifiée « CoGes - mise à jour » (posée par `Installer` et `Reparer`) :
+
+1. **À 12 h, à 18 h et à l'ouverture de session**, elle lit le canal du PC
+   (`deploy/onprem/canal/stable.json` sur GitHub, ou `test.json`). Une version nouvelle est
+   **téléchargée pendant que CoGes tourne** dans `C:\CoGes\mises-a-jour\<version>\` : le
+   programme (empreinte de son contenu vérifiée), les images `front`, `api` et `worker`
+   **par digest** (jamais par l'étiquette : une étiquette qui a bougé est refusée), et les
+   images d'accompagnement qui manqueraient. Elle passe alors « prête ». Sans Internet : rien,
+   journal seulement.
+2. **À 21 h 30** (réglable), si **aucune vente depuis 30 minutes**, elle l'applique ; sinon
+   elle réessaie le soir suivant. Jamais au démarrage du PC (elle attend qu'il soit allumé
+   depuis 15 minutes), jamais pendant une sauvegarde (verrou commun).
+3. L'application, dans l'ordre : sauvegarde chiffrée `-avant-maj` (copiée sur la clé CoGes si
+   elle est branchée) ; contrôle des réglages par la **nouvelle** version ; page « CoGes revient
+   dans un instant » ; **copie de la base** dans PostgreSQL ; nouveau programme (l'ancien est
+   gardé), `COGES_IMAGE_TAG` changé (seule ligne touchée, plus une ligne nouvelle du modèle avec
+   sa valeur par défaut si la version en demande une), migrations, démarrage ; vérifications
+   (neuf services, page d'accueil, licence, **même nombre** de sociétés et de ventes). Compter
+   2 à 5 minutes d'arrêt.
+4. **Si quelque chose casse** à partir du nouveau programme : **retour seul** à la version
+   d'avant, avec la base d'avant (la copie). Notification et journal : « La mise à jour vers vX
+   a échoué ; CoGes est revenu à vY. Rien n'est perdu. » Cette version **ne se réessaie plus
+   seule**.
+5. Après une mise à jour réussie, la copie de la base et l'ancien programme sont gardés
+   **7 jours** (retour possible), puis supprimés.
+
+**Au bout de 3 jours** sans avoir pu s'appliquer (PC éteint à 21 h 30, ventes tardives), un
+raccourci « **Mettre CoGes à jour** » apparaît sur le Bureau, avec une notification une fois
+par jour au plus : « Une mise à jour de CoGes est prête. Quand vous avez 5 minutes sans client,
+double-cliquez sur « Mettre CoGes à jour » sur le Bureau. » Le double-clic ouvre une fenêtre qui
+dit ce qui va se passer (« CoGes sera indisponible environ N minutes ; vos données sont
+sauvegardées avant »), fait taper `OUI`, joue les mêmes étapes (même retour seul en cas de
+problème), puis dit « CoGes est à jour (vX). Vous pouvez reprendre. » ou « La mise à jour a
+échoué ; CoGes est revenu à vY. Rien n'est perdu. », et attend Entrée. Le raccourci disparaît
+quand la version est appliquée ou abandonnée.
+
+Le réglage du PC est dans `C:\CoGes\reglages\mise-a-jour.json` :
+
+```json
+{ "canal": "stable", "automatique": true, "heure": "21:30" }
+```
+
+`automatique: false` : la version est téléchargée mais ne s'applique qu'à la main. Pour changer
+l'heure ou le canal, passer par le script (il repose la tâche) :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action Reparer -HeureMiseAJour 13:00
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action Reparer -CanalMiseAJour test
+```
+
+### Ce que dit `Etat`
+
+`-Action Etat` ajoute : le canal, le mode et l'heure ; le dernier passage sur le canal et ce
+qu'il a dit (à jour, nouvelle version, refus et pourquoi) ; la version prête, **depuis combien
+de jours elle attend et pourquoi** (« PC éteint ou en veille à 21:30 », « une vente il y a 4
+minutes »…) ; la prochaine application prévue ; la dernière mise à jour (réussie, ratée et
+revenue seule, ou défaite à la main) ; la copie de la base gardée et sa date de fin.
+
+### Forcer, vérifier, revenir (technicien)
+
+```powershell
+# Lire le canal et télécharger maintenant (n'applique rien)
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action VerifierMiseAJour
+# Appliquer la version prête maintenant (sans attendre 30 minutes sans vente : -Maintenant)
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action MettreAJour -Maintenant
+# Revenir à la version d'avant la dernière mise à jour (dans les 7 jours)
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action RevenirVersionPrecedente
+```
+
+`-Simulation` annonce chaque étape sans rien faire. `MettreAJour -Maintenant` reprend aussi une
+version marquée en échec (après correction par CoGes, par exemple).
+
+`RevenirVersionPrecedente` remet l'ancien programme, l'ancienne version **et la base telle
+qu'elle était juste avant la mise à jour** : les **ventes faites depuis seraient perdues**. Le
+script les compte et le dit, fait une sauvegarde `-avant-retour` (elles y restent), puis exige
+`REVENIR` et le code de la boutique. La base d'après est gardée (`-Action NettoyerAncienneBase`
+la supprime). La version défaite ne s'applique plus seule. **Après 7 jours**, la copie n'existe
+plus : `-Action Reparer -Version <ancienne>`, puis `-Action Restaurer` avec la sauvegarde
+`-avant-maj` (section « Restaurer »).
+
+| Message (début) | Quoi faire |
+|---|---|
+| `Le canal « … » ne se lit pas` | Internet ; rien n'a changé, nouvel essai seul |
+| `Canal illisible` · `se dit du canal` | prévenir CoGes : le fichier du canal est à republier |
+| `Le canal annonce vX, plus ancienne que vY installée` | rien : le canal ne fait jamais redescendre |
+| `vX demande d'avoir déjà vM au moins` | `-Action Reparer -Version vM`, puis la mise à jour se fera |
+| `vX demande Docker Desktop …` | mettre Docker Desktop à jour (Paramètres > Software updates) |
+| `L'étiquette … ne pointe plus vers le digest du canal` · `L'empreinte du programme` | rien n'a changé ; prévenir CoGes |
+| `Il ne reste que … Go libres` | libérer de la place (5 Go demandés) |
+| `Pas maintenant : une vente il y a …` | relancer plus tard, ou `-Maintenant` boutique fermée |
+| `La mise à jour vers vX a échoué ; CoGes est revenu à vY` | rien à faire tout de suite ; envoyer le journal à CoGes |
+| `… et le retour à vY aussi. Appelez CoGes.` | **n'effacer rien** ; la sauvegarde et la copie de la base sont gardées |
+
+Journal : `C:\CoGes\journaux\mise-a-jour-AAAAMMJJ.log`, sans aucun secret.
+
+### Publier une version pour les clients (CoGes)
+
+Sur le poste Ubuntu de CoGes, dans le dépôt à jour :
+
+1. **L'étiquette** `vX.Y.Z` est poussée et le workflow « Déployer » a publié ses images sur
+   ghcr.io (comme pour la production). Elle doit contenir `windows/mise-a-jour.ps1`.
+2. **Le canal `test` d'abord**, pour le PC d'essai de CoGes (réglé par `-CanalMiseAJour test`) :
+
+   ```bash
+   git switch -c canal/test-vX.Y.Z origin/main
+   python3 deploy/onprem/canal/publier.py --version vX.Y.Z --canal test \
+     --depuis-minimum vA.B.C --note "Une ou deux phrases pour le technicien."
+   git add deploy/onprem/canal/test.json && git commit -m "chore(onprem): publish vX.Y.Z on the test channel"
+   ```
+
+   `--depuis-minimum` : la plus ancienne version installée chez un client qui peut passer
+   directement à celle-ci (en général la précédente ; plus haut si une migration l'exige).
+   `--docker-desktop-minimum 4.30.0` si la version demande un Docker Desktop récent. Le script
+   lit les trois digests sur ghcr.io, télécharge l'archive de l'étiquette, calcule l'empreinte
+   et écrit le fichier ; il refuse une version plus ancienne que celle que le fichier annonce.
+3. Pull request avec **ce seul fichier**, fusionnée. Le PC d'essai la voit au plus tard au
+   passage suivant de 12 h ou 18 h (ou `-Action VerifierMiseAJour`) ; vérifier
+   `-Action MettreAJour -Maintenant`, puis une journée de vente normale.
+4. **Puis `stable`**, de la même façon (`--canal stable`, fichier `stable.json`) : tous les
+   clients l'appliquent les soirs suivants.
+
+Pour arrêter une version en cours de diffusion : publier la suivante (corrigée). Le canal ne
+fait jamais redescendre un PC ; un client déjà passé revient par `RevenirVersionPrecedente`.
+
+### Protéger le compte GitHub
+
+Le canal **n'est pas signé** (ADR 0128 ; une signature est prévue, son champ est réservé) :
+quiconque peut fusionner sur `main` peut pousser une version chez **tous les clients**. Donc :
+
+- **Double authentification** sur le compte GitHub du propriétaire (application TOTP ou clé de
+  sécurité, codes de secours rangés hors ligne) ; aucun jeton d'accès personnel qui puisse
+  écrire sur le dépôt sans en avoir besoin.
+- **Protection de `main`** (Settings > Branches, ou Rulesets) : pull request obligatoire,
+  revue des propriétaires de code exigée (`.github/CODEOWNERS` réserve `deploy/onprem/canal/`
+  au propriétaire), **pas de force-push**, pas de suppression de la branche, règles appliquées
+  aussi aux administrateurs.
+- Personne d'autre que le propriétaire comme administrateur du dépôt.
 
 ---
 
@@ -652,7 +804,6 @@ s'arrête en disant laquelle tourne. Un verrou laissé par un programme arrêté
 
 | Sujet | Lot | En attendant |
 |---|---|---|
-| Mises à jour à distance et retour arrière automatique | 5 | « Mettre à jour à la main » ci-dessus |
 | Support à distance et journaux | 6 | sur place, `coges logs` |
 
 Éteints sur site pour l'instant : photos des articles, e-mails, notifications sur le
@@ -673,4 +824,14 @@ restauration (mêmes lignes, licence revenue), fichier abîmé et révision inco
 
 ```bash
 ONPREM_REGISTRY=coges-local ONPREM_PORT=8080 deploy/onprem-ci/verifier.sh
+```
+
+`deploy/onprem-ci/verifier-mises-a-jour.sh` joue les mises à jour (lot 5) par le vrai script
+sous `pwsh` : un registre local reçoit trois versions faites des images construites
+(`v0.90.1`, `v0.90.2`, et `v0.90.3` à migration cassée), `publier.py` écrit les canaux ; canal
+faux refusé sans rien tirer, mise à jour avec données identiques, vente puis
+`RevenirVersionPrecedente`, migration cassée et retour automatique.
+
+```bash
+ONPREM_REGISTRY=coges-local ONPREM_PORT=8080 deploy/onprem-ci/verifier-mises-a-jour.sh
 ```
