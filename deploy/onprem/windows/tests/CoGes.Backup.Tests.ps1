@@ -366,6 +366,9 @@ Describe 'Clés de sauvegarde' {
 Describe 'Verrou commun' {
     It 'pris : l''action s''arrête avec un message clair qui nomme l''autre opération' {
         $paths = New-TestInstall
+        # Le moteur « répond » : ce test vise le verrou, jamais le Docker de la machine
+        # (celui d'un runner Windows tourne en conteneurs Windows).
+        Mock Get-CogesDockerEngineProblem { $null }
         $held = Enter-CogesLock -Paths $paths -Action 'Restaurer'
         try {
             { Enter-CogesLock -Paths $paths -Action 'Sauvegarder' } | Should -Throw '*Restaurer*'
