@@ -4076,9 +4076,11 @@ function Invoke-CogesUpdateLocked {
                 -QuoiFaire ('N''effacez rien. La sauvegarde {0} et la copie coges_avant_maj_{1} (ou coges_echec_maj_{1}) sont gardées.' -f $backup.Name, $context.Copy)
         }
         Set-CogesUpdateShortcut -Paths $Paths -Present $false
-        $text = 'La mise à jour vers {0} a échoué ; CoGes est revenu à {1}. Rien n''est perdu. CoGes est prévenu au prochain passage (lot 6).' -f $Version, $from
+        # Lot 6 : CoGes est prévenu tout de suite (si la remontée est active et Internet là).
+        $told = Send-CogesPing -Paths $Paths -Signal 'mise-a-jour' -Failure -Reason 'retour-arriere'
+        $text = 'La mise à jour vers {0} a échoué ; CoGes est revenu à {1}. Rien n''est perdu.' -f $Version, $from
+        if ($told) { $text += ' CoGes est prévenu.' }
         Show-CogesToast $text | Out-Null
-        [void](Send-CogesPing -Paths $Paths -Signal 'mise-a-jour' -Failure -Reason 'retour-arriere')
         Stop-CogesStep -Probleme $text -QuoiFaire ('Rien à faire tout de suite. {0} ne se réessaie plus seule ; envoyez le journal à CoGes.' -f $Version)
     }
 

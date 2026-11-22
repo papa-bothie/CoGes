@@ -438,6 +438,7 @@ Describe 'Le bon signal au bon moment (bloc B)' {
         $start = $text.IndexOf('function Invoke-CogesUpdateLocked')
         $body = $text.Substring($start, $text.IndexOf('function Invoke-CogesUpdateCleanup') - $start)
         $body | Should -Match "Send-CogesPing -Paths \`$Paths -Signal 'mise-a-jour' -Failure -Reason 'retour-arriere'"
+        $body | Should -Not -Match '\(lot 6\)'
         $body | Should -Match "Send-CogesPing -Paths \`$Paths -Signal 'mise-a-jour' -Failure -Reason 'retour-rate'"
         $body | Should -Match "Send-CogesPing -Paths \`$Paths -Signal 'mise-a-jour'\)"
     }
