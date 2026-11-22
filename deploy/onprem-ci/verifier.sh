@@ -8,7 +8,9 @@
 # migrations, démarrage, société, licence (ADR 0125), navigateur ; puis la tâche de nuit à
 # +45 jours, redémarrage, changement de version et arrêt brutal de PostgreSQL ; enfin la
 # sauvegarde et la restauration (ADR 0127), jouées par le vrai script Windows sous pwsh :
-# panne simulée (down -v, réglages neufs), données retrouvées. Il ne touche ni au poste de développement (projet Docker
+# panne simulée (down -v, réglages neufs), données retrouvées ; enfin le support à distance
+# (ADR 0129) : un faux service de pings reçoit les envois, relus par la liste fermée, et un
+# diagnostic est fouillé. Il ne touche ni au poste de développement (projet Docker
 # « coges-onprem », à part) ni à aucun fichier du dépôt.
 #
 # Variables :
@@ -48,6 +50,8 @@ fail() { printf 'ÉCHEC — %s\n' "$*" >&2; exit 1; }
 
 cleanup() {
   status=$?
+  # Le faux service de pings du lot 6, s'il tourne.
+  if [ -n "${pings_pid:-}" ]; then kill "$pings_pid" 2>/dev/null || true; fi
   if [ "$status" -ne 0 ]; then
     title "État au moment de l'échec"
     dc ps -a || true
@@ -483,5 +487,61 @@ left=$(dc exec -T postgres psql -U postgres -XAt -c "SELECT count(*) FROM pg_dat
 [ "$left" = 0 ] || fail "$left ancienne(s) base(s) restante(s)"
 [ -z "$(find "$racine/journaux" -type f -exec grep -lF -- "$secret" {} +)" ] || fail "la clé privée est dans un journal"
 echo "OK — anciennes bases supprimées ; sauvegarde ${backup_seconds} s, restauration ${restore_seconds} s."
+
+title "Support à distance (ADR 0129) : un faux service de pings, à la place de Healthchecks.io"
+pings="$work/pings"
+pings_port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
+python3 "$ci/controle_remontee.py" serveur --port "$pings_port" --dossier "$pings" 2>"$work/pings.log" &
+pings_pid=$!
+pings_url="http://127.0.0.1:$pings_port/ping"
+for _ in $(seq 1 20); do
+  curl -s -o /dev/null -X POST "$pings_url/essai-de-depart" && break
+  sleep 0.5
+done
+rm -f "$pings"/*.txt
+# Le fichier préparé chez CoGes (guide) : trois adresses, le numéro affiché par « Aide CoGes ».
+python3 - "$work/support.json" "$pings_url" <<'PY2'
+import json, secrets, sys
+base = sys.argv[2]
+json.dump({"adresses": {s: f"{base}/{s}-{secrets.token_hex(12)}" for s in ("vie", "sauvegarde", "mise-a-jour")},
+           "telephone_coges": "+221 00 000 00 00"}, open(sys.argv[1], "w", encoding="utf-8"))
+PY2
+coges_ps -Action ConfigurerSupport -Support "$work/support.json"
+grep -q '"remontee": *true' "$settings/support.json" || fail "remontée non activée"
+coges_ps -Action TesterSupport | tee "$work/tester-support.txt"
+[ "$(grep -c 'reçu par CoGes' "$work/tester-support.txt")" = 3 ] || fail "TesterSupport : les trois adresses n'ont pas répondu"
+
+title "Sauvegarde réussie ⇒ « sauvegarde » ; ratée exprès (clé publique retirée) ⇒ /fail avec la raison"
+coges_ps -Action Sauvegarder > "$work/sauvegarde-support.txt"
+mv "$settings/cle-publique-sauvegarde.txt" "$work/cle-publique-ecartee.txt"
+if coges_ps -Action Sauvegarder > "$work/sauvegarde-ratee.txt"; then fail "la sauvegarde sans clé a réussi"; fi
+mv "$work/cle-publique-ecartee.txt" "$settings/cle-publique-sauvegarde.txt"
+# L'ouverture de session (tâche « CoGes - démarrage ») : up -d sur la pile déjà lancée, puis « vie ».
+"$pwsh_bin" -NoProfile -File "$onprem/windows/demarrage.ps1" -Racine "$racine"
+python3 "$ci/controle_remontee.py" corps "$pings" --attendu sauvegarde:aucune --attendu sauvegarde-fail:cle-absente --attendu vie:aucune
+echo "Corps reçu pour l'échec (tout ce qui sort du PC) :"
+cat "$(find "$pings" -name '*-sauvegarde-fail.txt' | sort | tail -1)"
+for file in "$pings"/*.txt; do
+  if grep -qF -e "$slug" -e "Boutique Test" -e "$email" "$file"; then fail "$(basename "$file") nomme la boutique"; fi
+done
+coges_ps -Action Etat -CodeBoutique "$slug" > "$work/etat-support.txt"
+grep -q "Remontée vers CoGes : active (3 adresse(s)), dernier envoi le" "$work/etat-support.txt" || fail "Etat ne dit pas la remontée"
+if grep -qF "$pings_url" "$work/etat-support.txt"; then fail "Etat montre une adresse de ping"; fi
+if grep -rqF "$pings_url" "$racine/journaux"; then fail "une adresse de ping est dans un journal"; fi
+echo "OK — test, sauvegarde, /fail cle-absente, vie : reçus et dans la liste ; aucune adresse au journal ni dans Etat."
+
+title "Diagnostic : zip sur le Bureau, fouillé (aucun secret du coges.env du job, aucun nom de la démo)"
+mkdir -p "$work/bureau"
+COGES_BUREAU_ESSAI="$work/bureau" coges_ps -Action Diagnostic | tee "$work/diagnostic.txt"
+zip=$(find "$work/bureau" -name 'CoGes-diagnostic-*.zip' | head -1)
+[ -n "$zip" ] || fail "aucun diagnostic sur le Bureau"
+mapfile -t demo_names < <(dc exec -T postgres psql -U postgres -d coges -XAt -c "
+  SELECT name FROM companies UNION SELECT name FROM products UNION SELECT name FROM customers
+  UNION SELECT full_name FROM users WHERE full_name IS NOT NULL" | awk 'length($0) >= 4')
+[ "${#demo_names[@]}" -gt 0 ] || fail "aucun nom de la démo à chercher"
+forbidden=()
+for name in "${demo_names[@]}" "$email" "$pings_url"; do forbidden+=(--interdit "$name"); done
+python3 "$ci/controle_remontee.py" zip "$zip" --env "$env_file" "${forbidden[@]}"
+echo "OK — ${#demo_names[@]} nom(s) de la démo cherchés : absents."
 
 title "Vérification sur site réussie"

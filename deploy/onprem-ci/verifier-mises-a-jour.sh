@@ -57,6 +57,7 @@ coges_ps() {
 
 cleanup() {
   status=$?
+  if [ -n "${pings_pid:-}" ]; then kill "$pings_pid" 2>/dev/null || true; fi
   if [ "$status" -ne 0 ]; then
     title "État au moment de l'échec"
     dc ps -a || true
@@ -193,6 +194,17 @@ docker run --rm --network none --user "$(id -u):$(id -g)" -v "$onprem/sauvegarde
   /srv/onprem/sauvegarde/coffre.py paire --prive /cles/maj.cle --publique /cles/maj.pub
 "$pwsh_bin" -NoProfile -Command ". '$onprem/windows/CoGes.Install.ps1'; \$script:CogesState.NonInteractif = \$true;
   Set-CogesBackupKey -Paths (Get-CogesPath '$racine') -Options @{ ClePublique = '$work/cles/maj.pub' } -Slug '$slug'" >/dev/null
+# Support à distance (lot 6, ADR 0129) : un faux service de pings reçoit les signaux « mise-a-jour ».
+pings="$work/pings"
+pings_port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
+python3 "$ci/controle_remontee.py" serveur --port "$pings_port" --dossier "$pings" 2>"$work/pings.log" &
+pings_pid=$!
+python3 - "$work/support.json" "http://127.0.0.1:$pings_port/ping" <<'PY'
+import json, secrets, sys
+json.dump({"adresses": {s: f"{sys.argv[2]}/{s}-{secrets.token_hex(12)}" for s in ("vie", "sauvegarde", "mise-a-jour")}},
+          open(sys.argv[1], "w", encoding="utf-8"))
+PY
+coges_ps -Action ConfigurerSupport -Support "$work/support.json" >/dev/null
 wait_for_code "$url/" 200 60
 if [ "${ONPREM_SKIP_BROWSER:-}" != 1 ]; then
   ONPREM_URL="$url" ONPREM_SLUG="$slug" ONPREM_EMAIL="$email" ONPREM_SCREENSHOT="$work/echec-a.png" node "$ci/parcours.mjs" >/dev/null
@@ -254,6 +266,7 @@ wait_for_code "$url/api/v1/platform/" 404 10
 coges_ps -Action Etat -CodeBoutique "$slug" | tee "$work/etat-b.txt"
 grep -q "$A → $B.*réussie" "$work/etat-b.txt" || fail "Etat ne dit pas la mise à jour réussie"
 grep -q "Copie gardée" "$work/etat-b.txt" || fail "Etat ne dit pas la copie gardée"
+python3 "$ci/controle_remontee.py" corps "$pings" --attendu mise-a-jour:aucune
 echo "OK — $B en marche, données identiques ; téléchargement ${download_seconds} s, application ${update_seconds} s."
 
 title "d. Une vente en $B, puis RevenirVersionPrecedente : vente annoncée perdue, sauvegardée d'abord"
@@ -295,6 +308,9 @@ python3 "$ci/controle_donnees.py" --url "$url" --slug "$slug" --email "$email" -
 failed=$(dc exec -T postgres psql -U postgres -XAt -c "SELECT datname FROM pg_database WHERE datname LIKE 'coges_echec_maj_%'")
 [ -n "$failed" ] || fail "base en échec non gardée"
 grep -q '"etat": *"echec"' "$racine/mises-a-jour/etat.json" || fail "$C pas marquée en échec"
+python3 "$ci/controle_remontee.py" corps "$pings" --attendu mise-a-jour:aucune --attendu mise-a-jour-fail:retour-arriere
+echo "Corps reçu pour le retour arrière :"
+cat "$(find "$pings" -name '*-mise-a-jour-fail.txt' | sort | tail -1)"
 # Une version en échec ne se reprend pas seule.
 CANAL="$work/canal-casse" coges_ps -Action VerifierMiseAJour | tee "$work/verif-c2.txt"
 grep -q "ne s'applique plus seule" "$work/verif-c2.txt" || fail "$C serait reprise seule"
