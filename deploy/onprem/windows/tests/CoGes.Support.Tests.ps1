@@ -517,11 +517,23 @@ Describe 'Diagnostic (bloc C)' {
 
     It 'plus de 10 Mo : journaux des services raccourcis (300, puis 100, puis 30 lignes)' {
         $paths = New-TestInstall
-        $script:CogesDiagnosticMaxBytes = 40KB
-        $script:CogesDiagnosticTails = @(300, 100, 3)
-        try { $zip = New-CogesDiagnostic -Paths $paths -Destination (Join-Path $TestDrive 'bureau-petit') }
+        # La taille du zip dépend de la machine (journaux, système) : on mesure le zip à 100 et à
+        # 3 lignes, puis on place le plafond entre les deux, pour que seul le dernier passe.
+        try {
+            $script:CogesDiagnosticTails = @(100)
+            $big = (Get-Item (New-CogesDiagnostic -Paths $paths -Destination (Join-Path $TestDrive 'mesure-100'))).Length
+            $script:CogesDiagnosticTails = @(3)
+            $small = (Get-Item (New-CogesDiagnostic -Paths $paths -Destination (Join-Path $TestDrive 'mesure-3'))).Length
+            $small | Should -BeLessThan ($big - 2KB)
+            $script:CogesDiagnosticMaxBytes = [long](($big + $small) / 2)
+            $script:CogesDiagnosticTails = @(300, 100, 3)
+            $zip = New-CogesDiagnostic -Paths $paths -Destination (Join-Path $TestDrive 'bureau-petit')
+            $limit = $script:CogesDiagnosticMaxBytes
+        }
         finally { $script:CogesDiagnosticMaxBytes = 10MB; $script:CogesDiagnosticTails = @(300, 100, 30) }
-        (Get-Item $zip).Length | Should -BeLessOrEqual 40KB
+        (Get-Item $zip).Length | Should -BeLessOrEqual $limit
+        Should -Invoke Invoke-Docker -ParameterFilter { ($Arguments -join ' ') -match '--tail 300 api' }
+        Should -Invoke Invoke-Docker -ParameterFilter { ($Arguments -join ' ') -match '--tail 100 api' }
         Should -Invoke Invoke-Docker -ParameterFilter { ($Arguments -join ' ') -match '--tail 3 api' }
     }
 
