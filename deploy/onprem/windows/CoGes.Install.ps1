@@ -2634,7 +2634,7 @@ function Restore-CogesBackup {
         finally { $key = $null; Clear-CogesWorkVolume -Paths $Paths }
 
         # 5. Bascule : application arrêtée (Caddy montre la page de maintenance), renommage.
-        $stamp = (Get-Date).ToString('yyyyMMdd_HHmm')
+        $stamp = (Get-Date).ToString('yyyyMMdd_HHmmss')
         [void](Invoke-CogesCompose -Paths $Paths -Arguments @('stop', 'front', 'api', 'worker', 'beat', 'relay'))
         $switched = Get-CogesLastJson (Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Bascule' -Arguments @('base.py', 'bascule', $stamp)).Stdout
         $old = $switched.ancienne
