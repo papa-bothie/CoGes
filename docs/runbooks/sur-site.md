@@ -7,9 +7,10 @@ fois les images téléchargées, et rien n'est joignable depuis le réseau du ma
 Il est écrit pour quelqu'un qui débute : chaque commande se copie telle quelle dans
 **PowerShell** (menu Démarrer, taper « PowerShell », Entrée).
 
-> Lots 1 à 5 sur 6. Ce qui n'existe pas encore est listé à la fin (« Ce qui n'existe pas encore »).
+> Les six lots sont faits. Ce que le sur-site ne fait pas est listé à la fin.
 > Sauvegarde et restauration : section « Sauvegarde et restauration » (lot 4, ADR 0127).
 > Mises à jour à distance : section « Mises à jour » (lot 5, ADR 0128).
+> Support à distance, diagnostic, aide : section « Support à distance » (lot 6, ADR 0129).
 
 ## Installer en une commande (lot 3, ADR 0126)
 
@@ -800,15 +801,146 @@ s'arrête en disant laquelle tourne. Un verrou laissé par un programme arrêté
 
 ---
 
-## Ce qui n'existe pas encore
+## Support à distance (lot 6, ADR 0129)
 
-| Sujet | Lot | En attendant |
-|---|---|---|
-| Support à distance et journaux | 6 | sur place, `coges logs` |
+Chaque PC dit à CoGes « je vais bien » ou « ceci a échoué ». Il envoie un court résumé
+technique à un service de pings « homme mort » (Healthchecks.io), le même genre que celui de la
+production (ADR 0077). Le PC **envoie** et n'écoute rien : aucun port ouvert, aucune commande
+reçue. Ce qui sort est la liste fermée de `deploy/onprem/support/champs.txt` (versions,
+services, licence, dates des sauvegardes, disque, nombre d'erreurs). Aucune donnée
+commerciale, aucun nom : la liste et ce qui ne sort jamais sont dans l'ADR 0129 et dans
+l'annexe du contrat (`docs/contrat/annexe-donnees-sur-site.md`), à joindre au contrat.
 
-Éteints sur site pour l'instant : photos des articles, e-mails, notifications sur le
-téléphone, Sentry, inscription libre-service. L'administration de la plateforme n'existe
-pas sur le poste (`/api/v1/platform/*` répond 404).
+### Pour un nouveau client : créer les trois checks
+
+Dans Healthchecks.io (compte de CoGes), créez un projet par client, ou une étiquette par
+client dans un projet commun. Ajoutez-y trois checks, nommés par le numéro de client de
+CoGes, **jamais** par le nom de la boutique :
+
+| Check | Période | Tolérance | Ce qu'il dit |
+|---|---|---|---|
+| `<client>-vie` | 1 jour | 3 jours | le PC est allumé et CoGes démarre (ouverture de session, et 13 h 00 / 20 h 30) |
+| `<client>-sauvegarde` | 1 jour | 2 jours | chaque sauvegarde, réussie ou ratée (`/fail`) |
+| `<client>-mise-a-jour` | 30 jours | 30 jours | chaque mise à jour ; `/fail` au retour arrière, au retour raté, ou si une version attend plus de 3 jours |
+
+Branchez les alertes du compte (e-mail, Telegram…). Copiez l'**adresse de ping** de chaque
+check (`https://hc-ping.com/<uuid>`). C'est un secret : celui qui la connaît peut envoyer de
+faux « je vais bien ». Gardez-la dans le gestionnaire de mots de passe, avec le `coges.env`
+du client.
+
+### Préparer `support.json` (chez CoGes)
+
+```json
+{
+  "adresses": {
+    "vie": "https://hc-ping.com/<uuid du check vie>",
+    "sauvegarde": "https://hc-ping.com/<uuid du check sauvegarde>",
+    "mise-a-jour": "https://hc-ping.com/<uuid du check mise-a-jour>"
+  },
+  "telephone_coges": "+221 xx xxx xx xx"
+}
+```
+
+Sur la clé USB du technicien, par exemple `E:\support.json`, puis sur le PC :
+
+```powershell
+# À l'installation (facultatif) ou plus tard :
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action Reparer -Support E:\support.json
+# Sans Reparer (seulement les adresses) : -Action ConfigurerSupport -Support E:\support.json, ou en questions : -Action ConfigurerSupport
+# Essai : un ping « test » sur les trois checks, et lequel a répondu
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action TesterSupport
+```
+
+Le script garde l'identifiant du PC (tiré à l'installation, `C:\CoGes\reglages\support.json`),
+les adresses et le numéro. Notez dans la fiche du client l'identifiant que montre le
+diagnostic (ligne `pc:`). Pour couper la remontée : `"remontee": false` dans ce fichier.
+
+### Ce que je reçois, et quand
+
+| Moment | Signal |
+|---|---|
+| ouverture de session Windows (+ démarrage de CoGes) | `vie` ; `/fail` si Docker ne répond pas en 5 minutes (`docker-arrete`) ou si `up -d` échoue (`demarrage`) |
+| 13 h 00, 20 h 30 (tâche de sauvegarde), et l'ouverture de session | `vie` à chaque passage, puis `sauvegarde` s'il a sauvegardé ; `/fail` si elle a raté (`place-disque`, `cle-absente`, `taille`, `empreinte`, `autre`…), si Docker est arrêté à l'heure prévue, ou si l'essai du dimanche rate (`essai-rate`) |
+| `-Action Sauvegarder` | `sauvegarde` ou `/fail` |
+| mise à jour appliquée | `mise-a-jour` ; `/fail` `retour-arriere` (revenue seule), `retour-rate` (retour raté : urgent) |
+| version prête depuis plus de 3 jours | `/fail` `attente-3-jours`, une fois par jour |
+
+Chaque corps est le résumé : quelques lignes `nom: valeur` (voir « Lire un diagnostic »). Un
+ping qui ne part pas (Internet coupé) n'arrête jamais rien : il est noté au journal, et `Etat`
+dit « Dernier envoi raté ».
+
+### Que faire à chaque alerte
+
+| Alerte | Quoi faire |
+|---|---|
+| `vie` en silence (3 jours) | appeler le client : PC éteint, fermé, Internet coupé ? Sinon « Aide CoGes » puis `Etat` |
+| `vie` `/fail` `docker-arrete` | Docker Desktop ne démarre plus : voir « Docker Desktop ne démarre plus » (dépannage) |
+| `sauvegarde` `/fail` `place-disque` | libérer de la place sur le PC (jamais « Clean / Purge data » de Docker Desktop) |
+| `sauvegarde` `/fail` `cle-absente`, `taille`, `empreinte` | à distance : `Diagnostic`, lire `journaux\sauvegarde-*.log` |
+| `sauvegarde` `/fail` `essai-rate` | la sauvegarde est là mais ne se relit pas : `Diagnostic`, puis `-Action Sauvegarder -Essai` |
+| `sauvegarde` en silence | la tâche ne tourne plus : `Etat`, puis `-Action Reparer` (repose les tâches) |
+| résumé avec `copie_le` vieux de plus de 7 jours | demander au client de brancher la clé CoGes |
+| `mise-a-jour` `/fail` `retour-arriere` | rien n'est perdu ; lire le diagnostic, corriger la version, ne pas la republier telle quelle |
+| `mise-a-jour` `/fail` `retour-rate` | **urgent** : prise en main, `Etat`, ne rien effacer (ADR 0128) |
+| `mise-a-jour` `/fail` `attente-3-jours` | PC éteint le soir ou boutique jamais calme : demander au client le raccourci « Mettre CoGes à jour » |
+
+### Aider avec l'Assistance rapide
+
+1. Le client double-clique sur **« Aide CoGes »** (Bureau). L'Assistance rapide s'ouvre, et une
+   fenêtre dit d'appeler CoGes, de donner le code et d'accepter. Si l'Assistance rapide manque,
+   la fenêtre dit de l'installer depuis le Microsoft Store (« Assistance rapide »), et le Store
+   s'ouvre sur elle.
+2. Chez vous : ouvrez l'Assistance rapide, choisissez **« Aider quelqu'un »**, et dictez le code
+   au client.
+3. Demandez le **contrôle total**. Le client accepte, il voit tout et peut arrêter.
+4. Dans une fenêtre PowerShell du PC : `-Action Etat -CodeBoutique <code>`, `-Action Diagnostic`
+   (le zip arrive sur le Bureau du client : il vous l'envoie), `-Action TesterSupport`,
+   `-Action Reparer`.
+
+**Jamais à distance** : « Clean / Purge data » ou « Reset to factory defaults » dans Docker
+Desktop (efface toutes les données), `-Action Desinstaller -EffacerLesDonnees`, désinstaller
+Docker Desktop ou WSL, `docker volume rm`, `-Action Restaurer` sans avoir parlé au client des
+ventes perdues. Rien n'est installé pour un accès sans présence : chaque séance demande un
+nouveau code au client.
+
+### Lire un diagnostic
+
+Le client double-clique sur **« Diagnostic CoGes »**. Une minute plus tard, le fichier
+`CoGes-diagnostic-AAAAMMJJ-HHMM.zip` est sur son Bureau (10 Mo au plus), et l'Explorateur
+s'ouvre dessus. Il vous l'envoie par WhatsApp ou par e-mail. Dedans :
+
+| Fichier | Ce qu'il dit |
+|---|---|
+| `resume.txt` | le résumé tel qu'envoyé aux pings (ligne `pc:` = identifiant du PC) |
+| `etat.txt` | la sortie de `Etat` (versions, services, sauvegardes, mises à jour, remontée) |
+| `docker.txt` | `coges ps`, `docker version`, `docker info` abrégé, WSL, Windows |
+| `services\<service>.log` | les 300 dernières lignes de chaque service (moins si le zip dépasse 10 Mo), secrets masqués |
+| `journaux\` | les journaux du script des 7 derniers jours (installation, démarrage, sauvegarde, mise à jour, support) |
+| `reglages.txt` | les **noms** des réglages de `coges.env` (jamais les valeurs), `support.json` sans adresses, `mise-a-jour.json` |
+| `sauvegardes.txt` | noms, tailles et dates des sauvegardes du PC |
+| `systeme.txt` | disque, mémoire, tâches planifiées et leur dernier résultat |
+
+Commencez par `resume.txt` et `etat.txt`, puis le journal du sujet, et les lignes `[ECHEC]`.
+Aucun mot de passe n'y est (ils sont remplacés par `********`), ni aucune vente.
+
+### Les journaux ne remplissent pas le disque
+
+`C:\CoGes\journaux` : la tâche de sauvegarde supprime les fichiers de plus de 60 jours, puis
+garde au plus 200 Mo (les plus anciens partent d'abord). Elle ne supprime jamais le journal du
+jour. `Etat` dit leur taille. Les journaux des conteneurs sont plafonnés par Docker (10 Mo × 3
+par service).
+
+## Ce que le sur-site ne fait pas
+
+| Sujet | Pourquoi |
+|---|---|
+| Photos des articles | elles passent par un service en ligne (Cloudinary), éteint sur site |
+| E-mails (mot de passe oublié, alertes) | aucun serveur d'e-mail sur le PC |
+| Notifications sur le téléphone | Web Push demande un service en ligne et l'accès depuis le téléphone |
+| Administration de la plateforme | absente du PC (`/api/v1/platform/*` répond 404) ; la licence se pose par la CLI (lot 2) |
+| Accès depuis un autre appareil (téléphone, second PC) | CoGes n'écoute que `127.0.0.1` : rien n'est joignable depuis le réseau du magasin |
+| Inscription libre-service, Sentry | éteints |
+| Commandes à distance sans personne devant | volontairement : agir passe par l'Assistance rapide, avec l'accord du commerçant |
 
 ## Pour l'équipe : vérifier sur Linux
 
@@ -820,7 +952,11 @@ société témoin sans licence est suspendue), arrêt et redémarrage, changemen
 arrêt brutal de PostgreSQL ; puis, par le vrai script Windows sous `pwsh` : sauvegarde avec
 restauration d'essai et copie sur un « disque » préparé, `down -v` et réglages neufs,
 restauration (mêmes lignes, licence revenue), fichier abîmé et révision inconnue refusés,
-échec simulé après la bascule (retour à l'ancienne base), nettoyage.
+échec simulé après la bascule (retour à l'ancienne base), nettoyage ; enfin le support à
+distance (lot 6) : un faux service de pings local reçoit `TesterSupport`, une sauvegarde
+réussie, une sauvegarde ratée exprès (`/fail` `cle-absente`) et `vie` ; chaque corps est relu
+par la liste fermée (`controle_remontee.py`), puis un diagnostic est fouillé (aucune valeur du
+`coges.env`, aucun nom de la base).
 
 ```bash
 ONPREM_REGISTRY=coges-local ONPREM_PORT=8080 deploy/onprem-ci/verifier.sh
@@ -830,7 +966,8 @@ ONPREM_REGISTRY=coges-local ONPREM_PORT=8080 deploy/onprem-ci/verifier.sh
 sous `pwsh` : un registre local reçoit trois versions faites des images construites
 (`v0.90.1`, `v0.90.2`, et `v0.90.3` à migration cassée), `publier.py` écrit les canaux ; canal
 faux refusé sans rien tirer, mise à jour avec données identiques, vente puis
-`RevenirVersionPrecedente`, migration cassée et retour automatique.
+`RevenirVersionPrecedente`, migration cassée et retour automatique ; le faux service de pings
+reçoit `mise-a-jour` après la réussite et `/fail` `retour-arriere` après la migration cassée.
 
 ```bash
 ONPREM_REGISTRY=coges-local ONPREM_PORT=8080 deploy/onprem-ci/verifier-mises-a-jour.sh
