@@ -1,0 +1,33 @@
+# Ce qui sort du PC d'un client sur site (lot 6, ADR 0129) : la SEULE liste.
+#
+# Une ligne par champ : nom | règle de la valeur (expression régulière, ancrée) | ce que c'est.
+# Le résumé envoyé à CoGes (corps des pings) n'a que ces champs, dans cet ordre, une ligne
+# « nom: valeur » chacun ; une valeur hors de sa règle, ou un champ absent d'ici, est refusé
+# par le script (Get-CogesReport) et par la CI (deploy/onprem-ci/controle_remontee.py).
+# Aucun texte libre : une raison d'échec est un code de cette liste, le détail reste au journal.
+# L'ADR 0129 et docs/contrat/annexe-donnees-sur-site.md reprennent ces noms (un test le vérifie).
+format | COGES-RESUME-1 | version du format du résumé
+pc | [0-9a-f]{32} | identifiant du PC, tiré au hasard à l'installation (ni nom, ni code de boutique)
+signal | vie|sauvegarde|mise-a-jour|test | le sujet de l'envoi
+resultat | ok|echec | ce qui s'est passé
+raison | aucune|docker-arrete|verrou|demarrage|place-disque|cle-absente|taille|empreinte|essai-rate|retour-arriere|retour-rate|attente-3-jours|autre | code de l'échec (le détail reste dans les journaux du PC)
+envoye_le | \d{4}-\d\d-\d\dT\d\d:\d\d | date et heure du PC à l'envoi
+version | v\d{1,4}\.\d{1,4}\.\d{1,4}|inconnue | version de CoGes installée
+canal | stable|test | canal des mises à jour
+maj | aucune|reussie|revenue|revenue-a-la-main | résultat de la dernière mise à jour
+maj_le | \d{4}-\d\d-\d\dT\d\d:\d\d|jamais | date de la dernière mise à jour
+maj_attente | aucune|v\d{1,4}\.\d{1,4}\.\d{1,4} depuis \d{1,4} j | version prête qui attend d'être appliquée
+services_ok | \d/9|inconnu | services de CoGes en bonne santé, sur 9
+services_ko | aucun|inconnu|(caddy|autoheal|postgres|redis|front|api|worker|beat|relay)(,(caddy|autoheal|postgres|redis|front|api|worker|beat|relay)){0,8} | noms techniques des services qui ne le sont pas
+licence | active|essai|impayee|suspendue|aucune|inconnue | état de la licence
+offre | (starter|business|premium)(,(starter|business|premium)){0,2}|aucune|inconnue | offre de la licence (sans note de contrat)
+sauvegarde_le | \d{4}-\d\d-\d\dT\d\d:\d\d|jamais | date de la dernière bonne sauvegarde
+copie_le | \d{4}-\d\d-\d\dT\d\d:\d\d|jamais | date de la dernière copie hors du PC
+essai | ok|echec|jamais | résultat de la dernière restauration d'essai
+essai_le | \d{4}-\d\d-\d\dT\d\d:\d\d|jamais | date de la dernière restauration d'essai
+disque_go | \d{1,6}\.\d|inconnu | place libre sur le disque de CoGes, en Go
+memoire_go | \d{1,4}\.\d|inconnue | mémoire du PC, en Go
+windows | \d{1,3}(\.\d{1,6}){1,3}|inconnue | version de Windows
+docker | \d{1,3}\.\d{1,3}\.\d{1,4}|inconnue | version de Docker Desktop (du moteur sous Linux)
+wsl | \d{1,3}(\.\d{1,6}){1,3}|inconnue | version de WSL
+erreurs_24h | aucune|(installation|demarrage|sauvegarde|mise-a-jour|support)=\d{1,6}( (installation|demarrage|sauvegarde|mise-a-jour|support)=\d{1,6}){0,4} | nombre de lignes ÉCHEC des journaux du PC sur 24 h, par source

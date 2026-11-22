@@ -17,7 +17,8 @@
 .PARAMETER Action
     Installer (défaut), Reparer, Etat, Desinstaller ; sauvegarde (ADR 0127) : Sauvegarder,
     Restaurer, PreparerDisque, NettoyerAncienneBase ; mises à jour (ADR 0128) :
-    VerifierMiseAJour, MettreAJour, RevenirVersionPrecedente.
+    VerifierMiseAJour, MettreAJour, RevenirVersionPrecedente ; support à distance (ADR 0129) :
+    ConfigurerSupport, TesterSupport, Diagnostic, Aide.
 .PARAMETER Version
     La version de CoGes, vX.Y.Z (obligatoire pour Installer ; Reparer garde celle des réglages si absente).
 .PARAMETER Simulation
@@ -65,11 +66,14 @@
     Avec Installer ou Reparer : l'heure du soir des mises à jour (HH:MM, 21:30 par défaut) ; repose la tâche.
 .PARAMETER CanalMiseAJour
     Avec Installer ou Reparer : stable (défaut) ou test (PC d'essai de CoGes).
+.PARAMETER Support
+    Avec Installer, Reparer ou ConfigurerSupport : le support.json préparé chez CoGes (les
+    trois adresses de ping et le numéro de CoGes). Facultatif ; posé plus tard par Reparer.
 #>
 [CmdletBinding()]
 param(
     [ValidateSet('Installer', 'Reparer', 'Etat', 'Desinstaller', 'Sauvegarder', 'Restaurer', 'PreparerDisque', 'NettoyerAncienneBase',
-        'VerifierMiseAJour', 'MettreAJour', 'RevenirVersionPrecedente')] [string] $Action = 'Installer',
+        'VerifierMiseAJour', 'MettreAJour', 'RevenirVersionPrecedente', 'ConfigurerSupport', 'TesterSupport', 'Diagnostic', 'Aide')] [string] $Action = 'Installer',
     [string] $Version = '',
     [switch] $Simulation,
     [string] $Racine = 'C:\CoGes',
@@ -98,7 +102,8 @@ param(
     [switch] $Bureau,
     [switch] $ConfirmerRetour,
     [string] $HeureMiseAJour = '',
-    [string] $CanalMiseAJour = ''
+    [string] $CanalMiseAJour = '',
+    [string] $Support = ''
 )
 
 Set-StrictMode -Version Latest

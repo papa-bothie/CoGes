@@ -1088,7 +1088,8 @@ function Get-CogesSetting {
     <# Les réglages lus, et leurs secrets ajoutés au masque du journal. #>
     param([Parameter(Mandatory)] $Paths)
     $values = Read-CogesEnvFile $Paths.EnvFile
-    $script:CogesState.MaskValues = Get-CogesMaskValue $values
+    # Les adresses de ping du support (lot 6) sont des secrets elles aussi.
+    $script:CogesState.MaskValues = @(Get-CogesMaskValue $values) + @(Get-CogesSupportMaskValue $Paths)
     return $values
 }
 
@@ -1386,18 +1387,23 @@ function Start-CogesAtLogon {
             try { $lock = Enter-CogesLock -Paths $paths -Action 'Démarrage' -WaitSeconds $LockWaitSeconds -IntervalSeconds 15 }
             catch {
                 Write-Log -Message ('verrou pris, up -d non lancé : ' + $_.Exception.Message) -Level ATTENTION
+                [void](Send-CogesPing -Paths $paths -Signal 'vie' -Failure -Reason 'verrou')
                 return 1
             }
             try {
                 $up = Invoke-CogesCompose -Paths $paths -Arguments @('up', '-d')
                 Write-Log -Message ('up -d : code {0}' -f $up.ExitCode)
-                return $up.ExitCode
             }
             finally { Exit-CogesLock $lock }
+            # Lot 6 : « je vais bien » (ou /fail), après le démarrage, verrou rendu.
+            if ($up.ExitCode -eq 0) { [void](Send-CogesPing -Paths $paths -Signal 'vie') }
+            else { [void](Send-CogesPing -Paths $paths -Signal 'vie' -Failure -Reason 'demarrage') }
+            return $up.ExitCode
         }
         Start-Sleep -Seconds 10
     }
     Write-Log -Message 'Le moteur Docker n''a pas répondu en 5 minutes : rien lancé.' -Level ECHEC
+    [void](Send-CogesPing -Paths $paths -Signal 'vie' -Failure -Reason 'docker-arrete')
     return 1
 }
 
@@ -2247,9 +2253,15 @@ function Invoke-CogesBackupAction {
         Invoke-CogesStep -Title 'Sauvegarde de la base (CoGes reste ouvert)' -Action {
             $summary = Get-CogesBackupSummary $Paths
             $trial = [bool]$Options.Essai -or (Test-CogesTrialDue -Now (Get-Date) -LastSuccess $summary.LastTrialGood)
-            $made = New-CogesBackup -Paths $Paths -Trial:$trial
+            try { $made = New-CogesBackup -Paths $Paths -Trial:$trial }
+            catch {
+                [void](Send-CogesPing -Paths $Paths -Signal 'sauvegarde' -Failure -Reason (Get-CogesFailureCode $_.Exception.Message))
+                throw
+            }
             Write-CogesLine ('  {0} ({1:N1} Mo), chiffrée et relue.' -f $made.Path, ($made.Size / 1MB)) -Kind Ok
             if (@($made.Offsite).Count -eq 0) { Write-CogesLine '  Aucune clé CoGes branchée : pas de copie hors du PC cette fois.' -Kind Attention }
+            if ($trial -and -not (Get-CogesBackupSummary $Paths).LastTrialOk) { [void](Send-CogesPing -Paths $Paths -Signal 'sauvegarde' -Failure -Reason 'essai-rate') }
+            else { [void](Send-CogesPing -Paths $Paths -Signal 'sauvegarde') }
         }
     }
     finally { Exit-CogesLock $lock }
@@ -2267,8 +2279,12 @@ function Invoke-CogesScheduledBackup {
     $script:CogesState.LogPath = Join-Path $paths.Journaux ('sauvegarde-{0}.log' -f $Now.ToString('yyyyMMdd'))
     if (-not (Test-Path -LiteralPath $paths.EnvFile)) { Write-Log -Message 'CoGes n''est pas installé : rien à faire.'; return 0 }
     [void](Get-CogesSetting $paths)
+    # Lot 6 : journaux bornés (60 jours, 200 Mo), à chaque passage.
+    [void](Invoke-CogesLogRotation -Folder $paths.Journaux -Now $Now)
     $code = 0
     $lock = $null
+    # Ce que dira le ping « sauvegarde » : $null (rien fait), ok, ou un code d'échec.
+    $signal = $null
     try {
         $summary = Get-CogesBackupSummary $paths
         $due = Test-CogesBackupDue -Now $Now -LastGood $summary.LastGood
@@ -2276,18 +2292,27 @@ function Invoke-CogesScheduledBackup {
         if (-not $due -and -not $trial) { Write-Log -Message 'Rien à faire : la dernière sauvegarde est récente.' }
         elseif ((Invoke-Docker -Arguments @('version', '--format', '{{.Server.Os}}')).ExitCode -ne 0) {
             Write-Log -Message 'Docker ne répond pas : pas de sauvegarde cette fois.' -Level ATTENTION
+            $signal = 'docker-arrete'
         }
         else {
             $lock = Enter-CogesLock -Paths $paths -Action 'Sauvegarde planifiée' -WaitSeconds $LockWaitSeconds -IntervalSeconds 30
             $made = New-CogesBackup -Paths $paths -Trial:$trial
             Write-Log -Message ('sauvegarde bonne : {0}' -f $made.Name) -Level OK
+            $signal = 'aucune'
+            if ($trial -and -not (Get-CogesBackupSummary $paths).LastTrialOk) { $signal = 'essai-rate' }
         }
     }
     catch {
         Write-Log -Message ('sauvegarde en échec : ' + $_.Exception.Message) -Level ECHEC
+        $signal = Get-CogesFailureCode $_.Exception.Message
         $code = 1
     }
     finally { Exit-CogesLock $lock }
+    # Lot 6 : ce passage envoie « vie » (un PC jamais éteint ne rouvre pas de session), puis
+    # « sauvegarde » s'il a sauvegardé ou dû le faire. Jamais bloquant.
+    [void](Send-CogesPing -Paths $paths -Signal 'vie')
+    if ($signal -eq 'aucune') { [void](Send-CogesPing -Paths $paths -Signal 'sauvegarde') }
+    elseif ($signal) { [void](Send-CogesPing -Paths $paths -Signal 'sauvegarde' -Failure -Reason $signal) }
     try {
         $summary = Get-CogesBackupSummary $paths
         foreach ($alert in (Get-CogesBackupAlert -Now (Get-Date) -LastGood $summary.LastGood -LastOffsite $summary.LastOffsite -FreeBytes $summary.Free -TrialOk $summary.LastTrialOk)) {
@@ -2609,7 +2634,7 @@ function Restore-CogesBackup {
         finally { $key = $null; Clear-CogesWorkVolume -Paths $Paths }
 
         # 5. Bascule : application arrêtée (Caddy montre la page de maintenance), renommage.
-        $stamp = (Get-Date).ToString('yyyyMMdd_HHmm')
+        $stamp = (Get-Date).ToString('yyyyMMdd_HHmmss')
         [void](Invoke-CogesCompose -Paths $Paths -Arguments @('stop', 'front', 'api', 'worker', 'beat', 'relay'))
         $switched = Get-CogesLastJson (Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Bascule' -Arguments @('base.py', 'bascule', $stamp)).Stdout
         $old = $switched.ancienne
@@ -2863,6 +2888,8 @@ function Invoke-CogesInstall {
         Test-CogesSite -Url $url
     }
     Install-CogesComfort -Paths $Paths -Url $url
+    Initialize-CogesSupportSetting -Paths $Paths -Options $Options
+    Install-CogesSupportShortcut -Paths $Paths
     Install-CogesBackupSetup -Paths $Paths -Options $Options -Slug $answers.CodeBoutique -FirstBackup
     Set-CogesUpdateOption -Paths $Paths -Options $Options
     Install-CogesUpdateTask -Paths $Paths
@@ -2949,6 +2976,8 @@ function Invoke-CogesRepairLocked {
     }
     Invoke-CogesStep -Title 'Dernier contrôle de la page d''accueil' -Action { Test-CogesSite -Url $url }
     Install-CogesComfort -Paths $Paths -Url $url
+    Initialize-CogesSupportSetting -Paths $Paths -Options $Options
+    Install-CogesSupportShortcut -Paths $Paths
     Install-CogesBackupSetup -Paths $Paths -Options $Options -Slug $slug
     Set-CogesUpdateOption -Paths $Paths -Options $Options
     Install-CogesUpdateTask -Paths $Paths
@@ -3003,6 +3032,7 @@ function Show-CogesState {
     if ($last) { Write-CogesLine ('  Dernier journal  : {0}' -f $last.FullName) }
     Show-CogesBackupState $Paths
     Show-CogesUpdateState -Paths $Paths
+    Show-CogesSupportState -Paths $Paths
 }
 
 function Invoke-CogesUninstall {
@@ -3051,6 +3081,7 @@ function Invoke-CogesUninstall {
     }
     Remove-CogesBackupTask
     Remove-CogesUpdateTask -Paths $Paths
+    Remove-CogesSupportShortcut
     Invoke-CogesStep -Title 'Raccourci du Bureau retiré' -Action {
         $shortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'CoGes.url'
         if (Test-Path -LiteralPath $shortcut) { Remove-Item -LiteralPath $shortcut -Force }
@@ -3079,7 +3110,7 @@ function Invoke-CogesMain {
     <# Le point d'entrée commun : rend 0 (fait) ou 1 (échec expliqué). #>
     param(
         [ValidateSet('Installer', 'Reparer', 'Etat', 'Desinstaller', 'Sauvegarder', 'Restaurer', 'PreparerDisque', 'NettoyerAncienneBase',
-            'VerifierMiseAJour', 'MettreAJour', 'RevenirVersionPrecedente')] [string] $Action = 'Installer',
+            'VerifierMiseAJour', 'MettreAJour', 'RevenirVersionPrecedente', 'ConfigurerSupport', 'TesterSupport', 'Diagnostic', 'Aide')] [string] $Action = 'Installer',
         [string] $Version = '',
         [string] $Racine = 'C:\CoGes',
         [int] $Port = 0,
@@ -3108,7 +3139,8 @@ function Invoke-CogesMain {
         [switch] $Bureau,
         [switch] $ConfirmerRetour,
         [string] $HeureMiseAJour = '',
-        [string] $CanalMiseAJour = ''
+        [string] $CanalMiseAJour = '',
+        [string] $Support = ''
     )
     $script:CogesState.Simulation = [bool]$Simulation
     $script:CogesToastEnabled = -not [bool]$SansNotification
@@ -3123,7 +3155,7 @@ function Invoke-CogesMain {
         Fichier = $Fichier; Cle = $Cle; Lecteur = $Lecteur; ClePublique = $ClePublique; LecteurCle = $LecteurCle
         CleCopiee = [bool]$CleCopiee; ConfirmerRestauration = [bool]$ConfirmerRestauration; RestaurerQuandMeme = [bool]$RestaurerQuandMeme; Essai = [bool]$Essai
         Maintenant = [bool]$Maintenant; Bureau = [bool]$Bureau; ConfirmerRetour = [bool]$ConfirmerRetour
-        HeureMiseAJour = $HeureMiseAJour; CanalMiseAJour = $CanalMiseAJour
+        HeureMiseAJour = $HeureMiseAJour; CanalMiseAJour = $CanalMiseAJour; Support = $Support
     }
     # Le raccourci du Bureau : une personne devant le PC, une fenêtre qui attend Entrée à la fin.
     if ($Bureau) { $NonInteractif = $false; $script:CogesState.NonInteractif = $false }
@@ -3132,7 +3164,7 @@ function Invoke-CogesMain {
             Stop-CogesStep -Probleme ('-Port {0} n''est pas un numéro de port.' -f $Port) -QuoiFaire 'Donnez un port entre 1 et 65535 (80, 8080…).'
         }
         if ($Action -eq 'Installer') { Assert-CogesVersion $Version }
-        Initialize-CogesSession -Paths $paths -Simulation $Simulation -NonInteractif $NonInteractif -WriteLog ($Action -ne 'Etat')
+        Initialize-CogesSession -Paths $paths -Simulation $Simulation -NonInteractif $NonInteractif -WriteLog ($Action -notin @('Etat', 'Aide'))
         Write-CogesLine ('CoGes sur site — {0}' -f $Action) -Kind Titre
         if ($Simulation) { Write-CogesLine 'Mode simulation : chaque étape est annoncée, rien n''est écrit ni lancé.' }
         # Installer et Reparer contrôlent Docker dans leurs prérequis ; Etat le dit sans s'arrêter.
@@ -3149,6 +3181,10 @@ function Invoke-CogesMain {
             'VerifierMiseAJour' { Invoke-CogesUpdateCheckAction -Paths $paths }
             'MettreAJour' { Invoke-CogesUpdateAction -Paths $paths -Options $options }
             'RevenirVersionPrecedente' { Invoke-CogesRollbackAction -Paths $paths -Options $options }
+            'ConfigurerSupport' { Invoke-CogesConfigureSupport -Paths $paths -Options $options }
+            'TesterSupport' { Invoke-CogesTestSupport -Paths $paths }
+            'Diagnostic' { Invoke-CogesDiagnosticAction -Paths $paths -Options $options }
+            'Aide' { Invoke-CogesHelpAction -Paths $paths }
         }
         Wait-CogesDesktopWindow -Bureau ([bool]$Bureau)
         return 0
@@ -4035,11 +4071,15 @@ function Invoke-CogesUpdateLocked {
         catch {
             $text = 'La mise à jour vers {0} a échoué et le retour à {1} aussi. Appelez CoGes.' -f $Version, $from
             Show-CogesToast $text | Out-Null
+            [void](Send-CogesPing -Paths $Paths -Signal 'mise-a-jour' -Failure -Reason 'retour-rate')
             Stop-CogesStep -Probleme ('{0} ({1} ; puis {2})' -f $text, $reason, $_.Exception.Message.Split("`n")[0]) `
                 -QuoiFaire ('N''effacez rien. La sauvegarde {0} et la copie coges_avant_maj_{1} (ou coges_echec_maj_{1}) sont gardées.' -f $backup.Name, $context.Copy)
         }
         Set-CogesUpdateShortcut -Paths $Paths -Present $false
-        $text = 'La mise à jour vers {0} a échoué ; CoGes est revenu à {1}. Rien n''est perdu. CoGes est prévenu au prochain passage (lot 6).' -f $Version, $from
+        # Lot 6 : CoGes est prévenu tout de suite (si la remontée est active et Internet là).
+        $told = Send-CogesPing -Paths $Paths -Signal 'mise-a-jour' -Failure -Reason 'retour-arriere'
+        $text = 'La mise à jour vers {0} a échoué ; CoGes est revenu à {1}. Rien n''est perdu.' -f $Version, $from
+        if ($told) { $text += ' CoGes est prévenu.' }
         Show-CogesToast $text | Out-Null
         Stop-CogesStep -Probleme $text -QuoiFaire ('Rien à faire tout de suite. {0} ne se réessaie plus seule ; envoyez le journal à CoGes.' -f $Version)
     }
@@ -4054,6 +4094,7 @@ function Invoke-CogesUpdateLocked {
     if (Test-Path -LiteralPath $staged) { Remove-Item -LiteralPath $staged -Recurse -Force }
     Set-CogesUpdateShortcut -Paths $Paths -Present $false
     Remove-CogesOldImage -Settings (Get-CogesSetting $Paths)
+    [void](Send-CogesPing -Paths $Paths -Signal 'mise-a-jour')
     Write-CogesLine ('CoGes est à jour ({0}), en {1} minute(s). Retour possible jusqu''au {2} (-Action RevenirVersionPrecedente).' -f $Version, $minutes, $Now.AddDays($script:CogesKeepDays).ToString('dd/MM/yyyy')) -Kind Ok
     return 'appliquee'
 }
@@ -4116,6 +4157,7 @@ function Invoke-CogesManualReminder {
     $wait = Get-CogesUpdateWait -Entry (Get-CogesVersionState -State $State -Version $version) -Now $Now -Heure $Heure
     if (-not $wait.Manual) { return $false }
     Set-CogesUpdateShortcut -Paths $Paths -Present $true
+    [void](Send-CogesUpdateWaitPing -Paths $Paths -Now $Now)
     $today = $Now.ToString('yyyy-MM-dd')
     if ($State['dernier_rappel'] -eq $today) { return $false }
     [void](Show-CogesToast 'Une mise à jour de CoGes est prête. Quand vous avez 5 minutes sans client, double-cliquez sur « Mettre CoGes à jour » sur le Bureau.')
@@ -4420,5 +4462,808 @@ function Set-CogesUpdateOption {
     if ($changes.Count -eq 0) { return }
     Invoke-CogesStep -Title ('Réglage des mises à jour : {0}' -f (($changes.Keys | Sort-Object | ForEach-Object { '{0} {1}' -f $_, $changes[$_] }) -join ', ')) -Action {
         Write-CogesUpdateSetting -Paths $Paths -Changes $changes
+    }
+}
+
+# ---------------------------------------------------------------------------- lot 6 : support à distance (ADR 0129)
+#
+# TOUJOURS SORTANT, JAMAIS ENTRANT : le PC envoie des pings (POST https) à un service
+# « homme mort » (Healthchecks.io), comme les tâches de la production (ADR 0077). Aucun
+# port ouvert, aucun service qui écoute, aucune commande reçue. Ce qui sort est la liste
+# fermée de support\champs.txt, et rien d'autre : aucun texte libre, aucune donnée
+# commerciale. Un ping qui échoue n'arrête jamais rien : journal seulement.
+
+$script:CogesSupportSignals = @('vie', 'sauvegarde', 'mise-a-jour')
+$script:CogesSupportFormat = 'COGES-SUPPORT-1'
+$script:CogesReportFormat = 'COGES-RESUME-1'
+$script:CogesPingTimeoutSeconds = 10
+$script:CogesPingTries = 2
+$script:CogesPingPauseSeconds = 2
+$script:CogesReportMaxBytes = 2048
+$script:CogesLogSources = @('installation', 'demarrage', 'sauvegarde', 'mise-a-jour', 'support')
+$script:CogesLogKeepDays = 60
+$script:CogesLogMaxBytes = 200MB
+$script:CogesDiagnosticMaxBytes = 10MB
+$script:CogesDiagnosticLogDays = 7
+$script:CogesDiagnosticTails = @(300, 100, 30)
+$script:CogesHelpShortcut = 'Aide CoGes.cmd'
+$script:CogesDiagnosticShortcut = 'Diagnostic CoGes.cmd'
+$script:CogesQuickAssistPackage = 'MicrosoftCorporationII.QuickAssist'
+$script:CogesQuickAssistStore = 'ms-windows-store://pdp/?productid=9P7BP5VNWKX5'
+#: La liste des champs, à côté de ce fichier quand il n'est pas encore dans le programme.
+$script:CogesFieldsBeside = $null
+if ($PSScriptRoot) { $script:CogesFieldsBeside = Join-Path (Split-Path -Parent $PSScriptRoot) 'support\champs.txt' }
+
+function Get-CogesSupportPath {
+    param([Parameter(Mandatory)] $Paths)
+    $folder = Join-Path $Paths.Racine 'support'
+    return [pscustomobject]@{
+        Reglage = Join-Path $Paths.Reglages 'support.json'
+        Dossier = $folder
+        Etat    = Join-Path $folder 'etat.json'
+    }
+}
+
+# ---------------------------------------------------------------------------- bloc A : la liste et le résumé (fonctions pures)
+
+function ConvertFrom-CogesFieldList {
+    <# support\champs.txt en liste ordonnée : Name, Rule (expression ancrée), Text. #>
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text)
+    $fields = New-Object System.Collections.Generic.List[object]
+    foreach ($line in ($Text -split "`r?`n")) {
+        if (-not $line.Trim() -or $line.TrimStart().StartsWith('#')) { continue }
+        $parts = $line -split ' \| ', 3
+        if ($parts.Count -ne 3) { throw ('champs.txt : ligne illisible « {0} »' -f $line) }
+        $fields.Add([pscustomobject]@{ Name = $parts[0].Trim(); Rule = ('^(?:{0})$' -f $parts[1].Trim()); Text = $parts[2].Trim() })
+    }
+    return $fields.ToArray()
+}
+
+function Get-CogesFieldList {
+    <# La liste du programme installé ; sinon celle d'à côté (dépôt, tests). $null : aucune. #>
+    param($Paths = $null)
+    $candidates = @()
+    if ($Paths) { $candidates += (Join-Path $Paths.Programme 'support\champs.txt') }
+    if ($script:CogesFieldsBeside) { $candidates += $script:CogesFieldsBeside }
+    foreach ($file in $candidates) {
+        if (Test-Path -LiteralPath $file) { return , (ConvertFrom-CogesFieldList ([IO.File]::ReadAllText($file))) }
+    }
+    return $null
+}
+
+function Get-CogesReport {
+    <# Le résumé : un objet FERMÉ, aux seuls champs de la liste, dans son ordre. Un champ
+       inconnu, ou une valeur hors de sa règle, lève (rien ne part). Fonction pure. #>
+    param([Parameter(Mandatory)] [System.Collections.IDictionary] $Facts, [Parameter(Mandatory)] [object[]] $Fields)
+    $names = @($Fields | ForEach-Object { $_.Name })
+    foreach ($key in $Facts.Keys) {
+        if ($names -cnotcontains [string]$key) { throw ('résumé : le champ « {0} » n''est pas dans champs.txt' -f $key) }
+    }
+    $report = [ordered]@{}
+    foreach ($field in $Fields) {
+        if (-not $Facts.Contains($field.Name)) { throw ('résumé : le champ « {0} » manque' -f $field.Name) }
+        $value = [string]$Facts[$field.Name]
+        if ($value -cnotmatch $field.Rule) { throw ('résumé : la valeur du champ « {0} » est hors de sa règle' -f $field.Name) }
+        $report[$field.Name] = $value
+    }
+    return $report
+}
+
+function Format-CogesReport {
+    <# Le corps du ping : « nom: valeur », une ligne par champ, moins de 2 Ko. #>
+    param([Parameter(Mandatory)] [System.Collections.IDictionary] $Report)
+    $text = (@($Report.Keys | ForEach-Object { '{0}: {1}' -f $_, $Report[$_] }) -join "`n") + "`n"
+    if ([Text.Encoding]::UTF8.GetByteCount($text) -gt $script:CogesReportMaxBytes) { throw 'résumé : plus de 2 Ko' }
+    return $text
+}
+
+function Get-CogesMinimalFact {
+    <# Les faits sûrs de tout envoi ; le reste « inconnu » : ce qui part quand la lecture de
+       l'état a échoué (le ping part quand même). #>
+    param([Parameter(Mandatory)] [string] $Pc, [Parameter(Mandatory)] [string] $Signal, [bool] $Failure, [string] $Reason = 'aucune', [Nullable[datetime]] $Now = $null)
+    if ($null -eq $Now) { $Now = Get-Date }
+    $result = 'ok'
+    if ($Failure) { $result = 'echec' }
+    if ($Failure -and $Reason -eq 'aucune') { $Reason = 'autre' }
+    return [ordered]@{
+        format = $script:CogesReportFormat; pc = $Pc; signal = $Signal; resultat = $result; raison = $Reason
+        envoye_le = $Now.ToString('yyyy-MM-ddTHH:mm'); version = 'inconnue'; canal = 'stable'; maj = 'aucune'; maj_le = 'jamais'
+        maj_attente = 'aucune'; services_ok = 'inconnu'; services_ko = 'inconnu'; licence = 'inconnue'; offre = 'inconnue'
+        sauvegarde_le = 'jamais'; copie_le = 'jamais'; essai = 'jamais'; essai_le = 'jamais'; disque_go = 'inconnu'
+        memoire_go = 'inconnue'; windows = 'inconnue'; docker = 'inconnue'; wsl = 'inconnue'; erreurs_24h = 'aucune'
+    }
+}
+
+function ConvertTo-CogesReportDate {
+    param([AllowNull()] $Date)
+    if ($null -eq $Date) { return 'jamais' }
+    return ([datetime]$Date).ToString('yyyy-MM-ddTHH:mm')
+}
+
+function Get-CogesFailureCode {
+    <# Le code d'une raison d'échec (liste fermée de champs.txt) : le texte reste au journal. #>
+    param([AllowEmptyString()] [AllowNull()] [string] $Message)
+    $text = [string]$Message
+    $rules = [ordered]@{
+        'docker-arrete' = 'Docker ne répond pas|moteur Docker|Docker Desktop n''est pas|docker.*(introuvable|not found)'
+        'verrou'        = 'verrou|déjà en cours|occupé'
+        'place-disque'  = 'place sur le disque|Pas assez de place|disque plein|No space left'
+        'cle-absente'   = 'clé publique'
+        'taille'        = 'trop petite'
+        'empreinte'     = 'empreinte'
+        'demarrage'     = 'up -d|démarrage|ne répond pas'
+    }
+    foreach ($code in $rules.Keys) { if ($text -match $rules[$code]) { return $code } }
+    return 'autre'
+}
+
+function Get-CogesErrorCount {
+    <# Lignes « [ECHEC] » des journaux, sur 24 h, par source (préfixe du nom du fichier). #>
+    param([Parameter(Mandatory)] [string] $Folder, [Parameter(Mandatory)] [datetime] $Now)
+    $since = $Now.AddHours(-24)
+    $counts = [ordered]@{}
+    foreach ($file in @(Get-ChildItem -LiteralPath $Folder -File -Filter '*.log' -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $since })) {
+        $source = $null
+        foreach ($name in $script:CogesLogSources) { if ($file.Name -like ($name + '-*')) { $source = $name } }
+        if (-not $source) { continue }
+        foreach ($line in [IO.File]::ReadAllLines($file.FullName)) {
+            if ($line -notmatch '^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) \[ECHEC\]') { continue }
+            $at = [datetime]::ParseExact($Matches[1], 'yyyy-MM-dd HH:mm:ss', [Globalization.CultureInfo]::InvariantCulture)
+            if ($at -lt $since) { continue }
+            if (-not $counts.Contains($source)) { $counts[$source] = 0 }
+            $counts[$source] = $counts[$source] + 1
+        }
+    }
+    if ($counts.Count -eq 0) { return 'aucune' }
+    return (@($script:CogesLogSources | Where-Object { $counts.Contains($_) } | ForEach-Object { '{0}={1}' -f $_, $counts[$_] }) -join ' ')
+}
+
+function ConvertTo-CogesLicenseFact {
+    <# La sortie de « base.py licence » en deux champs : licence et offre. #>
+    param([AllowNull()] $Data)
+    if ($null -eq $Data) { return @{ licence = 'inconnue'; offre = 'inconnue' } }
+    $states = @{}
+    if ($Data.etats) { foreach ($property in $Data.etats.PSObject.Properties) { $states[$property.Name] = [int]$property.Value } }
+    $licence = 'aucune'
+    if ($states['suspended']) { $licence = 'suspendue' }
+    elseif ($states['past_due']) { $licence = 'impayee' }
+    elseif ($states['trial']) { $licence = 'essai' }
+    elseif ($states['active']) { $licence = 'active' }
+    $plans = @($Data.offres | Where-Object { $_ -in @('starter', 'business', 'premium') })
+    $offre = 'aucune'
+    if ($plans.Count -gt 0) { $offre = ($plans | Sort-Object) -join ',' }
+    return @{ licence = $licence; offre = $offre }
+}
+
+function Get-CogesWslVersion {
+    if (-not (Test-CogesWindows)) { return 'inconnue' }
+    try {
+        # wsl.exe écrit en UTF-16 : PowerShell en lit des caractères nuls.
+        $text = ((& wsl.exe --version 2>$null) -join ' ') -replace "`0", ''
+        if ($text -match '(\d+\.\d+\.\d+(?:\.\d+)?)') { return $Matches[1] }
+    }
+    catch { Write-Verbose 'wsl absent' }
+    return 'inconnue'
+}
+
+function Get-CogesMemoryGo {
+    try {
+        if (Test-CogesWindows) { return ('{0:0.0}' -f ((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)).Replace(',', '.') }
+        if (Test-Path -LiteralPath '/proc/meminfo') {
+            $line = @(Get-Content -LiteralPath '/proc/meminfo' | Where-Object { $_ -match '^MemTotal:\s+(\d+) kB' })[0]
+            if ($line -match '(\d+) kB') { return ('{0:0.0}' -f ([double]$Matches[1] * 1KB / 1GB)).Replace(',', '.') }
+        }
+    }
+    catch { Write-Verbose 'mémoire illisible' }
+    return 'inconnue'
+}
+
+function Read-CogesReportFact {
+    <# Lit l'état du PC (fichiers d'état, compose ps, base.py licence) en faits du résumé.
+       Chaque lecture qui échoue laisse « inconnu » : le ping part quand même. #>
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [string] $Pc, [Parameter(Mandatory)] [string] $Signal,
+        [bool] $Failure, [string] $Reason = 'aucune', [Nullable[datetime]] $Now = $null)
+    if ($null -eq $Now) { $Now = Get-Date }
+    $facts = Get-CogesMinimalFact -Pc $Pc -Signal $Signal -Failure $Failure -Reason $Reason -Now $Now
+    try {
+        $version = Get-CogesInstalledVersion $Paths
+        if (Test-CogesVersion $version) { $facts.version = $version }
+    }
+    catch { Write-Verbose 'version illisible' }
+    try {
+        $facts.canal = (Read-CogesUpdateSetting $Paths).canal
+        $state = Read-CogesUpdateState $Paths
+        $last = $state['derniere_maj']
+        if ($last -is [hashtable] -and $last['resultat']) {
+            $facts.maj = [string]$last['resultat']
+            $facts.maj_le = ConvertTo-CogesReportDate (ConvertTo-CogesStateDate $last['le'])
+        }
+        $ready = Get-CogesReadyVersion $state
+        if ($ready) {
+            $wait = Get-CogesUpdateWait -Entry (Get-CogesVersionState -State $state -Version $ready) -Now $Now -Heure (Read-CogesUpdateSetting $Paths).heure
+            $facts.maj_attente = '{0} depuis {1} j' -f $ready, $wait.Days
+        }
+    }
+    catch { Write-Verbose 'état des mises à jour illisible' }
+    try {
+        $summary = Get-CogesBackupSummary $Paths
+        $facts.sauvegarde_le = ConvertTo-CogesReportDate $summary.LastGood
+        $facts.copie_le = ConvertTo-CogesReportDate $summary.LastOffsite
+        $facts.essai_le = ConvertTo-CogesReportDate $summary.LastTrial
+        if ($null -ne $summary.LastTrialOk) { $facts.essai = $(if ($summary.LastTrialOk) { 'ok' } else { 'echec' }) }
+        if ($summary.Free -ne [long]::MaxValue) { $facts.disque_go = ('{0:0.0}' -f ($summary.Free / 1GB)).Replace(',', '.') }
+    }
+    catch { Write-Verbose 'état des sauvegardes illisible' }
+    $facts.memoire_go = Get-CogesMemoryGo
+    try {
+        $os = [Environment]::OSVersion.Version
+        $facts.windows = '{0}.{1}.{2}' -f $os.Major, $os.Minor, $os.Build
+    }
+    catch { Write-Verbose 'version du système illisible' }
+    $facts.wsl = Get-CogesWslVersion
+    try { $facts.erreurs_24h = Get-CogesErrorCount -Folder $Paths.Journaux -Now $Now } catch { Write-Verbose 'journaux illisibles' }
+    # Ce qui demande Docker, en dernier : Docker arrêté laisse « inconnu ».
+    try {
+        $engine = Invoke-Docker -Arguments @('version', '--format', '{{.Server.Platform.Name}}|{{.Server.Version}}')
+        if ($engine.ExitCode -eq 0) {
+            $line = [string](@($engine.Stdout) -join ' ')
+            $desktop = Get-CogesDockerDesktopVersion @($line)
+            if ($desktop) { $facts.docker = $desktop.ToString() }
+            elseif ($line -match '\|(\d+\.\d+\.\d+)') { $facts.docker = $Matches[1] }
+            $containers = @(ConvertFrom-CogesComposeStatus (Invoke-CogesCompose -Paths $Paths -Arguments @('ps', '-a', '--format', 'json')).Stdout)
+            $bad = @($script:CogesServices | Where-Object {
+                    $name = $_
+                    $container = @($containers | Where-Object { $_.Service -eq $name }) | Select-Object -First 1
+                    -not ($container -and $container.State -eq 'running' -and ($container.Health -eq 'healthy' -or -not $container.Health))
+                })
+            $facts.services_ok = '{0}/9' -f ($script:CogesServices.Count - $bad.Count)
+            $facts.services_ko = $(if ($bad.Count -eq 0) { 'aucun' } else { $bad -join ',' })
+            $licence = Invoke-CogesTool -Paths $Paths -Service 'sauvegarde-py' -What 'Licence (support)' -Arguments @('base.py', 'licence')
+            $license = ConvertTo-CogesLicenseFact (Get-CogesLastJson $licence.Stdout)
+            $facts.licence = $license.licence
+            $facts.offre = $license.offre
+        }
+    }
+    catch { Write-Log -Message ('résumé : lecture par Docker impossible : ' + $_.Exception.Message) -Level ATTENTION }
+    return $facts
+}
+
+# ---------------------------------------------------------------------------- bloc B : réglages et envoi
+
+function Test-CogesPingUrl {
+    <# https, ou http sur la machine elle-même (faux serveur des essais) ; jamais d'espace. #>
+    param([AllowEmptyString()] [AllowNull()] [string] $Url)
+    return ([string]$Url -match '^(https://[A-Za-z0-9.-]+(:\d+)?/[^\s]+|http://(127\.0\.0\.1|localhost)(:\d+)?/[^\s]+)$')
+}
+
+function Read-CogesSupportSetting {
+    <# reglages\support.json : pc, remontee, adresses (vie, sauvegarde, mise-a-jour), telephone_coges. #>
+    param([Parameter(Mandatory)] $Paths)
+    $result = @{ format = $script:CogesSupportFormat; pc = ''; remontee = $false; adresses = @{}; telephone_coges = '' }
+    $file = (Get-CogesSupportPath $Paths).Reglage
+    if (-not (Test-Path -LiteralPath $file)) { return $result }
+    try { $data = ConvertTo-CogesHashtable ([IO.File]::ReadAllText($file) | ConvertFrom-Json) }
+    catch { Write-Log -Message 'support.json illisible : remontée inactive' -Level ATTENTION; return $result }
+    if (-not ($data -is [hashtable])) { return $result }
+    if ([string]$data['pc'] -match '^[0-9a-f]{32}$') { $result.pc = [string]$data['pc'] }
+    if ($data['adresses'] -is [hashtable]) {
+        foreach ($signal in $script:CogesSupportSignals) {
+            if (Test-CogesPingUrl ([string]$data['adresses'][$signal])) { $result.adresses[$signal] = [string]$data['adresses'][$signal] }
+        }
+    }
+    $result.remontee = ($data['remontee'] -eq $true) -and $result.pc -and ($result.adresses.Count -gt 0)
+    if ($data['telephone_coges']) { $result.telephone_coges = [string]$data['telephone_coges'] }
+    return $result
+}
+
+function Get-CogesSupportMaskValue {
+    <# Les adresses de ping sont des secrets : masquées dans toute ligne du journal. #>
+    param([Parameter(Mandatory)] $Paths)
+    $values = @()
+    try {
+        foreach ($url in (Read-CogesSupportSetting $Paths).adresses.Values) {
+            $values += $url
+            $values += ($url -replace '^https?://[^/]+/', '')
+        }
+    }
+    catch { Write-Verbose 'support.json illisible' }
+    return @($values | Where-Object { $_ -and $_.Length -ge 8 })
+}
+
+function Write-CogesSupportSetting {
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [hashtable] $Setting)
+    $file = (Get-CogesSupportPath $Paths).Reglage
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $file) | Out-Null
+    $data = [ordered]@{ format = $script:CogesSupportFormat; pc = $Setting.pc; remontee = [bool]$Setting.remontee
+        adresses = [ordered]@{}; telephone_coges = [string]$Setting.telephone_coges }
+    foreach ($signal in $script:CogesSupportSignals) { if ($Setting.adresses[$signal]) { $data.adresses[$signal] = $Setting.adresses[$signal] } }
+    $temporary = $file + '.nouveau'
+    [IO.File]::WriteAllText($temporary, ($data | ConvertTo-Json -Depth 4), (New-Object Text.UTF8Encoding $false))
+    Move-Item -LiteralPath $temporary -Destination $file -Force
+    $script:CogesState.MaskValues = @($script:CogesState.MaskValues) + @(Get-CogesSupportMaskValue $Paths)
+}
+
+function New-CogesPcId {
+    return -join ((New-CogesRandomByte 16) | ForEach-Object { $_.ToString('x2') })
+}
+
+function Initialize-CogesSupportSetting {
+    <# Installer, Reparer : l'identifiant du PC tiré une fois (jamais changé ensuite) ; le
+       fichier du technicien (-Support) pose les adresses et le numéro de CoGes. #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
+        Justification = 'Lus dans le bloc de l''étape (Invoke-CogesStep), que l''analyse ne suit pas.')]
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [hashtable] $Options)
+    $given = $null
+    if ($Options.Support) { $given = Read-CogesSupportFile $Options.Support }
+    $title = 'Support à distance : identifiant du PC (remontée inactive tant que les adresses ne sont pas posées)'
+    if ($given) { $title = 'Support à distance : adresses de remontée posées (fichier du technicien)' }
+    Invoke-CogesStep -Title $title -Action {
+        $setting = Read-CogesSupportSetting $Paths
+        $exists = Test-Path -LiteralPath (Get-CogesSupportPath $Paths).Reglage
+        if (-not $setting.pc) { $setting.pc = New-CogesPcId }
+        if ($given) {
+            $setting.adresses = $given.adresses
+            $setting.remontee = $given.remontee
+            if ($given.telephone_coges) { $setting.telephone_coges = $given.telephone_coges }
+        }
+        if ($given -or -not $exists) { Write-CogesSupportSetting -Paths $Paths -Setting $setting }
+        if ($given) { Write-CogesLine ('  {0} adresse(s) posée(s) ; essai : -Action TesterSupport.' -f $setting.adresses.Count) -Kind Ok }
+    }
+}
+
+function Read-CogesSupportFile {
+    <# Le fichier préparé chez CoGes : { "adresses": { "vie": …, "sauvegarde": …,
+       "mise-a-jour": … }, "telephone_coges": "…", "remontee": true }. #>
+    param([Parameter(Mandatory)] [string] $Path)
+    if (-not (Test-Path -LiteralPath $Path)) {
+        Stop-CogesStep -Probleme ('Fichier de support introuvable : {0}' -f $Path) -QuoiFaire 'Donnez le support.json préparé chez CoGes (-Support E:\support.json).'
+    }
+    try { $data = ConvertTo-CogesHashtable ([IO.File]::ReadAllText($Path) | ConvertFrom-Json) }
+    catch { Stop-CogesStep -Probleme 'Le fichier de support n''est pas un JSON lisible.' -QuoiFaire 'Refaites-le chez CoGes (modèle : docs/runbooks/sur-site.md, « Support à distance »).' }
+    $addresses = @{}
+    foreach ($signal in $script:CogesSupportSignals) {
+        $url = ''
+        if ($data -is [hashtable] -and $data['adresses'] -is [hashtable]) { $url = [string]$data['adresses'][$signal] }
+        if (-not (Test-CogesPingUrl $url)) {
+            Stop-CogesStep -Probleme ('Adresse « {0} » absente ou fausse dans le fichier de support.' -f $signal) -QuoiFaire 'Chaque check : https://hc-ping.com/<uuid> (copiée depuis Healthchecks.io).'
+        }
+        $addresses[$signal] = $url
+    }
+    $enabled = $true
+    if ($data.ContainsKey('remontee') -and $data['remontee'] -is [bool]) { $enabled = [bool]$data['remontee'] }
+    return @{ adresses = $addresses; remontee = $enabled; telephone_coges = [string]$data['telephone_coges'] }
+}
+
+function Read-CogesSupportState {
+    param([Parameter(Mandatory)] $Paths)
+    $file = (Get-CogesSupportPath $Paths).Etat
+    $state = @{}
+    if (Test-Path -LiteralPath $file) {
+        try { $state = ConvertTo-CogesHashtable ([IO.File]::ReadAllText($file) | ConvertFrom-Json) } catch { $state = @{} }
+    }
+    if (-not ($state -is [hashtable])) { $state = @{} }
+    return $state
+}
+
+function Write-CogesSupportState {
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [hashtable] $Changes)
+    $state = Read-CogesSupportState $Paths
+    foreach ($key in $Changes.Keys) { $state[$key] = $Changes[$key] }
+    $file = (Get-CogesSupportPath $Paths).Etat
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $file) | Out-Null
+    $temporary = $file + '.nouveau'
+    [IO.File]::WriteAllText($temporary, ($state | ConvertTo-Json -Depth 4), (New-Object Text.UTF8Encoding $false))
+    Move-Item -LiteralPath $temporary -Destination $file -Force
+}
+
+function Invoke-CogesPingRequest {
+    <# Un POST, texte en UTF-8 ; lève si pas de 2xx. Remplacé par un faux en test. #>
+    param([Parameter(Mandatory)] [string] $Url, [Parameter(Mandatory)] [string] $Body, [int] $TimeoutSeconds = 10)
+    $previous = $ProgressPreference
+    $ProgressPreference = 'SilentlyContinue'
+    try {
+        $bytes = (New-Object Text.UTF8Encoding $false).GetBytes($Body)
+        $response = Invoke-WebRequest -Uri $Url -Method Post -Body $bytes -ContentType 'text/plain; charset=utf-8' -UseBasicParsing -TimeoutSec $TimeoutSeconds -ErrorAction Stop
+        return [int]$response.StatusCode
+    }
+    finally { $ProgressPreference = $previous }
+}
+
+function Send-CogesPing {
+    <# Un signal vers CoGes : POST du résumé à l'adresse, ou à <adresse>/fail. 10 s, 2 essais ;
+       JAMAIS bloquant : rend $true (reçu) ou $false (inactif, injoignable), n'échoue jamais. #>
+    param(
+        [Parameter(Mandatory)] $Paths,
+        [Parameter(Mandatory)] [ValidateSet('vie', 'sauvegarde', 'mise-a-jour')] [string] $Signal,
+        [switch] $Failure,
+        [string] $Reason = 'aucune',
+        [string] $ReportSignal = '',
+        [switch] $Force
+    )
+    if ($script:CogesState.Simulation) { return $false }
+    try {
+        $setting = Read-CogesSupportSetting $Paths
+        $url = $setting.adresses[$Signal]
+        if (-not ($setting.remontee -or $Force) -or -not $url) {
+            Write-Log -Message ('remontée inactive : signal {0} non envoyé' -f $Signal)
+            return $false
+        }
+        $script:CogesState.MaskValues = @($script:CogesState.MaskValues) + @(Get-CogesSupportMaskValue $Paths)
+        if (-not $ReportSignal) { $ReportSignal = $Signal }
+        $fields = Get-CogesFieldList $Paths
+        if ($null -eq $fields) { Write-Log -Message 'support\champs.txt absent : signal non envoyé' -Level ATTENTION; return $false }
+        try {
+            $facts = Read-CogesReportFact -Paths $Paths -Pc $setting.pc -Signal $ReportSignal -Failure ([bool]$Failure) -Reason $Reason
+            $body = Format-CogesReport (Get-CogesReport -Facts $facts -Fields $fields)
+        }
+        catch {
+            Write-Log -Message ('résumé incomplet (' + $_.Exception.Message + ') : envoi du résumé minimal') -Level ATTENTION
+            $body = Format-CogesReport (Get-CogesReport -Facts (Get-CogesMinimalFact -Pc $setting.pc -Signal $ReportSignal -Failure ([bool]$Failure) -Reason $Reason) -Fields $fields)
+        }
+        $target = $url
+        if ($Failure) { $target = $url.TrimEnd('/') + '/fail' }
+        for ($try = 1; $try -le $script:CogesPingTries; $try++) {
+            try {
+                $status = Invoke-CogesPingRequest -Url $target -Body $body -TimeoutSeconds $script:CogesPingTimeoutSeconds
+                if ($status -ge 200 -and $status -lt 300) {
+                    $result = 'ok'
+                    if ($Failure) { $result = 'echec' }
+                    Write-Log -Message ('signal {0} ({1}, {2}) reçu par CoGes' -f $Signal, $result, $Reason) -Level OK
+                    Write-CogesSupportState -Paths $Paths -Changes @{ dernier_envoi = (Get-Date).ToString('o'); dernier_signal = $Signal; dernier_resultat = $result }
+                    return $true
+                }
+                Write-Log -Message ('signal {0} : réponse {1} (essai {2})' -f $Signal, $status, $try) -Level ATTENTION
+            }
+            catch { Write-Log -Message ('signal {0} : {1} (essai {2})' -f $Signal, $_.Exception.Message, $try) -Level ATTENTION }
+            if ($try -lt $script:CogesPingTries) { Start-Sleep -Seconds $script:CogesPingPauseSeconds }
+        }
+        Write-CogesSupportState -Paths $Paths -Changes @{ dernier_echec_envoi = (Get-Date).ToString('o') }
+        return $false
+    }
+    catch {
+        Write-Log -Message ('signal {0} non envoyé : {1}' -f $Signal, $_.Exception.Message) -Level ATTENTION
+        return $false
+    }
+}
+
+function Invoke-CogesTestSupport {
+    <# -Action TesterSupport : un ping « test » sur les trois adresses, et qui a répondu. #>
+    param([Parameter(Mandatory)] $Paths)
+    if ($script:CogesState.Simulation) {
+        foreach ($signal in $script:CogesSupportSignals) { Write-CogesLine ('[simulation] ping de test vers l''adresse « {0} »' -f $signal) }
+        return
+    }
+    Initialize-CogesSupportLog $Paths
+    $setting = Read-CogesSupportSetting $Paths
+    if ($setting.adresses.Count -eq 0) {
+        Stop-CogesStep -Probleme 'Aucune adresse de remontée sur ce PC.' -QuoiFaire 'Posez-les : -Action Reparer -Support <fichier.json>, ou -Action ConfigurerSupport.'
+    }
+    $failed = 0
+    foreach ($signal in $script:CogesSupportSignals) {
+        if (-not $setting.adresses[$signal]) { Write-CogesLine ('  {0,-12} : aucune adresse' -f $signal) -Kind Attention; $failed++; continue }
+        if (Send-CogesPing -Paths $Paths -Signal $signal -ReportSignal 'test' -Force) { Write-CogesLine ('  {0,-12} : reçu par CoGes' -f $signal) -Kind Ok }
+        else { Write-CogesLine ('  {0,-12} : PAS de réponse (Internet, adresse ?)' -f $signal) -Kind Echec; $failed++ }
+    }
+    if (-not $setting.remontee) { Write-CogesLine '  La remontée est désactivée dans support.json (« remontee »: false) : rien ne part en dehors de ce test.' -Kind Attention }
+    if ($failed -gt 0) { Stop-CogesStep -Probleme ('{0} adresse(s) sans réponse.' -f $failed) -QuoiFaire 'Vérifiez Internet, puis les adresses dans Healthchecks.io ; relancez -Action TesterSupport.' }
+}
+
+function Invoke-CogesConfigureSupport {
+    <# -Action ConfigurerSupport : les trois adresses et le numéro de CoGes, en questions. #>
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [hashtable] $Options)
+    if ($Options.Support) { Initialize-CogesSupportSetting -Paths $Paths -Options $Options; return }
+    if ($script:CogesState.NonInteractif) {
+        Stop-CogesStep -Probleme 'ConfigurerSupport pose des questions.' -QuoiFaire 'En -NonInteractif, passez -Support <fichier.json>.'
+    }
+    $setting = Read-CogesSupportSetting $Paths
+    if (-not $setting.pc) { $setting.pc = New-CogesPcId }
+    foreach ($signal in $script:CogesSupportSignals) {
+        $setting.adresses[$signal] = Read-CogesAnswer -Question ('Adresse de ping « {0} » (https://hc-ping.com/…)' -f $signal) -Parameter 'Support' -Value '' `
+            -Validate { param($v) Test-CogesPingUrl $v } -Rule 'une adresse https://hc-ping.com/<uuid>, copiée depuis Healthchecks.io.'
+    }
+    $setting.telephone_coges = Read-CogesAnswer -Question 'Numéro de CoGes affiché par « Aide CoGes »' -Parameter 'Support' -Value '' -Optional `
+        -Validate { param($v) $v -match '^[0-9 +().-]{6,25}$' } -Rule 'chiffres, espaces, + ( ) . -'
+    $setting.remontee = $true
+    if ($script:CogesState.Simulation) { Write-CogesLine '[simulation] support.json écrit (adresses, numéro)'; return }
+    Write-CogesSupportSetting -Paths $Paths -Setting $setting
+    Write-CogesLine 'Adresses posées. Essai : -Action TesterSupport.' -Kind Ok
+}
+
+function Initialize-CogesSupportLog {
+    param([Parameter(Mandatory)] $Paths)
+    if ($script:CogesState.Simulation) { return }
+    New-Item -ItemType Directory -Force -Path $Paths.Journaux | Out-Null
+    $script:CogesState.LogPath = Join-Path $Paths.Journaux ('support-{0}.log' -f (Get-Date).ToString('yyyyMMdd'))
+}
+
+function Send-CogesUpdateWaitPing {
+    <# Une version prête attend depuis plus de 3 jours : /fail « mise-a-jour », une fois par jour. #>
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [datetime] $Now)
+    $state = Read-CogesSupportState $Paths
+    $today = $Now.ToString('yyyy-MM-dd')
+    if ($state['derniere_attente_signalee'] -eq $today) { return $false }
+    $sent = Send-CogesPing -Paths $Paths -Signal 'mise-a-jour' -Failure -Reason 'attente-3-jours'
+    if ($sent) { Write-CogesSupportState -Paths $Paths -Changes @{ derniere_attente_signalee = $today } }
+    return $sent
+}
+
+function Show-CogesSupportState {
+    <# Les lignes du lot 6 dans Etat : jamais une adresse. #>
+    param([Parameter(Mandatory)] $Paths)
+    $setting = Read-CogesSupportSetting $Paths
+    $state = Read-CogesSupportState $Paths
+    $last = ConvertTo-CogesStateDate $state['dernier_envoi']
+    $lastText = 'jamais'
+    if ($last) { $lastText = '{0} ({1}, {2})' -f $last.ToString('dd/MM/yyyy HH:mm'), $state['dernier_signal'], $state['dernier_resultat'] }
+    if ($setting.remontee) { Write-CogesLine ('  Remontée vers CoGes : active ({0} adresse(s)), dernier envoi le {1}' -f $setting.adresses.Count, $lastText) -Kind Ok }
+    else { Write-CogesLine '  Remontée vers CoGes : inactive (-Action Reparer -Support <fichier.json>)' -Kind Attention }
+    $failed = ConvertTo-CogesStateDate $state['dernier_echec_envoi']
+    if ($setting.remontee -and $failed -and (-not $last -or $failed -gt $last)) {
+        Write-CogesLine ('  Dernier envoi raté : {0} (Internet coupé ?)' -f $failed.ToString('dd/MM/yyyy HH:mm')) -Kind Attention
+    }
+    $size = 0
+    $files = @(Get-ChildItem -LiteralPath $Paths.Journaux -File -ErrorAction SilentlyContinue)
+    foreach ($file in $files) { $size += $file.Length }
+    Write-CogesLine ('  Journaux          : {0:N1} Mo en {1} fichier(s) ({2} ; 60 jours et 200 Mo au plus)' -f ($size / 1MB), $files.Count, $Paths.Journaux)
+}
+
+# ---------------------------------------------------------------------------- bloc E : journaux bornés
+
+function Invoke-CogesLogRotation {
+    <# Fichiers de plus de 60 jours supprimés, puis total plafonné à 200 Mo, les plus anciens
+       d'abord. Jamais un fichier du jour. Rend le nombre de fichiers supprimés ; n'échoue jamais. #>
+    param([Parameter(Mandatory)] [string] $Folder, [Nullable[datetime]] $Now = $null, [long] $MaxBytes = $script:CogesLogMaxBytes, [int] $KeepDays = $script:CogesLogKeepDays)
+    if ($null -eq $Now) { $Now = Get-Date }
+    $removed = 0
+    try {
+        $today = $Now.Date
+        $files = @(Get-ChildItem -LiteralPath $Folder -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime)
+        $kept = New-Object System.Collections.Generic.List[object]
+        foreach ($file in $files) {
+            $isToday = ($file.LastWriteTime.Date -ge $today) -or ($file.Name -match ('-' + $Now.ToString('yyyyMMdd')))
+            if (-not $isToday -and $file.LastWriteTime -lt $Now.AddDays(-$KeepDays)) {
+                Remove-Item -LiteralPath $file.FullName -Force
+                $removed++
+            }
+            else { $kept.Add([pscustomobject]@{ File = $file; Today = $isToday }) }
+        }
+        $total = 0
+        foreach ($item in $kept) { $total += $item.File.Length }
+        foreach ($item in $kept) {
+            if ($total -le $MaxBytes) { break }
+            if ($item.Today) { continue }
+            $total -= $item.File.Length
+            Remove-Item -LiteralPath $item.File.FullName -Force
+            $removed++
+        }
+        if ($removed -gt 0) { Write-Log -Message ('journaux : {0} fichier(s) ancien(s) supprimé(s)' -f $removed) }
+    }
+    catch { Write-Log -Message ('rotation des journaux : ' + $_.Exception.Message) -Level ATTENTION }
+    return $removed
+}
+
+# ---------------------------------------------------------------------------- bloc C : diagnostic
+
+function ConvertTo-CogesEnvNameList {
+    <# coges.env réduit aux NOMS des variables : jamais une valeur. #>
+    param([AllowEmptyString()] [string] $Text)
+    return @(($Text -split "`r?`n") | Where-Object { $_ -match '^\s*([A-Z][A-Z0-9_]*)\s*=' } | ForEach-Object { ($_ -replace '^\s*([A-Z][A-Z0-9_]*)\s*=.*$', '$1') })
+}
+
+function Write-CogesMaskedFile {
+    param([Parameter(Mandatory)] [string] $Path, [AllowEmptyCollection()] [AllowNull()] [string[]] $Lines)
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
+    $masked = @(@($Lines) | ForEach-Object { Mask-Secrets $_ })
+    [IO.File]::WriteAllText($Path, (($masked -join "`n") + "`n"), (New-Object Text.UTF8Encoding $false))
+}
+
+function Get-CogesTaskReport {
+    if (-not (Test-CogesWindows)) { return @('(tâches planifiées : Windows seulement)') }
+    $lines = @()
+    foreach ($name in @($script:CogesTaskName, $script:CogesBackupTaskName, $script:CogesUpdateTaskName)) {
+        try {
+            $task = Get-ScheduledTask -TaskName $name -ErrorAction Stop
+            $info = $task | Get-ScheduledTaskInfo
+            $lines += ('{0} : {1}, dernier passage {2}, résultat {3}, prochain {4}' -f $name, $task.State, $info.LastRunTime, $info.LastTaskResult, $info.NextRunTime)
+        }
+        catch { $lines += ('{0} : absente' -f $name) }
+    }
+    return $lines
+}
+
+function Get-CogesCommandLine {
+    <# Les lignes d'une commande docker, pour le diagnostic (jamais une exception). #>
+    param([Parameter(Mandatory)] [string] $Title, [Parameter(Mandatory)] [scriptblock] $Command)
+    $lines = @(('== ' + $Title))
+    try {
+        $result = & $Command
+        $lines += @($result.Output)
+        if ($result.ExitCode -ne 0) { $lines += ('(code {0})' -f $result.ExitCode) }
+    }
+    catch { $lines += ('(impossible : ' + $_.Exception.Message + ')') }
+    return $lines
+}
+
+function New-CogesDiagnosticFolder {
+    <# Le contenu du diagnostic, dans un dossier : $Tail dernières lignes par service. #>
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [string] $Folder, [Parameter(Mandatory)] [int] $Tail, [Parameter(Mandatory)] [string[]] $StateLines,
+        [Parameter(Mandatory)] [string] $Summary, [Parameter(Mandatory)] [datetime] $Now)
+    if (Test-Path -LiteralPath $Folder) { Remove-Item -LiteralPath $Folder -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $Folder | Out-Null
+    Write-CogesMaskedFile -Path (Join-Path $Folder 'etat.txt') -Lines $StateLines
+    Write-CogesMaskedFile -Path (Join-Path $Folder 'resume.txt') -Lines @($Summary -split "`n")
+    $engine = Get-CogesDockerEngineProblem
+    $docker = @()
+    if ($null -eq $engine) {
+        $docker += Get-CogesCommandLine 'coges ps' { Invoke-CogesCompose -Paths $Paths -Arguments @('ps', '-a') }
+        $docker += Get-CogesCommandLine 'docker version' { Invoke-Docker -Arguments @('version') }
+        $docker += Get-CogesCommandLine 'docker info (abrégé)' { Invoke-Docker -Arguments @('info', '--format', 'Serveur {{.ServerVersion}} | {{.OperatingSystem}} | {{.NCPU}} processeurs | {{.MemTotal}} octets | conteneurs {{.ContainersRunning}}/{{.Containers}} | images {{.Images}} | pilote {{.Driver}}') }
+        foreach ($service in $script:CogesServices) {
+            $logs = Invoke-CogesCompose -Paths $Paths -Arguments @('logs', '--no-color', '--timestamps', '--tail', [string]$Tail, $service)
+            Write-CogesMaskedFile -Path (Join-Path $Folder ('services\{0}.log' -f $service)) -Lines @($logs.Output)
+        }
+    }
+    else { $docker += ('Docker : ' + $script:CogesDockerStoppedText) }
+    $docker += ('== wsl --version : ' + (Get-CogesWslVersion))
+    $docker += ('== système : {0} ; PowerShell {1}' -f [Environment]::OSVersion.VersionString, $PSVersionTable.PSVersion)
+    Write-CogesMaskedFile -Path (Join-Path $Folder 'docker.txt') -Lines $docker
+    # Journaux de CoGes des 7 derniers jours (déjà masqués, et masqués encore), raccourcis comme les services.
+    $since = $Now.AddDays(-$script:CogesDiagnosticLogDays)
+    foreach ($file in @(Get-ChildItem -LiteralPath $Paths.Journaux -File -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $since })) {
+        $lines = @([IO.File]::ReadAllLines($file.FullName))
+        $keep = $Tail * 10
+        if ($lines.Count -gt $keep) { $lines = @(('(… {0} lignes plus anciennes retirées)' -f ($lines.Count - $keep))) + @($lines[($lines.Count - $keep)..($lines.Count - 1)]) }
+        Write-CogesMaskedFile -Path (Join-Path $Folder ('journaux\' + $file.Name)) -Lines $lines
+    }
+    $settings = @('== coges.env (noms seulement, jamais les valeurs)')
+    if (Test-Path -LiteralPath $Paths.EnvFile) { $settings += ConvertTo-CogesEnvNameList ([IO.File]::ReadAllText($Paths.EnvFile)) }
+    $support = Read-CogesSupportSetting $Paths
+    $settings += ('== support.json : pc {0}, remontée {1}, {2} adresse(s) (non recopiées)' -f $support.pc, $(if ($support.remontee) { 'active' } else { 'inactive' }), $support.adresses.Count)
+    $update = (Get-CogesUpdatePath $Paths).Reglage
+    if (Test-Path -LiteralPath $update) { $settings += '== mise-a-jour.json'; $settings += @([IO.File]::ReadAllLines($update)) }
+    Write-CogesMaskedFile -Path (Join-Path $Folder 'reglages.txt') -Lines $settings
+    $backups = @('== C:\CoGes\sauvegardes (noms, tailles, dates ; pas les fichiers)')
+    $backupFolder = (Get-CogesBackupPath $Paths).Dossier
+    foreach ($file in @(Get-ChildItem -LiteralPath $backupFolder -File -ErrorAction SilentlyContinue | Sort-Object Name)) {
+        $backups += ('{0}  {1:N0} o  {2}' -f $file.Name, $file.Length, $file.LastWriteTime.ToString('dd/MM/yyyy HH:mm'))
+    }
+    Write-CogesMaskedFile -Path (Join-Path $Folder 'sauvegardes.txt') -Lines $backups
+    $system = @()
+    try {
+        $drive = New-Object IO.DriveInfo ([IO.Path]::GetPathRoot([IO.Path]::GetFullPath($Paths.Racine)))
+        $system += ('Disque {0} : {1:N1} Go libres sur {2:N1} Go' -f $drive.Name, ($drive.AvailableFreeSpace / 1GB), ($drive.TotalSize / 1GB))
+    }
+    catch { $system += 'Disque : illisible' }
+    $system += ('Mémoire : {0} Go' -f (Get-CogesMemoryGo))
+    $system += '== Tâches planifiées de CoGes'
+    $system += Get-CogesTaskReport
+    Write-CogesMaskedFile -Path (Join-Path $Folder 'systeme.txt') -Lines $system
+}
+
+function New-CogesDiagnostic {
+    <# Le zip du diagnostic (Bureau, ou -Destination) : sans secret, sans donnée commerciale,
+       10 Mo au plus (journaux raccourcis sinon). Rend le chemin du zip. #>
+    param([Parameter(Mandatory)] $Paths, [string] $Destination = '', [Nullable[datetime]] $Now = $null)
+    if ($null -eq $Now) { $Now = Get-Date }
+    if (-not $Destination) { $Destination = Get-CogesDesktopPath }
+    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    # Etat, sans question : sa sortie est gardée telle qu'elle s'affiche.
+    $before = $script:CogesState.Output.Count
+    $interactive = $script:CogesState.NonInteractif
+    $script:CogesState.NonInteractif = $true
+    try { Show-CogesState -Paths $Paths -Options @{ CodeBoutique = '' } }
+    catch { $script:CogesState.Output.Add('Etat : ' + $_.Exception.Message) }
+    finally { $script:CogesState.NonInteractif = $interactive }
+    $stateLines = @($script:CogesState.Output | Select-Object -Skip $before)
+    $setting = Read-CogesSupportSetting $Paths
+    $summary = '(identifiant du PC absent : résumé non calculé)'
+    $fields = Get-CogesFieldList $Paths
+    if ($setting.pc -and $fields) {
+        try { $summary = Format-CogesReport (Get-CogesReport -Facts (Read-CogesReportFact -Paths $Paths -Pc $setting.pc -Signal 'test' -Now $Now) -Fields $fields) }
+        catch { $summary = '(résumé impossible : ' + $_.Exception.Message + ')' }
+    }
+    $zip = Join-Path $Destination ('CoGes-diagnostic-{0}.zip' -f $Now.ToString('yyyyMMdd-HHmm'))
+    $work = Join-Path ([IO.Path]::GetTempPath()) ('coges-diagnostic-' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+    try {
+        foreach ($tail in $script:CogesDiagnosticTails) {
+            New-CogesDiagnosticFolder -Paths $Paths -Folder $work -Tail $tail -StateLines $stateLines -Summary $summary -Now $Now
+            if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
+            [IO.Compression.ZipFile]::CreateFromDirectory($work, $zip, [IO.Compression.CompressionLevel]::Optimal, $false)
+            if ((Get-Item -LiteralPath $zip).Length -le $script:CogesDiagnosticMaxBytes) { break }
+            Write-Log -Message ('diagnostic de plus de 10 Mo avec {0} lignes par service : raccourci' -f $tail) -Level ATTENTION
+        }
+        if ((Get-Item -LiteralPath $zip).Length -gt $script:CogesDiagnosticMaxBytes) {
+            Remove-Item -LiteralPath $zip -Force
+            Stop-CogesStep -Probleme 'Le diagnostic dépasse 10 Mo même raccourci.' -QuoiFaire 'Appelez CoGes : la prise en main à distance (« Aide CoGes ») permet de regarder directement.'
+        }
+    }
+    finally { if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force } }
+    return $zip
+}
+
+function Invoke-CogesDiagnosticAction {
+    <# -Action Diagnostic (et le raccourci « Diagnostic CoGes ») : le zip, où il est, à qui l'envoyer. #>
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [hashtable] $Options)
+    if ($script:CogesState.Simulation) {
+        foreach ($step in @('Etat et résumé', 'coges ps, docker version, docker info (abrégé), wsl, Windows', 'journaux des 7 derniers jours (masqués)',
+                '300 dernières lignes par service (masquées)', 'coges.env : noms seulement', 'liste des sauvegardes', 'disque, mémoire, tâches planifiées',
+                'zip de 10 Mo au plus sur le Bureau')) { Write-CogesLine ('[simulation] ' + $step) }
+        return
+    }
+    Initialize-CogesSupportLog $Paths
+    Write-CogesLine 'Préparation du fichier de diagnostic (une minute environ)…' -Kind Titre
+    $zip = New-CogesDiagnostic -Paths $Paths
+    $size = (Get-Item -LiteralPath $zip).Length
+    Write-CogesLine ''
+    Write-CogesLine ('Le fichier est prêt sur le Bureau : {0} ({1:N1} Mo).' -f (Split-Path -Leaf $zip), ($size / 1MB)) -Kind Ok
+    Write-CogesLine 'Envoyez-le à CoGes par WhatsApp ou par e-mail. Il ne contient ni mot de passe, ni vente, ni client.' -Kind Ok
+    $phone = (Read-CogesSupportSetting $Paths).telephone_coges
+    if ($phone) { Write-CogesLine ('Numéro de CoGes : {0}' -f $phone) -Kind Ok }
+    if ($Options.Bureau -and (Test-CogesWindows)) {
+        try { Start-Process -FilePath 'explorer.exe' -ArgumentList ('/select,"{0}"' -f $zip) } catch { Write-Log -Message ('explorateur : ' + $_.Exception.Message) -Level ATTENTION }
+    }
+}
+
+# ---------------------------------------------------------------------------- bloc D : aide à distance (Assistance rapide)
+
+function Get-CogesHelpText {
+    <# La marche à suivre de « Aide CoGes », en trois phrases. #>
+    param([AllowEmptyString()] [string] $Phone)
+    $call = 'Appelez CoGes.'
+    if ($Phone) { $call = 'Appelez CoGes au {0}.' -f $Phone }
+    return @($call, 'Donnez le code affiché par l''Assistance rapide.', 'Acceptez quand CoGes demande à prendre la main : vous voyez tout, et vous pouvez arrêter à tout moment.')
+}
+
+function Test-CogesQuickAssist {
+    if (-not (Test-CogesWindows)) { return $false }
+    try { return [bool](Get-AppxPackage -Name $script:CogesQuickAssistPackage -ErrorAction Stop) } catch { return $false }
+}
+
+function Invoke-CogesHelpAction {
+    <# -Action Aide (raccourci « Aide CoGes ») : ouvre l'Assistance rapide de Windows, affiche le
+       numéro de CoGes. N'installe rien, ne laisse rien ouvert : chaque séance se fait avec un
+       code donné par le commerçant, qu'il accepte. #>
+    param([Parameter(Mandatory)] $Paths)
+    $phone = (Read-CogesSupportSetting $Paths).telephone_coges
+    Write-CogesLine 'Aide CoGes' -Kind Titre
+    foreach ($line in (Get-CogesHelpText $phone)) { Write-CogesLine ('  ' + $line) -Kind Ok }
+    if ($script:CogesState.Simulation) { Write-CogesLine '[simulation] ouverture de l''Assistance rapide'; return }
+    if (Test-CogesQuickAssist) {
+        try { Start-Process 'ms-quick-assist:'; return } catch { Write-Log -Message ('Assistance rapide : ' + $_.Exception.Message) -Level ATTENTION }
+    }
+    Write-CogesLine ''
+    Write-CogesLine 'L''Assistance rapide n''est pas sur ce PC. Pour l''installer : ouvrez le Microsoft Store, cherchez « Assistance rapide » (Quick Assist), cliquez sur Obtenir, puis relancez « Aide CoGes ».' -Kind Attention
+    if (Test-CogesWindows) { try { Start-Process $script:CogesQuickAssistStore } catch { Write-Log -Message ('Store : ' + $_.Exception.Message) -Level ATTENTION } }
+}
+
+function New-CogesSupportShortcutText {
+    param([Parameter(Mandatory)] $Paths, [Parameter(Mandatory)] [ValidateSet('Aide', 'Diagnostic')] [string] $Action)
+    $script = Join-Path $Paths.Programme 'windows\installer.ps1'
+    return ("@echo off`r`nrem CoGes : {0} (ADR 0129).`r`n" -f $Action) +
+    ('powershell.exe -NoProfile -ExecutionPolicy Bypass -File "{0}" -Action {1} -Bureau -Racine "{2}"' -f $script, $Action, $Paths.Racine) + "`r`n"
+}
+
+function Install-CogesSupportShortcut {
+    <# « Aide CoGes » et « Diagnostic CoGes » sur le Bureau. #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '',
+        Justification = 'Lus dans le bloc de l''étape (Invoke-CogesStep), que l''analyse ne suit pas.')]
+    param([Parameter(Mandatory)] $Paths)
+    Invoke-CogesStep -Title 'Raccourcis « Aide CoGes » et « Diagnostic CoGes » sur le Bureau' -Action {
+        $desktop = Get-CogesDesktopPath
+        New-Item -ItemType Directory -Force -Path $desktop | Out-Null
+        [IO.File]::WriteAllText((Join-Path $desktop $script:CogesHelpShortcut), (New-CogesSupportShortcutText -Paths $Paths -Action 'Aide'), [Text.Encoding]::ASCII)
+        [IO.File]::WriteAllText((Join-Path $desktop $script:CogesDiagnosticShortcut), (New-CogesSupportShortcutText -Paths $Paths -Action 'Diagnostic'), [Text.Encoding]::ASCII)
+    }
+}
+
+function Remove-CogesSupportShortcut {
+    Invoke-CogesStep -Title 'Raccourcis « Aide CoGes » et « Diagnostic CoGes » retirés (support.json gardé)' -Action {
+        $desktop = Get-CogesDesktopPath
+        foreach ($name in @($script:CogesHelpShortcut, $script:CogesDiagnosticShortcut)) {
+            $file = Join-Path $desktop $name
+            if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force }
+        }
     }
 }

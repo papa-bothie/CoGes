@@ -11,14 +11,17 @@ utilisateurs actuels ne voient aucune différence.
 | 3 | Script d'installation Windows (`03-script-installation.md`) | Installation en une commande | ✅ code et tests (ADR 0126) ; vérifié sur Windows le 20/11/2026, v0.2.0 |
 | 4 | Sauvegarde et restauration locales (`04-sauvegarde-restauration.md`) | Une panne simulée, données retrouvées | ✅ code et CI (ADR 0127) ; **à vérifier sur Windows** |
 | 5 | Mises à jour à distance et retour arrière (`05-mises-a-jour-a-distance.md`) | Passage d'une version à la suivante sans se déplacer | ✅ code et CI Linux (ADR 0128) ; **à vérifier sur Windows** |
-| 6 | Support à distance et journaux | Intervention sans se déplacer | ⬜ |
+| 6 | Support à distance et journaux (`06-support-a-distance.md`) | Intervention sans se déplacer | ✅ code et CI Linux (ADR 0129) ; **à vérifier sur Windows** |
 
 Lots 1 à 3 vérifiés sur un vrai PC Windows 11 le 20/11/2026, avec la version v0.2.0, en suivant
-le guide de test : les 16 vérifications passent.
+le guide de test : les 16 vérifications passent. **Le sur-site est complet côté code** : il
+reste la vérification sur Windows des lots 4 à 6 (listes ci-dessous).
 
 Guide d'installation : `docs/runbooks/sur-site.md`. Décisions : `docs/decisions/0124-assemblage-sur-site.md`,
 `docs/decisions/0125-licence-sur-site.md`, `docs/decisions/0126-installation-windows-sur-site.md`,
-`docs/decisions/0127-sauvegarde-sur-site.md`, `docs/decisions/0128-mises-a-jour-sur-site.md`.
+`docs/decisions/0127-sauvegarde-sur-site.md`, `docs/decisions/0128-mises-a-jour-sur-site.md`,
+`docs/decisions/0129-support-a-distance-sur-site.md`. Ce qui sort du PC, pour le contrat :
+`docs/contrat/annexe-donnees-sur-site.md`.
 
 ## Où sont les fichiers
 
@@ -26,9 +29,10 @@ Guide d'installation : `docs/runbooks/sur-site.md`. Décisions : `docs/decisions
 |---|---|
 | `deploy/onprem/` | ce qui est livré au client, autonome : compose, Caddyfile, amorçage des rôles, modèle de réglages, contrôles |
 | `deploy/onprem/windows/` | script d'installation Windows (lot 3) : `installer.ps1`, fonctions `CoGes.Install.ps1`, tâches `demarrage.ps1` et `sauvegarde.ps1` (lot 4), tests Pester |
+| `deploy/onprem/support/` | support à distance (lot 6) : `champs.txt`, la seule liste de ce qui sort du PC |
 | `deploy/onprem/canal/` | canal des mises à jour (lot 5) : `publier.py` (chez CoGes), `stable.json` et `test.json` écrits par lui |
 | `deploy/onprem/sauvegarde/` | sauvegarde (lot 4) : chiffrement `coffre.py`, opérations de base `base.py`, `pg.sh`, copie fidèle de `verify_restore.py` |
-| `deploy/onprem-ci/` | vérification de bout en bout (`verifier.sh`, `verifier-mises-a-jour.sh`, parcours Chromium, relecture des données) ; jamais livré |
+| `deploy/onprem-ci/` | vérification de bout en bout (`verifier.sh`, `verifier-mises-a-jour.sh`, parcours Chromium, relecture des données, faux service de pings et contrôle de ce qui sort : `controle_remontee.py`) ; jamais livré |
 | `.github/workflows/onprem.yml` | workflow « Sur site », à part de la CI et du déploiement |
 | `backend/tests/unit/test_onprem_*.py` | tests sur les fichiers versionnés (dont la table des dérogations) |
 | `backend/app/cli.py`, `backend/app/modules/platform/service.py` | `activate-license` et `license-status` (lot 2, ajouts seulement, dérogation de `check_protected_paths.py`) |
@@ -195,3 +199,36 @@ notification et le raccourci `.cmd` (accents du nom), un vrai ghcr.io (index OCI
 raw.githubusercontent.com (quelques minutes après la fusion).
 
 À rapporter : durée de chaque étape, messages exacts, ce que dit `Etat`.
+
+## Lot 6 — à vérifier sur la machine Windows
+
+La CI joue la remontée sous Linux, avec un faux service de pings local et le vrai script sous
+pwsh (`verifier.sh`, `verifier-mises-a-jour.sh`). Elle joue aussi les tests Pester sous Windows
+PowerShell 5.1 et pwsh, sans Docker. Il faut trois checks Healthchecks.io créés pour le PC
+d'essai et un `support.json` préparé (guide, « Support à distance »), avec une étiquette publiée
+qui contient le lot 6 :
+
+1. `-Action Reparer -Support <fichier>` puis `-Action TesterSupport` : les trois checks reçoivent
+   le test.
+2. Ouverture de session : ping `vie` reçu, avec le résumé ; rien de commercial dedans.
+3. Sauvegarde : ping `sauvegarde` reçu. Clé USB débranchée et date de copie vieillie : le
+   résumé le dit (`copie_le`).
+4. Docker Desktop arrêté exprès pendant une sauvegarde planifiée : `/fail` reçu
+   (`docker-arrete`), alerte chez CoGes.
+5. PC éteint 4 jours (ou check mis en pause puis repris) : alerte « silence » reçue.
+6. Mise à jour (v0.4.1 sur le canal `test`) : ping `mise-a-jour` reçu après l'application.
+7. Raccourci « Diagnostic CoGes » : zip sur le Bureau, moins de 10 Mo, et l'Explorateur s'ouvre
+   dessus. Fouillé : aucun mot de passe, aucun nom de client ou d'article.
+8. Raccourci « Aide CoGes » : l'Assistance rapide s'ouvre, et le numéro de CoGes s'affiche ;
+   prise en main depuis un autre PC.
+9. Internet coupé : aucune action ne bloque ni n'échoue à cause des pings ; journal seulement,
+   et `Etat` dit « Dernier envoi raté ».
+
+Points propres à Windows que ni Linux ni la CI ne prouvent : `Invoke-WebRequest -Method Post`
+sous Windows PowerShell 5.1 (TLS 1.2, délai de 10 s), `Get-AppxPackage` de l'Assistance rapide
+et l'adresse `ms-quick-assist:`, `wsl --version` (sortie en UTF-16), `Get-CimInstance` pour la
+mémoire, `Get-ScheduledTaskInfo` dans le diagnostic, l'Explorateur ouvert sur le zip, les deux
+raccourcis `.cmd` et la fenêtre qui attend Entrée.
+
+À rapporter : les corps reçus par Healthchecks.io (onglet « Events » de chaque check), la
+taille du zip, les messages exacts.
