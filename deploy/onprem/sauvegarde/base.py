@@ -27,6 +27,10 @@ pas), par une copie de la base dans le même PostgreSQL, faite application arrê
     python base.py remettre H --ecarter E             coges → coges_<E>_maj_H, copie → coges
     python base.py copies                             les copies d'avant une mise à jour
     python base.py compter [--depuis ISO]             sociétés, ventes, codes, dernière activité
+
+Support à distance (lot 6, ADR 0129) : la licence en nombres, sans nom ni code de boutique.
+
+    python base.py licence                            licences par état, offres, sans fin ou non
 """
 
 from __future__ import annotations
@@ -348,6 +352,30 @@ def cmd_state() -> None:
     print(json.dumps({"existe": present, "societes": companies, "ventes": sales}))
 
 
+def cmd_license() -> None:
+    """Ce que le résumé du support dit de la licence (lot 6) : des nombres et les codes
+    d'offre (starter, business, premium), jamais un nom, un code de boutique ni une note."""
+    result: dict[str, Any] = {"societes": 0, "etats": {}, "offres": [], "sans_fin": 0}
+    if exists(MAIN):
+        with connect(MAIN) as conn:
+            table = conn.execute("SELECT to_regclass('public.subscriptions')").fetchone()
+            if table and table[0]:
+                rows = conn.execute(
+                    "SELECT s.status::text, p.code, s.current_period_end IS NULL "
+                    "FROM subscriptions s JOIN plans p ON p.id = s.plan_id"
+                ).fetchall()
+                result["societes"] = len(rows)
+                states: dict[str, int] = {}
+                for status, _code, _endless in rows:
+                    states[status] = states.get(status, 0) + 1
+                result["etats"] = dict(sorted(states.items()))
+                result["offres"] = sorted({code for _status, code, _endless in rows})
+                result["sans_fin"] = sum(
+                    1 for status, _code, endless in rows if status == "active" and endless
+                )
+    print(json.dumps(result))
+
+
 # ---------------------------------------------------------------------------- vérifier
 
 
@@ -477,6 +505,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("copies")
     count = sub.add_parser("compter")
     count.add_argument("--depuis", default=None)
+    sub.add_parser("licence")
     args = parser.parse_args(argv)
     try:
         if args.command == "manifeste":
@@ -503,6 +532,8 @@ def main(argv: list[str] | None = None) -> int:
             cmd_put_back(args.horodatage, args.ecarter)
         elif args.command == "compter":
             cmd_count(args.depuis)
+        elif args.command == "licence":
+            cmd_license()
         else:
             cmd_state()
     except (BaseError, psycopg.Error, OSError) as error:
