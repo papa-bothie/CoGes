@@ -97,3 +97,15 @@ noir et blanc (imprimantes thermiques).
 - **Captures** : `docs/design/captures/groupe-2/facture-verte/` (`avant-*`, `apres-*`, à
   1280 et 390 px) ; écart à la maquette v2 noté dans `docs/design/maquette-v2/ecarts.md`.
 - Le PDF du serveur (bloc T, ADR 0113) suit la même mise en page.
+
+## Amendement du 2026-11-23 : facture claire (ADR 0130)
+Le propriétaire trouve que la facture verte consomme trop d'encre. **Plus aucun aplat
+foncé** : le bandeau du tableau et le bandeau « Total » passent en accent clair (`#e6f4ec`),
+avec un texte encre en gras entre deux filets verts fins. Le titre et le nom de la boutique
+restent verts, en texte seulement. Les pastilles sont claires et cerclées, avec une icône
+verte ; sans logo, un rond clair porte les initiales vertes. Toutes les couleurs de la
+facture passent par trois jetons, `facture-accent`, `facture-accent-clair` et
+`facture-filet`, définis une fois dans `globals.css` et une fois dans `pdf.PALETTE`.
+Règle testée : aucune surface remplie sous une luminance de 0,80 (hors logo et texte), dans
+la vue comme dans le PDF. La disposition de l'amendement du 2026-11-05 ne change pas ; le
+ticket et le bon de retour non plus. Détails, tests et captures : ADR 0130.

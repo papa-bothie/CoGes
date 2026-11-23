@@ -208,15 +208,21 @@ de marque éclairci. Contraste AA vérifié par axe, en clair et en sombre.
   retour** n'emploient que `recu-papier` (fond), `recu-encre` (texte, filets, tampon
   « VENTE ANNULÉE »), `recu-gris`, `recu-filet` et `recu-entete` : noir et blanc pour les
   imprimantes thermiques, logo en niveaux de gris. La **facture A4** suit le modèle
-  `docs/design/references/modele-facture.jpg` au vert de la marque : `vert-marque` pour le
-  titre « FACTURE », le bandeau du tableau et le bandeau « Total » (texte `sur-action`,
-  blanc, 11:1), `vert-action` pour le filet de l'en-tête, les pastilles et les intitulés
-  (5,4:1 sous le blanc), `ventes-teinte` pour le cadre « Facturé à », `recu-entete` pour
-  les lignes alternées ; le reste aux jetons `recu-*`. Elle est du **papier** : la classe
-  `.papier` reprend le bloc clair des jetons, même en sombre, et `print-color-adjust:
-  exact` garde les bandeaux à l'impression. Imprimé en noir et blanc, le bandeau devient un
-  gris foncé sous texte blanc. Le PDF du serveur emploie les mêmes valeurs
-  (`app/core/pdf.py`, palette vérifiée contre `globals.css`).
+  `docs/design/references/modele-facture.jpg`, **en clair** depuis le lot A (ADR 0130, qui
+  amende l'ADR 0112) : ses seules couleurs sont trois jetons, `facture-accent` (`#024a2c`,
+  texte seulement : titre « FACTURE », nom de la boutique, intitulés, icônes des pastilles,
+  initiales), `facture-accent-clair` (`#e6f4ec`, seul fond teinté : en-tête du tableau,
+  ligne « Total », cadre « Facturé à », pastilles, rond des initiales) et `facture-filet`
+  (`#117a3c`, filets fins : sous l'en-tête, au-dessus et au-dessous de l'en-tête du tableau
+  et du total, contour des pastilles) ; `recu-entete` pour les lignes alternées, le reste aux
+  `recu-*`. **Aucune surface remplie sous une luminance de 0,80** (hors logo et texte), texte
+  à 4,5:1 au moins sur chaque fond : la règle est testée sur la vue
+  (`receipt-view.test.tsx`) et sur le PDF (commandes de dessin, `test_receipt_pdf.py`).
+  Imprimée en gris, la structure tient par les filets et le gras. Une couleur choisie par la
+  boutique remplacera un jour l'accent (offre Business, hors lot A). Elle est du **papier** :
+  la classe `.papier` reprend le bloc clair des jetons, même en sombre, et
+  `print-color-adjust: exact` garde la teinte claire à l'impression. Le PDF du serveur
+  emploie les mêmes valeurs (`app/core/pdf.py`, palette vérifiée contre `globals.css`).
 
 ## Typography
 
