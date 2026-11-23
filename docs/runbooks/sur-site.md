@@ -386,7 +386,8 @@ La réponse se termine par la version en cours d'exécution, par exemple
 > **Le secours.** Depuis le lot 5, les mises à jour se font seules (section « Mises à
 > jour »). Cette procédure sert quand le script ne peut pas aller au bout, ou pour installer
 > une première fois la version qui contient le lot 5 sur un PC plus ancien (le plus simple :
-> `-Action Reparer -Version vX.Y.Z`).
+> `Reparer` lancé avec le script **de la nouvelle version**, voir « Passer un PC d'avant
+> v0.4.0 aux lots 5 et 6 » plus bas).
 
 Une seule ligne décide de la version : `COGES_IMAGE_TAG`. La mise à jour ne passe que par
 des connexions **sortantes** vers le registre public : aucun port à ouvrir sur le PC ni sur
@@ -841,7 +842,31 @@ du client.
 }
 ```
 
-Sur la clé USB du technicien, par exemple `E:\support.json`, puis sur le PC :
+Sur la clé USB du technicien, par exemple `E:\support.json`.
+
+#### Passer un PC d'avant v0.4.0 aux lots 5 et 6
+
+Un PC installé en v0.3.0 ou avant garde le script de sa version, dans
+`C:\CoGes\programme\windows\`. Ce script ne connaît ni `-Support`, ni `-CanalMiseAJour`, ni
+`TesterSupport`, et il refuse ces options. Téléchargez d'abord `installer.ps1` de v0.4.0, et
+lancez `Reparer` **avec ce script-là**. `Reparer` pose alors le programme de v0.4.0 dans
+`C:\CoGes\programme\`, et les commandes suivantes passent par lui.
+
+```powershell
+# 1. Sauvegarde juste avant (script déjà installé, il connaît Sauvegarder depuis le lot 4)
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action Sauvegarder
+# 2. Le script de v0.4.0
+Invoke-WebRequest https://raw.githubusercontent.com/papa-bothie/CoGes/v0.4.0/deploy/onprem/windows/installer.ps1 -OutFile $env:TEMP\coges-install.ps1 -UseBasicParsing
+# 3. Passage à v0.4.0, adresses de ping posées. Sur le PC d'essai de CoGes, ajoutez -CanalMiseAJour test
+#    (un PC de client reste sur stable, le défaut).
+powershell -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\coges-install.ps1 -Action Reparer -Version v0.4.0 -Support E:\support.json -CanalMiseAJour test
+# 4. Essai, avec le script maintenant installé
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\CoGes\programme\windows\installer.ps1 -Action TesterSupport
+```
+
+Les mises à jour suivantes arrivent ensuite par le canal (section « Mises à jour »).
+
+#### PC déjà en v0.4.0 ou plus
 
 ```powershell
 # À l'installation (facultatif) ou plus tard :
