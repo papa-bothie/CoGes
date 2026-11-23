@@ -25,13 +25,18 @@ et des réglages GitHub. Tant que l'étape 4 n'est pas faite, le workflow « Sau
    `coges-sauvegardes`), et **deux clés distinctes** limitées à ce bucket :
    - clé de **sauvegarde** : écriture, liste et lecture (le script relit le fichier envoyé
      pour comparer son sha256), **sans suppression** ;
-   - clé de **purge** : liste, lecture et suppression, pour le workflow « Sauvegarde —
-     purge » seulement (`rclone deletefile` lit d'abord l'en-tête du fichier : sans
-     `readFiles`, B2 répond 403 ; les fichiers sont chiffrés, la lecture ne livre rien).
+   - clé de **purge** : liste, lecture, écriture et suppression, pour le workflow
+     « Sauvegarde — purge » seulement. Avec B2, les quatre droits sont nécessaires :
+     `rclone deletefile` lit d'abord l'en-tête du fichier (sans `readFiles`, 403) ; puis,
+     par l'API S3, B2 ne supprime pas le fichier, il le **masque** (marqueur de
+     suppression), ce qui est une écriture : sans `writeFiles`, B2 répond
+     « AccessDenied: not entitled » (403), même avec `deleteFiles`. Les fichiers sont
+     chiffrés : lire ne livre rien, et la clé ne sert qu'au workflow de purge.
 
    Backblaze B2 est conseillé : ses *Application Keys* se limitent à un bucket et à des
    droits précis (`listBuckets`, `listFiles`, `readFiles`, `writeFiles`, sans
-   `deleteFiles` pour la clé de sauvegarde). Région européenne : `eu-central-003`
+   `deleteFiles` pour la clé de sauvegarde ; les mêmes **plus** `deleteFiles` pour la clé
+   de purge). Région européenne : `eu-central-003`
    (Amsterdam). Les jetons R2 de Cloudflare « Object Read & Write » incluent la
    suppression : avec R2, préférer une règle de cycle de vie à la clé de purge.
 
@@ -45,7 +50,7 @@ et des réglages GitHub. Tant que l'étape 4 n'est pas faite, le workflow « Sau
    b2 key create --bucket coges-sauvegardes coges-backup \
      listBuckets,listFiles,readFiles,writeFiles
    b2 key create --bucket coges-sauvegardes coges-backup-purge \
-     listBuckets,listFiles,readFiles,deleteFiles
+     listBuckets,listFiles,readFiles,writeFiles,deleteFiles
    b2 account clear          # oublie la clé maîtresse sur le poste
    ```
    Chaque `b2 key create` affiche **une seule fois** le keyID puis la clé : les ranger
@@ -53,7 +58,17 @@ et des réglages GitHub. Tant que l'étape 4 n'est pas faite, le workflow « Sau
    La règle de cycle de vie compte : par l'API S3, B2 ne supprime pas un fichier, il le
    **masque** et garde l'ancienne version. Sans elle, la purge ne libère aucune place ;
    avec 7 jours, un fichier masqué par erreur (ou par une clé volée) se récupère encore
-   une semaine.
+   une semaine. C'est aussi pourquoi la clé de purge a `writeFiles` : masquer, c'est
+   écrire. Elle peut donc déposer des fichiers dans le bucket ; elle ne peut ni changer
+   la règle de cycle de vie ni effacer une version (le masquage garde la version), et
+   elle reste dans le seul environnement `backup-purge`.
+
+   Clé de purge créée avant le 23/11/2026 sans `writeFiles` : la purge échoue sur
+   « AccessDenied: not entitled ». Une clé B2 ne se modifie pas : en créer une nouvelle
+   (commande ci-dessus), remplacer `BACKUP_PURGE_S3_ACCESS_KEY_ID` et
+   `BACKUP_PURGE_S3_SECRET_ACCESS_KEY` dans l'environnement `backup-purge`, lancer la
+   purge à la main (essai à blanc puis réel), puis supprimer l'ancienne
+   (`b2 key delete <keyID>`).
 2. **Clé age** : voir la section suivante. Clé publique → secret GitHub
    `BACKUP_AGE_RECIPIENT` ; clé privée → gestionnaire de mots de passe **et** copie hors
    ligne, puis effacée du poste.
@@ -273,7 +288,8 @@ stockage : elle prouve que les scripts marchent, pas que vous avez la clé.
 ## Purge
 
 Le workflow « Sauvegarde — purge » applique la rétention avec des clés **distinctes**
-(liste + suppression). Lancé à la main, il ne fait qu'un essai à blanc par défaut. Autre
+(B2 : liste, lecture, écriture et suppression ; l'écriture sert au masquage, voir
+l'étape 1). Lancé à la main, il ne fait qu'un essai à blanc par défaut. Autre
 possibilité, sans clé de suppression du tout : une règle de cycle de vie du bucket
 (R2 : *Object lifecycle rules* ; B2 : *Lifecycle settings*) qui supprime après 400 jours,
 en gardant ce workflow pour les quotidiennes.
