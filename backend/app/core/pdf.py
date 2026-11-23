@@ -43,17 +43,17 @@ MONO_BOLD = "JetBrainsMono-Bold"
 #: **Seule** palette des PDF : les jetons du bloc clair de `frontend/app/globals.css`,
 #: valeur pour valeur (`tests/unit/test_pdf_palette.py` le vérifie ; aucune couleur n'est
 #: écrite ailleurs). Le papier est toujours clair. Le ticket et les exports n'emploient que
-#: les `recu-*` (noir et blanc) ; la facture A4 prend aussi les verts (ADR 0112 amendé).
+#: les `recu-*` (noir et blanc) ; la facture A4 prend aussi les trois `facture-*` (ADR 0112
+#: amendé, ADR 0130) : jamais d'aplat foncé, pour économiser l'encre.
 PALETTE: dict[str, str] = {
     "coges-recu-papier": "#ffffff",
     "coges-recu-encre": "#111111",
     "coges-recu-gris": "#444444",
     "coges-recu-filet": "#e5e5e5",
     "coges-recu-entete": "#f5f5f5",
-    "coges-vert-marque": "#024a2c",
-    "coges-vert-action": "#117a3c",
-    "coges-ventes-teinte": "#e6f4ec",
-    "coges-sur-action": "#ffffff",
+    "coges-facture-accent": "#024a2c",
+    "coges-facture-accent-clair": "#e6f4ec",
+    "coges-facture-filet": "#117a3c",
 }
 
 
@@ -67,13 +67,15 @@ INK = color("coges-recu-encre")
 GREY = color("coges-recu-gris")
 RULE = color("coges-recu-filet")
 HEAD_FILL = color("coges-recu-entete")
-#: Titre, bandeaux du tableau et du total de la facture ; texte `ON_GREEN` dessus (11:1).
-BRAND = color("coges-vert-marque")
-#: Filet de l'en-tête, pastilles et intitulés de la facture (5,4:1 sous le blanc).
-ACTION = color("coges-vert-action")
-#: Fond léger du cadre « Facturé à ».
-TINT = color("coges-ventes-teinte")
-ON_GREEN = color("coges-sur-action")
+#: Les **trois seules** couleurs de la facture (lot A, ADR 0130), à un seul endroit : une
+#: couleur choisie par la boutique pourra un jour remplacer l'accent sans toucher au reste.
+#: Accent : texte seulement (titre, nom, intitulés, icônes, initiales), 9:1 sur l'accent
+#: clair. Accent clair : seul fond teinté (en-tête du tableau, total, « Facturé à »,
+#: pastilles, rond des initiales), luminance 0,88. Filet : traits fins qui gardent la
+#: structure repérable imprimée en gris.
+INVOICE_ACCENT = color("coges-facture-accent")
+INVOICE_ACCENT_LIGHT = color("coges-facture-accent-clair")
+INVOICE_RULE = color("coges-facture-filet")
 
 A4_MARGIN = 14 * mm
 #: ReportLab attend les constantes `TA_*` (0, 1, 2) ; une chaîne casse le dessin.
@@ -160,8 +162,8 @@ def logo(
 
 
 class Pastille(Flowable):
-    """Pastille ronde verte à icône blanche, devant une coordonnée de l'en-tête de la
-    facture : `phone` (combiné) ou `pin` (repère d'adresse), dessinés au trait."""
+    """Pastille ronde claire cerclée de filet, icône d'accent, devant une coordonnée de
+    l'en-tête de la facture : `phone` (combiné) ou `pin` (repère d'adresse), au trait."""
 
     def __init__(self, icon: Literal["phone", "pin"], size: float = 5.5 * mm) -> None:
         super().__init__()
@@ -174,15 +176,17 @@ class Pastille(Flowable):
     def draw(self) -> None:
         c = self.canv
         r = self.size / 2
-        c.setFillColor(ACTION)
-        c.circle(r, r, r, stroke=0, fill=1)
-        c.setStrokeColor(ON_GREEN)
-        c.setFillColor(ON_GREEN)
+        c.setFillColor(INVOICE_ACCENT_LIGHT)
+        c.setStrokeColor(INVOICE_RULE)
+        c.setLineWidth(0.6)
+        c.circle(r, r, r - 0.3, stroke=1, fill=1)
+        c.setStrokeColor(INVOICE_ACCENT)
         c.setLineWidth(0.9)
         if self.icon == "phone":
             # Un téléphone : boîtier arrondi et sa touche.
             c.roundRect(r - 0.32 * r, r - 0.5 * r, 0.64 * r, r, 0.12 * r, stroke=1, fill=0)
-            c.circle(r, r - 0.32 * r, 0.06 * r, stroke=0, fill=1)
+            # La touche au trait : aucune surface foncée remplie, même minuscule.
+            c.circle(r, r - 0.32 * r, 0.05 * r, stroke=1, fill=0)
         else:
             # Un repère : cercle et pointe.
             c.circle(r, r + 0.12 * r, 0.3 * r, stroke=1, fill=0)
@@ -191,7 +195,7 @@ class Pastille(Flowable):
 
 
 class Initials(Flowable):
-    """Initiales de la boutique dans un rond `vert-marque`, quand il n'y a pas de logo.
+    """Initiales d'accent dans un rond clair, quand la boutique n'a pas de logo.
 
     Dessinées par `drawCentredString` : jamais lues comme balise."""
 
@@ -206,9 +210,11 @@ class Initials(Flowable):
     def draw(self) -> None:
         c = self.canv
         r = self.size / 2
-        c.setFillColor(BRAND)
-        c.circle(r, r, r, stroke=0, fill=1)
-        c.setFillColor(ON_GREEN)
+        c.setFillColor(INVOICE_ACCENT_LIGHT)
+        c.setStrokeColor(INVOICE_RULE)
+        c.setLineWidth(0.8)
+        c.circle(r, r, r - 0.4, stroke=1, fill=1)
+        c.setFillColor(INVOICE_ACCENT)
         font = 0.42 * self.size
         c.setFont(SANS_BOLD, font)
         c.drawCentredString(r, r - 0.36 * font, self.letters)

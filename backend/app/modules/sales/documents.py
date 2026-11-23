@@ -132,10 +132,12 @@ def _line_no(index: int) -> str:
 
 
 def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> bytes:
-    """Facture A4 au vert CoGes, même mise en page que l'écran (ADR 0112 amendé) : en-tête
-    à logo et pastilles, filet vert ; « De » et titre ; « Facturé à » ; tableau à bandeau
-    répété sur chaque page et lignes alternées ; totaux à bandeau ; bas de page avec les
-    moyens de paiement et le cadre de signature. Couleurs : `pdf.PALETTE` seulement."""
+    """Facture A4, même mise en page que l'écran (ADR 0112 amendé) : en-tête à logo et
+    pastilles, filet ; « De » et titre ; « Facturé à » ; tableau à en-tête répété sur
+    chaque page et lignes alternées ; totaux ; bas de page avec les moyens de paiement et
+    le cadre de signature. Claire (lot A, ADR 0130) : aucun aplat foncé, l'accent n'écrit
+    que du texte, l'en-tête du tableau et le total sont en accent clair entre deux filets,
+    en gras, repérables imprimés en gris. Couleurs : les `pdf.INVOICE_*` et `recu-*`."""
     company = receipt.company
     cur = company.currency
     sold = receipt.confirmed_at or receipt.sold_at
@@ -147,9 +149,9 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
     bold = pdf.style("bold", size=10, bold=True)
     right = pdf.style("right", size=10, align="right")
     right_bold = pdf.style("right-bold", size=10, bold=True, align="right")
-    label = pdf.style("label", size=8, bold=True, color=pdf.ACTION)
-    band = pdf.style("band", size=8, bold=True, color=pdf.ON_GREEN)
-    band_right = pdf.style("band-right", size=8, bold=True, color=pdf.ON_GREEN, align="right")
+    label = pdf.style("label", size=8, bold=True, color=pdf.INVOICE_ACCENT)
+    band = pdf.style("band", size=8, bold=True)
+    band_right = pdf.style("band-right", size=8, bold=True, align="right")
     flat = [
         ("LEFTPADDING", (0, 0), (-1, -1), 0),
         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
@@ -161,7 +163,9 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
     # En-tête : logo (ou initiales) et nom à gauche, coordonnées à pastilles à droite.
     image = pdf.logo(logo_png, max_width=34 * mm, max_height=16 * mm)
     mark: Flowable = image or pdf.Initials(_initials(company.name))
-    name = pdf.para(pdf.text(company.name), pdf.style("shop", size=14, bold=True, color=pdf.BRAND))
+    name = pdf.para(
+        pdf.text(company.name), pdf.style("shop", size=14, bold=True, color=pdf.INVOICE_ACCENT)
+    )
     brand = Table(
         [[mark, name]],
         colWidths=[(image.drawWidth if image else 15 * mm) + 4 * mm, None],
@@ -188,7 +192,7 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
         style=TableStyle(
             [
                 *flat,
-                ("LINEBELOW", (0, 0), (-1, 0), 1.5, pdf.ACTION),
+                ("LINEBELOW", (0, 0), (-1, 0), 1.5, pdf.INVOICE_RULE),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 4 * mm),
             ]
         ),
@@ -218,7 +222,10 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
         style=TableStyle([*flat, ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]),
     )
     title: list[Flowable] = [
-        pdf.para("FACTURE", pdf.style("title", size=30, bold=True, color=pdf.BRAND, align="right")),
+        pdf.para(
+            "FACTURE",
+            pdf.style("title", size=30, bold=True, color=pdf.INVOICE_ACCENT, align="right"),
+        ),
         Spacer(1, 2.5 * mm),
         facts,
     ]
@@ -251,7 +258,7 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
         hAlign="LEFT",
         style=TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, -1), pdf.TINT),
+                ("BACKGROUND", (0, 0), (-1, -1), pdf.INVOICE_ACCENT_LIGHT),
                 ("ROUNDEDCORNERS", [6, 6, 6, 6]),
                 ("LEFTPADDING", (0, 0), (-1, -1), 10),
                 ("TOPPADDING", (0, 0), (-1, -1), 7),
@@ -269,7 +276,8 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
         )
     story += [header, Spacer(1, 6 * mm), parties, Spacer(1, 4 * mm), billed_to, Spacer(1, 5 * mm)]
 
-    # Tableau : bandeau vert répété, N°, désignation (description et remise en petit).
+    # Tableau : en-tête clair entre deux filets, répété ; N°, désignation (description et
+    # remise en petit).
     rows: list[list[Flowable | str]] = [
         [
             pdf.para("N°", band),
@@ -303,7 +311,9 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
             repeatRows=1,
             style=TableStyle(
                 [
-                    ("BACKGROUND", (0, 0), (-1, 0), pdf.BRAND),
+                    ("BACKGROUND", (0, 0), (-1, 0), pdf.INVOICE_ACCENT_LIGHT),
+                    ("LINEABOVE", (0, 0), (-1, 0), 1, pdf.INVOICE_RULE),
+                    ("LINEBELOW", (0, 0), (-1, 0), 1, pdf.INVOICE_RULE),
                     ("ROWBACKGROUNDS", (0, 1), (-1, -1), [pdf.PAPER, pdf.HEAD_FILL]),
                     ("LINEBELOW", (0, 1), (-1, -1), 0.5, pdf.RULE),
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -316,7 +326,8 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
         )
     )
 
-    # Totaux à droite : détail, bandeau « Total », puis payé et reste (jamais si annulée).
+    # Totaux à droite : détail, « Total » clair entre deux filets, puis payé et reste
+    # (jamais si annulée).
     totals: list[list[Flowable]] = []
 
     def total_row(text: str, value: str, *, strong: bool = False) -> None:
@@ -336,10 +347,10 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
     total_index = len(totals)
     totals.append(
         [
-            pdf.para("Total", pdf.style("total", size=12, bold=True, color=pdf.ON_GREEN)),
+            pdf.para("Total", pdf.style("total", size=12, bold=True)),
             pdf.para(
                 pdf.text(amount(receipt.total, cur)),
-                pdf.style("total-right", size=12, bold=True, color=pdf.ON_GREEN, align="right"),
+                pdf.style("total-right", size=12, bold=True, align="right"),
             ),
         ]
     )
@@ -355,7 +366,9 @@ def render_invoice(receipt: ReceiptRead, *, logo_png: bytes | None, tz: str) -> 
             hAlign="RIGHT",
             style=TableStyle(
                 [
-                    ("BACKGROUND", (0, total_index), (-1, total_index), pdf.BRAND),
+                    ("BACKGROUND", (0, total_index), (-1, total_index), pdf.INVOICE_ACCENT_LIGHT),
+                    ("LINEABOVE", (0, total_index), (-1, total_index), 1, pdf.INVOICE_RULE),
+                    ("LINEBELOW", (0, total_index), (-1, total_index), 1, pdf.INVOICE_RULE),
                     ("TOPPADDING", (0, total_index), (-1, total_index), 7),
                     ("BOTTOMPADDING", (0, total_index), (-1, total_index), 7),
                 ]

@@ -489,10 +489,9 @@ def test_the_green_invoice_follows_the_model(api_client: TestClient, manager: st
         assert expected in text, (expected, text)
     assert "Espèces : 6 000 F" in text, text
     assert "Signature et cachet" in text
-    # Les verts de la marque et la teinte claire, jamais une couleur hors palette.
-    assert _has_fill(reader, "coges-vert-marque"), "bandeaux et titre"
-    assert _has_fill(reader, "coges-vert-action"), "pastilles"
-    assert _has_fill(reader, "coges-ventes-teinte"), "cadre « Facturé à »"
+    # Facture claire (lot A, ADR 0130) : l'accent clair remplit l'en-tête du tableau, le
+    # total et « Facturé à » ; l'accent n'écrit que du texte et des filets.
+    assert _has_fill(reader, "coges-facture-accent-clair"), "en-tête, total, « Facturé à »"
     assert _has_fill(reader, "coges-recu-entete"), "lignes alternées"
 
 
@@ -540,3 +539,118 @@ def test_the_ticket_stays_black_and_white(
     )
     for r, g, b in _fills(reader):
         assert r == g == b, ("couleur sur le ticket", r, g, b)
+
+
+# ------------------------------------------------ facture claire (lot A, ADR 0130)
+
+
+def _luminance(rgb: tuple[float, float, float]) -> float:
+    def channel(c: float) -> float:
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = rgb
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+
+_PATH_FILLS = {b"f", b"F", b"f*", b"B", b"B*", b"b", b"b*"}
+_TEXT_SHOWS = {b"Tj", b"TJ", b"'", b'"'}
+
+
+def _painted(reader: PdfReader) -> tuple[set[tuple[float, ...]], set[tuple[float, ...]]]:
+    """Couleurs des surfaces remplies (chemins hors texte) et du texte, par les commandes de
+    dessin des pages ; les images (le logo) ne passent pas par là."""
+    from pypdf.generic import ContentStream
+
+    surfaces: set[tuple[float, ...]] = set()
+    texts: set[tuple[float, ...]] = set()
+    for page in reader.pages:
+        fill: tuple[float, ...] = (0.0, 0.0, 0.0)
+        stack: list[tuple[float, ...]] = []
+        for operands, operator in ContentStream(page.get_contents(), reader).operations:
+            if operator == b"rg":
+                fill = tuple(round(float(x), 4) for x in operands)
+            elif operator == b"g":
+                fill = (round(float(operands[0]), 4),) * 3
+            elif operator == b"k":
+                raise AssertionError("couleur CMJN inattendue")
+            elif operator == b"q":
+                stack.append(fill)
+            elif operator == b"Q" and stack:
+                fill = stack.pop()
+            elif operator in _PATH_FILLS:
+                surfaces.add(fill)
+            elif operator in _TEXT_SHOWS:
+                texts.add(fill)
+    return surfaces, texts
+
+
+def _hex(token: str) -> tuple[float, ...]:
+    from app.core.pdf import PALETTE
+
+    value = PALETTE[token]
+    return tuple(round(int(value[i : i + 2], 16) / 255, 4) for i in (1, 3, 5))
+
+
+def _contrast(a: tuple[float, ...], b: tuple[float, ...]) -> float:
+    high, low = sorted((_luminance(a), _luminance(b)), reverse=True)  # type: ignore[arg-type]
+    return (high + 0.05) / (low + 0.05)
+
+
+def _close(a: tuple[float, ...], b: tuple[float, ...]) -> bool:
+    return all(abs(x - y) < 0.003 for x, y in zip(a, b, strict=True))
+
+
+@pytest.mark.parametrize("logo", [False, True])
+@pytest.mark.parametrize("state", ["paid", "credit", "cancelled"])
+def test_no_dark_surface_on_the_invoice(
+    api_client: TestClient, manager: str, logo: bool, state: str, request: pytest.FixtureRequest
+) -> None:
+    """Règle mesurable du lot A : aucune surface remplie de la facture (hors logo et texte)
+    n'a une luminance relative inférieure à 0,80 ; le texte est encre, gris ou accent, et
+    lisible (4,5:1 au moins) sur chacune des surfaces."""
+    if logo:
+        request.getfixturevalue("with_logo")
+    api_client.patch(
+        "/api/v1/companies/me", headers=auth_headers(manager), json={"phone": "77 123 45 67"}
+    )
+    if state == "paid":
+        sale_id, _ = _sale(api_client, manager, lines=3, description="Sac cousu, 25 kg")
+    else:
+        sale_id = _credit_sale(api_client, manager)
+        if state == "cancelled":
+            _post(api_client, manager, f"/api/v1/sales/{sale_id}/cancel", {"reason": "Erreur"})
+    reader, _ = _read(
+        _pdf(api_client, manager, f"/api/v1/sales/{sale_id}/receipt/pdf", format="a4").content
+    )
+    surfaces, texts = _painted(reader)
+    for fill in surfaces:
+        assert _luminance(fill) >= 0.80, ("surface trop sombre", fill)  # type: ignore[arg-type]
+    allowed = [_hex("coges-recu-encre"), _hex("coges-recu-gris"), _hex("coges-facture-accent")]
+    for ink in texts:
+        assert any(_close(ink, want) for want in allowed), ("texte hors jeu", ink)
+        for fill in {*surfaces, _hex("coges-recu-papier")}:
+            assert _contrast(ink, fill) >= 4.5, (ink, fill)
+
+
+def test_the_invoice_structure_survives_grey_printing(api_client: TestClient, manager: str) -> None:
+    """Imprimée en niveaux de gris, l'en-tête du tableau et le total restent repérables :
+    des filets d'accent les bornent (traits `S` à la couleur `RG` du filet)."""
+    from pypdf.generic import ContentStream
+
+    sale_id, _ = _sale(api_client, manager, lines=2)
+    reader, _ = _read(
+        _pdf(api_client, manager, f"/api/v1/sales/{sale_id}/receipt/pdf", format="a4").content
+    )
+    rule = _hex("coges-facture-filet")
+    strokes = 0
+    for page in reader.pages:
+        stroke: tuple[float, ...] = (0.0, 0.0, 0.0)
+        for operands, operator in ContentStream(page.get_contents(), reader).operations:
+            if operator == b"RG":
+                stroke = tuple(round(float(x), 4) for x in operands)
+            elif operator == b"S" and _close(stroke, rule):
+                strokes += 1
+    # Filet sous l'en-tête de la boutique, au-dessus et au-dessous de l'en-tête du tableau
+    # et du total : cinq au moins.
+    assert strokes >= 5, strokes
+    assert _luminance(rule) < 0.25, "un filet qui reste visible en gris"  # type: ignore[arg-type]
