@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { EntreeLayout } from "@/components/auth/entree-layout";
-import { LegalLinks } from "@/components/legal/legal-links";
 import { labels } from "@/lib/labels";
 import { signupConfig } from "@/lib/signup/config";
 import { ALWAYS_LIGHT_VIEWPORT } from "@/lib/theme/always-light";
@@ -26,7 +25,6 @@ export default async function VerificationPage({ params }: { params: Promise<{ j
   return (
     <EntreeLayout panel={labels.signup.panel}>
       <VerifyLink token={jeton} />
-      <LegalLinks />
     </EntreeLayout>
   );
 }

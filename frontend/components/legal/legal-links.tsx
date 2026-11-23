@@ -6,9 +6,11 @@ import { cn } from "@/lib/utils";
 const t = labels.legal;
 
 /**
- * « Conditions d'utilisation et de vente · Confidentialité » (prompt 36, ADR 0117) : pied de
- * la connexion, du mot de passe à choisir, de la vitrine et des textes eux-mêmes. Le futur
- * formulaire d'inscription (lot 30) le reprend tel quel.
+ * « Conditions d'utilisation et de vente · Confidentialité » (prompt 36, ADR 0117) : au pied
+ * des deux textes eux-mêmes, pour passer de l'un à l'autre. Depuis le lot A (ADR 0130), plus
+ * nulle part ailleurs : les pages d'entrée et le menu du compte ne mènent plus aux textes,
+ * seule la case d'acceptation (`LegalConsent`) et le pied de la vitrine (« Confidentialité »)
+ * y mènent.
  */
 export function LegalLinks({ className }: { className?: string }) {
   const link =

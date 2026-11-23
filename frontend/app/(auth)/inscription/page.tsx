@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { EntreeLayout } from "@/components/auth/entree-layout";
-import { LegalLinks } from "@/components/legal/legal-links";
 import { vitrine } from "@/content/vitrine";
 import { labels } from "@/lib/labels";
 import { signupConfig } from "@/lib/signup/config";
@@ -34,7 +33,6 @@ export default async function SignupPage() {
         supportHours={vitrine.supportHours}
         resendSeconds={config.resend_interval_seconds}
       />
-      <LegalLinks />
     </EntreeLayout>
   );
 }

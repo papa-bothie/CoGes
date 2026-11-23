@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
 import { BrandLogo } from "@/components/brand/brand";
-import { LegalLinks } from "@/components/legal/legal-links";
 import { labels } from "@/lib/labels";
 
 import { FirstPasswordForm } from "./first-password-form";
@@ -19,7 +18,6 @@ export default function FirstPasswordPage() {
         </h1>
         <p className="text-lg text-encre-2">{labels.login.firstPassword.intro}</p>
         <FirstPasswordForm />
-        <LegalLinks />
       </div>
     </main>
   );
