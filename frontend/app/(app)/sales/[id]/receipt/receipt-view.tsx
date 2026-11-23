@@ -366,13 +366,14 @@ function logoInitials(name: string): string {
     .join("");
 }
 
-/** Pastille ronde verte d'une coordonnée de l'en-tête (modèle de facture). */
+/** Pastille ronde claire cerclée de filet, icône d'accent, devant une coordonnée de
+ * l'en-tête (modèle de facture ; lot A, ADR 0130). */
 function Pastille({ icon: Icon }: { icon: typeof Phone }) {
   return (
     <span
       aria-hidden
       data-pastille
-      className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+      className="flex size-7 shrink-0 items-center justify-center rounded-full border border-facture-filet bg-facture-accent-clair text-facture-accent"
     >
       <Icon className="size-4" />
     </span>
@@ -385,13 +386,15 @@ function lineNo(index: number): string {
 }
 
 /**
- * Facture A4 au vert CoGes, d'après `docs/design/references/modele-facture.jpg` (ADR 0112,
- * amendé) : en-tête à logo et coordonnées à pastilles, filet vert ; « De » et grand titre
- * « FACTURE » ; « Facturé à » ; tableau à bandeau vert (l'en-tête se répète, une ligne ne
- * se coupe jamais d'une page à l'autre), lignes alternées ; totaux à bandeau vert ; bas de
- * page avec les moyens de paiement et le cadre de signature. `papier` garde les jetons
- * clairs en sombre ; `print-color-adjust` garde les bandeaux à l'impression. Le PDF du
- * serveur suit la même mise en page (bloc T).
+ * Facture A4, d'après `docs/design/references/modele-facture.jpg` (ADR 0112, amendé) :
+ * en-tête à logo et coordonnées à pastilles, filet vert ; « De » et grand titre « FACTURE » ;
+ * « Facturé à » ; tableau (l'en-tête se répète, une ligne ne se coupe jamais d'une page à
+ * l'autre), lignes alternées ; totaux ; bas de page avec les moyens de paiement et le cadre
+ * de signature. Claire (lot A, ADR 0130) : aucun aplat foncé, l'accent n'écrit que du texte,
+ * l'en-tête du tableau et le total sont en accent clair entre deux filets, en gras. Ses
+ * seules couleurs sont les jetons `facture-*` et `recu-*`. `papier` garde les jetons clairs
+ * en sombre ; `print-color-adjust` garde la teinte claire à l'impression. Le PDF du serveur
+ * suit la même mise en page (bloc T).
  */
 function Invoice({
   receipt,
@@ -410,7 +413,7 @@ function Invoice({
   const seller = receipt.seller_name?.trim();
   const ids = t.ids(company.ninea, company.rc);
   const methods = paidByMethod(receipt);
-  const label = "text-[13px] font-bold tracking-[0.04em] text-primary uppercase";
+  const label = "text-[13px] font-bold tracking-[0.04em] text-facture-accent uppercase";
   const cell = "px-2 py-3 align-top sm:px-3";
   const amount = cn(cell, "numeric text-right whitespace-nowrap");
   const head = "px-2 py-3 text-[13px] font-bold tracking-[0.04em] uppercase sm:px-3";
@@ -420,18 +423,18 @@ function Invoice({
       aria-label={t.title(displayNumber(receipt.sale_no))}
       className="papier relative box-border w-[794px] max-w-full bg-recu-papier px-5 pt-8 pb-10 text-[15px] leading-normal text-recu-encre shadow-[0_2px_10px_var(--color-recu-ombre)] [print-color-adjust:exact] sm:px-14 sm:pt-12 sm:pb-12 print:w-auto print:p-0 print:shadow-none"
     >
-      <header className="flex flex-wrap items-center justify-between gap-6 border-b-2 border-primary pb-4">
+      <header className="flex flex-wrap items-center justify-between gap-6 border-b-2 border-facture-filet pb-4">
         <div className="flex min-w-0 items-center gap-3.5">
           <ShopLogo company={company} className="max-h-16 max-w-44 shrink-0" />
           {!company.logo_updated_at && (
             <div
               aria-hidden
-              className="flex size-14 shrink-0 items-center justify-center rounded-full bg-marque text-xl font-extrabold text-primary-foreground"
+              className="flex size-14 shrink-0 items-center justify-center rounded-full border-2 border-facture-filet bg-facture-accent-clair text-xl font-extrabold text-facture-accent"
             >
               {logoInitials(company.name)}
             </div>
           )}
-          <div className="text-xl font-extrabold text-marque">{company.name}</div>
+          <div className="text-xl font-extrabold text-facture-accent">{company.name}</div>
         </div>
         {(company.phone || company.address) && (
           <ul aria-label={t.contacts} className="flex flex-wrap gap-x-7 gap-y-2 text-[14px]">
@@ -462,7 +465,7 @@ function Invoice({
           {ids && <div className="text-[13px] text-recu-gris">{ids}</div>}
         </section>
         <div className="text-right">
-          <div className="text-[44px] leading-none font-extrabold tracking-[0.04em] text-marque">
+          <div className="text-[44px] leading-none font-extrabold tracking-[0.04em] text-facture-accent">
             {t.invoice}
           </div>
           <dl className="mt-3 grid grid-cols-[auto_auto] justify-end gap-x-5 gap-y-0.5">
@@ -477,7 +480,7 @@ function Invoice({
 
       <section
         aria-labelledby="facture-a"
-        className="mt-5 max-w-96 rounded-[10px] bg-ventes-teinte px-4 py-3"
+        className="mt-5 max-w-96 rounded-[10px] bg-facture-accent-clair px-4 py-3"
       >
         <h2 id="facture-a" className={label}>
           {t.billedTo}
@@ -495,7 +498,7 @@ function Invoice({
       >
         <table className="w-full min-w-[560px] border-collapse print:min-w-0">
           <thead className="table-header-group">
-            <tr className="bg-marque text-primary-foreground">
+            <tr className="border-y-2 border-facture-filet bg-facture-accent-clair text-recu-encre">
               <th scope="col" className={cn(head, "w-12 text-left")}>
                 {t.columns.no}
               </th>
@@ -546,7 +549,7 @@ function Invoice({
       <div className="mt-4 flex break-inside-avoid justify-end">
         <div className="w-[320px]">
           <Totals receipt={receipt} invoice />
-          <div className="mt-1 flex justify-between bg-marque px-3 py-2.5 text-lg font-extrabold text-primary-foreground">
+          <div className="mt-1 flex justify-between border-y-2 border-facture-filet bg-facture-accent-clair px-3 py-2.5 text-lg font-extrabold text-recu-encre">
             <span>{t.invoiceTotal}</span>
             <span className="numeric">{formatAmount(receipt.total, currency)}</span>
           </div>

@@ -222,5 +222,7 @@ export const texte = {
     hours: vitrine.supportHours,
     login: "Se connecter",
     copyright: `© ${new Date().getFullYear()} CoGes`,
+    /** Dernière ligne de la page (prompt 40, lot A, R3). */
+    slogan: "Une meilleure façon de gérer son commerce.",
   },
 } as const;

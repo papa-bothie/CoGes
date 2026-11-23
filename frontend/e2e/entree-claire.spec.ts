@@ -100,10 +100,9 @@ test("appareil et choix en sombre : les pages d'entrée restent claires, l'appli
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
   expect(await page.locator('meta[name="theme-color"]').count()).toBe(0);
 
-  // Les conditions ouvertes depuis le menu du compte (navigation sans rechargement) : claires,
-  // puis le retour à l'application rend le sombre.
-  await page.getByRole("button", { name: "Réglages et compte" }).click();
-  await page.getByRole("menuitem", { name: "Conditions d'utilisation et de vente" }).click();
+  // Les conditions ouvertes depuis l'application (le menu du compte n'y mène plus depuis le
+  // lot A, ADR 0130) : claires, puis le retour à l'application rend le sombre.
+  await page.goto("/conditions");
   await expect(page).toHaveURL(/\/conditions$/);
   await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
   expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(PAPIER);

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 
 import { BrandMark, BrandWordmark } from "@/components/brand/brand";
-import { LegalLinks } from "@/components/legal/legal-links";
 import { HeroTitle } from "@/components/vitrine/hero-title";
 import { ICONS, RUBRIQUE } from "@/components/vitrine/icons";
 import { ButtonLink, WhatsAppLink } from "@/components/vitrine/links";
@@ -455,10 +455,20 @@ export default async function VitrinePage() {
               </div>
             </div>
           </div>
-          <div className="mx-auto flex max-w-page flex-col gap-1 px-4 pb-8 md:flex-row md:items-center md:justify-between md:px-marge-page">
-            <LegalLinks />
+          <div className="mx-auto flex max-w-page flex-col gap-1 px-4 md:flex-row md:items-center md:justify-between md:px-marge-page">
+            {/* Lot A (ADR 0130) : les textes légaux ne se lisent qu'au moment de les accepter ;
+                seule la confidentialité reste consultable par qui n'a pas encore de compte. */}
+            <Link
+              href="/confidentialite"
+              className="inline-flex min-h-cible items-center self-start rounded-mini text-mini font-semibold text-encre-2 underline underline-offset-4 outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/60"
+            >
+              {labels.legal.privacy}
+            </Link>
             <p className="text-mini text-muted-foreground">{t.footer.copyright}</p>
           </div>
+          <p className="mx-auto max-w-page px-4 pt-4 pb-8 text-center text-corps text-encre-2 md:px-marge-page md:text-left">
+            {t.footer.slogan}
+          </p>
         </footer>
       </div>
       <Revele />

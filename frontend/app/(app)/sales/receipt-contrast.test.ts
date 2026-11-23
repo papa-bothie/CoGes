@@ -3,11 +3,14 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { contrast, grey, luminance } from "@/test/contrast";
+
 /**
- * Facture A4 au vert CoGes : le texte blanc (`--coges-sur-action`) sur le bandeau
- * (`--coges-vert-marque`) et sur les pastilles (`--coges-vert-action`) reste lisible, AA
- * (4,5:1) au moins, et le bandeau imprimé en gris garde un texte blanc lisible. Les valeurs
- * viennent du bloc clair de globals.css : la facture est du papier, claire en sombre aussi.
+ * Facture A4 claire (lot A, ADR 0130, amende l'ADR 0112) : trois jetons seulement
+ * (`--coges-facture-accent`, `-accent-clair`, `-filet`) ; l'accent clair est le seul fond
+ * teinté (luminance 0,80 au moins), l'encre, le gris et l'accent y sont lisibles (4,5:1),
+ * et le filet reste visible imprimé en gris. Les valeurs viennent du bloc clair de
+ * globals.css : la facture est du papier, claire en sombre aussi.
  */
 const css = readFileSync(join(__dirname, "..", "..", "globals.css"), "utf8");
 const light = css.slice(css.indexOf(":root"), css.indexOf("\n}", css.indexOf(":root")));
@@ -18,40 +21,33 @@ function token(name: string): string {
   return match[1];
 }
 
-function channel(value: number): number {
-  const c = value / 255;
-  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-}
+describe("contraste de la facture claire", () => {
+  const surfaces = ["coges-recu-papier", "coges-facture-accent-clair", "coges-recu-entete"];
+  const inks = ["coges-recu-encre", "coges-recu-gris", "coges-facture-accent"];
 
-function luminance(hex: string): number {
-  const [r, g, b] = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16));
-  return 0.2126 * channel(r!) + 0.7152 * channel(g!) + 0.0722 * channel(b!);
-}
-
-function contrast(a: string, b: string): number {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (hi! + 0.05) / (lo! + 0.05);
-}
-
-/** Le gris qu'une imprimante noir et blanc tire d'une couleur (même luminance). */
-function grey(hex: string): string {
-  const level = Math.round(luminance(hex) ** (1 / 2.2) * 255)
-    .toString(16)
-    .padStart(2, "0");
-  return `#${level}${level}${level}`;
-}
-
-describe("contraste de la facture verte", () => {
-  it("blanc sur vert-marque et sur vert-action : AA au moins", () => {
-    const white = token("coges-sur-action");
-    expect(white).toBe("#ffffff");
-    expect(contrast(white, token("coges-vert-marque"))).toBeGreaterThanOrEqual(7);
-    expect(contrast(white, token("coges-vert-action"))).toBeGreaterThanOrEqual(4.5);
+  it("chaque fond de la facture est clair : luminance 0,80 au moins", () => {
+    for (const surface of surfaces) {
+      expect(luminance(token(surface)), surface).toBeGreaterThanOrEqual(0.8);
+    }
   });
 
-  it("imprimé en noir et blanc, le bandeau reste lisible", () => {
-    const white = token("coges-sur-action");
-    expect(contrast(white, grey(token("coges-vert-marque")))).toBeGreaterThanOrEqual(4.5);
+  it("encre, gris et accent sur chaque fond : AA au moins, et encore en gris imprimé", () => {
+    for (const surface of surfaces) {
+      for (const ink of inks) {
+        expect(contrast(token(ink), token(surface)), `${ink}/${surface}`).toBeGreaterThanOrEqual(
+          4.5,
+        );
+        expect(contrast(grey(token(ink)), grey(token(surface)))).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it("le filet se voit sur le papier et l'accent clair, même en gris (3:1)", () => {
+    for (const surface of ["coges-recu-papier", "coges-facture-accent-clair"]) {
+      expect(
+        contrast(grey(token("coges-facture-filet")), grey(token(surface))),
+      ).toBeGreaterThanOrEqual(3);
+    }
   });
 
   it("le papier reprend les jetons clairs : `.papier` partage le bloc de `:root`", () => {

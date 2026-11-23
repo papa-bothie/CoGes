@@ -102,3 +102,18 @@ Barrière avant acceptation :
   - `e2e.sh system legal-stale <e-mail>` simule une version changée.
 - `marked` entre dans les dépendances du front (aucune au runtime : le rendu se fait au
   build).
+
+## Amendement du 2026-11-23 : liens au moment d'accepter (ADR 0130)
+Décision du propriétaire : les textes ne se lisent qu'au moment de les accepter.
+- **Retirés** :
+  - les deux entrées du menu du compte ;
+  - `LegalLinks` au pied de la connexion, de « Choisissez votre mot de passe », de la
+    vérification (avec ou sans jeton) et de l'inscription.
+- **Pied de la vitrine** : un seul lien discret, « Confidentialité » (choisi via
+  AskUserQuestion), pour qui n'a pas encore de compte.
+- **Gardés** :
+  - les deux liens de la case `LegalConsent`, désormais en `rel="noopener noreferrer"`,
+    dans un nouvel onglet ;
+  - les pages elles-mêmes, publiques et indexables, avec leurs liens croisés (`LegalLinks`
+    n'est plus employé que là) ;
+  - l'acceptation tracée, la barrière et la version, inchangées.

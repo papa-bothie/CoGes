@@ -8,7 +8,9 @@ import { E2E, LEGAL_HEADING, loginThroughUi, managerApi, type Credentials } from
 /**
  * Pages légales (prompt 36, ADR 0117) : `/conditions` et `/confidentialite` s'ouvrent sans
  * connexion et sans un appel à l'API ; `/cgu` et `/cgv` y mènent ; un compte accepte une fois
- * les textes au premier login, plus ensuite, et de nouveau quand la version change.
+ * les textes au premier login, plus ensuite, et de nouveau quand la version change. Lot A
+ * (ADR 0130) : plus de liens ailleurs qu'au moment d'accepter (et « Confidentialité » au pied
+ * de la vitrine).
  */
 test.describe.configure({ timeout: 90_000 });
 
@@ -74,21 +76,22 @@ test.describe("textes publics", () => {
     }
   });
 
-  test("les liens sont au pied de la connexion et de la vitrine", async ({ page }) => {
-    await page.goto("/login");
-    const legal = page.getByRole("navigation", { name: "Textes légaux" });
-    await expect(
-      legal.getByRole("link", { name: "Conditions d'utilisation et de vente" }),
-    ).toHaveAttribute("href", "/conditions");
-    await expect(legal.getByRole("link", { name: "Confidentialité" })).toHaveAttribute(
-      "href",
-      "/confidentialite",
-    );
+  // Lot A (ADR 0130) : les textes ne se lisent qu'au moment de les accepter.
+  test("aucun lien légal sur les pages d'entrée ; « Confidentialité » seul au pied de la vitrine", async ({
+    page,
+  }) => {
+    for (const path of ["/login", "/inscription", "/verification"]) {
+      await page.goto(path);
+      await expect(page.getByRole("navigation", { name: "Textes légaux" })).toHaveCount(0);
+      // Seuls les liens de la case d'acceptation (inscription), ouverts dans un nouvel onglet.
+      const legal = page.locator('a[href="/conditions"], a[href="/confidentialite"]');
+      await expect(legal.and(page.locator(':not([target="_blank"])'))).toHaveCount(0);
+      if (path === "/inscription") await expect(legal).toHaveCount(2);
+    }
     await page.goto("/");
-    await page
-      .getByRole("navigation", { name: "Textes légaux" })
-      .getByRole("link", { name: "Confidentialité" })
-      .click();
+    await expect(page.locator('a[href="/conditions"]')).toHaveCount(0);
+    const footer = page.getByRole("contentinfo");
+    await footer.getByRole("link", { name: "Confidentialité" }).click();
     await expect(
       page.getByRole("heading", { level: 1, name: "Politique de confidentialité" }),
     ).toBeVisible();
@@ -138,6 +141,23 @@ test.describe("acceptation", () => {
     const button = page.getByRole("button", { name: "Accepter et continuer" });
     await expect(button).toBeDisabled();
     await axe(page);
+
+    // Les liens de la case s'ouvrent dans un nouvel onglet : la case cochée reste cochée.
+    const box = page.getByRole("checkbox", { name: /J'ai lu et j'accepte/ });
+    await box.check();
+    for (const name of [/Lire les conditions/, /Lire la politique de confidentialité/]) {
+      const [tab] = await Promise.all([
+        page.context().waitForEvent("page"),
+        page.getByRole("link", { name }).click(),
+      ]);
+      await tab.waitForLoadState();
+      await expect(tab).toHaveURL(/\/(conditions|confidentialite)$/);
+      expect(await tab.evaluate(() => window.opener)).toBeNull();
+      await tab.close();
+    }
+    await expect(page).toHaveURL(/\/acceptation$/);
+    await expect(box).toBeChecked();
+    await box.uncheck();
     await page.emulateMedia({ colorScheme: "dark" });
     await axe(page);
     await page.emulateMedia({ colorScheme: "light" });
@@ -153,12 +173,10 @@ test.describe("acceptation", () => {
     await signIn(page);
     await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
     await expect(page.getByRole("heading", { level: 1, name: /^Bonjour / })).toBeVisible();
-    // Les deux liens restent dans le menu du compte.
+    // Lot A (ADR 0130) : le menu du compte ne mène plus aux textes.
     await page.getByRole("button", { name: "Réglages et compte" }).click();
-    await expect(
-      page.getByRole("menuitem", { name: "Conditions d'utilisation et de vente" }),
-    ).toBeVisible();
-    await expect(page.getByRole("menuitem", { name: "Confidentialité" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: /Se déconnecter/ })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: /Conditions|Confidentialité/ })).toHaveCount(0);
   });
 
   test("nouvelle version : l'écran revient", async ({ page }) => {

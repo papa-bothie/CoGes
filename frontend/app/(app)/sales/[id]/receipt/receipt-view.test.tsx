@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -6,6 +9,7 @@ import type { Schemas } from "@/lib/api/schema";
 import { labels } from "@/lib/labels";
 import { renderWithClient } from "@/test/render";
 
+import { contrast, luminance } from "@/test/contrast";
 import { paidByMethod, ReceiptView } from "./receipt-view";
 
 const t = labels.receipt;
@@ -118,7 +122,7 @@ beforeEach(() => {
   vi.mocked(api.GET).mockReset();
 });
 
-describe("Facture A4 au vert CoGes (modèle docs/design/references/modele-facture.jpg)", () => {
+describe("Facture A4 claire (modèle docs/design/references/modele-facture.jpg ; lot A, ADR 0130)", () => {
   it("papier : jetons clairs même en sombre, couleurs gardées à l'impression", async () => {
     serve(receipt());
     renderWithClient(<ReceiptView saleId="s1" />);
@@ -126,7 +130,7 @@ describe("Facture A4 au vert CoGes (modèle docs/design/references/modele-factur
     expect(invoice).toHaveClass("papier", "[print-color-adjust:exact]");
   });
 
-  it("en-tête : logo à gauche, téléphone et adresse à pastille verte, filet vert", async () => {
+  it("en-tête : logo à gauche, téléphone et adresse à pastille claire, filet vert", async () => {
     serve(receipt({}, { logo_updated_at: "2026-11-04T09:00:00Z" }));
     renderWithClient(<ReceiptView saleId="s1" />);
     const logo = await screen.findByRole(
@@ -136,14 +140,19 @@ describe("Facture A4 au vert CoGes (modèle docs/design/references/modele-factur
     );
     expect(logo.getAttribute("src")).toMatch(/^data:image\/png/);
     const header = screen.getByRole("banner");
-    expect(header).toHaveClass("border-primary");
+    expect(header).toHaveClass("border-facture-filet");
     const contacts = within(header).getAllByRole("listitem");
     expect(contacts.map((item) => item.textContent)).toEqual([
       "77 123 45 67",
       "Rue 10, Médina, Dakar",
     ]);
     for (const item of contacts) {
-      expect(item.querySelector("[data-pastille]")).toHaveClass("rounded-full", "bg-primary");
+      expect(item.querySelector("[data-pastille]")).toHaveClass(
+        "rounded-full",
+        "border-facture-filet",
+        "bg-facture-accent-clair",
+        "text-facture-accent",
+      );
     }
     expect(screen.queryByText("KF")).toBeNull();
   });
@@ -152,7 +161,7 @@ describe("Facture A4 au vert CoGes (modèle docs/design/references/modele-factur
     serve(receipt());
     renderWithClient(<ReceiptView saleId="s1" />);
     const title = await screen.findByText(t.invoice, { exact: true });
-    expect(title).toHaveClass("text-marque");
+    expect(title).toHaveClass("text-facture-accent");
     const block = title.parentElement!;
     expect(block).toHaveClass("text-right");
     expect(within(block).getByText(t.invoiceNoLabel)).toBeInTheDocument();
@@ -175,7 +184,7 @@ describe("Facture A4 au vert CoGes (modèle docs/design/references/modele-factur
     serve(receipt());
     const { unmount } = renderWithClient(<ReceiptView saleId="s1" />);
     const billed = await screen.findByRole("region", { name: t.billedTo });
-    expect(billed).toHaveClass("bg-ventes-teinte");
+    expect(billed).toHaveClass("bg-facture-accent-clair");
     expect(within(billed).getByText("Awa Ndiaye")).toBeInTheDocument();
     expect(within(billed).getByText(t.phone("77 000 00 00"))).toBeInTheDocument();
     unmount();
@@ -185,17 +194,20 @@ describe("Facture A4 au vert CoGes (modèle docs/design/references/modele-factur
     expect(within(passing).getByText(t.walkIn)).toBeInTheDocument();
   });
 
-  it("sans logo : les initiales en pastille verte, rien n'est lu ; sans adresse : rien de vide", async () => {
+  it("sans logo : les initiales vertes dans un rond clair, rien n'est lu ; sans adresse : rien de vide", async () => {
     serve(receipt({}, { address: null }));
     renderWithClient(<ReceiptView saleId="s1" />);
-    expect(await screen.findByText("KF")).toHaveClass("bg-marque", "text-primary-foreground");
+    expect(await screen.findByText("KF")).toHaveClass(
+      "bg-facture-accent-clair",
+      "text-facture-accent",
+    );
     expect(screen.queryByRole("img", { name: /Logo de/ })).toBeNull();
     const calls = vi.mocked(api.GET).mock.calls as unknown as [string][];
     expect(calls.some(([path]) => path.endsWith("/logo"))).toBe(false);
     expect(within(screen.getByRole("banner")).getAllByRole("listitem")).toHaveLength(1);
   });
 
-  it("tableau : bandeau vert, N°, description et remise en petit, lignes alternées, montants à droite", async () => {
+  it("tableau : en-tête clair entre deux filets, N°, description et remise en petit, lignes alternées, montants à droite", async () => {
     serve(receipt());
     renderWithClient(<ReceiptView saleId="s1" />);
     const rows = await screen.findAllByTestId("invoice-line");
@@ -207,7 +219,11 @@ describe("Facture A4 au vert CoGes (modèle docs/design/references/modele-factur
       t.columns.qty,
       t.columns.total,
     ]);
-    expect(headers[0]!.closest("tr")).toHaveClass("bg-marque", "text-primary-foreground");
+    expect(headers[0]!.closest("tr")).toHaveClass(
+      "bg-facture-accent-clair",
+      "border-facture-filet",
+      "text-recu-encre",
+    );
     expect(within(rows[0]!).getByText("01")).toBeInTheDocument();
     expect(within(rows[0]!).getByText("Riz parfumé de la vallée")).toBeInTheDocument();
     expect(within(rows[0]!).getByText(/2,5\s?kg/)).toBeInTheDocument();
@@ -218,7 +234,7 @@ describe("Facture A4 au vert CoGes (modèle docs/design/references/modele-factur
     }
   });
 
-  it("totaux : sous-total, remises, bandeau vert « Total », puis payé et reste dû", async () => {
+  it("totaux : sous-total, remises, « Total » clair entre deux filets, puis payé et reste dû", async () => {
     serve(
       receipt({
         returns: [
@@ -235,7 +251,7 @@ describe("Facture A4 au vert CoGes (modèle docs/design/references/modele-factur
     const total = screen
       .getAllByText(t.invoiceTotal)
       .find((element) => element.tagName === "SPAN")!.parentElement!;
-    expect(total).toHaveClass("bg-marque", "text-primary-foreground");
+    expect(total).toHaveClass("bg-facture-accent-clair", "border-facture-filet", "text-recu-encre");
     expect(screen.getByText(t.alreadyPaid)).toBeInTheDocument();
     expect(screen.getByText(t.invoiceRemaining)).toBeInTheDocument();
     expect(screen.getByText(/Retour n° 7 du/)).toBeInTheDocument();
@@ -357,5 +373,68 @@ describe("paidByMethod", () => {
       }),
     );
     expect(rows).toEqual([{ method: "Espèces", amount: "0.30" }]);
+  });
+});
+
+/**
+ * Règle mesurable du lot A (ADR 0130) : toute classe de fond de la facture se résout, par
+ * `@theme` puis le bloc clair de globals.css (celui de `.papier`), en une couleur de
+ * luminance 0,80 au moins ; toute couleur de texte y est lisible (4,5:1) sur chacun de ces
+ * fonds. Le logo (une image) n'est pas une classe : il n'est pas compté.
+ */
+const css = readFileSync(join(__dirname, "..", "..", "..", "..", "globals.css"), "utf8");
+const light = css.slice(css.indexOf(":root,"), css.indexOf("\n}", css.indexOf(":root,")));
+
+function resolve(name: string): string | null {
+  const theme = new RegExp(`--color-${name}:\\s*var\\(--([a-z0-9-]+)\\)`).exec(css);
+  if (!theme?.[1]) return null;
+  // `--primary: var(--coges-vert-action)` puis `--coges-vert-action: #117a3c`.
+  let variable = theme[1];
+  for (let hop = 0; hop < 5; hop++) {
+    const value = new RegExp(`--${variable}:\\s*(#[0-9a-f]{6}|var\\(--([a-z0-9-]+)\\))`, "i").exec(
+      light,
+    );
+    if (!value) break;
+    if (!value[2]) return value[1]!;
+    variable = value[2];
+  }
+  throw new Error(`jeton ${theme[1]} sans valeur claire`);
+}
+
+function colours(root: Element, prefix: "bg" | "text"): Map<string, string> {
+  const found = new Map<string, string>();
+  for (const element of [root, ...root.querySelectorAll("*")]) {
+    for (const cls of element.getAttribute("class")?.split(/\s+/) ?? []) {
+      // `even:bg-…`, `print:bg-transparent`, `bg-recu-papier/85`…
+      const match = new RegExp(`^(?:[a-z-]+:)*${prefix}-([a-z0-9-]+)(?:/\\d+)?$`).exec(cls);
+      if (!match?.[1] || match[1] === "transparent") continue;
+      const hex = resolve(match[1]);
+      if (hex) found.set(cls, hex);
+    }
+  }
+  return found;
+}
+
+describe("facture claire : aucune surface sombre (lot A, ADR 0130)", () => {
+  it.each([
+    ["payée avec logo", receipt({}, { logo_updated_at: "2026-11-04T09:00:00Z" })],
+    ["sans logo, sans client", receipt({ customer: null })],
+    ["annulée, avec retours", receipt({ status: "cancelled" })],
+  ])("%s", async (_, data) => {
+    serve(data);
+    renderWithClient(<ReceiptView saleId="s1" />);
+    const invoice = await screen.findByRole("article", { name: t.title("1044") });
+    const fills = colours(invoice, "bg");
+    expect(fills.size).toBeGreaterThan(0);
+    for (const [cls, hex] of fills) {
+      expect(luminance(hex), `${cls} ${hex}`).toBeGreaterThanOrEqual(0.8);
+    }
+    const inks = colours(invoice, "text");
+    expect(inks.size).toBeGreaterThan(0);
+    for (const [cls, ink] of inks) {
+      for (const [fill, hex] of [...fills, ["papier", "#ffffff"] as const]) {
+        expect(contrast(ink, hex), `${cls} sur ${fill}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
   });
 });

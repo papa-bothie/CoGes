@@ -6,7 +6,8 @@ const t = labels.legal.acceptance;
 
 /**
  * La case « J'ai lu et j'accepte… » (prompt 36, ADR 0117), avec ses deux liens ouverts dans
- * un nouvel onglet pour ne pas perdre la saisie. Contrôlée : le parent garde l'état et
+ * un nouvel onglet pour ne pas perdre la saisie. Depuis le lot A (ADR 0130), c'est le seul
+ * endroit de l'application qui mène aux textes : ni menu du compte, ni pages d'entrée. Contrôlée : le parent garde l'état et
  * n'active son bouton qu'une fois cochée. Réutilisée telle quelle par l'inscription (lot 30),
  * qui l'exige aussi à la création du compte gérant.
  */
@@ -25,13 +26,13 @@ export function LegalConsent({
     <div className="space-y-4">
       <ul className="space-y-1">
         <li>
-          <a href="/conditions" target="_blank" rel="noopener" className={link}>
+          <a href="/conditions" target="_blank" rel="noopener noreferrer" className={link}>
             {t.conditionsLink}
             <span className="sr-only"> {t.opensNewTab}</span>
           </a>
         </li>
         <li>
-          <a href="/confidentialite" target="_blank" rel="noopener" className={link}>
+          <a href="/confidentialite" target="_blank" rel="noopener noreferrer" className={link}>
             {t.privacyLink}
             <span className="sr-only"> {t.opensNewTab}</span>
           </a>

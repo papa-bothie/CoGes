@@ -96,6 +96,12 @@
   --coges-recu-filet: #e5e5e5;
   --coges-recu-entete: #f5f5f5;
   --coges-recu-ombre: rgb(0 0 0 / 12%);
+  /* Facture A4 claire (lot A, ADR 0130) : ses trois seules couleurs, ici et dans
+     `backend/app/core/pdf.py` (PALETTE). Accent = texte seulement ; accent clair = seul fond
+     teinté ; filet = traits de structure. Une couleur de la boutique remplacera l'accent. */
+  --coges-facture-accent: #024a2c;
+  --coges-facture-accent-clair: #e6f4ec;
+  --coges-facture-filet: #117a3c;
   /* Plan de travail derrière le reçu (maquette 05) */
   --coges-recu-fond: #e9e4db;
   --coges-ombre: #000000;
@@ -299,6 +305,9 @@
   --color-recu-entete: var(--coges-recu-entete);
   --color-recu-ombre: var(--coges-recu-ombre);
   --color-recu-fond: var(--coges-recu-fond);
+  --color-facture-accent: var(--coges-facture-accent);
+  --color-facture-accent-clair: var(--coges-facture-accent-clair);
+  --color-facture-filet: var(--coges-facture-filet);
   --color-ombre: var(--coges-ombre);
 
   /* Formes et tailles de la maquette : `rounded-carte`, `h-bouton-principal`, `max-w-page`… */

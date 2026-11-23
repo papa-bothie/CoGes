@@ -97,3 +97,15 @@ describe("vitrine : mini-caisse du hero (prompt 38, A9)", () => {
     expect(resume).toContain(formatAmount(String(total)));
   });
 });
+
+describe("vitrine : slogan (prompt 40, lot A, R3)", () => {
+  const SLOGAN = "Une meilleure façon de gérer son commerce.";
+
+  it("le texte exact est dans le pied de page", () => {
+    expect(texte.footer.slogan).toBe(SLOGAN);
+  });
+
+  it("il n'apparaît qu'une seule fois", () => {
+    expect(ALL.split(SLOGAN)).toHaveLength(2);
+  });
+});

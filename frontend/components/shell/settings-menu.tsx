@@ -1,18 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import {
-  BellRing,
-  Download,
-  FileText,
-  KeyRound,
-  Lightbulb,
-  LogOut,
-  Moon,
-  Settings,
-  ShieldCheck,
-  Sun,
-} from "lucide-react";
+import { BellRing, Download, KeyRound, Lightbulb, LogOut, Moon, Settings, Sun } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useState } from "react";
@@ -136,18 +125,6 @@ export function SettingsMenu({ me, className }: { me: Me; className?: string }) 
         >
           {dark ? <Sun aria-hidden /> : <Moon aria-hidden />}
           {dark ? labels.kit.theme.toLight : labels.kit.theme.toDark}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        {/* Textes légaux (prompt 36, ADR 0117) : pour tous les rôles, comme le mot de passe. */}
-        <DropdownMenuItem asChild className="min-h-cible text-corps">
-          <Link href="/conditions">
-            <FileText aria-hidden /> {labels.legal.conditions}
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild className="min-h-cible text-corps">
-          <Link href="/confidentialite">
-            <ShieldCheck aria-hidden /> {labels.legal.privacy}
-          </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem

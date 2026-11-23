@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import { EntreeLayout } from "@/components/auth/entree-layout";
-import { LegalLinks } from "@/components/legal/legal-links";
 import { ButtonLink } from "@/components/vitrine/links";
 import { signupConfig } from "@/lib/signup/config";
 import { labels } from "@/lib/labels";
@@ -41,7 +40,6 @@ export default async function LoginPage() {
           </ButtonLink>
         </div>
       )}
-      <LegalLinks className="pt-2" />
     </EntreeLayout>
   );
 }
