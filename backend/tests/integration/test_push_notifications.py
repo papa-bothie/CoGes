@@ -169,13 +169,18 @@ def push_server(monkeypatch: pytest.MonkeyPatch) -> PushServer:
     return server
 
 
+_LETTERS = str.maketrans("0123456789", "ghijklmnop")
+
+
 def _stock_out(client: TestClient, token: str, company: DemoCompany) -> UUID:
     """Un article épuisé : l'alerte `stock_out` est créée par le vrai consommateur."""
     product = client.post(
         "/api/v1/products",
         headers=auth_headers(token),
         json={
-            "name": f"Riz 25 kg {uuid4().hex[:4]}",
+            # Suffixe en lettres seulement : un « 16 » tiré au hasard (une fois sur cent
+            # environ) se confondrait avec le prix que le test cherche dans le message.
+            "name": f"Riz 25 kg {uuid4().hex[:4].translate(_LETTERS)}",
             "unit": "sac",
             "is_stock_tracked": True,
             "reorder_point": "5.000",
