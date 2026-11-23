@@ -109,7 +109,9 @@ BeforeAll {
                 return New-DockerResult 0 @(('["{0}/{1}@{2}"]' -f $Matches[1], $Matches[2], $script:Digests[$Matches[2]]))
             }
             if ($joined -match 'base\.py compter') {
-                $last = (Get-Date).AddHours(-3).ToUniversalTime().ToString('o')
+                # Date fixe, avant tous les -Now figés des tests (2026-11-22 21:35) et avant l'heure réelle :
+                # « il y a 3 heures » relu à l'horloge du runner tombait après ces -Now dès le 23/11.
+                $last = '2026-11-22T08:00:00.0000000Z'
                 if ($b.ContainsKey('LastActivity')) { $last = $b.LastActivity }
                 $since = 'null'
                 if ($joined -match '--depuis') { $since = '2' }
