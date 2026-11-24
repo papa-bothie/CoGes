@@ -566,6 +566,10 @@ Sur le poste Ubuntu de CoGes, dans le dépôt à jour :
 Pour arrêter une version en cours de diffusion : publier la suivante (corrigée). Le canal ne
 fait jamais redescendre un PC ; un client déjà passé revient par `RevenirVersionPrecedente`.
 
+Le ménage du registre ne supprime jamais une version citée par `stable.json` ou `test.json` sur
+`main`, ni les trois plus hautes `vX.Y.Z` (ADR 0131) : une version plus ancienne qu'aucun canal
+ne cite plus disparaît de ghcr.io et ne s'installe plus.
+
 ### Protéger le compte GitHub
 
 Le canal **n'est pas signé** (ADR 0128 ; une signature est prévue, son champ est réservé) :

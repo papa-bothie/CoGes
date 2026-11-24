@@ -2,7 +2,7 @@
 
 - **Date** : 2026-10-18
 - **Phase** : prompt 21, partie 1 (avant l'ouverture de la production)
-- **Statut** : acceptée
+- **Statut** : acceptée — amendée par 0131 pour P1.2 (le registre garde aussi les versions des canaux du sur-site et les trois plus hautes vX.Y.Z ; quota de 500 Mo sans objet, paquets publics)
 - **Décideur** : utilisateur (via AskUserQuestion) pour P1.2, P1.3, P1.6, P1.7 et P1.8 ;
   le reste suit le prompt. **À relire avant la fusion** : P1.3 (paiements), P1.4 (verrous)
   et P1.8 (coût moyen), qui touchent à l'argent.
