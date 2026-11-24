@@ -412,20 +412,23 @@ absents ou mal formés ; en mode `ip`, une liste `COGES_ADMIN_ALLOWED_IPS` vide 
 
 ### Registre d'images (ADR 0083, 0087)
 
-Une version pèse ≈ 490 Mo compressés (worker ≈ 320 Mo, API ≈ 95 Mo). Le groupe 2 (ADR 0111,
-0113) y a ajouté ≈ 31 Mo : Pillow et ReportLab, dans l'API **et** dans le worker, qui produit les
-PDF longs (mesuré par `docker save | gzip`, de 83 à 94 Mo pour l'API, de 302 à 322 Mo pour le
-worker). Le quota gratuit d'un dépôt privé est de 500 Mo : le registre ne garde donc, par
-paquet, que trois versions au plus.
+Une version pèse ≈ 490 Mo compressés (worker ≈ 320 Mo, API ≈ 95 Mo ; Pillow et ReportLab du
+groupe 2, ADR 0111 et 0113, y comptent pour ≈ 31 Mo, mesuré par `docker save | gzip`). Les
+paquets sont **publics** : leur stockage est gratuit et le quota de 500 Mo des paquets privés
+ne s'applique pas (ADR 0131, qui amende 0087 ; s'ils redevenaient privés, revoir le nombre de
+versions gardées).
 
 | Gardée | Comment on la reconnaît |
 |---|---|
 | celle qui tourne en production | étiquette **`production`**, posée par le job `deploy` après la fumée de production |
 | la précédente (retour arrière, reconstruction du VPS) | étiquette **`production-previous`**, déplacée au même moment |
-| la dernière préproduction | la plus récente des autres |
+| celles des PC sur site | étiquette ou digest cité par `deploy/onprem/canal/stable.json` ou `test.json` **sur `main`** |
+| les trois plus hautes `vX.Y.Z` | ordre des numéros, pas des dates (installation et retour arrière sur site, préproduction) |
+| la dernière préproduction par SHA | la plus récente des versions sans étiquette `vX.Y.Z` |
 
 Tout le reste est supprimé par le job `cleanup` (`deploy/scripts/registry_cleanup.py`) ;
-une version sans étiquette n'est jamais touchée. Sur le VPS, les mêmes versions se lisent
+une version sans étiquette n'est jamais touchée, et un canal illisible arrête le job sans rien
+supprimer. Sur le VPS, les mêmes versions se lisent
 dans `/opt/coges/state/<pile>.version` (en service) et `<pile>.previous` (précédente),
 écrits par `deploy.sh`. Après un `deploy.sh production rollback` lancé à la main, les
 étiquettes du registre ne bougent pas : les deux images restent protégées.

@@ -1,7 +1,7 @@
 name: Déployer
 
 # CoGes sur le VPS (ADR 0083). Plus de Vercel : images construites ici, poussées sur
-# ghcr.io (privé), migrations contre Neon depuis ce job, puis deploy.sh sur le VPS par
+# ghcr.io (public, ADR 0131), migrations contre Neon depuis ce job, puis deploy.sh sur le VPS par
 # une clé SSH bridée. Rien ne part si la CI n'est pas entièrement verte (décision 07).
 #
 # Déclencheurs :
@@ -321,7 +321,7 @@ jobs:
         run: rm -f ~/.ssh/deploy
 
   cleanup:
-    name: Registre — production, précédente et la dernière préproduction
+    name: Registre — production, canaux du sur-site, trois versions, dernière préproduction
     needs: [images, deploy]
     if: always() && needs.images.result == 'success'
     runs-on: ubuntu-latest
@@ -333,17 +333,35 @@ jobs:
         package: [front, admin, api, worker, bundle]
     steps:
       - uses: actions/checkout@v5
-      # Quota gratuit de 500 Mo (ADR 0087) : jamais `production` ni
-      # `production-previous`, jamais une version sans étiquette, et la dernière
-      # préproduction ; tout le reste part (deploy/scripts/registry_cleanup.py).
+      # Les canaux du sur-site se lisent sur `main`, quelle que soit la branche ou
+      # l'étiquette du déclenchement : c'est là que les PC des clients les lisent
+      # (ADR 0128). Absent = aucune version publiée ; une lecture de `main` ratée arrête
+      # le job avant toute suppression.
+      - name: Canaux du sur-site (main)
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          for canal in stable test; do
+            if git cat-file -e "FETCH_HEAD:deploy/onprem/canal/$canal.json" 2>/dev/null; then
+              git show "FETCH_HEAD:deploy/onprem/canal/$canal.json" > "$RUNNER_TEMP/canal-$canal.json"
+              echo "canal $canal : $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$RUNNER_TEMP/canal-$canal.json")" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "canal $canal : aucun" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+      # Jamais `production` ni `production-previous`, jamais une version sans étiquette,
+      # jamais une version citée par un canal du sur-site, jamais les trois plus hautes
+      # vX.Y.Z ; des SHA, la dernière préproduction ; tout le reste part
+      # (deploy/scripts/registry_cleanup.py, ADR 0087 et 0131).
       - name: Versions à supprimer
         id: plan
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
         run: |
+          set -o pipefail
           ids=$(gh api --paginate "/users/$OWNER/packages/container/coges%2F${{ matrix.package }}/versions" \
-            | python3 deploy/scripts/registry_cleanup.py plan)
+            | python3 deploy/scripts/registry_cleanup.py plan \
+                --channel "$RUNNER_TEMP/canal-stable.json" --channel "$RUNNER_TEMP/canal-test.json")
           echo "ids=$ids" >> "$GITHUB_OUTPUT"
           echo "${{ matrix.package }} : ${ids:-rien} à supprimer" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/delete-package-versions@v5
