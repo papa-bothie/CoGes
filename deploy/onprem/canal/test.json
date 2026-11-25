@@ -1,0 +1,19 @@
+{
+  "format": "COGES-CANAL-1",
+  "canal": "test",
+  "version": "v0.4.1",
+  "publiee_le": "2026-11-23",
+  "depuis_minimum": "v0.4.0",
+  "images": {
+    "front": "sha256:c8967792aefae77205beffc91ed8e932b25d0457223c12c328db57f234af11f5",
+    "api": "sha256:fdb4f33561a6be46bea72c7df52e74319f939e82722021ac6fdf4bfa1ce9deda",
+    "worker": "sha256:c9f9a4a196f5f652dd55e7d051a20e4dc25e8c7dcb7fe7dafee8b35572e3b0b0"
+  },
+  "programme": {
+    "sha256": "c6616604f8248031d4ace2d34a5e3904e8f12f065ebaa81181636501e26ffc55",
+    "fichiers": 24
+  },
+  "docker_desktop_minimum": null,
+  "note": "Premier essai de mise à jour à distance.",
+  "signature": null
+}
