@@ -1784,6 +1784,44 @@ export const labels = {
       rights: "Qui peut faire quoi",
       history: "Historique",
       files: "Fichiers Excel",
+      subscription: "Mon abonnement",
+    },
+    subscription: {
+      title: "Mon abonnement",
+      offer: (name: string) => `CoGes ${name}`,
+      trial: (day: string) => `Essai gratuit jusqu'au ${day}`,
+      paidUntil: (day: string) => `Payé jusqu'au ${day}`,
+      active: "Actif",
+      pastDue: (day: string) => `Paiement attendu depuis le ${day}`,
+      pastDueNoDay: "Paiement attendu",
+      suspended: "Suspendu",
+      license: (name: string) => `Licence sur site, offre ${name}`,
+      accounts: (used: number, max: number | null) =>
+        max === null
+          ? `${used} compte${used > 1 ? "s" : ""}`
+          : `${used} compte${used > 1 ? "s" : ""} sur ${max}`,
+      contains: "Ce que contient votre offre",
+      businessAdds: (name: string) => `Ce qu'ajoute ${name}`,
+      upgrade: (name: string) => `Passer à ${name}`,
+      acquired: "Inclus pour votre boutique",
+      acquiredImports: "Import inclus pour votre boutique",
+      acquiredAccounts: (max: number) => `Jusqu'à ${max} comptes pour votre boutique`,
+      howToPay: "Comment payer",
+      howToPayHint:
+        "Écrivez-nous sur WhatsApp : nous vous donnons le numéro Wave ou Orange Money, puis votre paiement est enregistré.",
+      perMonth: "par mois",
+      perYear: (percent: number) => `par an (-${percent} %)`,
+      payMonth: "Payer 1 mois",
+      payYear: "Payer 1 an",
+      quote: "Sur devis : écrivez-nous",
+      quoteButton: "Demander un devis",
+    },
+    locked: {
+      badge: "Business",
+      title: (name: string) => `Disponible avec ${name}`,
+      imports:
+        "Ajoutez tous vos articles d'un coup depuis un fichier Excel avec l'offre Business.",
+      upgrade: (name: string) => `Passer à ${name}`,
     },
     shop: {
       title: "Ma boutique",

@@ -66,6 +66,8 @@ export const ROUTE_ACCESS: Readonly<Record<string, PermissionRule | null>> = {
   "/settings/files": {
     anyOf: ["importexport:export", "importexport:create", "sales:export", "analytics:export"],
   },
+  // « Mon abonnement » (ADR 0132) : le droit de `GET /subscription`, réservé au gérant.
+  "/settings/subscription": "company:update",
 };
 
 /**

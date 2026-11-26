@@ -183,6 +183,25 @@ export const texte = {
     ],
     illustrationAlt: "",
   },
+  /**
+   * « Nos offres » (prompt 41, B5, ADR 0132). Aucun montant ici : les prix viennent de la
+   * source partagée `content/offres.json`, formatés par la section elle-même. « 10 % » ne
+   * s'écrit que dans la bascule annuelle (`vitrine-texte.test.ts`).
+   */
+  offers: {
+    title: "Nos offres",
+    lead: "Choisissez selon le nombre de personnes qui travaillent dans la boutique.",
+    period: "Durée du paiement",
+    monthly: "Par mois",
+    annual: "Par an (-10 %)",
+    perMonth: "par mois",
+    perYear: "par an",
+    users: (count: number) => `Jusqu'à ${count} personnes`,
+    everythingIn: (name: string) => `Tout ${name}, et en plus :`,
+    trial: `${TRIAL_DAYS} jours d'essai gratuit sur Pro`,
+    premium: "Plus de 7 personnes ? Premium, sur devis : écrivez-nous",
+    premiumLink: "Écrire sur WhatsApp",
+  },
   faq: {
     title: "Questions fréquentes",
     items: [

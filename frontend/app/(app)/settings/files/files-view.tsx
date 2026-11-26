@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import { ErrorState } from "@/components/error-state";
 import { Chip } from "@/components/kit/chip";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCompanyLocale } from "@/hooks/use-me";
+import { LockedFeatureCard } from "@/components/locked-feature";
+import { useCompanyLocale, useMe } from "@/hooks/use-me";
 import { usePermission } from "@/hooks/use-permission";
 import { api, unwrap } from "@/lib/api/client";
 import { errorMessage, toApiError } from "@/lib/api/errors";
@@ -24,6 +25,7 @@ import {
 } from "@/lib/files";
 import { formatDayMonth } from "@/lib/format";
 import { labels } from "@/lib/labels";
+import { hasFeature } from "@/lib/offres";
 import { todayIn } from "@/lib/period";
 import { cn } from "@/lib/utils";
 import { AccountantExports } from "@/components/pdf-export";
@@ -60,6 +62,9 @@ function isExpired(file: Export, now: Date = new Date()): boolean {
 export function FilesView() {
   const canExport = usePermission("importexport:export");
   const canImport = usePermission("importexport:create");
+  // L'import est réservé à Business (ADR 0132) : visible, mais verrouillé sur Pro. Le serveur
+  // refuse de toute façon (`plan_feature_required`).
+  const { data: me } = useMe();
   // Les PDF du comptable arrivent aussi dans la liste (ADR 0114).
   const canPdf = usePermission({ anyOf: ["sales:export", "analytics:export"] });
   return (
@@ -67,7 +72,8 @@ export function FilesView() {
       <h2 className="text-titre-carte">{t.title}</h2>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3">
         {canExport && <SalesCard />}
-        {canImport && <ImportCard />}
+        {canImport &&
+          (hasFeature(me?.plan?.features, "imports") ? <ImportCard /> : <LockedImportCard />)}
         {canExport && <ListsCard />}
       </div>
       {(canExport || canPdf) && <PreparedFiles />}
@@ -248,6 +254,16 @@ function ImportCard() {
         </div>
       )}
     </div>
+  );
+}
+
+function LockedImportCard() {
+  return (
+    <LockedFeatureCard
+      title={t.bulk}
+      description={labels.settingsScreens.locked.imports}
+      className="bg-depenses-teinte"
+    />
   );
 }
 

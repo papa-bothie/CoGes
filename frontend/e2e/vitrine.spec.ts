@@ -54,8 +54,14 @@ test.describe("vitrine : visiteur nouveau", () => {
 
     expect(requests.filter((url) => new URL(url).pathname.startsWith("/api/"))).toEqual([]);
     expect(requests.filter((url) => new URL(url).origin !== HOST.origin)).toEqual([]);
-    // Aucun formulaire : la page ne collecte rien.
-    await expect(page.locator("form, input, textarea")).toHaveCount(0);
+    // Aucun formulaire : la page ne collecte rien. Seule exception (prompt 41, ADR 0132) : les
+    // deux boutons radio de la bascule « Par mois / Par an » de « Nos offres », hors de tout
+    // formulaire, qui ne montrent que l'autre prix (CSS, sans envoi).
+    await expect(page.locator("form, textarea, input:not([type=radio][name=periode])")).toHaveCount(
+      0,
+    );
+    await expect(page.locator("#offres input[type=radio][name=periode]")).toHaveCount(2);
+    await expect(page.locator("form input[name=periode]")).toHaveCount(0);
     // La CSP n'est pas assouplie (next.config.ts) : même origine, aucune exception tierce.
     const csp = response?.headers()["content-security-policy"] ?? "";
     expect(csp).toContain("default-src 'self'");

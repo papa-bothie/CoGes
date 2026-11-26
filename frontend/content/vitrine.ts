@@ -4,6 +4,8 @@
  * Un numéro vide ou factice est refusé par `content/vitrine.test.ts` (ADR 0115) : la vitrine
  * ne part jamais en production sans un vrai contact.
  */
+import offres from "./offres.json";
+
 export const vitrine = {
   /** Adresse publique du site (balises de partage, sitemap.xml, robots.txt). */
   siteUrl: "https://coges.app",
@@ -14,10 +16,10 @@ export const vitrine = {
   /** Message prérempli à l'ouverture de WhatsApp. */
   whatsappMessage: "Bonjour, je voudrais en savoir plus sur CoGes pour ma boutique.",
   /**
-   * Section « Tarifs » : `null` tant que les prix ne sont pas arrêtés. S'ils sont fournis, ils
-   * reprennent mot pour mot les conditions générales de vente.
+   * Section « Nos offres » (prompt 41, ADR 0132) : Pro et Business, Premium sur devis. Une
+   * seule source, partagée avec « Mon abonnement » et testée contre la table `plans`.
    */
-  pricing: null,
+  pricing: offres.plans,
 } as const;
 
 /** Lien `wa.me` vers le support, message prérempli (aucun appel réseau : un simple lien). */

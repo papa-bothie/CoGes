@@ -119,5 +119,9 @@ export const SCREENS: Screen[] = [
     name: "reglages-fichiers",
     open: (page) => page.goto("/settings/files").then(() => undefined),
   },
+  {
+    name: "reglages-abonnement",
+    open: (page) => page.goto("/settings/subscription").then(() => undefined),
+  },
   { name: "notifications", open: (page) => page.goto("/notifications").then(() => undefined) },
 ];
