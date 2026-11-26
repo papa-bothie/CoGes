@@ -29,6 +29,10 @@ async function stockedArticle(request: APIRequestContext): Promise<string> {
   });
   expect(login.ok()).toBeTruthy();
   const headers = { Authorization: `Bearer ${(await login.json()).access_token}` };
+  // `support-e2e` est créée par la CLI : son gérant n'a encore rien accepté, et toute route
+  // lui répondrait 409 `legal_acceptance_required` (ADR 0117). Il accepte, comme à l'écran.
+  const accepted = await request.post(`${API}/auth/legal-acceptance`, { headers, data: {} });
+  expect(accepted.ok(), await accepted.text()).toBeTruthy();
   const name = `Riz du support ${crypto.randomUUID().slice(0, 6)}`;
   const product = await request.post(`${API}/products`, {
     headers: { ...headers, "Idempotency-Key": crypto.randomUUID() },
