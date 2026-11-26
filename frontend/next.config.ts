@@ -63,6 +63,9 @@ const nextConfig: NextConfig = {
   // au changement d'écran plutôt que de mélanger deux versions. Vide en développement.
   deploymentId: process.env.NEXT_DEPLOYMENT_ID || undefined,
   poweredByHeader: false,
+  // Mise à jour de Next 16.4.2 → 16.4.6 (avis de sécurité) : Next ne relance un agent que
+  // pour une mise à jour de sécurité. Aucun effet sur l'application servie.
+  experimental: { agentUpgrade: "security" },
   // Le bouton « N » de développement ne doit pas apparaître sur les captures d'écran.
   devIndicators: false,
   env: {
