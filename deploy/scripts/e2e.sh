@@ -202,6 +202,10 @@ SQL
     export COGES_SIGNUP_PHONE_PER_DAY=100000
     export COGES_SIGNUP_EMAIL_PER_DAY=100000
     export COGES_MERCHANT_URL="http://localhost:$E2E_FRONT_PORT"
+    # Aucun SMTP, quel que soit le `.env` du poste : les parcours lisent le lien d'invitation
+    # que l'API rend quand elle ne peut pas l'envoyer (ADR 0094), et aucun e-mail ne part
+    # d'un parcours. `smtp_host` vide = non configuré (`app/core/mailer.py`).
+    export COGES_SMTP_HOST=
     # Notifications sur le téléphone (ADR 0120) : une paire VAPID tirée à chaque lancement,
     # jamais écrite sur disque. Le parcours simule l'arrivée d'un push dans le navigateur.
     eval "$(uv run --directory backend python -m app.cli generate-vapid-keys | sed -n '1,2s/^/export /p')"
