@@ -266,20 +266,18 @@ async function expectSectionBelowHeader(page: Page, id: string) {
   await expect(section.getByRole("heading", { level: 2 })).toBeInViewport();
 }
 
-test.describe("vitrine : « Comment ça marche » dans la navigation (prompt 39, bloc N)", () => {
+test.describe("vitrine : navigation, « Tarifs » mène aux offres (prompt 39, bloc N ; prompt 42)", () => {
   test("ordinateur : trois liens dans l'ordre, la section arrive sous l'en-tête", async ({
     page,
   }) => {
     await page.goto("/");
     const nav = page.getByRole("navigation", { name: "Principal" });
-    await expect(nav.getByRole("link")).toHaveText([
-      "Fonctionnalités",
-      "Comment ça marche",
-      "Questions",
-    ]);
-    await nav.getByRole("link", { name: "Comment ça marche" }).click();
-    await expect(page).toHaveURL(/#comment$/);
-    await expectSectionBelowHeader(page, "comment");
+    await expect(nav.getByRole("link")).toHaveText(["Fonctionnalités", "Tarifs", "Questions"]);
+    await nav.getByRole("link", { name: "Tarifs" }).click();
+    await expect(page).toHaveURL(/#offres$/);
+    await expectSectionBelowHeader(page, "offres");
+    // La section « Comment ça marche » reste sur la page, hors de la navigation.
+    await expect(page.locator("#comment")).toHaveCount(1);
     await nav.getByRole("link", { name: "Questions" }).click();
     await expectSectionBelowHeader(page, "questions");
   });
@@ -291,13 +289,13 @@ test.describe("vitrine : « Comment ça marche » dans la navigation (prompt 39,
     const menu = page.getByRole("navigation", { name: "Menu" });
     await expect(menu.getByRole("link")).toHaveText([
       "Fonctionnalités",
-      "Comment ça marche",
+      "Tarifs",
       "Questions",
       /WhatsApp/,
     ]);
-    await menu.getByRole("link", { name: "Comment ça marche" }).click();
+    await menu.getByRole("link", { name: "Tarifs" }).click();
     await expect(menu).toBeHidden();
-    await expectSectionBelowHeader(page, "comment");
+    await expectSectionBelowHeader(page, "offres");
   });
 
   test("le hero n'a plus qu'un bouton principal ; WhatsApp à pleine largeur sur téléphone", async ({

@@ -7,6 +7,7 @@ import { texte } from "@/content/vitrine-texte";
  */
 export const NAV_LINKS = [
   { anchor: "fonctionnalites", label: texte.nav.features },
-  { anchor: "comment", label: texte.nav.howItWorks },
+  // Prompt 42 : « Tarifs » mène à « Nos offres » ; la section « Comment ça marche » reste.
+  { anchor: "offres", label: texte.nav.pricing },
   { anchor: "questions", label: texte.nav.questions },
 ] as const;

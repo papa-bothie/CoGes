@@ -157,6 +157,7 @@ def test_the_front_source_matches_the_database(owner_engine: Engine) -> None:
         assert sorted(offer["features"]) == sorted(plan_features.PLAN_FEATURES[code])
     assert offers["trialDays"] == 30
     assert offers["trialPlan"] == "starter"
+    assert offers["trialPrice"] == 0
 
 
 # -------------------------------------------------------------- current_plan()

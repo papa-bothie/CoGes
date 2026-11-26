@@ -18,14 +18,17 @@ export function WhatsAppLink({
   children,
   variant = "plein",
   className,
+  href = whatsappLink(),
 }: {
   children: ReactNode;
+  /** Un autre message prérempli (`lib/offres.ts`) ; par défaut, celui de la vitrine. */
+  href?: string;
   variant?: keyof typeof VARIANTS;
   className?: string;
 }) {
   return (
     <a
-      href={whatsappLink()}
+      href={href}
       target="_blank"
       rel="noopener noreferrer"
       className={cn(BASE, VARIANTS[variant], className)}

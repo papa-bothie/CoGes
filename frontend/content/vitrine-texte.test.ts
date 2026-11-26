@@ -38,6 +38,22 @@ describe("vitrine : promesses (prompt 37, ADR 0115)", () => {
     expect(allText({ ...texte, hero })).not.toMatch(/\d[\d  ]*\s?(F|FCFA|francs)\b/);
   });
 
+  it("navigation : « Tarifs » à la place de « Comment ça marche » (prompt 42)", () => {
+    expect(texte.nav.pricing).toBe("Tarifs");
+    expect(allText(texte.nav)).not.toMatch(/comment ça marche/i);
+    // La section reste : son titre n'est pas un texte de la navigation.
+    expect(texte.nav).not.toHaveProperty("howItWorks");
+  });
+
+  it("carte d'essai : durée et offre tirées de la source, aucun montant écrit à la main", () => {
+    // Le « 0 F » est formaté par la section depuis `offres.trialPrice`, jamais écrit ici.
+    expect(offres.trialPrice).toBe(0);
+    expect(texte.offers.trialCard.period).toBe(`pendant ${offres.trialDays} jours`);
+    const plan = offres.plans.find((item) => item.code === offres.trialPlan)!;
+    expect(texte.offers.trialCard.includes).toBe(`Toutes les fonctions de CoGes ${plan.name}`);
+    expect(allText(texte.offers.trialCard)).not.toMatch(/\d[\d  ]*\s?(F|FCFA|francs)\b/);
+  });
+
   it("aucun bouton « Créer ma boutique » (lot Inscription)", () => {
     expect(ALL).not.toMatch(/créer ma boutique|inscri/i);
   });

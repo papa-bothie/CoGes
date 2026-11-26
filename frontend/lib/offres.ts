@@ -40,6 +40,8 @@ export type Offre = {
 export const OFFRES = data.plans as Offre[];
 export const TRIAL_DAYS: number = data.trialDays;
 export const ANNUAL_DISCOUNT_PERCENT: number = data.annualDiscountPercent;
+/** Prix de l'essai (« 0 F », prompt 42), dans la même source que les offres. */
+export const TRIAL_PRICE: number = data.trialPrice;
 
 export function offre(code: PlanCode): Offre {
   const found = OFFRES.find((item) => item.code === code);
@@ -50,6 +52,8 @@ export function offre(code: PlanCode): Offre {
 export const PRO = offre("starter");
 export const BUSINESS = offre("business");
 export const PREMIUM = offre("premium");
+/** L'offre dont l'essai ouvre toutes les fonctions (`trialPlan`, trigger `companies_start_trial`). */
+export const TRIAL_OFFER = offre(data.trialPlan as PlanCode);
 
 /** Ce que chaque droit veut dire, en mots simples. Les fonctions des lots E et F sont dites
  * « bientôt » : leur code existe, la fonction pas encore. */
@@ -86,6 +90,11 @@ function whatsapp(message: string): string {
 /** « Je veux payer CoGes Pro pour 1 mois » (paiement en ligne au lot D). */
 export function payLink(name: string, months: 1 | 12): string {
   return whatsapp(`Je veux payer CoGes ${name} pour ${months === 1 ? "1 mois" : "1 an"}.`);
+}
+
+/** Bouton de l'essai quand l'inscription est fermée (prompt 42). */
+export function trialLink(): string {
+  return whatsapp("Je veux essayer CoGes gratuitement.");
 }
 
 export function upgradeLink(): string {

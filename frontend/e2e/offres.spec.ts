@@ -106,3 +106,43 @@ test("vitrine : Nos offres, montants du mois puis de l'année", async ({ page })
   await page.setViewportSize({ width: 360, height: 800 });
   await noHorizontalScroll(page);
 });
+
+test("vitrine : la carte « Essai gratuit » vient d'abord, à 0 F par mois comme par an (prompt 42)", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const section = page.locator("#offres");
+  await section.scrollIntoViewIfNeeded();
+  await expect(section.locator("ul.grid > li > h3")).toHaveText([
+    "Essai gratuit",
+    "CoGes Pro",
+    "CoGes Business",
+  ]);
+  const trial = section.locator("ul.grid > li").filter({ hasText: "Essai gratuit" });
+  await expect(trial.getByText("0 F", { exact: true })).toBeVisible();
+  await expect(trial.getByText("pendant 30 jours")).toBeVisible();
+  // L'inscription est ouverte sur la pile e2e (`COGES_SIGNUP_ENABLED=true`) : /inscription.
+  const cta = trial.getByRole("link", { name: "Démarrer l'essai gratuit" });
+  await expect(cta).toHaveAttribute("href", "/inscription");
+  await cta.click();
+  await expect(page).toHaveURL(/\/inscription$/);
+  await page.goBack();
+  await section.getByText("Par an (-10 %)").click();
+  await expect(trial.getByText("0 F", { exact: true })).toBeVisible();
+
+  // Trois colonnes sur ordinateur, empilées sur téléphone (`offsetTop` : sans la translation
+  // de l'apparition, décalée d'une carte à l'autre).
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const tops = await section
+    .locator("ul.grid > li")
+    .evaluateAll((cards) => cards.slice(0, 3).map((card) => (card as HTMLElement).offsetTop));
+  expect(new Set(tops).size).toBe(1);
+  await page.setViewportSize({ width: 360, height: 800 });
+  const stacked = await section
+    .locator("ul.grid > li")
+    .evaluateAll((cards) => cards.slice(0, 3).map((card) => (card as HTMLElement).offsetTop));
+  expect(stacked).toHaveLength(3);
+  expect([...stacked].sort((a, b) => a - b)).toEqual(stacked);
+  expect(new Set(stacked).size).toBe(3);
+  await noHorizontalScroll(page);
+});
