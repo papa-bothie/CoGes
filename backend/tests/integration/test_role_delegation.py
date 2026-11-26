@@ -28,6 +28,7 @@ from tests.conftest import (
     _create_demo_company,
     accept_legal,
     auth_headers,
+    lift_user_cap,
     login_token,
 )
 
@@ -176,11 +177,12 @@ def test_a_custom_role_never_carries_people_or_role_rights(
 
 
 def test_the_manager_still_creates_any_account(
-    api_client: TestClient, app_bound_to_test_database: None
+    api_client: TestClient, app_bound_to_test_database: None, owner_engine: Engine
 ) -> None:
     """Dans une entreprise à part : un second gérant chez `alpha` recevrait les alertes
     que d'autres suites y comptent."""
     company = _create_demo_company(f"deleg-{uuid4().hex[:6]}")
+    lift_user_cap(owner_engine, company.company_id)  # plus de 3 comptes (ADR 0132)
     token = login_token(api_client, company)
     created = api_client.post(
         "/api/v1/users",

@@ -43,6 +43,9 @@ LABELS: dict[str, str] = {
     f"GET {_PLATFORM}/companies/{{company_id}}/subscription": "Voir l'abonnement d'une entreprise",
     f"PATCH {_PLATFORM}/companies/{{company_id}}/subscription": "Changer l'offre d'une entreprise",
     f"POST {_PLATFORM}/companies/{{company_id}}/payments": "Enregistrer un paiement",
+    f"PUT {_PLATFORM}/companies/{{company_id}}/subscription/acquired-rights": (
+        "Accorder ou retirer des droits acquis"
+    ),
     f"GET {_PLATFORM}/companies/{{company_id}}/support-sessions": "Voir les accès support",
     f"POST {_PLATFORM}/companies/{{company_id}}/support-sessions": "Ouvrir un accès support",
     f"POST {_PLATFORM}/support-sessions/{{session_id}}/token": "Reprendre son accès support",

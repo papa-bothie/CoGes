@@ -15,12 +15,14 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
+from sqlalchemy.engine import Engine
 
 from app.core import queue
 from app.workers.tasks import exports as export_tasks
 from tests.conftest import (
     _create_demo_company,
     auth_headers,
+    lift_user_cap,
     login_token,
     write_headers,
 )
@@ -180,12 +182,15 @@ def test_sales_export_never_holds_a_formula(
 
 
 @pytest.mark.parametrize("fmt", ["csv", "xlsx"])
-def test_export_then_import_gives_back_the_same_customers(api_client: TestClient, fmt: str) -> None:
+def test_export_then_import_gives_back_the_same_customers(
+    api_client: TestClient, owner_engine: Engine, fmt: str
+) -> None:
     """Deux entreprises neuves : l'export de l'une, réimporté chez l'autre, se réexporte
     à l'identique — apostrophes comprises."""
     marker = uuid4().hex[:8]
     source = _create_demo_company(f"fx-source-{fmt}-{marker}")
     target = _create_demo_company(f"fx-cible-{fmt}-{marker}")
+    lift_user_cap(owner_engine, target.company_id)  # l'import est réservé à Business
     source_token = login_token(api_client, source)
     target_token = login_token(api_client, target)
 

@@ -8,6 +8,7 @@ jamais désactivée.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql import text
 
 from app.cli import create_company
+from app.core import plan_features
 from app.core.config import get_settings
 from app.core.database import create_app_engine
 from app.core.idempotency import IDEMPOTENCY_HEADER
@@ -212,17 +214,19 @@ def lift_user_cap(owner_engine: Engine, company_id: UUID) -> None:
     """Passe une entreprise partagée par toute la suite au palier sans plafond (ADR 0091).
 
     Ces entreprises ne sont pas des clientes : une centaine de tests y créent chacun leur
-    compte, et le plafond de l'essai Premium (10) les bloquerait entre eux. Le plafond a
+    compte, et le plafond de l'essai Pro (3) les bloquerait entre eux. Le plafond a
     ses propres tests, sur des entreprises neuves (`test_plan_user_limit.py`). Le palier
-    « sur devis » de l'ADR, absent du seed, est ajouté ici en propriétaire.
+    « sur devis » de l'ADR, absent du seed, est ajouté ici en propriétaire, avec tous
+    les droits du catalogue (ADR 0132) : l'import y reste ouvert.
     """
     with owner_engine.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO plans (code, name, price_fcfa, max_users, is_orderable) "
-                "VALUES ('sur_devis', 'Sur devis', NULL, NULL, false) "
+                "INSERT INTO plans (code, name, price_fcfa, max_users, is_orderable, features) "
+                "VALUES ('sur_devis', 'Sur devis', NULL, NULL, false, CAST(:features AS jsonb)) "
                 "ON CONFLICT (code) DO NOTHING"
-            )
+            ),
+            {"features": json.dumps(plan_features.CATALOGUE)},
         )
         # `subscriptions` est en RLS FORCE, propriétaire compris : le contexte d'abord.
         connection.execute(
@@ -519,3 +523,42 @@ def ops_redis(monkeypatch: pytest.MonkeyPatch) -> Iterator[redis.Redis]:
         yield client
     finally:
         client.flushdb()
+
+
+@pytest.fixture
+def subscriptions_kept(platform_session_factory: sessionmaker[Any]) -> Iterator[None]:
+    """Pour un test qui redescend sous la révision 0043 puis remonte : 0043 recopie
+    **toutes** les entreprises sur Pro (ADR 0132), et celles que la suite partage
+    (`lift_user_cap`) perdraient leur palier sans plafond. Elles le retrouvent ici."""
+    session = platform_session_factory()
+    try:
+        kept = list(
+            session.execute(
+                text(
+                    "SELECT company_id, plan_id, extra_features, max_users_override "
+                    "FROM subscriptions"
+                )
+            )
+        )
+    finally:
+        session.close()
+    yield
+    session = platform_session_factory()
+    try:
+        for row in kept:
+            session.execute(
+                text(
+                    "UPDATE subscriptions SET plan_id = :plan, "
+                    "extra_features = CAST(:extra AS jsonb), max_users_override = :cap "
+                    "WHERE company_id = :id"
+                ),
+                {
+                    "plan": row.plan_id,
+                    "extra": json.dumps(row.extra_features),
+                    "cap": row.max_users_override,
+                    "id": row.company_id,
+                },
+            )
+        session.commit()
+    finally:
+        session.close()

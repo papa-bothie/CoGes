@@ -35,6 +35,7 @@ from app.core.idempotency import (
 from app.core.repository import MAX_PAGE_SIZE
 from app.modules.platform import service
 from app.modules.platform.schemas import (
+    AcquiredRightsUpdate,
     AttentionRead,
     AuditAction,
     AuditPage,
@@ -289,6 +290,22 @@ def change_subscription(
     avec le nombre de comptes à désactiver d'abord.
     """
     return service.change_subscription(
+        platform.session, platform.admin, company_id, payload, ip_address=client_ip(request)
+    )
+
+
+@router.put(
+    "/companies/{company_id}/subscription/acquired-rights", response_model=SubscriptionDetail
+)
+def set_acquired_rights(
+    company_id: UUID, payload: AcquiredRightsUpdate, request: Request, platform: Administrator
+) -> SubscriptionDetail:
+    """Droits acquis : droits accordés en plus de l'offre et plafond de comptes (ADR 0132).
+
+    Profil `administrator`, raison obligatoire, audit critique. Remplace les valeurs
+    actuelles ; un plafond plus bas que les comptes actifs est refusé en 409.
+    """
+    return service.set_acquired_rights(
         platform.session, platform.admin, company_id, payload, ip_address=client_ip(request)
     )
 

@@ -24,6 +24,7 @@ from calendar import monthrange
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from decimal import Decimal
 from math import ceil
 from typing import Any, cast
 from uuid import UUID, uuid4
@@ -33,7 +34,7 @@ import segno
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import clock, mailer, mfa, queue, rate_limit, totp
+from app.core import clock, mailer, mfa, plan_features, queue, rate_limit, totp
 from app.core.audit import AuditAction, audit_critical
 from app.core.config import DEVELOPMENT_ENVS, get_settings
 from app.core.deps import PlatformAdmin, platform_transaction
@@ -87,6 +88,7 @@ from app.modules.platform.repository import (
     TeamRepository,
 )
 from app.modules.platform.schemas import (
+    AcquiredRightsUpdate,
     AttentionRead,
     AuditEntry,
     AuditPage,
@@ -1047,10 +1049,28 @@ def _plan_read(plan: Plan) -> PlanRead:
         code=plan.code,
         name=plan.name,
         price_fcfa=plan.price_fcfa,
+        annual_price_fcfa=plan.annual_price_fcfa,
         max_users=plan.max_users,
         features=list(plan.features),
         is_orderable=plan.is_orderable,
     )
+
+
+#: Offres que l'administrateur peut poser sans qu'elles soient en vente libre : Premium,
+#: sur devis (ADR 0132). Le changement d'offre est réservé au profil `administrator`.
+QUOTED_PLANS = frozenset({"premium"})
+
+
+def _offered(plan: Plan | None) -> bool:
+    return plan is not None and (plan.is_orderable or plan.code in QUOTED_PLANS)
+
+
+def _cap(plan: Plan, subscription: Subscription) -> int | None:
+    """Plafond effectif : le plafond acquis s'il existe, sinon celui de l'offre (comme
+    `users_plan_limit()` en base)."""
+    if subscription.max_users_override is not None:
+        return subscription.max_users_override
+    return plan.max_users
 
 
 def list_plans(session: Session) -> list[PlanRead]:
@@ -1060,14 +1080,19 @@ def list_plans(session: Session) -> list[PlanRead]:
 def _detail(session: Session, company_id: UUID, subscription: Subscription) -> SubscriptionDetail:
     repository = SubscriptionRepository(session)
     payments, total = repository.payments(subscription.id, limit=PAYMENTS_SHOWN)
+    plan = repository.plan(subscription.plan_id)
     return SubscriptionDetail(
         company_id=company_id,
-        plan=_plan_read(repository.plan(subscription.plan_id)),
+        plan=_plan_read(plan),
         status=cast(Any, subscription.status),
         trial_ends_at=subscription.trial_ends_at,
         started_at=subscription.started_at,
         current_period_end=subscription.current_period_end,
         active_users=repository.active_users(company_id),
+        is_license=subscription.is_license,
+        extra_features=list(subscription.extra_features),
+        max_users_override=subscription.max_users_override,
+        max_users=_cap(plan, subscription),
         payments=[
             SubscriptionPaymentRead(
                 id=payment.id,
@@ -1075,6 +1100,7 @@ def _detail(session: Session, company_id: UUID, subscription: Subscription) -> S
                 paid_at=payment.paid_at,
                 method=cast(Any, payment.method),
                 note=payment.note,
+                period_months=cast(Any, payment.period_months),
                 recorded_at=payment.created_at,
             )
             for payment in payments
@@ -1157,14 +1183,15 @@ def change_subscription(
 
     if payload.plan_code is not None and payload.plan_code != current.code:
         plan = repository.plan_by_code(payload.plan_code)
-        if plan is None or not plan.is_orderable:
+        if plan is None or not _offered(plan):
             raise ValidationFailedError(
                 "Cette offre n'est pas proposée.", details={"plan_code": payload.plan_code}
             )
-        if plan.max_users is not None:
+        cap = _cap(plan, subscription)
+        if cap is not None:
             active = repository.active_users(company_id)
-            if active > plan.max_users:
-                raise PlanDowngradeTooManyUsersError(active_users=active, max_users=plan.max_users)
+            if active > cap:
+                raise PlanDowngradeTooManyUsersError(active_users=active, max_users=cap)
         subscription.plan_id = plan.id
         current = plan
     if payload.status is not None:
@@ -1198,10 +1225,34 @@ def change_subscription(
     return _detail(session, company_id, subscription)
 
 
-def _next_month(moment: datetime) -> datetime:
-    """Même jour le mois suivant, ramené au dernier jour s'il n'existe pas (31 → 30)."""
-    year, month = (moment.year + 1, 1) if moment.month == 12 else (moment.year, moment.month + 1)
+def _add_months(moment: datetime, months: int) -> datetime:
+    """Même jour `months` mois plus tard, ramené au dernier jour s'il n'existe pas
+    (31 janvier + 1 → 28 ou 29 février ; 29 février + 12 → 28 février)."""
+    index = moment.month - 1 + months
+    year, month = moment.year + index // 12, index % 12 + 1
     return moment.replace(year=year, month=month, day=min(moment.day, monthrange(year, month)[1]))
+
+
+class PaymentAmountMismatchError(ValidationFailedError):
+    """Le montant déclaré n'est pas le prix de l'offre pour la durée choisie (ADR 0132)."""
+
+    code = "payment_amount_mismatch"
+
+
+class AnnualPaymentUnavailableError(ValidationFailedError):
+    code = "annual_payment_unavailable"
+    default_message = "Cette offre ne se paie pas à l'année."
+
+
+def _expected_amount(plan: Plan, period_months: int) -> Decimal | None:
+    """Le montant exigé, ou `None` pour une offre sur devis (tout montant positif)."""
+    if plan.price_fcfa is None:
+        return None
+    if period_months == 12:
+        if plan.annual_price_fcfa is None:
+            raise AnnualPaymentUnavailableError(details={"plan_code": plan.code})
+        return plan.annual_price_fcfa
+    return plan.price_fcfa
 
 
 def record_payment(
@@ -1226,6 +1277,13 @@ def record_payment(
             raise IdempotencyKeyReusedError()
         return _detail(session, company_id, subscription), True
 
+    expected = _expected_amount(repository.plan(subscription.plan_id), payload.period_months)
+    if expected is not None and payload.amount_fcfa != expected:
+        raise PaymentAmountMismatchError(
+            f"Le montant attendu est de {expected:,.0f} FCFA.".replace(",", "\u202f"),
+            details={"expected_amount_fcfa": str(expected), "period_months": payload.period_months},
+        )
+
     now = datetime.now(UTC)
     payment = repository.add_payment(
         SubscriptionPayment(
@@ -1234,6 +1292,7 @@ def record_payment(
             paid_at=payload.paid_at,
             method=payload.method,
             note=payload.note.strip() if payload.note and payload.note.strip() else None,
+            period_months=payload.period_months,
             recorded_by=admin.platform_user_id,
             idempotency_key=idempotency_key,
         )
@@ -1244,7 +1303,7 @@ def record_payment(
     }
     period_start = max(now, subscription.current_period_end or now)
     subscription.status = "active"
-    subscription.current_period_end = _next_month(period_start)
+    subscription.current_period_end = _add_months(period_start, payload.period_months)
     subscription.updated_at = now
     session.flush()
     _audit(
@@ -1259,6 +1318,7 @@ def record_payment(
                 "amount_fcfa": str(payment.amount_fcfa),
                 "method": payment.method,
                 "paid_at": payment.paid_at.isoformat(),
+                "period_months": payment.period_months,
             },
             "subscription": {
                 "before": before,
@@ -1284,6 +1344,67 @@ def record_payment(
 
 def _iso(moment: datetime | None) -> str | None:
     return moment.isoformat() if moment else None
+
+
+class UnknownFeatureError(ValidationFailedError):
+    code = "unknown_feature"
+    default_message = "Ce droit n'existe pas ou ne s'accorde pas."
+
+
+def set_acquired_rights(
+    session: Session,
+    admin: PlatformAdmin,
+    company_id: UUID,
+    payload: AcquiredRightsUpdate,
+    *,
+    ip_address: str | None = None,
+) -> SubscriptionDetail:
+    """Accorde ou retire des droits acquis (profil `administrator`, ADR 0132).
+
+    Seuls les droits qu'une offre réserve s'accordent (`plan_features.GRANTABLE`). Un
+    plafond acquis plus bas que les comptes actifs est refusé comme une descente d'offre ;
+    le retirer aussi, si l'offre seule n'y suffit pas. Audit critique, avec la raison.
+    """
+    unknown = sorted(set(payload.extra_features) - plan_features.GRANTABLE)
+    if unknown:
+        raise UnknownFeatureError(details={"features": unknown})
+    _access, subscription = _lock(session, company_id)
+    repository = SubscriptionRepository(session)
+    plan = repository.plan(subscription.plan_id)
+    before = {
+        "extra_features": list(subscription.extra_features),
+        "max_users_override": subscription.max_users_override,
+    }
+    after = {
+        "extra_features": sorted(set(payload.extra_features)),
+        "max_users_override": payload.max_users_override,
+    }
+    unchanged = (
+        sorted(subscription.extra_features) == after["extra_features"]
+        and subscription.max_users_override == payload.max_users_override
+    )
+    if unchanged:
+        return _detail(session, company_id, subscription)
+    cap = payload.max_users_override if payload.max_users_override is not None else plan.max_users
+    if cap is not None:
+        active = repository.active_users(company_id)
+        if active > cap:
+            raise PlanDowngradeTooManyUsersError(active_users=active, max_users=cap)
+    subscription.extra_features = after["extra_features"]  # type: ignore[assignment]
+    subscription.max_users_override = payload.max_users_override
+    subscription.updated_at = datetime.now(UTC)
+    session.flush()
+    _audit(
+        session,
+        actor_id=admin.platform_user_id,
+        action="update",
+        entity_table="subscriptions",
+        entity_id=subscription.id,
+        target_company_id=company_id,
+        diff={"before": before, "after": after, "reason": payload.reason.strip()},
+        ip_address=ip_address,
+    )
+    return _detail(session, company_id, subscription)
 
 
 # ------------------------------------------------- licence sur site (ADR 0125)
@@ -1386,7 +1507,7 @@ def activate_license(*, slug: str, plan_code: str, note: str | None = None) -> L
         access, subscription = _lock(session, company.id)
         repository = SubscriptionRepository(session)
         plan = repository.plan_by_code(plan_code.strip().lower())
-        if plan is None or not plan.is_orderable:
+        if plan is None or not _offered(plan):
             raise ValidationFailedError(
                 "Cette offre n'est pas proposée.", details={"plan_code": plan_code}
             )
@@ -1396,8 +1517,15 @@ def activate_license(*, slug: str, plan_code: str, note: str | None = None) -> L
             "plan": current.code,
             "status": subscription.status,
             "current_period_end": _iso(subscription.current_period_end),
+            "license": subscription.is_license,
         }
-        after = {"plan": plan.code, "status": "active", "current_period_end": None}
+        after = {
+            "plan": plan.code,
+            "status": "active",
+            "current_period_end": None,
+            "license": True,
+        }
+        cap = _cap(plan, subscription)
         access_after = ACCESS_OF["active"]
 
         def result(changed: bool) -> LicenseResult:
@@ -1407,7 +1535,7 @@ def activate_license(*, slug: str, plan_code: str, note: str | None = None) -> L
                 slug=company.slug,
                 plan_code=plan.code,
                 plan_name=plan.name,
-                max_users=plan.max_users,
+                max_users=cap,
                 active_users=active,
                 status_before=str(before["status"]),
                 status_after="active",
@@ -1418,8 +1546,8 @@ def activate_license(*, slug: str, plan_code: str, note: str | None = None) -> L
 
         if before == after and access == access_after:
             return result(False)
-        if plan.id != current.id and plan.max_users is not None and active > plan.max_users:
-            raise PlanDowngradeTooManyUsersError(active_users=active, max_users=plan.max_users)
+        if plan.id != current.id and cap is not None and active > cap:
+            raise PlanDowngradeTooManyUsersError(active_users=active, max_users=cap)
 
         if before != after:
             # `trial_ends_at` reste tel quel : la contrainte ne l'exige que pour un essai,
@@ -1427,6 +1555,7 @@ def activate_license(*, slug: str, plan_code: str, note: str | None = None) -> L
             subscription.plan_id = plan.id
             subscription.status = "active"
             subscription.current_period_end = None
+            subscription.is_license = True
             subscription.updated_at = datetime.now(UTC)
             session.flush()
             _audit(

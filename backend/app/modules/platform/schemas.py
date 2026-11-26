@@ -203,6 +203,9 @@ SettableSubscriptionStatus = Literal["active", "past_due", "suspended"]
 PaymentMethod = Literal["wave", "orange_money", "cash", "bank_transfer"]
 
 
+PeriodMonths = Literal[1, 12]
+
+
 class PlanRead(BaseModel):
     """Une offre. `max_users` à `None` : pas de plafond (palier « sur devis »)."""
 
@@ -212,6 +215,8 @@ class PlanRead(BaseModel):
     code: str
     name: str
     price_fcfa: Amount | None
+    #: Prix d'un an (-10 %), écrit en base ; `None` : pas de paiement annuel.
+    annual_price_fcfa: Amount | None
     max_users: int | None
     features: list[str]
     is_orderable: bool
@@ -225,6 +230,7 @@ class SubscriptionPaymentRead(BaseModel):
     paid_at: datetime
     method: PaymentMethod
     note: str | None
+    period_months: PeriodMonths
     recorded_at: datetime
 
 
@@ -240,6 +246,14 @@ class SubscriptionDetail(BaseModel):
     started_at: datetime
     current_period_end: datetime | None
     active_users: int
+    #: Licence sur site (ADR 0125).
+    is_license: bool
+    #: Droits acquis (ADR 0132), en plus de ceux de l'offre.
+    extra_features: list[str]
+    #: Plafond acquis ; `None` : celui de l'offre.
+    max_users_override: int | None
+    #: Plafond effectif : le plafond acquis s'il existe, sinon celui de l'offre.
+    max_users: int | None
     #: Les 50 plus récents ; `payments_total` les compte tous.
     payments: list[SubscriptionPaymentRead]
     payments_total: int
@@ -261,6 +275,17 @@ class SubscriptionUpdate(BaseModel):
         return self
 
 
+class AcquiredRightsUpdate(BaseModel):
+    """Droits acquis d'une boutique (administrateur, ADR 0132). Remplace l'existant ;
+    la raison va au journal."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    extra_features: list[str] = Field(max_length=20)
+    max_users_override: int | None = Field(default=None, ge=1, le=1000)
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class SubscriptionPaymentCreate(BaseModel):
     """Paiement reçu hors CoGes, déclaré par l'équipe. Montant en chaîne, jamais en float."""
 
@@ -278,6 +303,8 @@ class SubscriptionPaymentCreate(BaseModel):
     paid_at: datetime
     method: PaymentMethod
     note: str | None = Field(default=None, max_length=500)
+    #: Un mois ou un an (-10 %) ; le montant doit être celui de l'offre (ADR 0132).
+    period_months: PeriodMonths = 1
 
     @field_validator("paid_at")
     @classmethod
@@ -308,7 +335,7 @@ class CompanyStatusCounts(BaseModel):
 
 class PlanBreakdown(BaseModel):
     """Une offre et ses entreprises, d'après l'**abonnement** : les essais (tous sur
-    Premium) à part des payantes (`active` et `past_due`), pour ne pas gonfler l'offre."""
+    Pro) à part des payantes (`active` et `past_due`), pour ne pas gonfler l'offre."""
 
     model_config = ConfigDict(extra="forbid")
 

@@ -39,6 +39,7 @@ from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
 from app.modules.categories.router import router as categories_router
 from app.modules.companies.router import router as companies_router
+from app.modules.companies.router import subscription_router
 from app.modules.customers.router import router as customers_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.expenses.router import categories_router as expense_categories_router
@@ -150,6 +151,7 @@ api_router.include_router(auth_router)
 api_router.include_router(signup_config_router)
 api_router.include_router(signup_public_router)
 api_router.include_router(companies_router)
+api_router.include_router(subscription_router)
 api_router.include_router(users_router)
 api_router.include_router(rbac_router)
 api_router.include_router(categories_router)

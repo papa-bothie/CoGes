@@ -15,6 +15,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.engine import Engine
 
 from app.main import app
 from tests.conftest import (
@@ -22,6 +23,7 @@ from tests.conftest import (
     DemoCompany,
     _create_demo_company,
     auth_headers,
+    lift_user_cap,
     login_token,
     write_headers,
 )
@@ -88,7 +90,7 @@ def test_a_sales_export_requires_an_idempotency_key(
 
 
 def test_exported_categories_import_back_with_same_named_parents(
-    api_client: TestClient, shop: DemoCompany
+    api_client: TestClient, shop: DemoCompany, owner_engine: Engine
 ) -> None:
     token = login_token(api_client, shop)
     headers = auth_headers(token)
@@ -109,6 +111,7 @@ def test_exported_categories_import_back_with_same_named_parents(
     assert exported.status_code == 200, exported.text
 
     target = _create_demo_company(f"reimport-{uuid4().hex[:6]}")
+    lift_user_cap(owner_engine, target.company_id)  # l'import est réservé à Business
     target_token = login_token(api_client, target)
     imported = api_client.post(
         "/api/v1/imports/categories",

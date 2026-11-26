@@ -381,7 +381,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     license_cmd.add_argument("--slug", required=True, help="Identifiant de connexion")
     license_cmd.add_argument(
-        "--plan", required=True, help="Code de l'offre achetée : starter, business, premium"
+        "--plan",
+        required=True,
+        help="Offre achetée : starter (Pro), business, premium (sur devis)",
     )
     license_cmd.add_argument(
         "--note", default=None, help="Texte libre : date du contrat, fin de maintenance…"

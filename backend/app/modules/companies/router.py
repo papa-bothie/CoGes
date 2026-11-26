@@ -12,10 +12,24 @@ from app.modules.companies.schemas import (
     CompanyLogoRead,
     CompanyRead,
     CompanyUpdate,
+    SubscriptionRead,
     SupportAccessRead,
 )
 
 router = APIRouter(prefix="/companies", tags=["companies"])
+#: « Mon abonnement » (ADR 0132) : à part, l'abonnement n'est pas un réglage de l'entreprise.
+subscription_router = APIRouter(prefix="/subscription", tags=["subscription"])
+
+
+@subscription_router.get("", response_model=SubscriptionRead)
+def read_subscription(
+    tenant: Annotated[TenantSession, Depends(require_permission("company:update"))],
+) -> SubscriptionRead:
+    """L'offre de la boutique, son échéance, ses comptes et ses droits (gérant seul).
+
+    Lu par la fonction `current_plan()` : l'entreprise du contexte, jamais une autre.
+    """
+    return service.subscription(tenant.session)
 
 
 @router.get("/me", response_model=CompanyRead)

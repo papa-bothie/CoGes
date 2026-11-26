@@ -176,8 +176,8 @@ _WHEN = {7: "dans 7 jours", 3: "dans 3 jours", 1: "demain"}
 
 _WARNING_BODY = (
     "Bonjour,\n\n"
-    "Merci de faire confiance à CoGes pour {name} ! Votre essai gratuit se termine "
-    "{when}, le {date}.\n\n"
+    "Merci de faire confiance à CoGes pour {name} ! Votre essai gratuit de "
+    "CoGes Pro se termine {when}, le {date}.\n\n"
     "Pour continuer sans la moindre interruption, choisissez simplement l'offre qui vous "
     "convient : répondez à ce message ou appelez-nous, nous vous accompagnons avec "
     "plaisir. Vos ventes, votre stock et vos clients restent exactement là où vous les "
@@ -186,8 +186,8 @@ _WARNING_BODY = (
 )
 _ENDED_BODY = (
     "Bonjour,\n\n"
-    "Votre essai gratuit de CoGes pour {name} s'est terminé le {date}. Merci de l'avoir "
-    "essayé !\n\n"
+    "Votre essai gratuit de CoGes Pro pour {name} s'est terminé le {date}. Merci de "
+    "l'avoir essayé !\n\n"
     "Toutes vos données sont bien gardées. Pour retrouver l'accès, il suffit de choisir "
     "votre offre : répondez à ce message ou appelez-nous, et nous rouvrons votre accès "
     "dès votre premier paiement.\n\n"
@@ -238,9 +238,9 @@ def trial_notice(self: Any, company_id: str, days: int, trial_ends_at: str) -> b
                     notification_type=NotificationType.TRIAL_ENDING,
                     title=f"Votre essai se termine {_WHEN[days]}",
                     body=(
-                        f"Votre essai gratuit s'arrête le {dmy(ends.date())}. Pour continuer "
-                        "sans interruption, contactez l'équipe CoGes : elle vous aide à "
-                        "choisir votre offre."
+                        f"Votre essai gratuit de CoGes Pro s'arrête le {dmy(ends.date())}. "
+                        "Pour continuer sans interruption, contactez l'équipe CoGes : "
+                        "elle vous aide à choisir votre offre."
                     ),
                     entity_id=f"trial:{days}",
                     data={"days": days, "trial_ends_at": trial_ends_at},

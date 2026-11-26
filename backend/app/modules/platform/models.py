@@ -172,6 +172,8 @@ class Plan(Base):
     code: Mapped[str] = mapped_column(Text)
     name: Mapped[str] = mapped_column(Text)
     price_fcfa: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    #: Prix d'un an, écrit en base (12 × prix × 0,9, ADR 0132) ; `None` : pas à l'année.
+    annual_price_fcfa: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     #: `None` : aucun plafond (futur palier « sur devis »).
     max_users: Mapped[int | None] = mapped_column(Integer, nullable=True)
     features: Mapped[list[str]] = mapped_column(JSONB)
@@ -209,6 +211,12 @@ class Subscription(Base):
         DateTime(timezone=True), nullable=True
     )
     trial_warned_days: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    #: Droits acquis (ADR 0132) : accordés en plus de l'offre.
+    extra_features: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    #: Plafond de comptes acquis ; `None` : celui de l'offre.
+    max_users_override: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    #: Licence sur site (ADR 0125), posée par `activate-license`.
+    is_license: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
@@ -240,6 +248,8 @@ class SubscriptionPayment(Base):
         )
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: 1 ou 12 mois (ADR 0132).
+    period_months: Mapped[int] = mapped_column(SmallInteger, server_default=text("1"))
     recorded_by: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True))
     idempotency_key: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(

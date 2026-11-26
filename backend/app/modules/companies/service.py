@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
+from app.core import plan_features
 from app.core.audit import AuditAction, audit_critical
 from app.core.errors import NotFoundError
 from app.core.tenancy import TenantContext
@@ -25,6 +26,8 @@ from app.modules.companies.schemas import (
     CompanyLogoRead,
     CompanyRead,
     CompanyUpdate,
+    PlanSummary,
+    SubscriptionRead,
     SupportAccessRead,
     SupportAccessWindow,
 )
@@ -263,4 +266,43 @@ def support_access(session: Session, ctx: TenantContext) -> SupportAccessRead:
         return SupportAccessRead(session=None)
     return SupportAccessRead(
         session=SupportAccessWindow(started_at=window[0], expires_at=window[1])
+    )
+
+
+# ------------------------------------------------------- offre (ADR 0132)
+
+
+def current_plan(session: Session) -> plan_features.CurrentPlan | None:
+    """L'offre de l'entreprise du contexte, par `current_plan()` (jamais les tables)."""
+    return plan_features.read_current_plan(session)
+
+
+def plan_summary(session: Session) -> PlanSummary | None:
+    plan = current_plan(session)
+    if plan is None:
+        return None
+    return PlanSummary(
+        code=plan.plan_code,
+        name=plan.plan_name,
+        status=plan.status,
+        is_license=plan.is_license,
+        features=list(plan.features),
+    )
+
+
+def subscription(session: Session) -> SubscriptionRead:
+    plan = current_plan(session)
+    if plan is None:
+        raise NotFoundError("Abonnement introuvable.")
+    return SubscriptionRead(
+        code=plan.plan_code,
+        name=plan.plan_name,
+        status=plan.status,
+        is_license=plan.is_license,
+        features=list(plan.features),
+        trial_ends_at=plan.trial_ends_at,
+        current_period_end=plan.current_period_end,
+        max_users=plan.max_users,
+        active_users=plan.active_users,
+        extra_features=list(plan.extra_features),
     )

@@ -120,6 +120,8 @@ READ_ROUTES: dict[str, tuple[str, dict[str, str]]] = {
     "/api/v1/companies/me/logo": (IMAGE, {}),
     # Le bandeau d'accès support (ADR 0092) : début et fin, de sa seule entreprise.
     "/api/v1/companies/me/support-access": (TENANT, {}),
+    # « Mon abonnement » (ADR 0132) : `current_plan()`, l'entreprise du contexte seule.
+    "/api/v1/subscription": (TENANT, {}),
     "/api/v1/customers": (TENANT, {}),
     "/api/v1/dashboard": (TENANT, {}),
     "/api/v1/debts": (TENANT, {}),

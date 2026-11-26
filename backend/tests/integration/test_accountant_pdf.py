@@ -18,6 +18,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from pypdf import PdfReader
+from sqlalchemy.engine import Engine
 
 from app.core import queue
 from app.modules.analytics.reports import aging_bucket
@@ -28,6 +29,7 @@ from tests.conftest import (
     _create_demo_company,
     accept_legal,
     auth_headers,
+    lift_user_cap,
     login_token,
     write_headers,
 )
@@ -80,12 +82,14 @@ class Shop:
 
 
 @pytest.fixture(scope="module")
-def shop(app_bound_to_test_database: None) -> Shop:
+def shop(app_bound_to_test_database: None, owner_engine: Engine) -> Shop:
     """Données connues, toutes datées d'aujourd'hui (heure de Dakar)."""
     from app.main import app
     from tests.conftest import TEST_BASE_URL, _IdempotentClient
 
     company = _create_demo_company(f"compta-{uuid4().hex[:8]}")
+    # Plusieurs comptes, un par rôle : au-delà des 3 de l'essai Pro (ADR 0132).
+    lift_user_cap(owner_engine, company.company_id)
     with _IdempotentClient(app, base_url=TEST_BASE_URL) as client:
         token = login_token(client, company)
         client.patch(
