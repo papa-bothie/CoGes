@@ -2,7 +2,7 @@
 
 - **Date** : 2026-10-24
 - **Phase** : lot admin 3 (`docs/prompts/24-admin-abonnements.md`)
-- **Statut** : acceptée — **remplace l'ADR 0043** et referme le point **P8**
+- **Statut** : acceptée — **remplace l'ADR 0043** et referme le point **P8** ; **amendée par l'ADR 0132** (offres Pro et Business, essai sur Pro, Premium sur devis, `features` source des droits, droits acquis, paiement annuel)
 - **Décideur** : utilisateur (via AskUserQuestion)
 
 ## Contexte
