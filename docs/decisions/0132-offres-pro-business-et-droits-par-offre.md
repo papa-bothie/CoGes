@@ -164,3 +164,25 @@ aucun droit sur `plans`, `subscriptions`, `subscription_payments` (T36).
   tableau : à corriger par le propriétaire, puis nouvelle version des textes.
 - Hors lot : relances et suspension (C), paiement en ligne (D), inventaire, facture
   personnalisée (E), dépôt-réserve (F).
+
+## Amendement — prompt 42 (27 novembre 2026) : « Tarifs » et carte « Essai gratuit »
+
+Demande du propriétaire (`docs/prompts/42-vitrine-tarifs-et-essai.md`), sans migration ni route.
+
+- **Navigation** : « Comment ça marche » (`nav.howItWorks`, retiré) devient « Tarifs »
+  (`nav.pricing`), vers `#offres`, dans l'en-tête et le menu du téléphone (`NAV_LINKS`). La
+  section `#comment` reste à sa place. Comme les autres ancres (ADR 0123), la section
+  `#offres` (`tabIndex={-1}`, nommée par son titre) reçoit le focus ; `scroll-mt-20` (80 px) la
+  pose sous l'en-tête de 72 px.
+- **Carte « Essai gratuit »**, la première des trois (Essai, Pro, Business ; Premium reste en
+  dessous) : « 0 F » tiré de `offres.json` (`trialPrice`, nouvelle clé, vérifiée par le test
+  backend), « pendant N jours » (`trialDays`), « Toutes les fonctions de CoGes <offre de
+  `trialPlan`> », « Aucun paiement pour commencer ». Sans `data-periode` : la bascule annuelle
+  ne la touche pas. Le bouton « Démarrer l'essai gratuit » mène à `/inscription` quand
+  l'inscription est ouverte (même condition que « Créer ma boutique », `signupConfig()` lu par
+  le serveur), sinon à WhatsApp avec « Je veux essayer CoGes gratuitement. » (`trialLink()`).
+- **Mise en page** : trois colonnes dès 1024 px (`lg`), empilées en dessous. La carte d'essai
+  garde une bordure fine et porte l'étiquette « Pour commencer » (`ventes-teinte` /
+  `ventes-encre`). Business reste la seule bordée de vert.
+- **Gardes** : « 0 F » n'apparaît que dans la carte d'essai (`offres.test.tsx`, avec un
+  témoin), aucun montant écrit dans `texte.offers.trialCard` (`vitrine-texte.test.ts`).
