@@ -186,3 +186,7 @@ Demande du propriétaire (`docs/prompts/42-vitrine-tarifs-et-essai.md`), sans mi
   `ventes-encre`). Business reste la seule bordée de vert.
 - **Gardes** : « 0 F » n'apparaît que dans la carte d'essai (`offres.test.tsx`, avec un
   témoin), aucun montant écrit dans `texte.offers.trialCard` (`vitrine-texte.test.ts`).
+- **FAQ « Combien coûte CoGes ? »** : ne dit plus « Les prix ne sont pas encore publiés ici »
+  (faux depuis le lot B). Elle renvoie à « Tarifs » : 30 jours d'essai sans paiement, Pro et
+  Business au mois ou à l'année, Premium sur devis au-delà de 7 personnes. Durée, noms et
+  nombre de personnes viennent de la source partagée, et aucun montant n'est écrit (test).

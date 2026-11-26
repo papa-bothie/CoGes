@@ -54,6 +54,18 @@ describe("vitrine : promesses (prompt 37, ADR 0115)", () => {
     expect(allText(texte.offers.trialCard)).not.toMatch(/\d[\d  ]*\s?(F|FCFA|francs)\b/);
   });
 
+  it("FAQ « Combien coûte CoGes ? » renvoie aux offres publiées, sans montant écrit (prompt 42)", () => {
+    const item = texte.faq.items.find((entry) => entry.question.startsWith("Combien coûte"))!;
+    expect(item.answer).not.toMatch(/pas encore publiés/);
+    expect(item.answer).toContain("Tarifs");
+    const names = offres.plans.map((plan) => plan.name);
+    for (const name of names) expect(item.answer).toContain(name);
+    const business = offres.plans.find((plan) => plan.code === "business")!;
+    expect(item.answer).toContain(`plus de ${business.maxUsers} personnes`);
+    expect(item.answer).toContain(`${offres.trialDays} jours d'essai gratuit`);
+    expect(item.answer).not.toMatch(/\d[\d  ]*\s?(F|FCFA|francs)\b|\d+ ?%/);
+  });
+
   it("aucun bouton « Créer ma boutique » (lot Inscription)", () => {
     expect(ALL).not.toMatch(/créer ma boutique|inscri/i);
   });

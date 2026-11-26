@@ -4,7 +4,7 @@
  * tant qu'ils ne sont pas arrêtés, l'essai à sa durée réelle (ADR 0091). `vitrine-texte.test.ts`
  * refuse les promesses interdites.
  */
-import { TRIAL_OFFER } from "@/lib/offres";
+import { BUSINESS, PREMIUM, PRO, TRIAL_OFFER } from "@/lib/offres";
 import { TRIAL_DAYS } from "@/lib/trial";
 
 import { vitrine } from "./vitrine";
@@ -217,7 +217,8 @@ export const texte = {
     items: [
       {
         question: "Combien coûte CoGes ?",
-        answer: `Les prix ne sont pas encore publiés ici : écrivez-nous sur WhatsApp, nous vous répondons avec l'offre qui convient à votre boutique. Chaque nouvelle boutique commence par ${TRIAL_DAYS} jours d'essai gratuit.`,
+        // Prompt 42 : les prix sont publiés dans « Nos offres » ; aucun montant écrit ici.
+        answer: `Chaque nouvelle boutique commence par ${TRIAL_DAYS} jours d'essai gratuit, sans paiement. Ensuite, deux offres au choix, ${PRO.name} et ${BUSINESS.name}, payées au mois ou à l'année : les prix sont dans « Tarifs », plus haut sur cette page. Pour plus de ${BUSINESS.maxUsers} personnes, ${PREMIUM.name} se fait sur devis : écrivez-nous sur WhatsApp.`,
       },
       {
         question: "Faut-il un ordinateur ?",
