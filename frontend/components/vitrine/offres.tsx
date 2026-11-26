@@ -1,10 +1,19 @@
 import { Check } from "lucide-react";
 
-import { WhatsAppLink } from "@/components/vitrine/links";
+import { ButtonLink, WhatsAppLink } from "@/components/vitrine/links";
 import { revele } from "@/components/vitrine/motion";
 import { texte } from "@/content/vitrine-texte";
 import { formatAmount } from "@/lib/format/money";
-import { BUSINESS, BUSINESS_EXTRAS, FEATURE_LABELS, type Offre, PRO, amount } from "@/lib/offres";
+import {
+  BUSINESS,
+  BUSINESS_EXTRAS,
+  FEATURE_LABELS,
+  type Offre,
+  PRO,
+  TRIAL_PRICE,
+  amount,
+  trialLink,
+} from "@/lib/offres";
 import { cn } from "@/lib/utils";
 
 import styles from "./vitrine.module.css";
@@ -19,6 +28,51 @@ function Price({ value, period, periode }: { value: number; period: string; peri
       </span>{" "}
       <span className="text-muted-foreground">{period}</span>
     </p>
+  );
+}
+
+/**
+ * Première carte (prompt 42) : l'essai, « 0 F » de la source partagée, pareil par mois et par
+ * an (aucun `data-periode` : la bascule ne la touche pas). Bordure fine et étiquette « Pour
+ * commencer » : elle se distingue sans prendre le dessus sur Business, seul bordé de vert.
+ * Bouton : l'inscription quand elle est ouverte (même condition que « Créer ma boutique »),
+ * sinon WhatsApp avec un message prérempli.
+ */
+function TrialCard({ signupEnabled }: { signupEnabled: boolean }) {
+  const card = t.trialCard;
+  const button = "mt-auto w-full";
+  return (
+    <li
+      {...revele(0, "monte", "flex flex-col gap-4 rounded-carte border border-border bg-card p-6")}
+    >
+      <p className="self-start rounded-full bg-ventes-teinte px-3 py-1 text-sm font-bold text-ventes-encre">
+        {card.badge}
+      </p>
+      <h3 className="text-2xl font-extrabold">{card.name}</h3>
+      <p className="text-lg">
+        <span className="text-[32px] leading-tight font-extrabold numeric">
+          {formatAmount(amount(TRIAL_PRICE))}
+        </span>{" "}
+        <span className="text-muted-foreground">{card.period}</span>
+      </p>
+      <ul className="space-y-2">
+        {[card.includes, card.noPayment].map((line) => (
+          <li key={line} className="flex items-start gap-2.5">
+            <Check aria-hidden className="mt-0.5 size-5 shrink-0 text-ventes-encre" />
+            <span>{line}</span>
+          </li>
+        ))}
+      </ul>
+      {signupEnabled ? (
+        <ButtonLink href="/inscription" className={button}>
+          {card.cta}
+        </ButtonLink>
+      ) : (
+        <WhatsAppLink href={trialLink()} className={button}>
+          {card.cta}
+        </WhatsAppLink>
+      )}
+    </li>
   );
 }
 
@@ -61,7 +115,7 @@ function OfferCard({ offer, index }: { offer: Offre; index: number }) {
  * `content/offres.json` (une seule source, testée contre la table `plans`). La bascule
  * « Par mois / Par an » est faite de deux boutons radio et de `:has()` : aucun script.
  */
-export function NosOffres() {
+export function NosOffres({ signupEnabled }: { signupEnabled: boolean }) {
   return (
     <section
       id="offres"
@@ -99,9 +153,10 @@ export function NosOffres() {
             </label>
           ))}
         </fieldset>
-        <ul className="grid gap-5 md:grid-cols-2">
+        <ul className="grid gap-5 lg:grid-cols-3">
+          <TrialCard signupEnabled={signupEnabled} />
           {[PRO, BUSINESS].map((offer, index) => (
-            <OfferCard key={offer.code} offer={offer} index={index} />
+            <OfferCard key={offer.code} offer={offer} index={index + 1} />
           ))}
         </ul>
         <div className="mt-6 flex flex-col items-start gap-3 rounded-carte bg-card p-5 md:flex-row md:items-center md:justify-between">

@@ -4,6 +4,7 @@
  * tant qu'ils ne sont pas arrêtés, l'essai à sa durée réelle (ADR 0091). `vitrine-texte.test.ts`
  * refuse les promesses interdites.
  */
+import { BUSINESS, PREMIUM, PRO, TRIAL_OFFER } from "@/lib/offres";
 import { TRIAL_DAYS } from "@/lib/trial";
 
 import { vitrine } from "./vitrine";
@@ -35,7 +36,7 @@ export const texte = {
   },
   nav: {
     features: "Fonctionnalités",
-    howItWorks: "Comment ça marche",
+    pricing: "Tarifs",
     questions: "Questions",
     login: "Se connecter",
     whatsapp: "WhatsApp",
@@ -199,6 +200,15 @@ export const texte = {
     users: (count: number) => `Jusqu'à ${count} personnes`,
     everythingIn: (name: string) => `Tout ${name}, et en plus :`,
     trial: `${TRIAL_DAYS} jours d'essai gratuit sur Pro`,
+    /** Première carte (prompt 42) : le « 0 F » vient de `offres.trialPrice`, formaté par la section. */
+    trialCard: {
+      name: "Essai gratuit",
+      badge: "Pour commencer",
+      period: `pendant ${TRIAL_DAYS} jours`,
+      includes: `Toutes les fonctions de CoGes ${TRIAL_OFFER.name}`,
+      noPayment: "Aucun paiement pour commencer",
+      cta: "Démarrer l'essai gratuit",
+    },
     premium: "Plus de 7 personnes ? Premium, sur devis : écrivez-nous",
     premiumLink: "Écrire sur WhatsApp",
   },
@@ -207,7 +217,8 @@ export const texte = {
     items: [
       {
         question: "Combien coûte CoGes ?",
-        answer: `Les prix ne sont pas encore publiés ici : écrivez-nous sur WhatsApp, nous vous répondons avec l'offre qui convient à votre boutique. Chaque nouvelle boutique commence par ${TRIAL_DAYS} jours d'essai gratuit.`,
+        // Prompt 42 : les prix sont publiés dans « Nos offres » ; aucun montant écrit ici.
+        answer: `Chaque nouvelle boutique commence par ${TRIAL_DAYS} jours d'essai gratuit, sans paiement. Ensuite, deux offres au choix, ${PRO.name} et ${BUSINESS.name}, payées au mois ou à l'année : les prix sont dans « Tarifs », plus haut sur cette page. Pour plus de ${BUSINESS.maxUsers} personnes, ${PREMIUM.name} se fait sur devis : écrivez-nous sur WhatsApp.`,
       },
       {
         question: "Faut-il un ordinateur ?",

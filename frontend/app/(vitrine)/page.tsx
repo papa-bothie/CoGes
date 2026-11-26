@@ -361,7 +361,7 @@ export default async function VitrinePage() {
           </section>
 
           {/* Nos offres (prompt 41, ADR 0132) : prix de la source partagée. */}
-          <NosOffres />
+          <NosOffres signupEnabled={signup.enabled} />
 
           {/* Questions fréquentes : <details> natif, sans JavaScript. */}
           <section

@@ -2,6 +2,7 @@
   "$comment": "Source unique des offres (ADR 0132) : vitrine et « Mon abonnement ». Les prix sont ceux de la révision 0043 ; un test backend (tests/integration/test_plan_features.py) les compare à la table plans.",
   "trialDays": 30,
   "trialPlan": "starter",
+  "trialPrice": 0,
   "annualDiscountPercent": 10,
   "plans": [
     {
