@@ -1819,8 +1819,7 @@ export const labels = {
     locked: {
       badge: "Business",
       title: (name: string) => `Disponible avec ${name}`,
-      imports:
-        "Ajoutez tous vos articles d'un coup depuis un fichier Excel avec l'offre Business.",
+      imports: "Ajoutez tous vos articles d'un coup depuis un fichier Excel avec l'offre Business.",
       upgrade: (name: string) => `Passer à ${name}`,
     },
     shop: {
