@@ -78,6 +78,8 @@ PRIVILEGED_FUNCTIONS = {
     "purge_job_runs",
     "companies_start_trial",
     "users_plan_limit",
+    # L'offre de l'entreprise du contexte, rendue à `coges_app` (ADR 0132).
+    "current_plan",
     *SIGNUP_FUNCTIONS,
 }
 
@@ -542,6 +544,10 @@ def test_t36_who_may_call_the_privileged_functions(app_engine: Engine) -> None:
         ("job_runs_latest", RELAY_ROLE): False,
         ("purge_job_runs", APP_ROLE): True,
         ("purge_job_runs", ANALYTICS_ROLE): False,
+        # Droits par offre (ADR 0132) : l'API seule lit l'offre, et seulement la sienne.
+        ("current_plan", APP_ROLE): True,
+        ("current_plan", RELAY_ROLE): False,
+        ("current_plan", ANALYTICS_ROLE): False,
     }
     signatures = {
         "outbox_claim": "outbox_claim(integer)",
@@ -555,6 +561,7 @@ def test_t36_who_may_call_the_privileged_functions(app_engine: Engine) -> None:
         "job_run_finish": "job_run_finish(bigint, text, text)",
         "job_runs_latest": "job_runs_latest(interval)",
         "purge_job_runs": "purge_job_runs()",
+        "current_plan": "current_plan()",
     }
 
     with app_engine.connect() as connection:

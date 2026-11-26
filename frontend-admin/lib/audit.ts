@@ -3,7 +3,7 @@ import type { AuditEntry } from "@/lib/api/schema";
 import { PAYMENT_METHOD_LABELS, PLATFORM_ROLE_LABELS, formatFcfa, shortName } from "./format";
 
 const PLAN_NAMES: Record<string, string> = {
-  starter: "Starter",
+  starter: "Pro",
   business: "Business",
   premium: "Premium",
 };
@@ -109,6 +109,9 @@ export function describeEntry(entry: AuditEntry): string {
           `${actor} a mis l'abonnement de ${company} en « ${SUBSCRIPTION_STATUS[String(after.status)] ?? after.status} »`,
         );
       }
+      if ("extra_features" in after || "max_users_override" in after) {
+        sentences.push(`${actor} a changé les droits acquis de ${company}`);
+      }
       return withReason(
         sentences.join(", et ") || `${actor} a modifié l'abonnement de ${company}`,
         diff,
@@ -116,7 +119,8 @@ export function describeEntry(entry: AuditEntry): string {
     }
     case "subscription_payments": {
       const method = PAYMENT_METHOD_LABELS[String(after.method)] ?? String(after.method ?? "");
-      return `${actor} a enregistré un paiement de ${formatFcfa(String(after.amount_fcfa ?? "0"))} (${method}) pour ${company}`;
+      const period = after.period_months === 12 ? " pour 1 an" : "";
+      return `${actor} a enregistré un paiement de ${formatFcfa(String(after.amount_fcfa ?? "0"))} (${method})${period} pour ${company}`;
     }
     case "support_sessions":
       if (entry.action === "insert") {

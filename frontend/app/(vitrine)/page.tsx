@@ -7,6 +7,7 @@ import { HeroTitle } from "@/components/vitrine/hero-title";
 import { ICONS, RUBRIQUE } from "@/components/vitrine/icons";
 import { ButtonLink, WhatsAppLink } from "@/components/vitrine/links";
 import { MiniCaisse } from "@/components/vitrine/mini-caisse";
+import { NosOffres } from "@/components/vitrine/offres";
 import { motion, revele } from "@/components/vitrine/motion";
 import { Revele } from "@/components/vitrine/revele";
 import { VitrineHeader } from "@/components/vitrine/vitrine-header";
@@ -358,6 +359,9 @@ export default async function VitrinePage() {
               </div>
             </div>
           </section>
+
+          {/* Nos offres (prompt 41, ADR 0132) : prix de la source partagée. */}
+          <NosOffres />
 
           {/* Questions fréquentes : <details> natif, sans JavaScript. */}
           <section

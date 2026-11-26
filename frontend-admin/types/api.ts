@@ -354,6 +354,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/subscription": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Read Subscription
+     * @description L'offre de la boutique, son échéance, ses comptes et ses droits (gérant seul).
+     *
+     *     Lu par la fonction `current_plan()` : l'entreprise du contexte, jamais une autre.
+     */
+    get: operations["read_subscription_api_v1_subscription_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/users": {
     parameters: {
       query?: never;
@@ -2884,6 +2906,29 @@ export interface paths {
     patch: operations["change_subscription_api_v1_platform_companies__company_id__subscription_patch"];
     trace?: never;
   };
+  "/api/v1/platform/companies/{company_id}/subscription/acquired-rights": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Set Acquired Rights
+     * @description Droits acquis : droits accordés en plus de l'offre et plafond de comptes (ADR 0132).
+     *
+     *     Profil `administrator`, raison obligatoire, audit critique. Remplace les valeurs
+     *     actuelles ; un plafond plus bas que les comptes actifs est refusé en 409.
+     */
+    put: operations["set_acquired_rights_api_v1_platform_companies__company_id__subscription_acquired_rights_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/platform/companies/{company_id}/payments": {
     parameters: {
       query?: never;
@@ -3499,6 +3544,19 @@ export interface components {
       permissions: string[];
       /** Locked */
       locked: boolean;
+    };
+    /**
+     * AcquiredRightsUpdate
+     * @description Droits acquis d'une boutique (administrateur, ADR 0132). Remplace l'existant ;
+     *     la raison va au journal.
+     */
+    AcquiredRightsUpdate: {
+      /** Extra Features */
+      extra_features: string[];
+      /** Max Users Override */
+      max_users_override?: number | null;
+      /** Reason */
+      reason: string;
     };
     /**
      * ActiveAlert
@@ -5300,6 +5358,7 @@ export interface components {
       via_support: boolean;
       /** Legal Version */
       legal_version: string;
+      plan?: components["schemas"]["PlanSummary"] | null;
     };
     /**
      * MeRole
@@ -6102,7 +6161,7 @@ export interface components {
     /**
      * PlanBreakdown
      * @description Une offre et ses entreprises, d'après l'**abonnement** : les essais (tous sur
-     *     Premium) à part des payantes (`active` et `past_due`), pour ne pas gonfler l'offre.
+     *     Pro) à part des payantes (`active` et `past_due`), pour ne pas gonfler l'offre.
      */
     PlanBreakdown: {
       /** Code */
@@ -6133,12 +6192,34 @@ export interface components {
       /** Name */
       name: string;
       price_fcfa: components["schemas"]["Amount-Output"] | null;
+      annual_price_fcfa: components["schemas"]["Amount-Output"] | null;
       /** Max Users */
       max_users: number | null;
       /** Features */
       features: string[];
       /** Is Orderable */
       is_orderable: boolean;
+    };
+    /**
+     * PlanSummary
+     * @description L'offre de la boutique, pour masquer ou verrouiller à l'écran (ADR 0132).
+     *
+     *     `features` = droits **effectifs** : ceux de l'offre et les droits acquis.
+     */
+    PlanSummary: {
+      /** Code */
+      code: string;
+      /** Name */
+      name: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "trial" | "active" | "past_due" | "suspended";
+      /** Is License */
+      is_license: boolean;
+      /** Features */
+      features: string[];
     };
     /**
      * PlatformLoginRequest
@@ -7794,6 +7875,14 @@ export interface components {
       current_period_end: string | null;
       /** Active Users */
       active_users: number;
+      /** Is License */
+      is_license: boolean;
+      /** Extra Features */
+      extra_features: string[];
+      /** Max Users Override */
+      max_users_override: number | null;
+      /** Max Users */
+      max_users: number | null;
       /** Payments */
       payments: components["schemas"]["SubscriptionPaymentRead"][];
       /** Payments Total */
@@ -7817,6 +7906,12 @@ export interface components {
       method: "wave" | "orange_money" | "cash" | "bank_transfer";
       /** Note */
       note?: string | null;
+      /**
+       * Period Months
+       * @default 1
+       * @enum {integer}
+       */
+      period_months: 1 | 12;
     };
     /** SubscriptionPaymentRead */
     SubscriptionPaymentRead: {
@@ -7839,10 +7934,45 @@ export interface components {
       /** Note */
       note: string | null;
       /**
+       * Period Months
+       * @enum {integer}
+       */
+      period_months: 1 | 12;
+      /**
        * Recorded At
        * Format: date-time
        */
       recorded_at: string;
+    };
+    /**
+     * SubscriptionRead
+     * @description « Mon abonnement » (gérant, `company:update`). Sans prix : ils viennent de la
+     *     source partagée du front (`frontend/content/offres.json`), testée contre `plans`.
+     */
+    SubscriptionRead: {
+      /** Code */
+      code: string;
+      /** Name */
+      name: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "trial" | "active" | "past_due" | "suspended";
+      /** Is License */
+      is_license: boolean;
+      /** Features */
+      features: string[];
+      /** Trial Ends At */
+      trial_ends_at: string | null;
+      /** Current Period End */
+      current_period_end: string | null;
+      /** Max Users */
+      max_users: number | null;
+      /** Active Users */
+      active_users: number;
+      /** Extra Features */
+      extra_features: string[];
     };
     /**
      * SubscriptionUpdate
@@ -8998,6 +9128,26 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  read_subscription_api_v1_subscription_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SubscriptionRead"];
+        };
       };
     };
   };
@@ -13551,6 +13701,41 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["SubscriptionUpdate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SubscriptionDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  set_acquired_rights_api_v1_platform_companies__company_id__subscription_acquired_rights_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        company_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AcquiredRightsUpdate"];
       };
     };
     responses: {

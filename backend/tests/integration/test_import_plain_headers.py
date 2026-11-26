@@ -25,6 +25,7 @@ from tests.conftest import (
     read_scalar_in_tenant,
     write_headers,
 )
+from tests.integration.billing_harness import set_subscription
 
 
 def _upload(
@@ -69,6 +70,7 @@ def test_exported_customers_reimport_elsewhere(
     api_client: TestClient,
     alpha_token: str,
     session_factory: sessionmaker[Any],
+    platform_session_factory: sessionmaker[Any],
 ) -> None:
     marker = uuid4().hex[:6]
     created = _upload(
@@ -95,6 +97,8 @@ def test_exported_customers_reimport_elsewhere(
 
     # Une entreprise neuve : aucun code déjà pris, le fichier passe tel quel.
     fresh = _create_demo_company(f"aller-retour-{marker}")
+    # L'import est réservé à Business (ADR 0132) : une boutique neuve est en essai Pro.
+    set_subscription(platform_session_factory, fresh.company_id, plan="business")
     reimported = _upload(api_client, login_token(api_client, fresh), "customers", exported.content)
     assert reimported.status_code == 201, reimported.text
     assert reimported.json()["errors"] == []

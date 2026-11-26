@@ -96,7 +96,7 @@ function Overview({ overview }: { overview: StatsOverview }) {
           Entreprises par offre
         </h2>
         <p className="text-encre-douce">
-          D&apos;après l&apos;abonnement. Les essais, tous sur Premium, sont comptés à part des
+          D&apos;après l&apos;abonnement. Les essais, tous sur Pro, sont comptés à part des
           entreprises payantes.
         </p>
         <div className="overflow-x-auto rounded border border-trait bg-surface">

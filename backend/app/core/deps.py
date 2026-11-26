@@ -25,14 +25,14 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from ipaddress import ip_address
-from typing import Annotated
+from typing import Annotated, cast
 from uuid import UUID
 
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import text
 
-from app.core import legal, rate_limit, support_access
+from app.core import legal, plan_features, rate_limit, support_access
 from app.core.config import get_settings
 from app.core.database import get_platform_app_session_factory
 from app.core.errors import (
@@ -42,6 +42,7 @@ from app.core.errors import (
     NotFoundError,
     PasswordChangeRequiredError,
     PermissionDeniedError,
+    PlanFeatureRequiredError,
     SupportReadOnlyError,
     SupportSessionEndedError,
 )
@@ -216,6 +217,45 @@ def require_permission(code: str) -> Callable[[TenantSession], TenantSession]:
             )
         return tenant
 
+    return dependency
+
+
+#: Attribut posé sur la dépendance de `require_feature` : le registre des routes protégées
+#: par un droit d'offre le lit (`tests/architecture/test_plan_feature_routes.py`).
+PLAN_FEATURE_ATTRIBUTE = "plan_feature"
+
+
+def current_plan(request: Request, tenant: CurrentTenant) -> plan_features.CurrentPlan | None:
+    """L'offre de l'entreprise, lue **une fois par requête** (`current_plan()` en base)."""
+    cached = getattr(request.state, "current_plan", _UNREAD)
+    if cached is _UNREAD:
+        cached = plan_features.read_current_plan(tenant.session)
+        request.state.current_plan = cached
+    return cast("plan_features.CurrentPlan | None", cached)
+
+
+_UNREAD = object()
+
+
+def require_feature(
+    feature: plan_features.FeatureCode,
+) -> Callable[[Request, TenantSession], None]:
+    """Exige un droit de l'offre, **côté serveur** (ADR 0132), à côté des permissions.
+
+    Droit absent : 403 `plan_feature_required`, avec l'offre qui le donne.
+    """
+
+    def dependency(request: Request, tenant: CurrentTenant) -> None:
+        plan = current_plan(request, tenant)
+        if plan is None or not plan.has(feature):
+            raise PlanFeatureRequiredError(
+                details={
+                    "feature": feature,
+                    "required_plan": plan_features.REQUIRED_PLAN.get(feature, "business"),
+                }
+            )
+
+    setattr(dependency, PLAN_FEATURE_ATTRIBUTE, feature)
     return dependency
 
 

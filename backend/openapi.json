@@ -579,6 +579,28 @@
         }
       }
     },
+    "/api/v1/subscription": {
+      "get": {
+        "tags": [
+          "subscription"
+        ],
+        "summary": "Read Subscription",
+        "description": "L'offre de la boutique, son échéance, ses comptes et ses droits (gérant seul).\n\nLu par la fonction `current_plan()` : l'entreprise du contexte, jamais une autre.",
+        "operationId": "read_subscription_api_v1_subscription_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionRead"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/users": {
       "get": {
         "tags": [
@@ -8279,6 +8301,60 @@
         }
       }
     },
+    "/api/v1/platform/companies/{company_id}/subscription/acquired-rights": {
+      "put": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Set Acquired Rights",
+        "description": "Droits acquis : droits accordés en plus de l'offre et plafond de comptes (ADR 0132).\n\nProfil `administrator`, raison obligatoire, audit critique. Remplace les valeurs\nactuelles ; un plafond plus bas que les comptes actifs est refusé en 409.",
+        "operationId": "set_acquired_rights_api_v1_platform_companies__company_id__subscription_acquired_rights_put",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcquiredRightsUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform/companies/{company_id}/payments": {
       "post": {
         "tags": [
@@ -9990,6 +10066,45 @@
         ],
         "title": "AbilityRead",
         "description": "Une ligne de la grille « Qui peut faire quoi » (ADR 0075)."
+      },
+      "AcquiredRightsUpdate": {
+        "properties": {
+          "extra_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Extra Features"
+          },
+          "max_users_override": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 1000.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Users Override"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "extra_features",
+          "reason"
+        ],
+        "title": "AcquiredRightsUpdate",
+        "description": "Droits acquis d'une boutique (administrateur, ADR 0132). Remplace l'existant ;\nla raison va au journal."
       },
       "ActiveAlert": {
         "properties": {
@@ -14781,6 +14896,16 @@
           "legal_version": {
             "type": "string",
             "title": "Legal Version"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -17046,7 +17171,7 @@
           "total"
         ],
         "title": "PlanBreakdown",
-        "description": "Une offre et ses entreprises, d'après l'**abonnement** : les essais (tous sur\nPremium) à part des payantes (`active` et `past_due`), pour ne pas gonfler l'offre."
+        "description": "Une offre et ses entreprises, d'après l'**abonnement** : les essais (tous sur\nPro) à part des payantes (`active` et `past_due`), pour ne pas gonfler l'offre."
       },
       "PlanRead": {
         "properties": {
@@ -17064,6 +17189,16 @@
             "title": "Name"
           },
           "price_fcfa": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Amount-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "annual_price_fcfa": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/Amount-Output"
@@ -17103,12 +17238,57 @@
           "code",
           "name",
           "price_fcfa",
+          "annual_price_fcfa",
           "max_users",
           "features",
           "is_orderable"
         ],
         "title": "PlanRead",
         "description": "Une offre. `max_users` à `None` : pas de plafond (palier « sur devis »)."
+      },
+      "PlanSummary": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "trial",
+              "active",
+              "past_due",
+              "suspended"
+            ],
+            "title": "Status"
+          },
+          "is_license": {
+            "type": "boolean",
+            "title": "Is License"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Features"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "status",
+          "is_license",
+          "features"
+        ],
+        "title": "PlanSummary",
+        "description": "L'offre de la boutique, pour masquer ou verrouiller à l'écran (ADR 0132).\n\n`features` = droits **effectifs** : ceux de l'offre et les droits acquis."
       },
       "PlatformLoginRequest": {
         "properties": {
@@ -21620,6 +21800,39 @@
             "type": "integer",
             "title": "Active Users"
           },
+          "is_license": {
+            "type": "boolean",
+            "title": "Is License"
+          },
+          "extra_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Extra Features"
+          },
+          "max_users_override": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Users Override"
+          },
+          "max_users": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Users"
+          },
           "payments": {
             "items": {
               "$ref": "#/components/schemas/SubscriptionPaymentRead"
@@ -21642,6 +21855,10 @@
           "started_at",
           "current_period_end",
           "active_users",
+          "is_license",
+          "extra_features",
+          "max_users_override",
+          "max_users",
           "payments",
           "payments_total"
         ],
@@ -21679,6 +21896,15 @@
               }
             ],
             "title": "Note"
+          },
+          "period_months": {
+            "type": "integer",
+            "enum": [
+              1,
+              12
+            ],
+            "title": "Period Months",
+            "default": 1
           }
         },
         "additionalProperties": false,
@@ -21727,6 +21953,14 @@
             ],
             "title": "Note"
           },
+          "period_months": {
+            "type": "integer",
+            "enum": [
+              1,
+              12
+            ],
+            "title": "Period Months"
+          },
           "recorded_at": {
             "type": "string",
             "format": "date-time",
@@ -21741,9 +21975,105 @@
           "paid_at",
           "method",
           "note",
+          "period_months",
           "recorded_at"
         ],
         "title": "SubscriptionPaymentRead"
+      },
+      "SubscriptionRead": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "trial",
+              "active",
+              "past_due",
+              "suspended"
+            ],
+            "title": "Status"
+          },
+          "is_license": {
+            "type": "boolean",
+            "title": "Is License"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Features"
+          },
+          "trial_ends_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trial Ends At"
+          },
+          "current_period_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period End"
+          },
+          "max_users": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Users"
+          },
+          "active_users": {
+            "type": "integer",
+            "title": "Active Users"
+          },
+          "extra_features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Extra Features"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "status",
+          "is_license",
+          "features",
+          "trial_ends_at",
+          "current_period_end",
+          "max_users",
+          "active_users",
+          "extra_features"
+        ],
+        "title": "SubscriptionRead",
+        "description": "« Mon abonnement » (gérant, `company:update`). Sans prix : ils viennent de la\nsource partagée du front (`frontend/content/offres.json`), testée contre `plans`."
       },
       "SubscriptionUpdate": {
         "properties": {

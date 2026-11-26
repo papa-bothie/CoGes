@@ -272,6 +272,7 @@ def _codes(session_factory: sessionmaker[Any], company: DemoCompany, role_id: st
 
 
 def test_d1_d3_revision_0031_takes_back_the_rights_with_an_audit_line(
+    subscriptions_kept: None,
     api_client: TestClient,
     session_factory: sessionmaker[Any],
     migrated_database: str,

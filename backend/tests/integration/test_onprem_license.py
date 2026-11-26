@@ -226,14 +226,16 @@ def test_a_suspended_company_gets_its_access_back_silently(
     ]
     subscription_diff, access_diff = new[0].diff, new[1].diff
     assert subscription_diff["before"] == {
-        "plan": "premium",
+        "plan": "starter",
         "status": "suspended",
         "current_period_end": None,
+        "license": False,
     }
     assert subscription_diff["after"] == {
         "plan": "business",
         "status": "active",
         "current_period_end": None,
+        "license": True,
     }
     assert subscription_diff["reason"] == LICENSE_REASON
     assert subscription_diff["note"] == "Contrat du 17/11/2026"
@@ -398,8 +400,8 @@ def test_the_status_reads_every_field_and_writes_nothing(
 ) -> None:
     trial = platform_service.license_status(slug=shop.slug)
     assert (trial.access, trial.subscription_status) == ("trial", "trial")
-    assert trial.plan_code == "premium"
-    assert (trial.max_users, trial.active_users) == (10, 1)
+    assert trial.plan_code == "starter"
+    assert (trial.max_users, trial.active_users) == (3, 1)
     assert trial.trial_ends_at is not None and trial.current_period_end is None
     assert (trial.last_license_at, trial.last_license_note) == (None, None)
 
@@ -464,7 +466,7 @@ def test_the_status_command_prints_active_without_end(
     assert cli.main(["license-status", "--slug", shop.slug]) == 0
     out = capsys.readouterr().out
     assert "Accès            : actif" in out
-    assert "Offre            : Starter (starter), 3 comptes au plus" in out
+    assert "Offre            : Pro (starter), 3 comptes au plus" in out
     assert "Comptes actifs   : 1" in out
     assert "Fin de période   : sans fin" in out
     assert "Dernière licence :" in out and "Contrat A" in out
@@ -491,8 +493,12 @@ def test_the_command_refuses_with_a_clear_message_and_a_failing_code(
 
 
 def test_the_command_refuses_a_downgrade_with_the_count(
-    session_factory: sessionmaker[Any], shop: DemoCompany, capsys: pytest.CaptureFixture[str]
+    session_factory: sessionmaker[Any],
+    platform_session_factory: sessionmaker[Any],
+    shop: DemoCompany,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
+    set_subscription(platform_session_factory, shop.company_id, plan="business")
     _fill_to(session_factory, shop.company_id, 5)
     assert cli.main(["activate-license", "--slug", shop.slug, "--plan", "starter"]) == 5
     assert "Désactivez-en 2" in capsys.readouterr().err
@@ -503,3 +509,14 @@ def test_the_status_command_refuses_an_unknown_company(
 ) -> None:
     assert cli.main(["license-status", "--slug", "aucune-boutique-ici"]) == 3
     assert "Entreprise introuvable" in capsys.readouterr().err
+
+
+def test_a_licence_is_marked_and_premium_is_accepted_on_quote(
+    platform_session_factory: sessionmaker[Any], shop: DemoCompany
+) -> None:
+    """Premium n'est plus en vente libre (ADR 0132) mais se pose sur site, sur devis ; la
+    licence se marque `is_license`, que lit l'écran « Mon abonnement »."""
+    result = _activate(shop, "premium", note="Devis du 26/11/2026")
+    assert (result.plan_code, result.max_users) == ("premium", 10)
+    row = subscription_row(platform_session_factory, shop.company_id)
+    assert (row.is_license, row.status, row.current_period_end) == (True, "active", None)

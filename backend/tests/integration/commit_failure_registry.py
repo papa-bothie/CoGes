@@ -412,6 +412,11 @@ REGISTRY: dict[tuple[str, str], Critical | Exempt] = {
         "COMMIT refusé prouvé par test_subscriptions_api::test_a_refused_commit_records_nothing "
         "(aucun paiement, période inchangée)"
     ),
+    # Droits acquis (ADR 0132) : même harnais.
+    ("PUT", "/api/v1/platform/companies/{company_id}/subscription/acquired-rights"): Exempt(
+        "COMMIT refusé prouvé par test_subscriptions_api::test_a_refused_commit_records_nothing "
+        "(droits et plafond acquis inchangés)"
+    ),
     # Accès support (ADR 0092) : l'ouverture et la fermeture écrivent aussi le journal de
     # l'entreprise, validé avant celui de l'administration ; un COMMIT refusé de ce
     # dernier ne rend aucun jeton.

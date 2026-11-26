@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.modules.companies.schemas import PlanSummary
+
 
 class LoginRequest(BaseModel):
     """L'identifiant de connexion est le **couple** (slug d'entreprise, e-mail ou
@@ -120,3 +122,6 @@ class MeResponse(BaseModel):
     via_support: bool = False
     #: Version courante des textes légaux (`app/core/legal.py`, ADR 0117).
     legal_version: str
+    #: L'offre de la boutique (ADR 0132) : le front masque ou verrouille, le serveur
+    #: contrôle (`require_feature`). `None` seulement sans abonnement.
+    plan: PlanSummary | None = None

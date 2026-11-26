@@ -31,7 +31,7 @@ const SCREENS: { name: string; open: (page: Page) => Promise<void> }[] = [
       await page.goto("/companies");
       await page.getByRole("link", { name: "Parcours administration" }).first().click();
       await expect(page.getByRole("heading", { name: "Parcours administration" })).toBeVisible();
-      await expect(page.getByRole("region", { name: "Abonnement" })).toContainText("Premium");
+      await expect(page.getByRole("region", { name: "Abonnement" })).toContainText("Pro");
     },
   },
   {

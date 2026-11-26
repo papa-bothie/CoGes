@@ -348,3 +348,17 @@
     opacity: 1;
   }
 }
+
+/* ── Nos offres (prompt 41, ADR 0132) : la bascule mois / an, sans JavaScript ── */
+
+.offres [data-periode="an"] {
+  display: none;
+}
+
+.offres:has(input[value="an"]:checked) [data-periode="an"] {
+  display: block;
+}
+
+.offres:has(input[value="an"]:checked) [data-periode="mois"] {
+  display: none;
+}

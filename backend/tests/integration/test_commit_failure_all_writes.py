@@ -43,6 +43,7 @@ from tests.conftest import (
     DemoCompany,
     _create_demo_company,
     auth_headers,
+    lift_user_cap,
     login_token,
 )
 from tests.helpers.invariants import assert_consistent
@@ -150,8 +151,11 @@ def _changed(before: dict[str, str], after: dict[str, str]) -> list[str]:
 
 
 @pytest.fixture(scope="module")
-def commit_company(app_bound_to_test_database: None) -> DemoCompany:
-    return _create_demo_company(f"commit-c1-{uuid4().hex[:6]}")
+def commit_company(app_bound_to_test_database: None, owner_engine: Engine) -> DemoCompany:
+    company = _create_demo_company(f"commit-c1-{uuid4().hex[:6]}")
+    # Chaque écriture y passe, l'import et les comptes compris : aucun plafond d'offre.
+    lift_user_cap(owner_engine, company.company_id)
+    return company
 
 
 @pytest.fixture

@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 const t = labels.settingsScreens;
 
-/** Les cinq rubriques ; chacune n'apparaît qu'avec son droit de lecture (le serveur revérifie). */
+/** Les six rubriques ; chacune n'apparaît qu'avec son droit de lecture (le serveur revérifie). */
 export const SECTIONS = [
   { href: "/settings", label: t.nav.shop, permission: "company:read" },
   { href: "/settings/people", label: t.nav.people, permission: "users:read" },
@@ -24,6 +24,8 @@ export const SECTIONS = [
       anyOf: ["importexport:export", "importexport:create", "sales:export", "analytics:export"],
     },
   },
+  // Le gérant seul (ADR 0132) : l'échéance et le paiement ne regardent pas les autres rôles.
+  { href: "/settings/subscription", label: t.nav.subscription, permission: "company:update" },
 ] as const satisfies readonly { href: string; label: string; permission: PermissionRule }[];
 
 export function SettingsFrame({ children }: { children: ReactNode }) {

@@ -125,12 +125,15 @@ SQL
     uv run --directory backend python -m app.cli create-company --name "Parcours e2e" \
       --slug e2e --manager-email gerant@e2e.example.com --manager-name "Gérant des parcours" \
       --password demo-coges-2026
-    # Les parcours y créent chacun leurs comptes : le plafond de l'essai Premium (10) les
-    # bloquerait entre eux (ADR 0091). Comme `lift_user_cap` de la suite backend, l'entreprise
-    # de parcours passe au palier « sur devis », sans plafond ; le plafond a ses propres tests.
+    # Les parcours y créent chacun leurs comptes : le plafond de l'essai Pro (3) les
+    # bloquerait entre eux (ADR 0091, 0132). Comme `lift_user_cap` de la suite backend,
+    # l'entreprise de parcours passe au palier « sur devis », sans plafond et avec tous les
+    # droits du catalogue ; le plafond et les droits ont leurs propres tests.
     docker compose exec -T postgres psql -U postgres -d "$E2E_DB" -v ON_ERROR_STOP=1 -q <<'SQL'
-INSERT INTO plans (code, name, price_fcfa, max_users, is_orderable)
-VALUES ('sur_devis', 'Sur devis', NULL, NULL, false) ON CONFLICT (code) DO NOTHING;
+INSERT INTO plans (code, name, price_fcfa, max_users, is_orderable, features)
+VALUES ('sur_devis', 'Sur devis', NULL, NULL, false,
+        (SELECT features FROM plans WHERE code = 'business'))
+ON CONFLICT (code) DO NOTHING;
 UPDATE subscriptions SET plan_id = (SELECT id FROM plans WHERE code = 'sur_devis')
 WHERE company_id = (SELECT id FROM companies WHERE slug = 'e2e');
 SQL
@@ -148,8 +151,18 @@ SQL
     uv run --directory backend python -m app.cli create-company --name "Parcours support" \
       --slug support-e2e --manager-email gerant@support-e2e.example.com \
       --manager-name "Gérant consulté" --password demo-coges-2026
+    # Offres (ADR 0132) : une boutique en essai Pro, sans import, que les parcours lisent.
+    uv run --directory backend python -m app.cli create-company --name "Parcours offres" \
+      --slug offres-e2e --manager-email gerant@offres-e2e.example.com \
+      --manager-name "Gérante en essai" --password demo-coges-2026
     # L'épicerie de la maquette v2, à part : la démo et `e2e` ne changent pas (ADR 0065).
     uv run --directory backend python -m app.seed_maquette --intelligence
+    # La démo et la maquette montrent tout le produit (elles étaient en essai Premium avant
+    # l'ADR 0132) : Business, l'import compris (écran 24e de la maquette v2).
+    docker compose exec -T postgres psql -U postgres -d "$E2E_DB" -v ON_ERROR_STOP=1 -q <<'SQL'
+UPDATE subscriptions SET plan_id = (SELECT id FROM plans WHERE code = 'business')
+WHERE company_id IN (SELECT id FROM companies WHERE slug IN ('demo', 'maquette'));
+SQL
     ;;
   maquette)
     shift

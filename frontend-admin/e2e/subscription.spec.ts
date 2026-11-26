@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { ADMIN, enterCode } from "./mfa";
 
-/** Abonnements (ADR 0091) sur l'entreprise `admin-e2e`, créée par `e2e.sh reset`. */
+/** Abonnements (ADR 0091, 0132) sur l'entreprise `admin-e2e`, créée par `e2e.sh reset`. */
 
 async function openShop(page: Page): Promise<void> {
   await page.goto("/login");
@@ -24,10 +24,12 @@ async function axe(page: Page): Promise<void> {
   expect(results.violations).toEqual([]);
 }
 
-test("abonnement : essai Premium, changement d'offre, paiement enregistré", async ({ page }) => {
+test("abonnement : essai Pro, changement d'offre, paiement d'un an, droits acquis", async ({
+  page,
+}) => {
   await openShop(page);
   const card = page.getByRole("region", { name: "Abonnement" });
-  await expect(card).toContainText("Premium");
+  await expect(card).toContainText("Pro");
   await expect(card).toContainText("Essai jusqu'au");
   await axe(page);
 
@@ -37,14 +39,25 @@ test("abonnement : essai Premium, changement d'offre, paiement enregistré", asy
   await expect(card.getByRole("status")).toHaveText("Offre changée : Business.");
   await expect(card).toContainText(/9.900.FCFA par mois/);
 
-  await card.getByLabel("Montant (FCFA)").fill("9900");
+  // Le montant est prérempli ; « 1 an » donne le prix annuel (-10 %).
+  await expect(card.getByLabel("Montant (FCFA)")).toHaveValue("9900");
+  await card.getByLabel("Durée").selectOption("12");
+  await expect(card.getByLabel("Montant (FCFA)")).toHaveValue("106920");
   await card.getByLabel("Moyen").selectOption("orange_money");
   await card.getByLabel("Note").fill("Reçu par Orange Money");
   await card.getByRole("button", { name: "Enregistrer le paiement" }).click();
   await expect(card.getByRole("status")).toContainText("Paiement enregistré.");
   await expect(card.getByText("Actif", { exact: true })).toBeVisible();
   await expect(card.getByRole("cell", { name: "Reçu par Orange Money" })).toBeVisible();
+  await expect(card.getByRole("cell", { name: "1 an" })).toBeVisible();
   // L'accès suit l'abonnement : l'entreprise passe « Active ».
   await expect(page.getByText("Active", { exact: true })).toBeVisible();
+
+  // Droits acquis : accordés avec une raison, affichés sur la carte.
+  await card.getByRole("checkbox", { name: "Import Excel ou CSV" }).check();
+  await card.getByLabel("Raison des droits acquis").fill("Geste commercial");
+  await card.getByRole("button", { name: "Enregistrer les droits acquis" }).click();
+  await expect(card.getByRole("status")).toHaveText("Droits acquis enregistrés.");
+  await expect(card).toContainText("Import Excel ou CSV");
   await axe(page);
 });

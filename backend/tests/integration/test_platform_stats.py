@@ -87,6 +87,7 @@ def _pay(
     company_id: UUID,
     amount: str,
     paid_at: datetime | None = None,
+    period_months: int = 1,
 ) -> None:
     response = client.post(
         f"/api/v1/platform/companies/{company_id}/payments",
@@ -95,6 +96,7 @@ def _pay(
             "amount_fcfa": amount,
             "paid_at": (paid_at or datetime.now(UTC)).isoformat(),
             "method": "wave",
+            "period_months": period_months,
         },
     )
     assert response.status_code == 201, response.text
@@ -142,9 +144,9 @@ def test_the_overview_counts_statuses_offers_and_active_accounts(
     after = _consistent(client, admin_headers, owner_engine)
     assert after["companies"]["trial"] == before["companies"]["trial"] + 1
     assert after["companies"]["total"] == before["companies"]["total"] + 1
-    # L'essai est sur Premium, mais compté **à part** des entreprises payantes.
-    assert _plan(after, "premium")["trial"] == _plan(before, "premium")["trial"] + 1
-    assert _plan(after, "premium")["paying"] == _plan(before, "premium")["paying"]
+    # L'essai est sur Pro (ADR 0132), mais compté **à part** des entreprises payantes.
+    assert _plan(after, "starter")["trial"] == _plan(before, "starter")["trial"] + 1
+    assert _plan(after, "starter")["paying"] == _plan(before, "starter")["paying"]
     # Le gérant de la boutique de démonstration.
     assert after["active_users"] == before["active_users"] + 1
 
@@ -157,21 +159,21 @@ def test_the_invariant_holds_after_every_step(
     _consistent(client, admin_headers, owner_engine)
 
     # Payée : l'entreprise passe dans les payantes de son offre.
-    _pay(client, admin_headers, shop.company_id, "14900")
+    _pay(client, admin_headers, shop.company_id, "4900")
     paid = _consistent(client, admin_headers, owner_engine)
     assert paid["companies"]["active"] == before["companies"]["active"] + 1
-    assert _plan(paid, "premium")["paying"] == _plan(before, "premium")["paying"] + 1
+    assert _plan(paid, "starter")["paying"] == _plan(before, "starter")["paying"] + 1
 
-    # Change d'offre : elle quitte Premium pour Starter.
+    # Change d'offre : elle quitte Pro pour Business.
     changed = client.patch(
         f"/api/v1/platform/companies/{shop.company_id}/subscription",
         headers=admin_headers,
-        json={"plan_code": "starter", "reason": "Le gérant préfère Starter"},
+        json={"plan_code": "business", "reason": "Le gérant préfère Business"},
     )
     assert changed.status_code == 200, changed.text
     moved = _consistent(client, admin_headers, owner_engine)
-    assert _plan(moved, "starter")["paying"] == _plan(before, "starter")["paying"] + 1
-    assert _plan(moved, "premium")["paying"] == _plan(before, "premium")["paying"]
+    assert _plan(moved, "business")["paying"] == _plan(before, "business")["paying"] + 1
+    assert _plan(moved, "starter")["paying"] == _plan(before, "starter")["paying"]
 
     # Suspendue (accès coupé par l'équipe, lot 1).
     suspended = client.patch(
@@ -243,14 +245,21 @@ def test_a_period_counts_its_days_to_the_second(
     _pay(
         client, admin_headers, shop.company_id, "4900", datetime.combine(day, time(23, 59, 59), UTC)
     )
-    _pay(client, admin_headers, shop.company_id, "14900", datetime.combine(following, time(0), UTC))
+    _pay(
+        client,
+        admin_headers,
+        shop.company_id,
+        "52920",
+        datetime.combine(following, time(0), UTC),
+        period_months=12,
+    )
 
     assert _revenue(client, admin_headers, **on_day) == (
         day_before[0] + Decimal("4900"),
         day_before[1] + 1,
     )
     assert _revenue(client, admin_headers, **on_next) == (
-        next_before[0] + Decimal("14900"),
+        next_before[0] + Decimal("52920"),
         next_before[1] + 1,
     )
 

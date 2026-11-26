@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { formatAmount } from "@/lib/format/money";
 
 import { texte, TRIAL_DAYS } from "./vitrine-texte";
+import offres from "./offres.json";
 import { vitrine } from "./vitrine";
 
 /** Tout le texte affiché, à plat. */
@@ -25,8 +26,12 @@ describe("vitrine : promesses (prompt 37, ADR 0115)", () => {
     expect(ALL).not.toMatch(/\b(?!30\b)\d+ jours d'essai/);
   });
 
-  it("aucun prix tant que vitrine.pricing est vide", () => {
-    expect(vitrine.pricing).toBeNull();
+  it("les offres viennent de la source partagée, et aucun prix n'est écrit dans les textes", () => {
+    // Prompt 41 (ADR 0132) : remplace « aucun prix tant que vitrine.pricing est vide ».
+    // Les montants sont affichés par « Nos offres » depuis `content/offres.json` seulement
+    // (`components/vitrine/offres.test.tsx`), jamais écrits à la main dans un texte.
+    expect(vitrine.pricing).toBe(offres.plans);
+    expect(vitrine.pricing.map((plan) => plan.code)).toEqual(["starter", "business", "premium"]);
     // Seule exception : la mini-caisse (A9), une vente d'exemple aux prix des articles de la
     // démo, jamais un prix de CoGes (vérifié plus bas : elle se dit « exemple »).
     const hero = Object.entries(texte.hero).filter(([cle]) => cle !== "caisse");
@@ -41,8 +46,11 @@ describe("vitrine : promesses (prompt 37, ADR 0115)", () => {
     expect(ALL).not.toMatch(/\/conditions|\/confidentialite|cgu|cgv/i);
   });
 
-  it("jamais « meilleur produit » ni chiffre inventé", () => {
-    expect(ALL).not.toMatch(/meilleur produit|\d+ ?%/i);
+  it("jamais « meilleur produit » ; « 10 % » seulement dans la bascule annuelle", () => {
+    expect(ALL).not.toMatch(/meilleur produit/i);
+    const { annual, ...rest } = texte.offers;
+    expect(annual).toBe(`Par an (-${offres.annualDiscountPercent} %)`);
+    expect(allText({ ...texte, offers: rest })).not.toMatch(/\d+ ?%/);
   });
 
   it("six fonctionnalités et cinq à six questions", () => {

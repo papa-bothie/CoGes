@@ -1,0 +1,69 @@
+{
+  "$comment": "Source unique des offres (ADR 0132) : vitrine et « Mon abonnement ». Les prix sont ceux de la révision 0043 ; un test backend (tests/integration/test_plan_features.py) les compare à la table plans.",
+  "trialDays": 30,
+  "trialPlan": "starter",
+  "annualDiscountPercent": 10,
+  "plans": [
+    {
+      "code": "starter",
+      "name": "Pro",
+      "monthly": 4900,
+      "annual": 52920,
+      "maxUsers": 3,
+      "features": [
+        "sales",
+        "purchases",
+        "inventory",
+        "dashboard",
+        "reports_exports",
+        "product_photos",
+        "documents",
+        "stock_alerts"
+      ]
+    },
+    {
+      "code": "business",
+      "name": "Business",
+      "monthly": 9900,
+      "annual": 106920,
+      "maxUsers": 7,
+      "features": [
+        "sales",
+        "purchases",
+        "inventory",
+        "dashboard",
+        "reports_exports",
+        "product_photos",
+        "documents",
+        "stock_alerts",
+        "imports",
+        "physical_inventory",
+        "invoice_branding",
+        "stock_locations",
+        "priority_support"
+      ]
+    },
+    {
+      "code": "premium",
+      "name": "Premium",
+      "monthly": null,
+      "annual": null,
+      "maxUsers": 10,
+      "features": [
+        "sales",
+        "purchases",
+        "inventory",
+        "dashboard",
+        "reports_exports",
+        "product_photos",
+        "documents",
+        "stock_alerts",
+        "imports",
+        "physical_inventory",
+        "invoice_branding",
+        "stock_locations",
+        "priority_support"
+      ]
+    }
+  ]
+}

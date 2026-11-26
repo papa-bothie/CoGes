@@ -8,6 +8,7 @@ propriétaire, le temps d'un test.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
@@ -17,6 +18,8 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
+
+from app.core import plan_features
 
 UNLIMITED = "sur_devis"
 
@@ -30,6 +33,8 @@ def set_subscription(
     for column, value in values.items():
         if column == "plan":
             assignments.append("plan_id = (SELECT id FROM plans WHERE code = :plan)")
+        elif column == "extra_features":
+            assignments.append("extra_features = CAST(:extra_features AS jsonb)")
         else:
             assignments.append(f"{column} = :{column}")
         params[column] = value
@@ -78,9 +83,10 @@ def unlimited_plan(owner_engine: Engine) -> Iterator[str]:
     with owner_engine.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO plans (code, name, price_fcfa, max_users, is_orderable) "
-                "VALUES (:code, 'Sur devis', NULL, NULL, false) ON CONFLICT (code) DO NOTHING"
+                "INSERT INTO plans (code, name, price_fcfa, max_users, is_orderable, features) "
+                "VALUES (:code, 'Sur devis', NULL, NULL, false, CAST(:features AS jsonb)) "
+                "ON CONFLICT (code) DO NOTHING"
             ),
-            {"code": UNLIMITED},
+            {"code": UNLIMITED, "features": json.dumps(plan_features.CATALOGUE)},
         )
     yield UNLIMITED

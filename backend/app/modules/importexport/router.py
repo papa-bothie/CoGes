@@ -17,7 +17,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile, status
 
 from app.core import idempotency, pdf, queue
-from app.core.deps import CurrentTenant, TenantSession, client_ip, require_permission
+from app.core.deps import (
+    CurrentTenant,
+    TenantSession,
+    client_ip,
+    require_feature,
+    require_permission,
+)
 from app.core.idempotency import IdempotencyKey
 from app.core.tenancy import TenantContext
 from app.modules.importexport import service
@@ -84,6 +90,8 @@ def _audit_export(
     response_model=ImportReport,
     status_code=status.HTTP_201_CREATED,
     responses={200: {"model": ImportReport, "description": "Simulation (dry_run)"}},
+    # Réservé à Business (ADR 0132), envoi comme modèle : contrôlé par le serveur.
+    dependencies=[Depends(require_feature("imports"))],
 )
 def import_file(
     kind: ImportKind,
@@ -134,7 +142,11 @@ def import_file(
     )
 
 
-@imports_router.get("/{kind}/template", response_class=Response)
+@imports_router.get(
+    "/{kind}/template",
+    response_class=Response,
+    dependencies=[Depends(require_feature("imports"))],
+)
 def import_template(
     kind: ImportKind,
     tenant: Annotated[TenantSession, Depends(require_permission("importexport:create"))],

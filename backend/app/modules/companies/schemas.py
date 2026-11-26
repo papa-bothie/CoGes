@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Self
+from typing import Any, Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -173,3 +173,32 @@ class SupportAccessRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     session: SupportAccessWindow | None
+
+
+class PlanSummary(BaseModel):
+    """L'offre de la boutique, pour masquer ou verrouiller à l'écran (ADR 0132).
+
+    `features` = droits **effectifs** : ceux de l'offre et les droits acquis.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    name: str
+    status: Literal["trial", "active", "past_due", "suspended"]
+    is_license: bool
+    features: list[str]
+
+
+class SubscriptionRead(PlanSummary):
+    """« Mon abonnement » (gérant, `company:update`). Sans prix : ils viennent de la
+    source partagée du front (`frontend/content/offres.json`), testée contre `plans`."""
+
+    trial_ends_at: datetime | None
+    current_period_end: datetime | None
+    #: Plafond effectif : le plafond acquis s'il existe, sinon celui de l'offre.
+    max_users: int | None
+    active_users: int
+    #: Droits acquis (accordés en plus de l'offre, par exemple l'import des boutiques
+    #: d'avant les offres Pro et Business).
+    extra_features: list[str]

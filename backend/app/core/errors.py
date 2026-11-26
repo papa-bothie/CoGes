@@ -90,6 +90,17 @@ class PermissionDeniedError(CogesError):
     default_message = "Vous n'avez pas la permission d'effectuer cette action."
 
 
+class PlanFeatureRequiredError(PermissionDeniedError):
+    """Le droit est réservé à une offre que l'entreprise n'a pas (ADR 0132).
+
+    Un code distinct de `permission_denied` : la personne a le droit, c'est l'offre de la
+    boutique qui ne l'a pas. L'écran le traduit en « Disponible avec Business ».
+    """
+
+    code = "plan_feature_required"
+    default_message = "Cette fonction est disponible avec l'offre Business."
+
+
 class ValidationFailedError(CogesError):
     code = "validation_failed"
     status_code = 422
