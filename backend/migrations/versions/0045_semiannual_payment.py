@@ -38,8 +38,14 @@ def upgrade() -> None:
             CHECK (semiannual_price_fcfa IS NULL OR price_fcfa IS NOT NULL)
         """
     )
-    op.execute("UPDATE plans SET semiannual_price_fcfa = 29400 WHERE code = 'starter'")
-    op.execute("UPDATE plans SET semiannual_price_fcfa = 59400 WHERE code = 'business'")
+    op.execute(
+        """
+        UPDATE plans
+           SET semiannual_price_fcfa = CASE code WHEN 'starter' THEN 29400
+                                                 WHEN 'business' THEN 59400 END
+         WHERE code IN ('starter', 'business')
+        """
+    )
     op.execute(
         f"""
         ALTER TABLE subscription_payments
