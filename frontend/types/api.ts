@@ -6238,6 +6238,7 @@ export interface components {
       /** Name */
       name: string;
       price_fcfa: components["schemas"]["Amount-Output"] | null;
+      semiannual_price_fcfa: components["schemas"]["Amount-Output"] | null;
       annual_price_fcfa: components["schemas"]["Amount-Output"] | null;
       /** Max Users */
       max_users: number | null;
@@ -8068,7 +8069,7 @@ export interface components {
        * @default 1
        * @enum {integer}
        */
-      period_months: 1 | 12;
+      period_months: 1 | 6 | 12;
     };
     /** SubscriptionPaymentRead */
     SubscriptionPaymentRead: {
@@ -8094,7 +8095,7 @@ export interface components {
        * Period Months
        * @enum {integer}
        */
-      period_months: 1 | 12;
+      period_months: 1 | 6 | 12;
       /**
        * Recorded At
        * Format: date-time

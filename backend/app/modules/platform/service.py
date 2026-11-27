@@ -1049,6 +1049,7 @@ def _plan_read(plan: Plan) -> PlanRead:
         code=plan.code,
         name=plan.name,
         price_fcfa=plan.price_fcfa,
+        semiannual_price_fcfa=plan.semiannual_price_fcfa,
         annual_price_fcfa=plan.annual_price_fcfa,
         max_users=plan.max_users,
         features=list(plan.features),
@@ -1247,10 +1248,19 @@ class AnnualPaymentUnavailableError(ValidationFailedError):
     default_message = "Cette offre ne se paie pas à l'année."
 
 
+class SemiannualPaymentUnavailableError(ValidationFailedError):
+    code = "semiannual_payment_unavailable"
+    default_message = "Cette offre ne se paie pas par 6 mois."
+
+
 def _expected_amount(plan: Plan, period_months: int) -> Decimal | None:
     """Le montant exigé, ou `None` pour une offre sur devis (tout montant positif)."""
     if plan.price_fcfa is None:
         return None
+    if period_months == 6:
+        if plan.semiannual_price_fcfa is None:
+            raise SemiannualPaymentUnavailableError(details={"plan_code": plan.code})
+        return plan.semiannual_price_fcfa
     if period_months == 12:
         if plan.annual_price_fcfa is None:
             raise AnnualPaymentUnavailableError(details={"plan_code": plan.code})

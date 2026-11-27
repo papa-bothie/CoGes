@@ -9,6 +9,7 @@
       "code": "starter",
       "name": "Pro",
       "monthly": 4900,
+      "semiannual": 29400,
       "annual": 52920,
       "maxUsers": 3,
       "features": [
@@ -26,6 +27,7 @@
       "code": "business",
       "name": "Business",
       "monthly": 9900,
+      "semiannual": 59400,
       "annual": 106920,
       "maxUsers": 7,
       "features": [
@@ -48,6 +50,7 @@
       "code": "premium",
       "name": "Premium",
       "monthly": null,
+      "semiannual": null,
       "annual": null,
       "maxUsers": 10,
       "features": [

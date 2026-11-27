@@ -17279,6 +17279,16 @@
               }
             ]
           },
+          "semiannual_price_fcfa": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Amount-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "annual_price_fcfa": {
             "anyOf": [
               {
@@ -17319,6 +17329,7 @@
           "code",
           "name",
           "price_fcfa",
+          "semiannual_price_fcfa",
           "annual_price_fcfa",
           "max_users",
           "features",
@@ -22260,6 +22271,7 @@
             "type": "integer",
             "enum": [
               1,
+              6,
               12
             ],
             "title": "Period Months",
@@ -22316,6 +22328,7 @@
             "type": "integer",
             "enum": [
               1,
+              6,
               12
             ],
             "title": "Period Months"
