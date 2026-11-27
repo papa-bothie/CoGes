@@ -197,6 +197,9 @@ export const texte = {
     annual: "Par an (-10 %)",
     perMonth: "par mois",
     perYear: "par an",
+    /** Sous les cartes (prompt 44, ADR 0134) : 6 mois = 6 fois le mois, sans remise, donc
+     * pas de troisième position dans la bascule. */
+    durations: "Paiement possible par mois, par 6 mois ou par an.",
     users: (count: number) => `Jusqu'à ${count} personnes`,
     everythingIn: (name: string) => `Tout ${name}, et en plus :`,
     trial: `${TRIAL_DAYS} jours d'essai gratuit sur Pro`,

@@ -159,6 +159,7 @@ export function NosOffres({ signupEnabled }: { signupEnabled: boolean }) {
             <OfferCard key={offer.code} offer={offer} index={index + 1} />
           ))}
         </ul>
+        <p className="mt-5 font-bold text-muted-foreground">{t.durations}</p>
         <div className="mt-6 flex flex-col items-start gap-3 rounded-carte bg-card p-5 md:flex-row md:items-center md:justify-between">
           <p className="font-bold">{t.premium}</p>
           <WhatsAppLink variant="borde">{t.premiumLink}</WhatsAppLink>

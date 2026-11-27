@@ -32,6 +32,8 @@ export type Offre = {
   name: string;
   /** `null` : sur devis (Premium). */
   monthly: number | null;
+  /** 6 fois le mois, sans remise (ADR 0134) ; `null` : sur devis. */
+  semiannual: number | null;
   annual: number | null;
   maxUsers: number;
   features: FeatureCode[];
@@ -87,9 +89,19 @@ function whatsapp(message: string): string {
   return `https://wa.me/${vitrine.whatsappNumber}?text=${encodeURIComponent(message)}`;
 }
 
-/** « Je veux payer CoGes Pro pour 1 mois » (paiement en ligne au lot D). */
-export function payLink(name: string, months: 1 | 12): string {
-  return whatsapp(`Je veux payer CoGes ${name} pour ${months === 1 ? "1 mois" : "1 an"}.`);
+/** Durées payables (ADR 0132, 0134) : 1 mois, 6 mois sans remise, 1 an à -10 %. */
+export type PayMonths = 1 | 6 | 12;
+
+const DURATIONS: Record<PayMonths, string> = { 1: "1 mois", 6: "6 mois", 12: "1 an" };
+
+/** « 1 mois », « 6 mois », « 1 an ». */
+export function duration(months: PayMonths): string {
+  return DURATIONS[months];
+}
+
+/** « Je veux payer CoGes Pro pour 6 mois » (paiement en ligne au lot D). */
+export function payLink(name: string, months: PayMonths): string {
+  return whatsapp(`Je veux payer CoGes ${name} pour ${duration(months)}.`);
 }
 
 /** Bouton de l'essai quand l'inscription est fermée (prompt 42). */

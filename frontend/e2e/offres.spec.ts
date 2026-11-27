@@ -6,7 +6,7 @@ import { DEMO, loginThroughUi, managerToken, type Credentials } from "./fixtures
 /**
  * Offres Pro et Business (prompt 41, ADR 0132) : « Mon abonnement » d'une boutique en essai
  * Pro, l'import verrouillé (jamais de 403 brut), la même boutique vue par le serveur, et la
- * section « Nos offres » de la vitrine avec sa bascule annuelle.
+ * section « Nos offres » de la vitrine avec sa bascule annuelle et ses trois durées (ADR 0134).
  */
 test.describe.configure({ timeout: 90_000 });
 
@@ -48,11 +48,16 @@ test("essai Pro : Mon abonnement dit l'offre, l'échéance, les comptes et comme
   await expect(page.getByText("1 compte sur 3")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Ce qu'ajoute Business" })).toBeVisible();
   await expect(page.getByText("4 900 F")).toBeVisible();
+  await expect(page.getByText("29 400 F")).toBeVisible();
   await expect(page.getByText("52 920 F")).toBeVisible();
-  const month = page.getByRole("link", { name: "Payer 1 mois" });
-  expect(decodeURIComponent((await month.getAttribute("href")) ?? "")).toContain(
-    "Je veux payer CoGes Pro pour 1 mois.",
-  );
+  await expect(page.getByText(", soit 10 % de moins")).toBeVisible();
+  // Trois durées (ADR 0134), chacune avec son message WhatsApp.
+  for (const duration of ["1 mois", "6 mois", "1 an"]) {
+    const link = page.getByRole("link", { name: `Payer ${duration}` });
+    expect(decodeURIComponent((await link.getAttribute("href")) ?? "")).toContain(
+      `Je veux payer CoGes Pro pour ${duration}.`,
+    );
+  }
   await noAxeViolation(page);
   await page.setViewportSize({ width: 360, height: 800 });
   await noHorizontalScroll(page);
@@ -103,8 +108,17 @@ test("vitrine : Nos offres, montants du mois puis de l'année", async ({ page })
   await expect(section.getByText("106 920 F")).toBeVisible();
   await expect(section.getByText("4 900 F")).toBeHidden();
   await expect(section.getByText("30 jours d'essai gratuit sur Pro")).toBeVisible();
+  // 6 mois : une ligne sous les cartes, la bascule garde deux positions (ADR 0134).
+  await expect(
+    section.getByText("Paiement possible par mois, par 6 mois ou par an."),
+  ).toBeVisible();
+  await expect(section.getByRole("radio")).toHaveCount(2);
+  await noAxeViolation(page);
   await page.setViewportSize({ width: 360, height: 800 });
   await noHorizontalScroll(page);
+  await expect(
+    section.getByText("Paiement possible par mois, par 6 mois ou par an."),
+  ).toBeVisible();
 });
 
 test("vitrine : la carte « Essai gratuit » vient d'abord, à 0 F par mois comme par an (prompt 42)", async ({
