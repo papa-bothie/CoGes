@@ -1,22 +1,23 @@
-# Offres et abonnements : changer l'offre, encaisser un an, droits acquis
+# Offres et abonnements : changer l'offre, encaisser 1 mois, 6 mois ou un an, droits acquis
 
 Pour l'équipe CoGes (profil **administrateur** de l'administration de la plateforme).
-Référence : ADR 0091 (abonnements), ADR 0132 (offres Pro et Business, droits acquis).
+Référence : ADR 0091 (abonnements), ADR 0132 (offres Pro et Business, droits acquis),
+ADR 0134 (paiement de 6 mois).
 
 ## Les offres
 
-| Offre | Code | Par mois | Par an (-10 %) | Comptes | En vente |
-|---|---|---|---|---|---|
-| Pro | `starter` | 4 900 F | 52 920 F | 3 | oui |
-| Business | `business` | 9 900 F | 106 920 F | 7 | oui |
-| Premium | `premium` | sur devis | sur devis | 10 | non (administrateur seulement) |
+| Offre | Code | Par mois | Par 6 mois (sans remise) | Par an (-10 %) | Comptes | En vente |
+|---|---|---|---|---|---|---|
+| Pro | `starter` | 4 900 F | 29 400 F | 52 920 F | 3 | oui |
+| Business | `business` | 9 900 F | 59 400 F | 106 920 F | 7 | oui |
+| Premium | `premium` | sur devis | sur devis | sur devis | 10 | non (administrateur seulement) |
 
 Toute nouvelle boutique commence par **30 jours d'essai gratuit sur Pro**. L'import Excel/CSV
 est réservé à Business (et Premium), sauf droit acquis. Les codes ne changent jamais : la
 licence sur site les emploie (`activate-license --plan starter|business|premium`).
 
 Les prix sont écrits à deux endroits **qui doivent rester égaux** : la table `plans` (révision
-0043) et `frontend/content/offres.json` (vitrine, « Mon abonnement »). Un test les compare ;
+0043, et 0045 pour les 6 mois) et `frontend/content/offres.json` (vitrine, « Mon abonnement »). Un test les compare ;
 changer un prix = une révision **et** ce fichier, dans la même PR.
 
 ## Changer l'offre d'une boutique
@@ -30,14 +31,18 @@ changer un prix = une révision **et** ce fichier, dans la même PR.
 
 Changer d'offre ne touche ni la fin de période payée ni l'accès.
 
-## Enregistrer un paiement d'un mois ou d'un an
+## Enregistrer un paiement d'un mois, de 6 mois ou d'un an
 
 1. Carte **Abonnement** → **Enregistrer un paiement**.
-2. **Durée** : « 1 mois » ou « 1 an (-10 %) ». Le montant se remplit avec le prix de l'offre ;
-   il doit être **exactement** celui-là (sinon : « Le montant attendu est de 52 920 FCFA. »).
-   Premium : montant du devis, libre.
+2. **Durée** : « 1 mois », « 6 mois » ou « 1 an (-10 %) ». Le montant se remplit avec le prix
+   de l'offre : 6 mois = 6 fois le prix du mois, **sans remise** (29 400 F pour Pro, 59 400 F
+   pour Business). Il doit être **exactement** celui-là (sinon : « Le montant attendu est de
+   29 400 FCFA. »). Premium : montant du devis, libre, pour chacune des trois durées.
+   Sous la durée, **« Nouvelle fin : jj/mm/aaaa »** montre la date que le paiement posera :
+   vérifiez-la avant de valider.
 3. Date, moyen (Wave, Orange Money, espèces, virement), note (référence de la transaction).
-4. La fin de période avance de 1 ou 12 mois. Un **renouvellement** (période en cours ou dans ses
+4. La fin de période avance de 1, 6 ou 12 mois calendaires (le 31 août + 6 mois donne le
+   dernier jour de février). Un **renouvellement** (période en cours ou dans ses
    3 jours de grâce) part de l'ancienne fin ; une fin d'essai ou une boutique en pause part
    d'aujourd'hui (ADR 0133). Une boutique suspendue retrouve l'accès. Relances et pauses :
    `relances-et-suspensions.md`.
@@ -64,6 +69,7 @@ pour votre boutique »). Le changement prend effet à la requête suivante.
 ## Vérifier
 
 - Journal (Administration → Journal) : « … a changé les droits acquis de … », « … a enregistré
-  un paiement de 52 920 FCFA (Wave) pour 1 an pour … ».
+  un paiement de 52 920 FCFA (Wave) pour 1 an pour … », « … pour 6 mois pour … ». La colonne
+  **Durée** de l'historique des paiements dit « 1 mois », « 6 mois » ou « 1 an ».
 - Côté boutique : `GET /api/v1/auth/me` → `plan.features` ; un import refusé répond 403
   `plan_feature_required`.
