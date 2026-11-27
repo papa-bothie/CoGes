@@ -6,7 +6,7 @@
 #
 # Il suit le guide docs/runbooks/sur-site.md, dans le même ordre : réglages, contrôle,
 # migrations, démarrage, société, licence (ADR 0125), navigateur ; puis la tâche de nuit à
-# +45 jours, redémarrage, changement de version et arrêt brutal de PostgreSQL ; enfin la
+# +45 puis +46 jours, redémarrage, changement de version et arrêt brutal de PostgreSQL ; enfin la
 # sauvegarde et la restauration (ADR 0127), jouées par le vrai script Windows sous pwsh :
 # panne simulée (down -v, réglages neufs), données retrouvées ; enfin le support à distance
 # (ADR 0129) : un faux service de pings reçoit les envois, relus par la liste fermée, et un
@@ -248,14 +248,17 @@ done_tasks=$(dc logs --no-log-prefix --since "$since" worker 2>&1 | grep -c 'suc
 [ "$done_tasks" -ge "$count" ] || fail "$done_tasks tâche(s) réussie(s) pour $count déclenchée(s)"
 echo "OK — $count tâches déclenchées, $done_tasks exécutions réussies, journaux propres."
 
-title "Tâche de nuit des abonnements à +45 jours : seule la société sans licence est suspendue"
+title "Tâche de nuit des abonnements à +45 et +46 jours : seule la société sans licence est suspendue"
 # Dans le conteneur worker, qui tient le DSN de la plateforme ; la tâche est appelée
-# directement (synchrone), avec la date de son paramètre `now`.
-later=$(date -u -d '+45 days' +%Y-%m-%dT%H:%M:%S+00:00)
-dc exec -T worker python -c '
+# directement (synchrone), avec la date de son paramètre `now`. Deux nuits : la première
+# donne le dernier rappel, la pause ne vient que la nuit suivante (ADR 0133).
+for days in 45 46; do
+  later=$(date -u -d "+$days days" +%Y-%m-%dT%H:%M:%S+00:00)
+  dc exec -T worker python -c '
 import sys
 from app.workers.tasks.platform import subscriptions_daily
 print(f"{subscriptions_daily(sys.argv[1])} avis : essais finis ou proches de leur fin")' "$later"
+done
 data_are_there "$sales"  # la société licenciée se connecte toujours
 license_status "$slug"
 expect_line "$work/licence-$slug.txt" "Accès            : actif"

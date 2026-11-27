@@ -976,7 +976,7 @@ par service).
 `deploy/onprem-ci/verifier.sh` joue ce guide de bout en bout sur un poste Linux ou dans le
 workflow « Sur site » : réglages, contrôle, migrations (deux fois), démarrage, société,
 licence et `license-status`, parcours Chromium (connexion, rechargement, service worker,
-vente), tâches planifiées, tâche de nuit des abonnements à +45 jours (la société licenciée se connecte toujours, une
+vente), tâches planifiées, tâche de nuit des abonnements à +45 puis +46 jours (la société licenciée se connecte toujours, une
 société témoin sans licence est suspendue), arrêt et redémarrage, changement de version,
 arrêt brutal de PostgreSQL ; puis, par le vrai script Windows sous `pwsh` : sauvegarde avec
 restauration d'essai et copie sur un « disque » préparé, `down -v` et réglages neufs,
