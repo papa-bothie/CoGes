@@ -190,3 +190,15 @@ Demande du propriétaire (`docs/prompts/42-vitrine-tarifs-et-essai.md`), sans mi
   (faux depuis le lot B). Elle renvoie à « Tarifs » : 30 jours d'essai sans paiement, Pro et
   Business au mois ou à l'année, Premium sur devis au-delà de 7 personnes. Durée, noms et
   nombre de personnes viennent de la source partagée, et aucun montant n'est écrit (test).
+
+## Amendement — prompt 44 (27 novembre 2026) : paiement de 6 mois
+
+Voir l'ADR 0134.
+
+- Une troisième durée s'ajoute : **6 mois, sans remise**. Les prix sont dans
+  `plans.semiannual_price_fcfa` (révision 0045) : 29 400 pour Pro, 59 400 pour Business,
+  `NULL` pour Premium.
+- `period_months` accepte 1, 6 et 12, et le montant de 6 mois est exigé à l'exact.
+- `offres.json` gagne `semiannual`.
+- La bascule de la vitrine reste à deux positions, et une ligne sous les cartes dit les trois
+  durées.

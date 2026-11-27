@@ -141,7 +141,10 @@ def test_the_front_source_matches_the_database(owner_engine: Engine) -> None:
         rows = {
             row.code: row
             for row in connection.execute(
-                text("SELECT code, name, price_fcfa, annual_price_fcfa, max_users FROM plans")
+                text(
+                    "SELECT code, name, price_fcfa, semiannual_price_fcfa, annual_price_fcfa, "
+                    "max_users FROM plans"
+                )
             )
         }
     by_code = {offer["code"]: offer for offer in offers["plans"]}
@@ -151,6 +154,9 @@ def test_the_front_source_matches_the_database(owner_engine: Engine) -> None:
         assert offer["name"] == row.name
         assert offer["maxUsers"] == row.max_users
         assert offer["monthly"] == (None if row.price_fcfa is None else int(row.price_fcfa))
+        assert offer["semiannual"] == (
+            None if row.semiannual_price_fcfa is None else int(row.semiannual_price_fcfa)
+        )
         assert offer["annual"] == (
             None if row.annual_price_fcfa is None else int(row.annual_price_fcfa)
         )

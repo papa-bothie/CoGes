@@ -41,6 +41,7 @@ PLAN_KEYS = {
     "code",
     "name",
     "price_fcfa",
+    "semiannual_price_fcfa",
     "annual_price_fcfa",
     "max_users",
     "features",
@@ -146,15 +147,16 @@ def test_the_three_offers_are_seeded(client: TestClient, admin_headers: dict[str
         code: (
             plan["name"],
             plan["price_fcfa"],
+            plan["semiannual_price_fcfa"],
             plan["annual_price_fcfa"],
             plan["max_users"],
             plan["is_orderable"],
         )
         for code, plan in seeded.items()
     } == {
-        "starter": ("Pro", "4900.00", "52920.00", 3, True),
-        "business": ("Business", "9900.00", "106920.00", 7, True),
-        "premium": ("Premium", None, None, 10, False),
+        "starter": ("Pro", "4900.00", "29400.00", "52920.00", 3, True),
+        "business": ("Business", "9900.00", "59400.00", "106920.00", 7, True),
+        "premium": ("Premium", None, None, None, 10, False),
     }
 
 
@@ -505,10 +507,10 @@ def test_a_wrong_amount_is_refused_with_the_expected_one(
     assert (row.status, row.current_period_end) == ("trial", None)
 
 
-def test_only_one_or_twelve_months(
+def test_only_one_six_or_twelve_months(
     client: TestClient, admin_headers: dict[str, str], shop: DemoCompany
 ) -> None:
-    response = _pay(client, admin_headers, shop.company_id, uuid4().hex, period_months=6)
+    response = _pay(client, admin_headers, shop.company_id, uuid4().hex, period_months=3)
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "validation_failed"
 

@@ -1,7 +1,13 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 
+import { addMonths } from "../lib/periods";
 import { ADMIN, enterCode } from "./mfa";
+
+function frDate(value: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(value.getUTCDate())}/${pad(value.getUTCMonth() + 1)}/${value.getUTCFullYear()}`;
+}
 
 /** Abonnements (ADR 0091, 0132) sur l'entreprise `admin-e2e`, créée par `e2e.sh reset`. */
 
@@ -24,7 +30,7 @@ async function axe(page: Page): Promise<void> {
   expect(results.violations).toEqual([]);
 }
 
-test("abonnement : essai Pro, changement d'offre, paiement d'un an, droits acquis", async ({
+test("abonnement : essai Pro, changement d'offre, paiement d'un an puis de 6 mois, droits acquis", async ({
   page,
 }) => {
   await openShop(page);
@@ -52,6 +58,21 @@ test("abonnement : essai Pro, changement d'offre, paiement d'un an, droits acqui
   await expect(card.getByRole("cell", { name: "1 an" })).toBeVisible();
   // L'accès suit l'abonnement : l'entreprise passe « Active ».
   await expect(page.getByText("Active", { exact: true })).toBeVisible();
+
+  // 6 mois, sans remise (ADR 0134) : 6 × 9 900, et la fin avance depuis la fin payée.
+  const paidUntil = /Payé jusqu'au (\d{2})\/(\d{2})\/(\d{4})/.exec(
+    (await card.getByRole("status").textContent()) ?? "",
+  );
+  expect(paidUntil).not.toBeNull();
+  const [, day, month, year] = paidUntil!.map(Number);
+  const expected = addMonths(new Date(Date.UTC(year!, month! - 1, day!, 12)), 6);
+  await card.getByLabel("Durée").selectOption("6");
+  await expect(card.getByLabel("Montant (FCFA)")).toHaveValue("59400");
+  await expect(card).toContainText(`Nouvelle fin : ${frDate(expected)}`);
+  await card.getByLabel("Note").fill("Six mois par Wave");
+  await card.getByRole("button", { name: "Enregistrer le paiement" }).click();
+  await expect(card.getByRole("status")).toContainText(`Payé jusqu'au ${frDate(expected)}.`);
+  await expect(card.getByRole("cell", { name: "6 mois" })).toBeVisible();
 
   // Droits acquis : accordés avec une raison, affichés sur la carte.
   await card.getByRole("checkbox", { name: "Import Excel ou CSV" }).check();

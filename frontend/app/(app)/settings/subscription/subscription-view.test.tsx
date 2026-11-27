@@ -59,7 +59,7 @@ describe("Mon abonnement pendant la grâce (ADR 0133)", () => {
 });
 
 describe("Mon abonnement (prompt 41, B4)", () => {
-  it("essai : l'offre, la fin d'essai, les comptes, et les deux montants", async () => {
+  it("essai : l'offre, la fin d'essai, les comptes, et les trois durées", async () => {
     current = subscription();
     renderWithClient(<SubscriptionView />);
     expect(await screen.findByText("CoGes Pro")).toBeInTheDocument();
@@ -67,12 +67,19 @@ describe("Mon abonnement (prompt 41, B4)", () => {
       "Essai gratuit jusqu'au 25 décembre 2026",
     );
     expect(screen.getByText("2 comptes sur 3")).toBeInTheDocument();
-    expect(screen.getByText("4 900 F")).toBeInTheDocument();
-    expect(screen.getByText("52 920 F")).toBeInTheDocument();
-    expect(screen.getByText("par an (-10 %)")).toBeInTheDocument();
+    // 1 mois, 6 mois sans remise, 1 an à -10 % (ADR 0132, 0134), dans cet ordre.
+    const pay = screen.getByRole("heading", { name: t.howToPay }).closest("section")!;
+    expect(
+      within(pay)
+        .getAllByTestId("pay-option")
+        .map((option) => option.querySelector("p")!.textContent!.replace(/\s+/g, " ")),
+    ).toEqual(["1 mois : 4 900 F", "6 mois : 29 400 F", "1 an : 52 920 F, soit 10 % de moins"]);
+    expect(within(pay).getByText("29 400 F")).toBeInTheDocument();
+    expect(within(pay).getByRole("link", { name: "Payer 6 mois" })).toBeInTheDocument();
     expect(hrefs()).toEqual(
       expect.arrayContaining([
         expect.stringContaining("Je veux payer CoGes Pro pour 1 mois."),
+        expect.stringContaining("Je veux payer CoGes Pro pour 6 mois."),
         expect.stringContaining("Je veux payer CoGes Pro pour 1 an."),
         expect.stringContaining("Je veux passer à CoGes Business."),
       ]),
@@ -142,6 +149,12 @@ describe("Mon abonnement (prompt 41, B4)", () => {
     expect(await screen.findByText("CoGes Business")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Ce qu'ajoute Business" })).toBeNull();
     expect(screen.getByText("9 900 F")).toBeInTheDocument();
+    expect(screen.getByText("59 400 F")).toBeInTheDocument();
     expect(screen.getByText("106 920 F")).toBeInTheDocument();
+    expect(hrefs()).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("Je veux payer CoGes Business pour 6 mois."),
+      ]),
+    );
   });
 });

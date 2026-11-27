@@ -72,6 +72,18 @@ describe("le journal en phrases", () => {
     expect(
       describeEntry(
         entry({
+          action: "insert",
+          entity_table: "subscription_payments",
+          target_company_name: "Boutique Awa",
+          diff: { after: { amount_fcfa: "29400.00", method: "wave", period_months: 6 } },
+        }),
+      ),
+    ).toBe(
+      "Aïssatou D. a enregistré un paiement de 29 400 FCFA (Wave) pour 6 mois pour Boutique Awa",
+    );
+    expect(
+      describeEntry(
+        entry({
           actor_id: null,
           actor_name: null,
           entity_table: "subscriptions",

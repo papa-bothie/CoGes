@@ -228,6 +228,20 @@ def test_revenue_moves_only_when_a_payment_is_recorded(
     )
 
 
+def test_six_months_paid_count_their_amount_once_on_the_payment_day(
+    client: TestClient, admin_headers: dict[str, str]
+) -> None:
+    """Le revenu est l'argent déclaré (ADR 0093) : 6 mois payés comptent 29 400 F une fois,
+    le jour du paiement, comme un an payé (ADR 0134) ; rien n'est étalé sur les mois."""
+    shop = _new_shop()
+    total, count = _revenue(client, admin_headers, period="current_month")
+    _pay(client, admin_headers, shop.company_id, "29400", period_months=6)
+    assert _revenue(client, admin_headers, period="current_month") == (
+        total + Decimal("29400"),
+        count + 1,
+    )
+
+
 def test_a_period_counts_its_days_to_the_second(
     client: TestClient, admin_headers: dict[str, str]
 ) -> None:

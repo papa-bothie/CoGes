@@ -21,7 +21,9 @@ import {
   type FeatureCode,
   OFFRES,
   type PlanCode,
+  type PayMonths,
   amount,
+  duration,
   payLink,
   quoteLink,
   upgradeLink,
@@ -92,7 +94,11 @@ export function SubscriptionView() {
       ? subscription.max_users
       : null;
   const extras = BUSINESS_EXTRAS.filter((code) => !subscription.features.includes(code));
-  const payable = !subscription.is_license && plan?.monthly != null && plan.annual != null;
+  const payable =
+    !subscription.is_license &&
+    plan?.monthly != null &&
+    plan.semiannual != null &&
+    plan.annual != null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -140,19 +146,22 @@ export function SubscriptionView() {
         <KitCard title={t.howToPay}>
           <p className="text-encre-2">{t.howToPayHint}</p>
           {payable && plan ? (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <PayOption
-                price={formatAmount(amount(plan.monthly!))}
-                period={t.perMonth}
-                href={payLink(plan.name, 1)}
-                action={t.payMonth}
-              />
-              <PayOption
-                price={formatAmount(amount(plan.annual!))}
-                period={t.perYear(ANNUAL_DISCOUNT_PERCENT)}
-                href={payLink(plan.name, 12)}
-                action={t.payYear}
-              />
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {(
+                [
+                  [1, plan.monthly!, null],
+                  [6, plan.semiannual!, null],
+                  [12, plan.annual!, t.yearSaving(ANNUAL_DISCOUNT_PERCENT)],
+                ] as [PayMonths, number, string | null][]
+              ).map(([months, price, saving]) => (
+                <PayOption
+                  key={months}
+                  duration={duration(months)}
+                  price={formatAmount(amount(price))}
+                  saving={saving}
+                  href={payLink(plan.name, months)}
+                />
+              ))}
             </div>
           ) : (
             <div className="mt-4 flex flex-col gap-3">
@@ -175,21 +184,25 @@ export function SubscriptionView() {
 }
 
 function PayOption({
+  duration,
   price,
-  period,
+  saving,
   href,
-  action,
 }: {
+  duration: string;
   price: string;
-  period: string;
+  saving: string | null;
   href: string;
-  action: string;
 }) {
   return (
-    <div className="flex flex-col gap-2 rounded-champ border border-border p-3.5">
+    <div
+      data-testid="pay-option"
+      className="flex flex-col gap-2 rounded-champ border border-border p-3.5"
+    >
       <p>
-        <span className="text-xl font-extrabold numeric">{price}</span>{" "}
-        <span className="text-encre-2">{period}</span>
+        <span className="font-bold">{duration} :</span>{" "}
+        <span className="text-xl font-extrabold numeric">{price}</span>
+        {saving && <span className="text-encre-2">{saving}</span>}
       </p>
       <a
         href={href}
@@ -198,7 +211,7 @@ function PayOption({
         className={`${linkButton} bg-primary text-primary-foreground hover:bg-primary/90`}
       >
         <MessageCircle className="size-5" aria-hidden />
-        {action}
+        {t.pay(duration)}
       </a>
     </div>
   );

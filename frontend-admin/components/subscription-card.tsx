@@ -6,6 +6,7 @@ import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import type { PlanRead, SubscriptionDetail } from "@/lib/api/schema";
 import { PAYMENT_METHOD_LABELS, SUBSCRIPTION_LABELS, formatDate, formatFcfa } from "@/lib/format";
+import { PERIOD_LABELS, nextPeriodEnd, type Months } from "@/lib/periods";
 import { STAGES } from "@/lib/reminders";
 
 const TONES: Record<string, string> = {
@@ -16,7 +17,6 @@ const TONES: Record<string, string> = {
 };
 
 type Method = "wave" | "orange_money" | "cash" | "bank_transfer";
-type Months = 1 | 12;
 
 /** Droits qu'un administrateur peut accorder en plus de l'offre (ADR 0132,
  * `plan_features.GRANTABLE`) : ceux que Business réserve. */
@@ -34,7 +34,12 @@ const QUOTED_PLANS = new Set(["premium"]);
 
 /** Le montant attendu par le serveur, ou `""` pour une offre sur devis (montant libre). */
 export function expectedAmount(plan: PlanRead, months: Months): string {
-  const value = months === 12 ? plan.annual_price_fcfa : plan.price_fcfa;
+  const value =
+    months === 12
+      ? plan.annual_price_fcfa
+      : months === 6
+        ? plan.semiannual_price_fcfa
+        : plan.price_fcfa;
   return value === null || value === undefined ? "" : String(Math.round(Number(value)));
 }
 
@@ -49,7 +54,8 @@ function today(): string {
 /**
  * Abonnement d'une entreprise (ADR 0091, 0132) : offre, statut, échéances, droits acquis,
  * paiements déclarés. L'administrateur change l'offre (vendables, plus Premium sur devis),
- * enregistre un paiement d'un mois ou d'un an (montant prérempli) et accorde des droits
+ * enregistre un paiement d'un mois, de 6 mois ou d'un an (montant prérempli, nouvelle fin
+ * montrée avant de valider, ADR 0134) et accorde des droits
  * acquis avec une raison ; la
  * clé d'idempotence est gardée jusqu'au succès, un second clic ne paie pas deux fois.
  */
@@ -136,7 +142,12 @@ export function SubscriptionCard({
   const orderable = plans.filter(
     (candidate) => candidate.is_orderable || QUOTED_PLANS.has(candidate.code),
   );
-  const annual = plan.annual_price_fcfa !== null && plan.annual_price_fcfa !== undefined;
+  const quoted = plan.price_fcfa === null;
+  const annual =
+    quoted || (plan.annual_price_fcfa !== null && plan.annual_price_fcfa !== undefined);
+  const semiannual =
+    quoted || (plan.semiannual_price_fcfa !== null && plan.semiannual_price_fcfa !== undefined);
+  const newEnd = nextPeriodEnd(subscription, months);
 
   function choosePeriod(next: Months) {
     setMonths(next);
@@ -478,9 +489,13 @@ export function SubscriptionCard({
                 onChange={(event) => choosePeriod(Number(event.target.value) as Months)}
                 className="w-full rounded border border-trait bg-surface px-3 py-2"
               >
-                <option value={1}>1 mois</option>
-                {(annual || plan.price_fcfa === null) && <option value={12}>1 an (-10 %)</option>}
+                <option value={1}>{PERIOD_LABELS[1]}</option>
+                {semiannual && <option value={6}>{PERIOD_LABELS[6]}</option>}
+                {annual && <option value={12}>{PERIOD_LABELS[12]} (-10 %)</option>}
               </select>
+              <p className="text-encre-douce" aria-live="polite">
+                Nouvelle fin : {formatDate(newEnd.toISOString())}
+              </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
@@ -649,9 +664,7 @@ export function SubscriptionCard({
                   <tr key={payment.id} className="border-b border-trait last:border-0">
                     <td className="px-3 py-2">{formatDate(payment.paid_at)}</td>
                     <td className="px-3 py-2">{formatFcfa(payment.amount_fcfa)}</td>
-                    <td className="px-3 py-2">
-                      {payment.period_months === 12 ? "1 an" : "1 mois"}
-                    </td>
+                    <td className="px-3 py-2">{PERIOD_LABELS[payment.period_months]}</td>
                     <td className="px-3 py-2">
                       {PAYMENT_METHOD_LABELS[payment.method] ?? payment.method}
                     </td>

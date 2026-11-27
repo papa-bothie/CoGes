@@ -1837,10 +1837,8 @@ export const labels = {
       howToPay: "Comment payer",
       howToPayHint:
         "Écrivez-nous sur WhatsApp : nous vous donnons le numéro Wave ou Orange Money, puis votre paiement est enregistré.",
-      perMonth: "par mois",
-      perYear: (percent: number) => `par an (-${percent} %)`,
-      payMonth: "Payer 1 mois",
-      payYear: "Payer 1 an",
+      yearSaving: (percent: number) => `, soit ${percent} % de moins`,
+      pay: (duration: string) => `Payer ${duration}`,
       quote: "Sur devis : écrivez-nous",
       quoteButton: "Demander un devis",
     },

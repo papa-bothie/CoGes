@@ -132,3 +132,12 @@ données gardées, bouton WhatsApp prérempli vers l'équipe (le paiement en lig
 - Avant le déploiement, le propriétaire regarde les boutiques dont la fin tombe dans les jours
   qui viennent : elles passent directement sur le nouveau calendrier
   (`docs/runbooks/relances-et-suspensions.md`).
+
+## Amendement — prompt 44 (27 novembre 2026) : paiement de 6 mois
+
+Voir l'ADR 0134.
+
+- Un paiement de 6 mois suit les mêmes règles de départ (`_period_start`) et la même fonction
+  de fin de mois (`_add_months`) que 1 et 12 mois.
+- Le calendrier des relances ne change pas : il ne regarde que la date de fin, et il repart de
+  zéro pour la nouvelle fin.

@@ -173,6 +173,8 @@ class Plan(Base):
     name: Mapped[str] = mapped_column(Text)
     price_fcfa: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     #: Prix d'un an, écrit en base (12 × prix × 0,9, ADR 0132) ; `None` : pas à l'année.
+    #: 6 fois le prix du mois, sans remise (ADR 0134) ; `None` : pas de paiement par 6 mois.
+    semiannual_price_fcfa: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     annual_price_fcfa: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     #: `None` : aucun plafond (futur palier « sur devis »).
     max_users: Mapped[int | None] = mapped_column(Integer, nullable=True)

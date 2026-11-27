@@ -52,6 +52,18 @@ describe("vitrine : Nos offres (prompt 41, B5)", () => {
     expect(outside).not.toMatch(/\d+ ?%/);
   });
 
+  it("une ligne sous les cartes dit les trois durées, sans montant (ADR 0134)", () => {
+    const { container } = render(<NosOffres signupEnabled />);
+    const line = screen.getByText("Paiement possible par mois, par 6 mois ou par an.");
+    const cards = container.querySelector(":scope ul")!;
+    // Juste après les cartes, hors de la bascule qui garde ses deux positions.
+    expect(cards.nextElementSibling).toBe(line);
+    expect(
+      within(screen.getByRole("group", { name: "Durée du paiement" })).getAllByRole("radio"),
+    ).toHaveLength(2);
+    expect(line.textContent).not.toMatch(/\d[\d  ]* F\b|%/);
+  });
+
   it("chaque carte liste les fonctions de son offre", () => {
     render(<NosOffres signupEnabled />);
     const pro = screen.getByRole("heading", { name: "CoGes Pro" }).closest("li")!;

@@ -203,7 +203,8 @@ SettableSubscriptionStatus = Literal["active", "past_due", "suspended"]
 PaymentMethod = Literal["wave", "orange_money", "cash", "bank_transfer"]
 
 
-PeriodMonths = Literal[1, 12]
+#: Un mois, 6 mois (sans remise, ADR 0134) ou un an (-10 %, ADR 0132).
+PeriodMonths = Literal[1, 6, 12]
 
 
 class PlanRead(BaseModel):
@@ -215,6 +216,9 @@ class PlanRead(BaseModel):
     code: str
     name: str
     price_fcfa: Amount | None
+    #: Prix de 6 mois (6 fois le mois, sans remise), écrit en base ; `None` : pas de
+    #: paiement par 6 mois (ADR 0134).
+    semiannual_price_fcfa: Amount | None
     #: Prix d'un an (-10 %), écrit en base ; `None` : pas de paiement annuel.
     annual_price_fcfa: Amount | None
     max_users: int | None
@@ -308,7 +312,8 @@ class SubscriptionPaymentCreate(BaseModel):
     paid_at: datetime
     method: PaymentMethod
     note: str | None = Field(default=None, max_length=500)
-    #: Un mois ou un an (-10 %) ; le montant doit être celui de l'offre (ADR 0132).
+    #: Un mois, 6 mois ou un an (-10 %) ; le montant doit être celui de l'offre
+    #: (ADR 0132, 0134).
     period_months: PeriodMonths = 1
 
     @field_validator("paid_at")
