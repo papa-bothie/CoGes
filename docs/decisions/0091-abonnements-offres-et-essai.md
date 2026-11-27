@@ -2,7 +2,7 @@
 
 - **Date** : 2026-10-24
 - **Phase** : lot admin 3 (`docs/prompts/24-admin-abonnements.md`)
-- **Statut** : acceptée — **remplace l'ADR 0043** et referme le point **P8** ; **amendée par l'ADR 0132** (offres Pro et Business, essai sur Pro, Premium sur devis, `features` source des droits, droits acquis, paiement annuel)
+- **Statut** : acceptée — **remplace l'ADR 0043** et referme le point **P8** ; **amendée par l'ADR 0132** (offres Pro et Business, essai sur Pro, Premium sur devis, `features` source des droits, droits acquis, paiement annuel) ; **amendée par l'ADR 0133** (relances la veille, le jour J et à J+2, `past_due` pendant la grâce, suspension à J+3, périodes payées suivies, `trial_warned_days` remplacé par l'état d'étape)
 - **Décideur** : utilisateur (via AskUserQuestion)
 
 ## Contexte
