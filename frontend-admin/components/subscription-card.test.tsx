@@ -12,6 +12,7 @@ const PLANS: PlanRead[] = [
     code: "starter",
     name: "Pro",
     price_fcfa: "4900.00",
+    semiannual_price_fcfa: "29400.00",
     annual_price_fcfa: "52920.00",
     max_users: 3,
     features: [],
@@ -22,6 +23,7 @@ const PLANS: PlanRead[] = [
     code: "business",
     name: "Business",
     price_fcfa: "9900.00",
+    semiannual_price_fcfa: "59400.00",
     annual_price_fcfa: "106920.00",
     max_users: 7,
     features: [],
@@ -32,6 +34,7 @@ const PLANS: PlanRead[] = [
     code: "premium",
     name: "Premium",
     price_fcfa: null,
+    semiannual_price_fcfa: null,
     annual_price_fcfa: null,
     max_users: 10,
     features: [],
@@ -42,6 +45,7 @@ const PLANS: PlanRead[] = [
     code: "sur_devis",
     name: "Sur devis",
     price_fcfa: null,
+    semiannual_price_fcfa: null,
     annual_price_fcfa: null,
     max_users: null,
     features: [],
@@ -127,6 +131,66 @@ describe("carte abonnement", () => {
     await screen.findByText(/Paiement enregistré/);
     const body = POST.mock.calls[0]?.[1].body;
     expect([body.amount_fcfa, body.period_months]).toEqual(["52920", 12]);
+  });
+
+  it("propose trois durées, 6 mois sans remise, et montre la nouvelle fin (ADR 0134)", async () => {
+    vi.useFakeTimers({ now: new Date("2026-11-27T10:00:00Z"), toFake: ["Date"] });
+    try {
+      POST.mockResolvedValue(
+        ok({ ...DETAIL, status: "active", current_period_end: "2027-05-27T10:00:00Z" }, 201),
+      );
+      render(<SubscriptionCard companyId="c" canChange onAccessChanged={() => undefined} />);
+      const amount = await screen.findByLabelText("Montant (FCFA)");
+      const durations = Array.from(
+        (screen.getByLabelText("Durée") as HTMLSelectElement).options,
+        (option) => option.textContent,
+      );
+      expect(durations).toEqual(["1 mois", "6 mois", "1 an (-10 %)"]);
+      expect(screen.getByText("Nouvelle fin : 27/12/2026")).toBeVisible();
+      await userEvent.selectOptions(screen.getByLabelText("Durée"), "6");
+      expect(amount).toHaveValue("29400");
+      expect(screen.getByText("Nouvelle fin : 27/05/2027")).toBeVisible();
+      await userEvent.click(screen.getByRole("button", { name: "Enregistrer le paiement" }));
+      await screen.findByText(/Paiement enregistré/);
+      const body = POST.mock.calls[0]?.[1].body;
+      expect([body.amount_fcfa, body.period_months]).toEqual(["29400", 6]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("l'historique dit la durée payée", async () => {
+    const payment = {
+      amount_fcfa: "29400.00",
+      paid_at: "2026-11-20T10:00:00Z",
+      method: "wave" as const,
+      note: null,
+      recorded_at: "2026-11-20T10:00:00Z",
+    };
+    GET.mockImplementation(async (path: string) =>
+      ok(
+        path.endsWith("/plans")
+          ? PLANS
+          : {
+              ...DETAIL,
+              status: "active",
+              current_period_end: "2027-05-20T10:00:00Z",
+              payments: [
+                { ...payment, id: "p6", period_months: 6 },
+                { ...payment, id: "p12", period_months: 12, amount_fcfa: "52920.00" },
+                { ...payment, id: "p1", period_months: 1, amount_fcfa: "4900.00" },
+              ],
+              payments_total: 3,
+            },
+      ),
+    );
+    render(<SubscriptionCard companyId="c" canChange onAccessChanged={() => undefined} />);
+    const table = await screen.findByRole("table");
+    const cells = Array.from(
+      table.querySelectorAll("tbody tr td:nth-child(3)"),
+      (c) => c.textContent,
+    );
+    expect(cells).toEqual(["6 mois", "1 an", "1 mois"]);
   });
 
   it("les droits acquis s'affichent et s'enregistrent avec une raison", async () => {
