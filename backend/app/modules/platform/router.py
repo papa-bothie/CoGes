@@ -64,12 +64,14 @@ from app.modules.platform.schemas import (
     ProfileRead,
     RecoveryCodes,
     RecoveryCodesRegenerate,
+    ReminderList,
     RevenueRead,
     SignupsRead,
     StatsGranularity,
     StatsOverview,
     StatsPeriod,
     SubscriptionDetail,
+    SubscriptionExtend,
     SubscriptionPaymentCreate,
     SubscriptionUpdate,
     SupportAccessToken,
@@ -345,6 +347,27 @@ def record_payment(
         response.status_code = status.HTTP_200_OK
         response.headers[REPLAY_HEADER] = "true"
     return detail
+
+
+@router.post("/companies/{company_id}/subscription/extend", response_model=SubscriptionDetail)
+def extend_subscription(
+    company_id: UUID, payload: SubscriptionExtend, request: Request, platform: Administrator
+) -> SubscriptionDetail:
+    """« Prolonger » l'essai ou la période de N jours (1 à 90), raison obligatoire (ADR 0133).
+
+    Profil `administrator`, audit critique. Depuis l'échéance, ou depuis aujourd'hui si
+    elle est passée ; les relances repartent de zéro et une boutique en pause rouvre.
+    """
+    return service.extend_subscription(
+        platform.session, platform.admin, company_id, payload, ip_address=client_ip(request)
+    )
+
+
+@router.get("/reminders", response_model=ReminderList)
+def reminders(platform: CurrentPlatformAdmin) -> ReminderList:
+    """« À relancer » (ADR 0133) : boutiques de J-1 à J+3 et en pause depuis moins de
+    7 jours, avec l'étape, l'échéance, les gérants et le message WhatsApp de l'étape."""
+    return service.reminders(platform.session)
 
 
 # ---------------------------------------------------------- statistiques (ADR 0093)

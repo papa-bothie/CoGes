@@ -16,12 +16,12 @@ Sans SMTP configuré, rien ne part et rien n'échoue (`app/core/mailer.py`).
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any
+from datetime import date, datetime
+from typing import Any, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from app.core import mailer
+from app.core import mailer, renewal
 from app.core.config import get_settings
 from app.core.display import dmy
 from app.core.tenancy import TenantContext, tenant_transaction
@@ -31,7 +31,7 @@ from app.modules.notifications.schemas import NotificationType
 from app.modules.platform import service as platform_service
 from app.modules.rbac import service as rbac_service
 from app.modules.users import service as users_service
-from app.workers.beat import SUBSCRIPTIONS_DAILY, SUPPORT_SESSIONS_CLOSE, TRIAL_NOTICE
+from app.workers.beat import RENEWAL_NOTICE, SUBSCRIPTIONS_DAILY, SUPPORT_SESSIONS_CLOSE
 from app.workers.celery_app import celery_app
 from app.workers.jobs import tracked_job
 
@@ -168,48 +168,56 @@ def security_notice(self: Any, platform_user_id: str, kind: str, device: str | N
         raise self.retry(exc=exc) from exc
 
 
-# ----------------------------------------------------------- fin des essais (ADR 0091)
+# ------------------------------------------- relances et suspension (ADR 0091, 0133)
 
 TRIAL_SUMMARY = "platform.trial_summary"
 
-_WHEN = {7: "dans 7 jours", 3: "dans 3 jours", 1: "demain"}
+_STAGE_WORDS = {
+    "eve": "rappel de la veille",
+    "due": "rappel du jour J",
+    "last": "dernier rappel",
+    "suspended": "mise en pause",
+}
+_EMAIL_HOW = (
+    "Pour choisir ou renouveler votre offre, ouvrez CoGes, Réglages, « Mon abonnement », "
+    "ou répondez simplement à ce message : nous vous accompagnons avec plaisir."
+)
+_EMAIL_PAUSED = (
+    "Vos ventes, votre stock et vos clients restent exactement là où vous les avez "
+    "laissés. Pour rouvrir votre boutique, répondez à ce message ou écrivez-nous sur "
+    "WhatsApp : tout revient dès votre paiement."
+)
 
-_WARNING_BODY = (
-    "Bonjour,\n\n"
-    "Merci de faire confiance à CoGes pour {name} ! Votre essai gratuit de "
-    "CoGes Pro se termine {when}, le {date}.\n\n"
-    "Pour continuer sans la moindre interruption, choisissez simplement l'offre qui vous "
-    "convient : répondez à ce message ou appelez-nous, nous vous accompagnons avec "
-    "plaisir. Vos ventes, votre stock et vos clients restent exactement là où vous les "
-    "avez laissés.\n\n"
-    "À très bientôt,\nL'équipe CoGes"
-)
-_ENDED_BODY = (
-    "Bonjour,\n\n"
-    "Votre essai gratuit de CoGes Pro pour {name} s'est terminé le {date}. Merci de "
-    "l'avoir essayé !\n\n"
-    "Toutes vos données sont bien gardées. Pour retrouver l'accès, il suffit de choisir "
-    "votre offre : répondez à ce message ou appelez-nous, et nous rouvrons votre accès "
-    "dès votre premier paiement.\n\n"
-    "À très bientôt,\nL'équipe CoGes"
-)
+
+def _email_body(name: str, text: str, stage: str) -> str:
+    follow = _EMAIL_PAUSED if stage == "suspended" else _EMAIL_HOW
+    return f"Bonjour,\n\n{name} — {text}\n\n{follow}\n\nÀ très bientôt,\nL'équipe CoGes"
 
 
 @celery_app.task(name=SUBSCRIPTIONS_DAILY)
 @tracked_job(SUBSCRIPTIONS_DAILY)
 def subscriptions_daily(now: str | None = None) -> int:
-    """Avertit et suspend dans une transaction, puis enfile les messages (après COMMIT)."""
+    """Relance et suspend dans une transaction, puis enfile les messages (après COMMIT)."""
     moment = datetime.fromisoformat(now) if now else None
     notices = platform_service.run_subscription_day(moment)
     for notice in notices:
-        trial_notice.delay(str(notice.company_id), notice.days, notice.trial_ends_at.isoformat())
+        renewal_notice.delay(
+            company_id=str(notice.company_id),
+            stage=notice.stage,
+            kind=notice.kind,
+            ends_at=notice.ends_at.isoformat(),
+            plan_name=notice.plan_name,
+            pause_on=notice.pause_on.isoformat(),
+            today=notice.today.isoformat(),
+        )
     if notices:
         trial_summary.delay(
             [
                 {
                     "name": notice.company_name,
-                    "days": notice.days,
-                    "ends": notice.trial_ends_at.isoformat(),
+                    "stage": notice.stage,
+                    "kind": notice.kind,
+                    "ends": notice.ends_at.isoformat(),
                 }
                 for notice in notices
             ]
@@ -217,73 +225,78 @@ def subscriptions_daily(now: str | None = None) -> int:
     return len(notices)
 
 
-@celery_app.task(name=TRIAL_NOTICE, bind=True, max_retries=5, default_retry_delay=300)
-@tracked_job(TRIAL_NOTICE, ping_as=SUBSCRIPTIONS_DAILY)
-def trial_notice(self: Any, company_id: str, days: int, trial_ends_at: str) -> bool:
-    """Prévient une entreprise : avertissement (7, 3, 1) ou fin d'essai (0).
+@celery_app.task(name=RENEWAL_NOTICE, bind=True, max_retries=5, default_retry_delay=300)
+@tracked_job(RENEWAL_NOTICE, ping_as=SUBSCRIPTIONS_DAILY)
+def renewal_notice(
+    self: Any,
+    company_id: str,
+    stage: str,
+    kind: str,
+    ends_at: str,
+    plan_name: str,
+    pause_on: str,
+    today: str,
+) -> bool:
+    """Prévient une entreprise d'une étape (ADR 0133) : cloche et téléphone des gérants,
+    e-mail à ceux qui en ont un. La pause n'a pas de cloche (la boutique ne se connecte
+    plus) : l'e-mail seul.
 
-    La cloche n'est posée que pour un avertissement (une entreprise suspendue ne se
-    connecte plus). Rejouée, elle ne double rien : la notification est dédoublonnée par
-    palier, et l'e-mail ne part qu'une fois la cloche posée pour la première fois.
+    Rejouée, elle ne double rien : la cloche est dédoublonnée par étape et par échéance,
+    et l'e-mail ne part qu'une fois la cloche posée pour la première fois.
     """
-    ctx = TenantContext.bootstrap(UUID(company_id))
-    ends = datetime.fromisoformat(trial_ends_at)
-    first_time = True
-    if days:
+    stage_ = cast(renewal.Stage, stage)
+    kind_ = cast(renewal.Kind, kind)
+    days_left = max(1, (date.fromisoformat(pause_on) - date.fromisoformat(today)).days)
+    title = renewal.title(stage_, kind_, days_left)
+    text = renewal.message(stage_, kind_, plan_name, days_left)
+    if stage_ != "suspended":
+        ctx = TenantContext.bootstrap(UUID(company_id))
         with tenant_transaction(ctx) as session:
             first_time = (
                 notifications_service.notify(
                     session,
                     ctx,
                     notification_type=NotificationType.TRIAL_ENDING,
-                    title=f"Votre essai se termine {_WHEN[days]}",
-                    body=(
-                        f"Votre essai gratuit de CoGes Pro s'arrête le {dmy(ends.date())}. "
-                        "Pour continuer sans interruption, contactez l'équipe CoGes : "
-                        "elle vous aide à choisir votre offre."
-                    ),
-                    entity_id=f"trial:{days}",
-                    data={"days": days, "trial_ends_at": trial_ends_at},
-                    push=notifications_service.push_texts.trial_ending(days),
+                    title=title,
+                    body=text,
+                    entity_id=f"renewal:{stage_}:{ends_at}",
+                    data={"stage": stage_, "kind": kind_, "ends_at": ends_at},
+                    push=notifications_service.push_texts.renewal(stage_, kind_),
                     dedupe_hours=24 * 31,
                 )
                 > 0
             )
-    if not first_time:
-        return False
+        if not first_time:
+            return False
     try:
         name, emails = manager_emails(UUID(company_id))
-        if days:
-            subject = f"Votre essai de CoGes se termine {_WHEN[days]}"
-            body = _WARNING_BODY.format(name=name, when=_WHEN[days], date=dmy(ends.date()))
-        else:
-            subject = "Votre essai de CoGes est terminé"
-            body = _ENDED_BODY.format(name=name, date=dmy(ends.date()))
-        return mailer.send_email(to=emails, subject=subject, body=body)
+        if emails:
+            mailer.send_email(to=emails, subject=title, body=_email_body(name, text, stage_))
+        return True
     except Exception as exc:
         raise self.retry(exc=exc) from exc
 
 
 @celery_app.task(name=TRIAL_SUMMARY, bind=True, max_retries=3, default_retry_delay=300)
 def trial_summary(self: Any, notices: list[dict[str, Any]]) -> bool:
-    """Récapitulatif pour l'équipe (`COGES_PLATFORM_ALERT_EMAIL`) : qui finit, qui est coupé."""
+    """Récapitulatif pour l'équipe (`COGES_PLATFORM_ALERT_EMAIL`) : les étapes du jour,
+    puis les mises en pause."""
     team = get_settings().platform_alert_email
     if not team:
         return False
+    ordered = sorted(notices, key=lambda item: item.get("stage") == "suspended")
     lines = [
-        f"- {item['name']} : "
-        + (
-            f"essai terminé le {dmy(datetime.fromisoformat(item['ends']).date())}, accès suspendu"
-            if item["days"] == 0
-            else f"essai qui se termine {_WHEN[item['days']]}"
-        )
-        for item in notices
+        f"- {item['name']} : {_STAGE_WORDS.get(item.get('stage', ''), 'relance')} "
+        f"({'essai' if item.get('kind') == 'trial' else 'abonnement'} jusqu'au "
+        f"{dmy(datetime.fromisoformat(item['ends']).date())})"
+        for item in ordered
     ]
     try:
         return mailer.send_email(
             to=[team],
-            subject="CoGes — fins d'essai du jour",
-            body="Fins d'essai traitées cette nuit :\n\n" + "\n".join(lines),
+            subject="CoGes — relances et mises en pause du jour",
+            body="Relances traitées cette nuit (« À relancer » dans l'administration) :\n\n"
+            + "\n".join(lines),
         )
     except Exception as exc:
         raise self.retry(exc=exc) from exc

@@ -52,6 +52,9 @@ from tests.conftest import (
 pytestmark = [pytest.mark.tenancy, pytest.mark.usefixtures("workers_bound_to_test_database")]
 
 #: Éventail → sous-tâche lancée pour une seule entreprise.
+#: Une échéance fixe : relancée, la même étape de la même échéance ne double rien.
+_RENEWAL_END = datetime.now(UTC) + timedelta(days=1)
+
 FAN_OUT: dict[str, Callable[[str], Any]] = {
     beat.REBUILD_STOCK: reconcile.rebuild_stock,
     beat.REBUILD_RECENT_FACTS: lambda company: analytics.rebuild_recent_facts(company, 7),
@@ -63,10 +66,16 @@ FAN_OUT: dict[str, Callable[[str], Any]] = {
     beat.SWEEP_EXPORTS: exports.sweep,
     # Photos orphelines (ADR 0121) : le dossier d'une seule entreprise, sous son contexte.
     beat.SWEEP_PHOTOS: products.sweep_photos,
-    # Fin des essais (ADR 0091) : la tâche de nuit décide sous le rôle de la plateforme,
+    # Relances (ADR 0091, 0133) : la tâche de nuit décide sous le rôle de la plateforme,
     # puis prévient chaque entreprise dans son propre contexte.
-    beat.SUBSCRIPTIONS_DAILY: lambda company: platform.trial_notice(
-        company, 7, (datetime.now(UTC) + timedelta(days=7)).isoformat()
+    beat.SUBSCRIPTIONS_DAILY: lambda company: platform.renewal_notice(
+        company_id=company,
+        stage="eve",
+        kind="trial",
+        ends_at=_RENEWAL_END.isoformat(),
+        plan_name="Pro",
+        pause_on=(_RENEWAL_END + timedelta(days=3)).date().isoformat(),
+        today=(_RENEWAL_END - timedelta(days=1)).date().isoformat(),
     ),
 }
 #: Tâches de plate-forme : aucune donnée d'une entreprise lue ou écrite en son nom.

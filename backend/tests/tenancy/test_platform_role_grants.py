@@ -112,6 +112,8 @@ COLUMN_GRANTS: dict[str, dict[str, set[str]]] = {
         "status": {"SELECT", "UPDATE"},
         "created_at": {"SELECT"},
         "deleted_at": {"SELECT"},
+        # Les relances comptent les jours dans le fuseau de l'entreprise (ADR 0133).
+        "timezone": {"SELECT"},
     },
     "users": {
         column: {"SELECT"}

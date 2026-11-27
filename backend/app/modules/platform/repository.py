@@ -343,6 +343,53 @@ _ACTIVE_USERS = text(
 )
 
 
+#: Échéance suivie (ADR 0133, `app/core/renewal.deadline`) : la période payée si elle
+#: existe hors essai, sinon la fin de l'essai.
+_DEADLINE = """
+    CASE WHEN s.status <> 'trial' AND s.current_period_end IS NOT NULL
+         THEN s.current_period_end
+         WHEN s.status IN ('trial', 'past_due') THEN s.trial_ends_at END
+"""
+_DEADLINES_BEFORE = text(
+    f"""
+    SELECT s.company_id FROM subscriptions s
+     WHERE s.status IN ('trial', 'active', 'past_due') AND NOT s.is_license
+       AND ({_DEADLINE}) <= :moment
+     ORDER BY ({_DEADLINE}), s.id
+    """
+)
+_COMPANY_TIMEZONE = text(
+    "SELECT c.timezone FROM companies c WHERE c.id = :id AND c.deleted_at IS NULL"
+)
+_REMINDER_CANDIDATES = text(
+    f"""
+    SELECT c.id AS company_id, c.name, c.slug::text AS slug, c.timezone,
+           s.status::text AS status, s.trial_ends_at, s.current_period_end, s.is_license,
+           s.reminder_stage, s.reminder_for_end, s.reminder_at, p.name AS plan_name
+      FROM subscriptions s
+      JOIN companies c ON c.id = s.company_id AND c.deleted_at IS NULL
+      JOIN plans p ON p.id = s.plan_id
+     WHERE (s.status IN ('trial', 'active', 'past_due') AND NOT s.is_license
+            AND ({_DEADLINE}) BETWEEN :since AND :until)
+        OR (s.status = 'suspended' AND s.reminder_stage = 'suspended'
+            AND s.reminder_at >= :paused_since)
+     ORDER BY COALESCE(({_DEADLINE}), s.reminder_for_end), c.id
+    """
+)
+#: Gérants vivants d'entreprises, avec leur téléphone (« Écrire sur WhatsApp »).
+_MANAGER_CONTACTS = text(
+    """
+    SELECT u.company_id, u.full_name, u.phone
+      FROM users u
+      JOIN user_roles ur ON ur.company_id = u.company_id AND ur.user_id = u.id
+      JOIN roles r ON r.company_id = ur.company_id AND r.id = ur.role_id
+     WHERE u.company_id = ANY(:ids) AND u.deleted_at IS NULL AND u.is_active
+       AND r.name = 'gerant'
+     ORDER BY u.company_id, u.full_name, u.id
+    """
+)
+
+
 class SubscriptionRepository:
     """Offres, abonnements et paiements déclarés, sous `coges_app_platform`.
 
@@ -405,19 +452,34 @@ class SubscriptionRepository:
         self.session.flush()
         return payment
 
-    def trials_ending_before(self, moment: datetime) -> list[UUID]:
-        """Entreprises dont l'essai finit avant `moment`, les plus proches d'abord.
+    def deadlines_before(self, moment: datetime) -> list[UUID]:
+        """Entreprises suivies par les relances (ADR 0133) dont l'échéance tombe avant
+        `moment` : essais, périodes payées, hors licences ; les plus proches d'abord.
 
         Sans verrou : la tâche de nuit verrouille ensuite chaque entreprise **puis** son
         abonnement, dans l'ordre de tous les autres gestes, et revérifie.
         """
+        return list(self.session.execute(_DEADLINES_BEFORE, {"moment": moment}).scalars())
+
+    def timezone(self, company_id: UUID) -> str | None:
+        return self.session.execute(_COMPANY_TIMEZONE, {"id": company_id}).scalar_one_or_none()
+
+    def reminder_candidates(
+        self, *, since: datetime, until: datetime, paused_since: datetime
+    ) -> list[Any]:
+        """« À relancer » : échéance entre `since` et `until`, ou mise en pause par la
+        tâche de nuit depuis `paused_since` ; le jour exact se décide dans le fuseau."""
         return list(
-            self.session.scalars(
-                select(Subscription.company_id)
-                .where(Subscription.status == "trial", Subscription.trial_ends_at <= moment)
-                .order_by(Subscription.trial_ends_at, Subscription.id)
-            )
+            self.session.execute(
+                _REMINDER_CANDIDATES,
+                {"since": since, "until": until, "paused_since": paused_since},
+            ).all()
         )
+
+    def manager_contacts(self, company_ids: list[UUID]) -> list[Any]:
+        if not company_ids:
+            return []
+        return list(self.session.execute(_MANAGER_CONTACTS, {"ids": company_ids}).all())
 
 
 class SupportSessionRepository:

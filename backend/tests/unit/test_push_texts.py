@@ -33,10 +33,11 @@ def _every_type() -> list[push.PushMessage]:
         push.sale_cancelled("7", None, corrected=False, sale_id=ID),
         push.insight_critical("stockout_risk"),
         push.login_failures("Fatou Sall"),
-        push.trial_ending(7),
-        push.trial_ending(3),
-        push.trial_ending(1),
-        push.trial_ending(0),
+        *(
+            push.renewal(stage, kind)
+            for stage in ("eve", "due", "last", "suspended")
+            for kind in ("trial", "paid")
+        ),
         push.support_access(),
         push.burst(4),
     ]
@@ -62,7 +63,8 @@ def test_the_examples_of_the_owner() -> None:
         push.sale_cancelled("42", "Awa Ndiaye", corrected=False, sale_id=ID).title
         == "Vente n° 42 annulée par Awa"
     )
-    assert push.trial_ending(3).title == "Fin de l'essai dans 3 jours"
+    assert push.renewal("eve", "trial").title == "Votre essai se termine demain"
+    assert push.renewal("last", "paid").url == "/settings/subscription"
     assert push.support_access().title == "Accès support ouvert par l'équipe CoGes"
 
 

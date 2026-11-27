@@ -58,6 +58,9 @@ DETAIL_KEYS = {
     "extra_features",
     "max_users_override",
     "max_users",
+    "reminder_stage",
+    "reminder_for_end",
+    "reminder_at",
     "payments",
     "payments_total",
 }
@@ -407,10 +410,16 @@ def test_a_refused_commit_records_nothing(
                 headers=headers,
                 json={"extra_features": ["imports"], "max_users_override": 9, "reason": "refusé"},
             )
+            extended = raw.post(
+                _url(shop.company_id, "subscription/extend"),
+                headers=headers,
+                json={"days": 7, "reason": "refusé"},
+            )
         assert paid.status_code >= 500 and changed.status_code >= 500
-        assert rights.status_code >= 500
+        assert rights.status_code >= 500 and extended.status_code >= 500
     row = subscription_row(platform_session_factory, shop.company_id)
     assert (row.plan_code, row.status, row.current_period_end) == ("starter", "trial", None)
+    assert abs(row.trial_ends_at - row.started_at - timedelta(days=30)) < timedelta(minutes=1)
     assert (row.extra_features, row.max_users_override) == ([], None)
     assert enqueued == []
 

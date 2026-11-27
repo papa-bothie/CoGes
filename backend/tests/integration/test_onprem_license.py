@@ -73,10 +73,10 @@ def _audits(platform_session_factory: sessionmaker[Any], company_id: UUID) -> li
         )
 
 
-def _night(company_id: UUID) -> list[int]:
+def _night(company_id: UUID) -> list[str]:
     """La tâche de nuit, maintenant ; les paliers vus pour cette entreprise seulement."""
     return [
-        n.days
+        n.stage
         for n in platform_service.run_subscription_day(datetime.now(UTC))
         if n.company_id == company_id
     ]
@@ -84,7 +84,7 @@ def _night(company_id: UUID) -> list[int]:
 
 def _days_later(
     platform_session_factory: sessionmaker[Any], company_id: UUID, days: int
-) -> list[int]:
+) -> list[str]:
     """La nuit du jour `days` de cette entreprise : sa fin d'essai (30 jours après la
     création) est reculée de `days` jours, et la tâche tourne maintenant.
 
@@ -95,6 +95,21 @@ def _days_later(
     ends = created + timedelta(days=30) - timedelta(days=days)
     set_subscription(platform_session_factory, company_id, trial_ends_at=ends)
     return _night(company_id)
+
+
+def _paused_by_the_night(
+    platform_session_factory: sessionmaker[Any], company_id: UUID
+) -> list[str]:
+    """Le témoin mis en pause par le calendrier (ADR 0133) : essai fini depuis 33 jours,
+    dernier rappel une nuit, pause la nuit suivante (la veille est simulée en reculant
+    l'heure du rappel d'un jour)."""
+    stages = _days_later(platform_session_factory, company_id, 33)
+    row = subscription_row(platform_session_factory, company_id)
+    if row.reminder_at is not None:
+        set_subscription(
+            platform_session_factory, company_id, reminder_at=row.reminder_at - timedelta(days=1)
+        )
+    return stages + _night(company_id)
 
 
 def _activate(shop: DemoCompany, plan: str = "premium", note: str | None = None) -> Any:
@@ -149,11 +164,11 @@ def test_a_licensed_company_is_never_suspended_by_the_night(
     assert enqueued == []
 
 
-def test_without_licence_the_same_company_is_suspended_on_day_31(
+def test_without_licence_the_same_company_is_paused_by_the_night(
     platform_session_factory: sessionmaker[Any], shop: DemoCompany
 ) -> None:
     """Contrôle témoin : sans `activate_license`, la tâche de nuit suspend."""
-    assert _days_later(platform_session_factory, shop.company_id, 31) == [0]
+    assert _paused_by_the_night(platform_session_factory, shop.company_id) == ["last", "suspended"]
     assert subscription_row(platform_session_factory, shop.company_id).status == "suspended"
     assert _access(platform_session_factory, shop.company_id) == "suspended"
 
@@ -210,7 +225,7 @@ def test_a_suspended_company_gets_its_access_back_silently(
     shop: DemoCompany,
     enqueued: list[tuple[str, dict[str, Any]]],
 ) -> None:
-    assert _days_later(platform_session_factory, shop.company_id, 31) == [0]
+    assert _paused_by_the_night(platform_session_factory, shop.company_id) == ["last", "suspended"]
     before = len(_audits(platform_session_factory, shop.company_id))
 
     result = _activate(shop, "business", note="Contrat du 17/11/2026")
@@ -330,7 +345,7 @@ def test_licensing_a_leaves_b_on_trial_and_followed_by_the_night(
     assert after_b == before_b
     assert _access(platform_session_factory, other.company_id) == "trial"
     assert _audits(platform_session_factory, other.company_id) == []
-    assert _days_later(platform_session_factory, other.company_id, 31) == [0]
+    assert _paused_by_the_night(platform_session_factory, other.company_id) == ["last", "suspended"]
     assert _access(platform_session_factory, shop.company_id) == "active"
 
 
@@ -426,7 +441,7 @@ def test_the_status_reads_every_field_and_writes_nothing(
 def test_the_status_of_a_suspended_company(
     platform_session_factory: sessionmaker[Any], shop: DemoCompany
 ) -> None:
-    _days_later(platform_session_factory, shop.company_id, 31)
+    _paused_by_the_night(platform_session_factory, shop.company_id)
     status = platform_service.license_status(slug=shop.slug)
     assert (status.access, status.subscription_status) == ("suspended", "suspended")
 

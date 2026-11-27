@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
-from app.core import plan_features
+from app.core import clock, plan_features, renewal
 from app.core.audit import AuditAction, audit_critical
 from app.core.errors import NotFoundError
 from app.core.tenancy import TenantContext
@@ -27,6 +27,7 @@ from app.modules.companies.schemas import (
     CompanyRead,
     CompanyUpdate,
     PlanSummary,
+    RenewalBanner,
     SubscriptionRead,
     SupportAccessRead,
     SupportAccessWindow,
@@ -277,7 +278,27 @@ def current_plan(session: Session) -> plan_features.CurrentPlan | None:
     return plan_features.read_current_plan(session)
 
 
-def plan_summary(session: Session) -> PlanSummary | None:
+def _renewal(plan: plan_features.CurrentPlan, timezone: str | None) -> RenewalBanner | None:
+    found = renewal.banner(
+        status=plan.status,
+        trial_ends_at=plan.trial_ends_at,
+        current_period_end=plan.current_period_end,
+        is_license=plan.is_license,
+        now=clock.now(),
+        timezone=timezone,
+    )
+    if found is None:
+        return None
+    return RenewalBanner(
+        kind=found.kind,
+        stage=found.stage,
+        ends_at=found.ends_at,
+        pause_on=found.pause_on,
+        days_left=found.days_left,
+    )
+
+
+def plan_summary(session: Session, *, timezone: str | None = None) -> PlanSummary | None:
     plan = current_plan(session)
     if plan is None:
         return None
@@ -287,10 +308,11 @@ def plan_summary(session: Session) -> PlanSummary | None:
         status=plan.status,
         is_license=plan.is_license,
         features=list(plan.features),
+        renewal=_renewal(plan, timezone),
     )
 
 
-def subscription(session: Session) -> SubscriptionRead:
+def subscription(session: Session, ctx: TenantContext) -> SubscriptionRead:
     plan = current_plan(session)
     if plan is None:
         raise NotFoundError("Abonnement introuvable.")
@@ -305,4 +327,5 @@ def subscription(session: Session) -> SubscriptionRead:
         max_users=plan.max_users,
         active_users=plan.active_users,
         extra_features=list(plan.extra_features),
+        renewal=_renewal(plan, get_timezone(session, ctx)),
     )

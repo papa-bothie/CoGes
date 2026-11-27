@@ -35,7 +35,7 @@ BEAT_TICK = "system.beat_tick"
 PURGE_JOB_RUNS = "system.purge_job_runs"
 #: Abonnements (ADR 0091) : fin des essais, et sa sous-tâche par entreprise.
 SUBSCRIPTIONS_DAILY = "platform.subscriptions_daily"
-TRIAL_NOTICE = "platform.trial_notice"
+RENEWAL_NOTICE = "platform.renewal_notice"
 #: Accès support (ADR 0092) : ferme à leur échéance les sessions restées ouvertes.
 SUPPORT_SESSIONS_CLOSE = "platform.support_sessions_close"
 #: Inscription libre-service (ADR 0118) : bascule à 48 h, abandon, effacement.
@@ -122,8 +122,8 @@ BEAT_SCHEDULE: dict[str, dict[str, Any]] = {
         "task": PURGE_JOB_RUNS,
         "schedule": crontab(hour="1", minute="15"),
     },
-    # 06 h 30 — fin des essais (ADR 0091) : avertir à J-7, J-3, J-1, suspendre à
-    # l'échéance. Après la nuit, avant l'ouverture des boutiques.
+    # 06 h 30 — relances (ADR 0133) : veille, jour J, dernier rappel à J+2, pause à
+    # J+3, essais et périodes payées. Après la nuit, avant l'ouverture des boutiques.
     "subscriptions-daily": {
         "task": SUBSCRIPTIONS_DAILY,
         "schedule": crontab(hour="6", minute="30"),
@@ -186,7 +186,7 @@ JOB_FRESHNESS: dict[str, Freshness] = {
     SCAN_DUE_DEBTS: Freshness(DAILY, "notifications.scan_due_debts"),
     CHECK_REVENUE: Freshness(WEEKLY, "reconcile.check_revenue"),
     SIGNUP_MAINTENANCE: Freshness(DAILY),
-    SUBSCRIPTIONS_DAILY: Freshness(DAILY, TRIAL_NOTICE),
+    SUBSCRIPTIONS_DAILY: Freshness(DAILY, RENEWAL_NOTICE),
     SUPPORT_SESSIONS_CLOSE: Freshness(DAILY),
     SWEEP_PHOTOS: Freshness(DAILY, "products.sweep_photos"),
 }

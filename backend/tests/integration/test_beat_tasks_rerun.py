@@ -123,8 +123,8 @@ def test_purge_job_runs_rerun() -> None:
 
 @pytest.mark.usefixtures("platform_bound_to_test_database")
 def test_subscriptions_daily_rerun(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Fin des essais (ADR 0091) : la seconde passe ne prévient ni ne suspend personne."""
-    monkeypatch.setattr(platform.trial_notice, "delay", lambda *args: None)
+    """Relances (ADR 0133) : la seconde passe ne prévient ni ne suspend personne."""
+    monkeypatch.setattr(platform.renewal_notice, "delay", lambda **kwargs: None)
     monkeypatch.setattr(platform.trial_summary, "delay", lambda *args: None)
     _, second = _twice(platform.subscriptions_daily)
     assert second == 0

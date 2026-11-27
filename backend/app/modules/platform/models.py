@@ -210,7 +210,14 @@ class Subscription(Base):
     current_period_end: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    #: Plus lue depuis l'ADR 0133 (gardée pour la version précédente pendant un déploiement).
     trial_warned_days: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    #: Relances (ADR 0133) : dernière étape franchie, pour quelle échéance, et quand.
+    reminder_stage: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reminder_for_end: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reminder_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     #: Droits acquis (ADR 0132) : accordés en plus de l'offre.
     extra_features: Mapped[list[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
     #: Plafond de comptes acquis ; `None` : celui de l'offre.

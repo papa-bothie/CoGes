@@ -178,14 +178,19 @@ def login_failures(name: str) -> PushMessage:
     )
 
 
-#: « dans 3 jours », « demain », « aujourd'hui » (J-7, J-3, J-1, J+0).
-def trial_ending(days: int) -> PushMessage:
-    when = {0: "aujourd'hui", 1: "demain"}.get(days, f"dans {days} jours")
-    return PushMessage(
-        title=f"Fin de l'essai {when}",
-        body="Contactez l'équipe CoGes pour choisir votre offre.",
-        url=ALERTS_PATH,
-    )
+#: « Mon abonnement » : où mène chaque relance (ADR 0133).
+SUBSCRIPTION_PATH = "/settings/subscription"
+
+
+def renewal(stage: str, kind: str) -> PushMessage:
+    """Relance de fin d'essai ou d'abonnement (ADR 0133), sans montant."""
+    what = "Votre essai" if kind == "trial" else "Votre abonnement"
+    title, body = {
+        "eve": (f"{what} se termine demain", "Choisissez votre offre pour continuer."),
+        "due": (f"{what} se termine", "Votre boutique reste ouverte encore quelques jours."),
+        "last": ("Dernier rappel : pause demain", "Vos données sont gardées."),
+    }.get(stage, ("Votre boutique est en pause", "Tout revient dès le paiement."))
+    return PushMessage(title=title, body=body, url=SUBSCRIPTION_PATH)
 
 
 def support_access() -> PushMessage:
