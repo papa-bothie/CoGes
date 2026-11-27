@@ -6,6 +6,7 @@ import { api, unwrap } from "@/lib/api/client";
 import { errorMessage } from "@/lib/api/errors";
 import type { PlanRead, SubscriptionDetail } from "@/lib/api/schema";
 import { PAYMENT_METHOD_LABELS, SUBSCRIPTION_LABELS, formatDate, formatFcfa } from "@/lib/format";
+import { STAGES } from "@/lib/reminders";
 
 const TONES: Record<string, string> = {
   trial: "bg-attention-teinte text-attention",
@@ -88,6 +89,11 @@ export function SubscriptionCard({
   const [override, setOverride] = useState("");
   const [rightsReason, setRightsReason] = useState("");
   const [rightsError, setRightsError] = useState<string | null>(null);
+  const extendDaysId = useId();
+  const extendReasonId = useId();
+  const [extendDays, setExtendDays] = useState("7");
+  const [extendReason, setExtendReason] = useState("");
+  const [extendError, setExtendError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -170,6 +176,53 @@ export function SubscriptionCard({
     }
   }
   const [lastPayment] = subscription.payments;
+  // L'échéance suivie par les relances : la période payée, sinon la fin de l'essai.
+  const deadline = subscription.current_period_end ?? subscription.trial_ends_at;
+  const sentForThisEnd =
+    subscription.reminder_stage &&
+    subscription.reminder_for_end &&
+    deadline &&
+    Date.parse(subscription.reminder_for_end) === Date.parse(deadline)
+      ? subscription.reminder_stage
+      : subscription.status === "suspended"
+        ? subscription.reminder_stage
+        : null;
+
+  async function extend(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const days = Number(extendDays);
+    if (!/^\d+$/.test(extendDays.trim()) || days < 1 || days > 90) {
+      setExtendError("Saisissez un nombre de jours entre 1 et 90.");
+      return;
+    }
+    if (extendReason.trim().length < 3) {
+      setExtendError("Donnez la raison de la prolongation.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const before = subscription?.status;
+      const updated = await unwrap(
+        api.POST("/api/v1/platform/companies/{company_id}/subscription/extend", {
+          params: { path: { company_id: companyId } },
+          body: { days, reason: extendReason.trim() },
+        }),
+      );
+      setSubscription(updated);
+      setExtendReason("");
+      setExtendError(null);
+      setNotice(
+        `Prolongé de ${days} jour${days > 1 ? "s" : ""} : nouvelle fin le ${formatDate(
+          updated.current_period_end ?? updated.trial_ends_at,
+        )}. Les relances repartent de zéro.`,
+      );
+      if (before !== updated.status) onAccessChanged();
+    } catch (caught) {
+      setExtendError(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function changePlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -293,6 +346,16 @@ export function SubscriptionCard({
         <dd>
           {subscription.current_period_end ? formatDate(subscription.current_period_end) : "—"}
         </dd>
+        {!subscription.is_license && (
+          <>
+            <dt className="text-encre-douce">Relances</dt>
+            <dd data-testid="relance-etape">
+              {sentForThisEnd
+                ? `${STAGES[sentForThisEnd].label} (envoyé le ${formatDate(subscription.reminder_at)})`
+                : "Aucune relance pour cette fin"}
+            </dd>
+          </>
+        )}
         <dt className="text-encre-douce">Dernier paiement</dt>
         <dd>
           {lastPayment
@@ -350,6 +413,56 @@ export function SubscriptionCard({
               Changer d&apos;offre
             </button>
           </form>
+
+          {!subscription.is_license && deadline && (
+            <form onSubmit={extend} className="space-y-3" aria-labelledby="titre-prolonger">
+              <h3 id="titre-prolonger" className="font-bold">
+                Prolonger
+              </h3>
+              <p className="text-sm text-encre-douce">
+                {subscription.current_period_end ? "La période payée" : "L'essai"} gagne N jours,
+                depuis sa fin ou depuis aujourd&apos;hui si elle est passée. Une boutique en pause
+                rouvre, et les relances repartent de zéro.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-[8rem_1fr]">
+                <div className="space-y-1">
+                  <label htmlFor={extendDaysId} className="block font-semibold">
+                    Jours
+                  </label>
+                  <input
+                    id={extendDaysId}
+                    inputMode="numeric"
+                    value={extendDays}
+                    onChange={(event) => setExtendDays(event.target.value)}
+                    className="w-full rounded border border-trait bg-surface px-3 py-2"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor={extendReasonId} className="block font-semibold">
+                    Raison de la prolongation
+                  </label>
+                  <input
+                    id={extendReasonId}
+                    value={extendReason}
+                    onChange={(event) => setExtendReason(event.target.value)}
+                    className="w-full rounded border border-trait bg-surface px-3 py-2"
+                  />
+                </div>
+              </div>
+              {extendError && (
+                <p role="alert" className="rounded bg-danger-teinte px-3 py-2 text-danger">
+                  {extendError}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={busy}
+                className="rounded bg-accent px-4 py-2 font-semibold text-accent-encre disabled:opacity-50"
+              >
+                Prolonger
+              </button>
+            </form>
+          )}
 
           <form onSubmit={recordPayment} className="space-y-3" aria-labelledby="titre-paiement">
             <h3 id="titre-paiement" className="font-bold">

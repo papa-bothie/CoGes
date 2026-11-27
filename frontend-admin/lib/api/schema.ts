@@ -34,6 +34,10 @@ export type AuditEntry = Schemas["AuditEntry"];
 export type AuditPage = Schemas["AuditPage"];
 export type ProfileRead = Schemas["ProfileRead"];
 export type AttentionRead = Schemas["AttentionRead"];
+// Relances (ADR 0133).
+export type ReminderList = Schemas["ReminderList"];
+export type ReminderItem = Schemas["ReminderItem"];
+export type SubscriptionExtend = Schemas["SubscriptionExtend"];
 export type TeamMemberUpdate = Schemas["TeamMemberUpdate"];
 export type SecurityEvent = Schemas["SecurityEvent"];
 export type RecoveryCodes = Schemas["RecoveryCodes"];
