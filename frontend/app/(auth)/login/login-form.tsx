@@ -15,6 +15,8 @@ import { resendSignupLink } from "@/lib/signup/api";
 import { labels } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
+import { PausedShop } from "./paused-shop";
+
 const t = labels.login;
 
 /** Mêmes bornes que `LoginRequest` côté API ; le serveur revalide de toute façon. */
@@ -46,8 +48,6 @@ function rememberedSlug(): string {
 function failure(error: unknown): string {
   // Provisoire expiré (ADR 0078) : ne s'apprend qu'avec le bon mot de passe.
   if (isApiError(error) && error.code === "temporary_password_expired") return t.temporaryExpired;
-  // Entreprise suspendue (ADR 0089) : le bon mot de passe, mais l'accès est coupé.
-  if (isApiError(error) && error.code === COMPANY_SUSPENDED) return t.suspended;
   // Demande d'inscription pas encore activée (ADR 0118) : dit après le bon mot de passe.
   if (isApiError(error) && error.code === "signup_email_pending") return t.signupEmailPending;
   if (isApiError(error) && error.code === "signup_team_pending") return t.signupTeamPending;
@@ -68,6 +68,8 @@ export function LoginForm() {
   // Lien e-mail à renvoyer, quand la connexion a révélé une demande en attente (ADR 0118).
   const [resendTo, setResendTo] = useState<string | null>(null);
   const [resent, setResent] = useState(false);
+  // Boutique en pause (ADR 0133) : l'écran chaleureux à la place d'une erreur.
+  const [paused, setPaused] = useState<string | null>(null);
 
   const {
     register,
@@ -97,9 +99,15 @@ export function LoginForm() {
     setFormError(null);
     setResendTo(null);
     setResent(false);
+    setPaused(null);
     try {
       await login(values);
     } catch (error) {
+      // Entreprise en pause (ADR 0089, 0133) : le bon mot de passe, l'accès coupé.
+      if (isApiError(error) && error.code === COMPANY_SUSPENDED) {
+        setPaused(values.company_slug);
+        return;
+      }
       setFormError(failure(error));
       if (isApiError(error) && error.code === "signup_email_pending") {
         setResendTo(values.identifier.includes("@") ? values.identifier : null);
@@ -118,7 +126,6 @@ export function LoginForm() {
   const notices: Record<string, string> = {
     expired: t.sessionExpired,
     logout: t.loggedOut,
-    suspended: t.suspended,
   };
   const notice = reason ? (notices[reason] ?? null) : null;
 
@@ -132,6 +139,10 @@ export function LoginForm() {
       noValidate
       className="space-y-5"
     >
+      {paused !== null && <PausedShop shop={paused} live="alert" />}
+      {reason === "suspended" && paused === null && !formError && (
+        <PausedShop shop="" live="status" />
+      )}
       {notice && !formError && (
         <p role="status" className="rounded-champ bg-voile px-4 py-3 font-semibold">
           {notice}

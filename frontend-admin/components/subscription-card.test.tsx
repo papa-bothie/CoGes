@@ -61,6 +61,9 @@ const DETAIL: SubscriptionDetail = {
   extra_features: [],
   max_users_override: null,
   max_users: 3,
+  reminder_stage: null,
+  reminder_for_end: null,
+  reminder_at: null,
   payments: [],
   payments_total: 0,
 };
@@ -185,6 +188,38 @@ describe("carte abonnement", () => {
     expect(keys[0]).toBe(keys[1]);
     expect(POST.mock.calls[0]?.[1].body.amount_fcfa).toBe("4900");
     expect(changed).toHaveBeenCalledOnce();
+  });
+
+  it("dit la relance envoyée pour cette fin, et prolonge avec une raison (ADR 0133)", async () => {
+    GET.mockImplementation(async (path: string) =>
+      ok(
+        path.endsWith("/plans")
+          ? PLANS
+          : {
+              ...DETAIL,
+              status: "past_due",
+              reminder_stage: "due",
+              reminder_for_end: DETAIL.trial_ends_at,
+              reminder_at: "2026-11-23T06:30:00Z",
+            },
+      ),
+    );
+    POST.mockResolvedValue(
+      ok({ ...DETAIL, trial_ends_at: "2026-11-30T10:00:00Z", reminder_stage: null }),
+    );
+    render(<SubscriptionCard companyId="c" canChange onAccessChanged={() => undefined} />);
+    expect(await screen.findByTestId("relance-etape")).toHaveTextContent(
+      "Jour J (grâce) (envoyé le 23/11/2026)",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Prolonger" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("raison");
+    expect(POST).not.toHaveBeenCalled();
+    await userEvent.type(screen.getByLabelText("Raison de la prolongation"), "Voyage du gérant");
+    await userEvent.click(screen.getByRole("button", { name: "Prolonger" }));
+    await screen.findByText(/Prolongé de 7 jours : nouvelle fin le 30\/11\/2026/);
+    const [path, request] = POST.mock.calls[0] ?? [];
+    expect(path).toBe("/api/v1/platform/companies/{company_id}/subscription/extend");
+    expect(request.body).toEqual({ days: 7, reason: "Voyage du gérant" });
   });
 
   it("le support lit sans formulaire", async () => {

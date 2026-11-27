@@ -8425,6 +8425,82 @@
         }
       }
     },
+    "/api/v1/platform/companies/{company_id}/subscription/extend": {
+      "post": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Extend Subscription",
+        "description": "« Prolonger » l'essai ou la période de N jours (1 à 90), raison obligatoire (ADR 0133).\n\nProfil `administrator`, audit critique. Depuis l'échéance, ou depuis aujourd'hui si\nelle est passée ; les relances repartent de zéro et une boutique en pause rouvre.",
+        "operationId": "extend_subscription_api_v1_platform_companies__company_id__subscription_extend_post",
+        "parameters": [
+          {
+            "name": "company_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Company Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubscriptionExtend"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/platform/reminders": {
+      "get": {
+        "tags": [
+          "platform-admin"
+        ],
+        "summary": "Reminders",
+        "description": "« À relancer » (ADR 0133) : boutiques de J-1 à J+3 et en pause depuis moins de\n7 jours, avec l'étape, l'échéance, les gérants et le message WhatsApp de l'étape.",
+        "operationId": "reminders_api_v1_platform_reminders_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/platform/stats/overview": {
       "get": {
         "tags": [
@@ -10244,6 +10320,10 @@
             "type": "integer",
             "title": "Suspended Total"
           },
+          "reminders": {
+            "type": "integer",
+            "title": "Reminders"
+          },
           "expiring_invitations": {
             "items": {
               "$ref": "#/components/schemas/ExpiringInvitation"
@@ -10266,6 +10346,7 @@
           "trials_ending",
           "suspended_companies",
           "suspended_total",
+          "reminders",
           "expiring_invitations",
           "security_events"
         ],
@@ -17276,6 +17357,16 @@
             },
             "type": "array",
             "title": "Features"
+          },
+          "renewal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenewalBanner"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -19148,6 +19239,206 @@
           "partial",
           "settled"
         ]
+      },
+      "ReminderContact": {
+        "properties": {
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "full_name",
+          "phone"
+        ],
+        "title": "ReminderContact"
+      },
+      "ReminderItem": {
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Company Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "trial",
+              "active",
+              "past_due",
+              "suspended"
+            ],
+            "title": "Status"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "trial",
+              "paid"
+            ],
+            "title": "Kind"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "eve",
+              "due",
+              "last",
+              "suspended"
+            ],
+            "title": "Stage"
+          },
+          "sent_stage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "eve",
+                  "due",
+                  "last",
+                  "suspended"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent Stage"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ends At"
+          },
+          "pause_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Pause On"
+          },
+          "plan_name": {
+            "type": "string",
+            "title": "Plan Name"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "contacts": {
+            "items": {
+              "$ref": "#/components/schemas/ReminderContact"
+            },
+            "type": "array",
+            "title": "Contacts"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "company_id",
+          "name",
+          "slug",
+          "status",
+          "kind",
+          "stage",
+          "sent_stage",
+          "ends_at",
+          "pause_on",
+          "plan_name",
+          "message",
+          "contacts"
+        ],
+        "title": "ReminderItem",
+        "description": "Une boutique « à relancer » (ADR 0133) : l'étape du jour et de quoi l'écrire."
+      },
+      "ReminderList": {
+        "properties": {
+          "computed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Computed At"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReminderItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "computed_at",
+          "items"
+        ],
+        "title": "ReminderList"
+      },
+      "RenewalBanner": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "trial",
+              "paid"
+            ],
+            "title": "Kind"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "eve",
+              "due",
+              "last"
+            ],
+            "title": "Stage"
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ends At"
+          },
+          "pause_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Pause On"
+          },
+          "days_left": {
+            "type": "integer",
+            "title": "Days Left"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "stage",
+          "ends_at",
+          "pause_on",
+          "days_left"
+        ],
+        "title": "RenewalBanner",
+        "description": "Le bandeau de relance de J-1 à J+2 (ADR 0133), calculé depuis `current_plan()` dans\nle fuseau de l'entreprise. Le front le montre au gérant, et aux autres à J+2."
       },
       "ReorderPoint-Input": {
         "$ref": "#/components/schemas/Quantity-Input",
@@ -21833,6 +22124,47 @@
             ],
             "title": "Max Users"
           },
+          "reminder_stage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "eve",
+                  "due",
+                  "last",
+                  "suspended"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder Stage"
+          },
+          "reminder_for_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder For End"
+          },
+          "reminder_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder At"
+          },
           "payments": {
             "items": {
               "$ref": "#/components/schemas/SubscriptionPaymentRead"
@@ -21859,11 +22191,38 @@
           "extra_features",
           "max_users_override",
           "max_users",
+          "reminder_stage",
+          "reminder_for_end",
+          "reminder_at",
           "payments",
           "payments_total"
         ],
         "title": "SubscriptionDetail",
         "description": "L'abonnement d'une entreprise, ses comptes actifs et ses derniers paiements."
+      },
+      "SubscriptionExtend": {
+        "properties": {
+          "days": {
+            "type": "integer",
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Days"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 3,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "days",
+          "reason"
+        ],
+        "title": "SubscriptionExtend",
+        "description": "« Prolonger » (ADR 0133) : N jours ajoutés à l'échéance, raison obligatoire."
       },
       "SubscriptionPaymentCreate": {
         "properties": {
@@ -22010,6 +22369,16 @@
             },
             "type": "array",
             "title": "Features"
+          },
+          "renewal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenewalBanner"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "trial_ends_at": {
             "anyOf": [

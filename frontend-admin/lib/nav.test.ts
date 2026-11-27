@@ -9,6 +9,7 @@ describe("menu", () => {
       "Tableau de bord",
       "Entreprises",
       "Demandes",
+      "À relancer",
       "Utilisateurs",
       "Équipe",
       "Journal",

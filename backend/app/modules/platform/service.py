@@ -25,7 +25,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
-from math import ceil
 from typing import Any, cast
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -34,7 +33,7 @@ import segno
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import clock, mailer, mfa, plan_features, queue, rate_limit, totp
+from app.core import clock, mailer, mfa, plan_features, queue, rate_limit, renewal, totp
 from app.core.audit import AuditAction, audit_critical
 from app.core.config import DEVELOPMENT_ENVS, get_settings
 from app.core.deps import PlatformAdmin, platform_transaction
@@ -108,6 +107,9 @@ from app.modules.platform.schemas import (
     PlanRead,
     PlatformMe,
     ProfileRead,
+    ReminderContact,
+    ReminderItem,
+    ReminderList,
     RevenueRead,
     SecurityEvent,
     SignupBucket,
@@ -116,6 +118,7 @@ from app.modules.platform.schemas import (
     StatsOverview,
     StatsPeriod,
     SubscriptionDetail,
+    SubscriptionExtend,
     SubscriptionPaymentCreate,
     SubscriptionPaymentRead,
     SubscriptionUpdate,
@@ -1018,9 +1021,6 @@ ACCESS_OF: dict[str, str] = {
     "suspended": "suspended",
 }
 
-#: Paliers d'avertissement avant la fin de l'essai, en jours.
-WARNING_DAYS = (7, 3, 1)
-
 #: Les paiements montrés avec l'abonnement ; le total les compte tous.
 PAYMENTS_SHOWN = 50
 
@@ -1093,6 +1093,9 @@ def _detail(session: Session, company_id: UUID, subscription: Subscription) -> S
         extra_features=list(subscription.extra_features),
         max_users_override=subscription.max_users_override,
         max_users=_cap(plan, subscription),
+        reminder_stage=cast(Any, subscription.reminder_stage),
+        reminder_for_end=subscription.reminder_for_end,
+        reminder_at=subscription.reminder_at,
         payments=[
             SubscriptionPaymentRead(
                 id=payment.id,
@@ -1264,10 +1267,10 @@ def record_payment(
     idempotency_key: str,
     ip_address: str | None = None,
 ) -> tuple[SubscriptionDetail, bool]:
-    """Enregistre un paiement déclaré : l'abonnement devient actif, sa période avance d'un
-    mois (depuis aujourd'hui, ou depuis la fin en cours si elle est plus loin), et une
-    entreprise suspendue retrouve l'accès. Même clé, même paiement : rien n'est refait
-    (le second élément dit si c'est un rejeu).
+    """Enregistre un paiement déclaré : l'abonnement devient actif, sa période avance
+    (depuis l'ancienne échéance pour un renouvellement, sinon depuis aujourd'hui :
+    `_period_start`, ADR 0133), et une entreprise suspendue retrouve l'accès. Même clé,
+    même paiement : rien n'est refait (le second élément dit si c'est un rejeu).
     """
     access, subscription = _lock(session, company_id)
     repository = SubscriptionRepository(session)
@@ -1301,7 +1304,7 @@ def record_payment(
         "status": subscription.status,
         "current_period_end": _iso(subscription.current_period_end),
     }
-    period_start = max(now, subscription.current_period_end or now)
+    period_start = _period_start(subscription, now)
     subscription.status = "active"
     subscription.current_period_end = _add_months(period_start, payload.period_months)
     subscription.updated_at = now
@@ -1340,6 +1343,21 @@ def record_payment(
         ip_address=ip_address,
     )
     return _detail(session, company_id, subscription), False
+
+
+def _period_start(subscription: Subscription, now: datetime) -> datetime:
+    """D'où part la période payée (ADR 0133, choix du propriétaire).
+
+    Renouvellement (une période payée en cours ou dans sa grâce) : depuis l'ancienne
+    échéance, les jours de grâce ne sont pas offerts. Fin d'essai, boutique mise en
+    pause, échéance oubliée depuis longtemps : depuis le jour du paiement.
+    """
+    ends = subscription.current_period_end
+    if ends is None or subscription.status == "suspended":
+        return now
+    if ends >= now - timedelta(days=renewal.GRACE_DAYS):
+        return ends
+    return now
 
 
 def _iso(moment: datetime | None) -> str | None:
@@ -1634,44 +1652,81 @@ def license_status(*, slug: str) -> LicenseStatus:
 
 # ------------------------------------------------------------- la tâche de nuit
 
+#: Raisons écrites au journal par la tâche de nuit (audit sans acteur).
+TRIAL_PAUSE_REASON = "fin de l'essai sans paiement"
+PAID_PAUSE_REASON = "échéance dépassée sans paiement"
+#: Une échéance qui tombe d'ici là peut être « demain » dans un fuseau en avance.
+_LOOKAHEAD = timedelta(days=2)
+
 
 @dataclass(frozen=True, slots=True)
-class TrialNotice:
-    """Ce que la tâche de nuit doit dire à une entreprise, après COMMIT."""
+class RenewalNotice:
+    """Ce que la tâche de nuit doit dire à une entreprise, après COMMIT (ADR 0133)."""
 
     company_id: UUID
     company_name: str
-    #: 7, 3 ou 1 jour(s) avant la fin ; 0 : l'essai vient de se terminer.
-    days: int
-    trial_ends_at: datetime
+    stage: renewal.Stage
+    kind: renewal.Kind
+    ends_at: datetime
+    plan_name: str
+    #: Jour de la pause au plus tôt, et jour de la tâche, dans le fuseau de l'entreprise.
+    pause_on: date
+    today: date
 
 
-def run_subscription_day(now: datetime | None = None) -> list[TrialNotice]:
-    """Fin des essais : avertit à J-7, J-3, J-1, suspend à l'échéance (ADR 0091).
+def run_subscription_day(now: datetime | None = None) -> list[RenewalNotice]:
+    """Relances et suspension (ADR 0133) : veille, jour J (`past_due`, accès gardé),
+    dernier rappel à J+2, pause à J+3, pour un essai comme pour une période payée.
 
-    Une seule transaction, sous `coges_app_platform`. Chaque palier n'est franchi qu'une
-    fois (`trial_warned_days`), une entreprise n'est suspendue qu'une fois (elle quitte
-    l'état `trial`) : relancer la tâche ne prévient ni ne suspend deux fois. Les messages
-    partent **après** le COMMIT, par l'appelant.
+    Une seule transaction, sous `coges_app_platform`. L'étape franchie est gardée avec
+    son échéance (`reminder_stage`, `reminder_for_end`, `reminder_at`) : relancer la
+    tâche ne refait rien, une nuit manquée ne donne que l'étape du jour, et la pause
+    n'arrive qu'après un dernier rappel donné un jour précédent. Les messages partent
+    **après** le COMMIT, par l'appelant.
     """
     moment = now or datetime.now(UTC)
-    notices: list[TrialNotice] = []
+    notices: list[RenewalNotice] = []
     with platform_transaction() as session:
         directory = CompanyDirectory(session)
         repository = SubscriptionRepository(session)
-        for company_id in repository.trials_ending_before(moment + timedelta(days=WARNING_DAYS[0])):
+        for company_id in repository.deadlines_before(moment + _LOOKAHEAD):
             access = directory.lock_status(company_id)
             subscription = repository.lock(company_id) if access else None
-            if access is None or subscription is None or subscription.status != "trial":
+            if access is None or subscription is None:
                 continue
-            ends = subscription.trial_ends_at
-            if ends is None:
+            found = renewal.deadline(
+                status=subscription.status,
+                trial_ends_at=subscription.trial_ends_at,
+                current_period_end=subscription.current_period_end,
+                is_license=subscription.is_license,
+            )
+            if found is None:
                 continue
-            company = directory.get(company_id)
-            name = company.name if company else ""
-            if ends <= moment:
+            tz = renewal.zone(repository.timezone(company_id))
+            today = renewal.local_day(moment, tz)
+            same_end = subscription.reminder_for_end == found.ends_at
+            done = subscription.reminder_stage if same_end else None
+            done_on = (
+                renewal.local_day(subscription.reminder_at, tz)
+                if same_end and subscription.reminder_at is not None
+                else None
+            )
+            stage = renewal.next_stage(
+                offset=renewal.offset_days(found.ends_at, moment, tz),
+                done=done,
+                done_on=done_on,
+                today=today,
+            )
+            if stage is None:
+                continue
+            before = {"status": subscription.status, "reminder_stage": done}
+            subscription.reminder_stage = stage
+            subscription.reminder_for_end = found.ends_at
+            subscription.reminder_at = moment
+            subscription.updated_at = moment
+            if stage == "suspended":
+                reason = TRIAL_PAUSE_REASON if found.kind == "trial" else PAID_PAUSE_REASON
                 subscription.status = "suspended"
-                subscription.updated_at = moment
                 session.flush()
                 _audit(
                     session,
@@ -1681,12 +1736,13 @@ def run_subscription_day(now: datetime | None = None) -> list[TrialNotice]:
                     entity_id=subscription.id,
                     target_company_id=company_id,
                     diff={
-                        "before": {"status": "trial"},
-                        "after": {"status": "suspended"},
-                        "reason": "fin de l'essai sans paiement",
+                        "before": before,
+                        "after": {"status": "suspended", "reminder_stage": stage},
+                        "ends_at": found.ends_at.isoformat(),
+                        "reason": reason,
                     },
                 )
-                # Le gérant reçoit le message chaleureux de fin d'essai, pas celui d'une
+                # Le gérant reçoit le message chaleureux « en pause », pas celui d'une
                 # suspension décidée par l'équipe.
                 _set_access(
                     session,
@@ -1694,18 +1750,178 @@ def run_subscription_day(now: datetime | None = None) -> list[TrialNotice]:
                     before=access,
                     after="suspended",
                     actor_id=None,
-                    reason="fin de l'essai sans paiement",
+                    reason=reason,
                     notify_manager=False,
                 )
-                notices.append(TrialNotice(company_id, name, 0, ends))
-                continue
-            days_left = ceil((ends - moment) / timedelta(days=1))
-            threshold = min(days for days in WARNING_DAYS if days >= days_left)
-            if subscription.trial_warned_days is None or subscription.trial_warned_days > threshold:
-                subscription.trial_warned_days = threshold
-                subscription.updated_at = moment
-                notices.append(TrialNotice(company_id, name, threshold, ends))
+            elif stage in ("due", "last") and subscription.status != "past_due":
+                # Délai de grâce : l'abonnement est en retard, l'accès ne change pas.
+                subscription.status = "past_due"
+            session.flush()
+            company = directory.get(company_id)
+            notices.append(
+                RenewalNotice(
+                    company_id=company_id,
+                    company_name=company.name if company else "",
+                    stage=stage,
+                    kind=found.kind,
+                    ends_at=found.ends_at,
+                    plan_name=repository.plan(subscription.plan_id).name,
+                    pause_on=renewal.pause_day(found.ends_at, tz),
+                    today=today,
+                )
+            )
     return notices
+
+
+# ------------------------------------------------- prolonger, à relancer (ADR 0133)
+
+EXTEND_DAYS_MAX = 90
+
+
+def extend_subscription(
+    session: Session,
+    admin: PlatformAdmin,
+    company_id: UUID,
+    payload: SubscriptionExtend,
+    *,
+    ip_address: str | None = None,
+) -> SubscriptionDetail:
+    """« Prolonger » : N jours ajoutés à l'échéance (ou à aujourd'hui si elle est passée),
+    calendrier des relances remis à zéro, accès rendu à une boutique mise en pause.
+
+    Un essai reste un essai (`trial_ends_at`), une période payée reste payée
+    (`current_period_end`). Audit critique avec la raison.
+    """
+    access, subscription = _lock(session, company_id)
+    if subscription.is_license:
+        raise ValidationFailedError("Une licence sur site n'a pas d'échéance à prolonger.")
+    now = datetime.now(UTC)
+    paid = subscription.current_period_end is not None
+    ends = subscription.current_period_end if paid else subscription.trial_ends_at
+    if ends is None:
+        raise ValidationFailedError("Cet abonnement n'a pas d'échéance à prolonger.")
+    new_end = max(ends, now) + timedelta(days=payload.days)
+    before = {
+        "status": subscription.status,
+        "trial_ends_at": _iso(subscription.trial_ends_at),
+        "current_period_end": _iso(subscription.current_period_end),
+        "reminder_stage": subscription.reminder_stage,
+    }
+    if paid:
+        subscription.current_period_end = new_end
+        subscription.status = "active"
+    else:
+        subscription.trial_ends_at = new_end
+        subscription.status = "trial"
+    subscription.reminder_stage = None
+    subscription.reminder_for_end = None
+    subscription.reminder_at = None
+    subscription.updated_at = now
+    session.flush()
+    reason = payload.reason.strip()
+    _audit(
+        session,
+        actor_id=admin.platform_user_id,
+        action="update",
+        entity_table="subscriptions",
+        entity_id=subscription.id,
+        target_company_id=company_id,
+        diff={
+            "before": before,
+            "after": {
+                "status": subscription.status,
+                "trial_ends_at": _iso(subscription.trial_ends_at),
+                "current_period_end": _iso(subscription.current_period_end),
+                "reminder_stage": None,
+            },
+            "days": payload.days,
+            "reason": reason,
+        },
+        ip_address=ip_address,
+    )
+    if access == "suspended" and before["status"] == "suspended":
+        _set_access(
+            session,
+            company_id,
+            before=access,
+            after=ACCESS_OF[subscription.status],
+            actor_id=admin.platform_user_id,
+            reason=reason,
+            ip_address=ip_address,
+        )
+    return _detail(session, company_id, subscription)
+
+
+#: « À relancer » : de J-1 à J+3, et les boutiques mises en pause depuis moins de 7 jours.
+REMINDERS_PAUSED_WINDOW = timedelta(days=7)
+
+
+def _reminder_item(row: Any, now: datetime, contacts: list[Any]) -> ReminderItem | None:
+    tz = renewal.zone(row.timezone)
+    today = renewal.local_day(now, tz)
+    if row.status == "suspended":
+        if row.reminder_for_end is None:
+            return None
+        kind: renewal.Kind = "paid" if row.current_period_end == row.reminder_for_end else "trial"
+        ends = row.reminder_for_end
+        stage: renewal.Stage = "suspended"
+    else:
+        found = renewal.deadline(
+            status=row.status,
+            trial_ends_at=row.trial_ends_at,
+            current_period_end=row.current_period_end,
+            is_license=row.is_license,
+        )
+        if found is None:
+            return None
+        offset = renewal.offset_days(found.ends_at, now, tz)
+        if not -1 <= offset <= renewal.GRACE_DAYS:
+            return None
+        calendar = renewal.calendar_stage(offset)
+        if calendar is None:
+            return None
+        stage = "last" if calendar == "suspended" else calendar
+        kind, ends = found.kind, found.ends_at
+    pause_on = renewal.pause_day(ends, tz)
+    days_left = max(1, (pause_on - today).days)
+    sent = row.reminder_stage if row.reminder_for_end == ends else None
+    text_ = renewal.message(stage, kind, row.plan_name, days_left)
+    return ReminderItem(
+        company_id=row.company_id,
+        name=row.name,
+        slug=row.slug,
+        status=row.status,
+        kind=kind,
+        stage=stage,
+        sent_stage=cast(Any, sent),
+        ends_at=ends,
+        pause_on=pause_on,
+        plan_name=row.plan_name,
+        message=f"Bonjour, c'est l'équipe CoGes pour {row.name}. {text_}",
+        contacts=[
+            ReminderContact(full_name=contact.full_name, phone=contact.phone)
+            for contact in contacts
+        ],
+    )
+
+
+def reminders(session: Session) -> ReminderList:
+    now = clock.now()
+    repository = SubscriptionRepository(session)
+    rows = repository.reminder_candidates(
+        since=now - timedelta(days=renewal.GRACE_DAYS + 2),
+        until=now + _LOOKAHEAD,
+        paused_since=now - REMINDERS_PAUSED_WINDOW,
+    )
+    by_company: dict[UUID, list[Any]] = {}
+    for contact in repository.manager_contacts([row.company_id for row in rows]):
+        by_company.setdefault(contact.company_id, []).append(contact)
+    items = [
+        item
+        for row in rows
+        if (item := _reminder_item(row, now, by_company.get(row.company_id, []))) is not None
+    ]
+    return ReminderList(computed_at=now, items=items)
 
 
 # ------------------------------------------------- accès support encadré (ADR 0092)
@@ -2688,6 +2904,7 @@ def attention(session: Session) -> AttentionRead:
             SuspendedCompany(company_id=row.id, name=row.name) for row in suspended
         ],
         suspended_total=suspended_total,
+        reminders=len(reminders(session).items),
         expiring_invitations=[
             ExpiringInvitation(
                 id=invitation.id,

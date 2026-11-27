@@ -383,7 +383,7 @@ def test_me_carries_the_plan_block(api_client: TestClient, shop: DemoCompany) ->
     me = api_client.get("/api/v1/auth/me", headers=auth_headers(login_token(api_client, shop)))
     assert me.status_code == 200
     plan = me.json()["plan"]
-    assert set(plan) == {"code", "name", "status", "is_license", "features"}
+    assert set(plan) == {"code", "name", "status", "is_license", "features", "renewal"}
     assert (plan["code"], plan["name"], plan["status"], plan["is_license"]) == (
         "starter",
         "Pro",
@@ -415,6 +415,7 @@ def test_the_manager_reads_the_subscription(
         "status",
         "is_license",
         "features",
+        "renewal",
         "trial_ends_at",
         "current_period_end",
         "max_users",

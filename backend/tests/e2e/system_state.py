@@ -5,6 +5,7 @@
     deploy/scripts/e2e.sh system build-exports      # produit les exports en attente
     deploy/scripts/e2e.sh system legal-stale <e-mail>   # acceptation d'une ancienne version
     deploy/scripts/e2e.sh system signup-link <e-mail>   # le lien qu'aurait envoyé le worker
+    deploy/scripts/e2e.sh system renewal <code> <jour>  # fin d'essai à J-<jour>, puis la nuit
 
 L'API des parcours tourne sans worker, sans beat ni relais : laissée telle quelle, elle
 est toujours en panne. `healthy` écrit ce que ces processus écriraient (battements, tic
@@ -141,6 +142,56 @@ def signup_link(email: str) -> None:
     print(service.verification_link(issued[0]))
 
 
+def renewal(slug: str, day: int) -> None:
+    """Relances (ADR 0133) : l'essai de la boutique `slug` s'est terminé il y a `day` jours
+    (-1 : il finit demain), les relances repartent de zéro, puis la tâche de nuit tourne
+    pour de vrai. À partir de J+3, le dernier rappel est posé la veille : la nuit met la
+    boutique en pause. Les autres boutiques des parcours finissent dans 30 jours : la nuit
+    ne leur fait rien."""
+    from app.modules.platform import service as platform_service
+
+    engine = create_engine(_engine_url())
+    tables = ("subscriptions", "companies")
+    try:
+        with engine.begin() as connection:
+            for table in tables:
+                connection.execute(text(f"ALTER TABLE {table} NO FORCE ROW LEVEL SECURITY"))
+            ends = "date_trunc('day', now()) + interval '12 hours' - make_interval(days => :day)"
+            paused = day >= 3
+            updated = connection.execute(
+                text(
+                    f"""
+                    UPDATE subscriptions s
+                       SET status = CAST(:status AS subscription_status),
+                           trial_ends_at = {ends}, current_period_end = NULL,
+                           is_license = false,
+                           reminder_stage = CASE WHEN :paused THEN 'last' END,
+                           reminder_for_end = CASE WHEN :paused THEN {ends} END,
+                           reminder_at = CASE WHEN :paused THEN now() - interval '1 day' END
+                      FROM companies c
+                     WHERE c.id = s.company_id AND c.slug = :slug AND c.deleted_at IS NULL
+                    """
+                ),
+                {
+                    "slug": slug,
+                    "day": day,
+                    "paused": paused,
+                    "status": "past_due" if paused else "trial",
+                },
+            ).rowcount
+            connection.execute(
+                text("UPDATE companies SET status = 'trial' WHERE slug = :slug"), {"slug": slug}
+            )
+            for table in tables:
+                connection.execute(text(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY"))
+    finally:
+        engine.dispose()
+    if updated != 1:
+        sys.exit(f"system_state : aucune boutique {slug}")
+    for notice in platform_service.run_subscription_day():
+        print(f"{notice.company_name} : {notice.stage}")
+
+
 if __name__ == "__main__":
     actions = {
         "healthy": healthy,
@@ -152,6 +203,9 @@ if __name__ == "__main__":
         sys.exit(0)
     if len(sys.argv) == 3 and sys.argv[1] == "signup-link":
         signup_link(sys.argv[2])
+        sys.exit(0)
+    if len(sys.argv) == 4 and sys.argv[1] == "renewal":
+        renewal(sys.argv[2], int(sys.argv[3]))
         sys.exit(0)
     if len(sys.argv) != 2 or sys.argv[1] not in actions:
         sys.exit(f"usage : system_state {'|'.join(actions)}|legal-stale <e-mail>")

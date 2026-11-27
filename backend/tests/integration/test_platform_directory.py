@@ -348,6 +348,7 @@ def test_attention_lists_what_needs_doing(
         "trials_ending",
         "suspended_companies",
         "suspended_total",
+        "reminders",
         "expiring_invitations",
         "security_events",
     }

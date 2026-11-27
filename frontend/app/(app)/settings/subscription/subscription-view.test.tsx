@@ -39,6 +39,25 @@ function hrefs(): string[] {
   return screen.getAllByRole("link").map((link) => decodeURIComponent(link.getAttribute("href")!));
 }
 
+describe("Mon abonnement pendant la grâce (ADR 0133)", () => {
+  it("un essai terminé dit le jour de la pause", async () => {
+    current = subscription({
+      status: "past_due",
+      renewal: {
+        kind: "trial",
+        stage: "due",
+        ends_at: "2026-12-25T10:00:00Z",
+        pause_on: "2026-12-28",
+        days_left: 3,
+      },
+    });
+    renderWithClient(<SubscriptionView />);
+    expect(await screen.findByTestId("subscription-status")).toHaveTextContent(
+      "Essai gratuit terminé le 25 décembre 2026. Mise en pause prévue le lundi 28 décembre.",
+    );
+  });
+});
+
 describe("Mon abonnement (prompt 41, B4)", () => {
   it("essai : l'offre, la fin d'essai, les comptes, et les deux montants", async () => {
     current = subscription();

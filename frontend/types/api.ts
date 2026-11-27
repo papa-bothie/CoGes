@@ -2952,6 +2952,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/platform/companies/{company_id}/subscription/extend": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Extend Subscription
+     * @description « Prolonger » l'essai ou la période de N jours (1 à 90), raison obligatoire (ADR 0133).
+     *
+     *     Profil `administrator`, audit critique. Depuis l'échéance, ou depuis aujourd'hui si
+     *     elle est passée ; les relances repartent de zéro et une boutique en pause rouvre.
+     */
+    post: operations["extend_subscription_api_v1_platform_companies__company_id__subscription_extend_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/platform/reminders": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Reminders
+     * @description « À relancer » (ADR 0133) : boutiques de J-1 à J+3 et en pause depuis moins de
+     *     7 jours, avec l'étape, l'échéance, les gérants et le message WhatsApp de l'étape.
+     */
+    get: operations["reminders_api_v1_platform_reminders_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/platform/stats/overview": {
     parameters: {
       query?: never;
@@ -3637,6 +3681,8 @@ export interface components {
       suspended_companies: components["schemas"]["SuspendedCompany"][];
       /** Suspended Total */
       suspended_total: number;
+      /** Reminders */
+      reminders: number;
       /** Expiring Invitations */
       expiring_invitations: components["schemas"]["ExpiringInvitation"][];
       /** Security Events */
@@ -6220,6 +6266,7 @@ export interface components {
       is_license: boolean;
       /** Features */
       features: string[];
+      renewal?: components["schemas"]["RenewalBanner"] | null;
     };
     /**
      * PlatformLoginRequest
@@ -6909,6 +6956,100 @@ export interface components {
     RefundMethod: components["schemas"]["PaymentMethod"] | "offset";
     /** @enum {string} */
     RefundStatus: "none_due" | "pending" | "partial" | "settled";
+    /** ReminderContact */
+    ReminderContact: {
+      /** Full Name */
+      full_name: string;
+      /** Phone */
+      phone: string | null;
+    };
+    /**
+     * ReminderItem
+     * @description Une boutique « à relancer » (ADR 0133) : l'étape du jour et de quoi l'écrire.
+     */
+    ReminderItem: {
+      /**
+       * Company Id
+       * Format: uuid
+       */
+      company_id: string;
+      /** Name */
+      name: string;
+      /** Slug */
+      slug: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "trial" | "active" | "past_due" | "suspended";
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "trial" | "paid";
+      /**
+       * Stage
+       * @enum {string}
+       */
+      stage: "eve" | "due" | "last" | "suspended";
+      /** Sent Stage */
+      sent_stage: ("eve" | "due" | "last" | "suspended") | null;
+      /**
+       * Ends At
+       * Format: date-time
+       */
+      ends_at: string;
+      /**
+       * Pause On
+       * Format: date
+       */
+      pause_on: string;
+      /** Plan Name */
+      plan_name: string;
+      /** Message */
+      message: string;
+      /** Contacts */
+      contacts: components["schemas"]["ReminderContact"][];
+    };
+    /** ReminderList */
+    ReminderList: {
+      /**
+       * Computed At
+       * Format: date-time
+       */
+      computed_at: string;
+      /** Items */
+      items: components["schemas"]["ReminderItem"][];
+    };
+    /**
+     * RenewalBanner
+     * @description Le bandeau de relance de J-1 à J+2 (ADR 0133), calculé depuis `current_plan()` dans
+     *     le fuseau de l'entreprise. Le front le montre au gérant, et aux autres à J+2.
+     */
+    RenewalBanner: {
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "trial" | "paid";
+      /**
+       * Stage
+       * @enum {string}
+       */
+      stage: "eve" | "due" | "last";
+      /**
+       * Ends At
+       * Format: date-time
+       */
+      ends_at: string;
+      /**
+       * Pause On
+       * Format: date
+       */
+      pause_on: string;
+      /** Days Left */
+      days_left: number;
+    };
     "ReorderPoint-Input": components["schemas"]["Quantity-Input"];
     "ReorderPoint-Output": components["schemas"]["Quantity-Output"];
     ReturnReason: string;
@@ -7883,10 +8024,26 @@ export interface components {
       max_users_override: number | null;
       /** Max Users */
       max_users: number | null;
+      /** Reminder Stage */
+      reminder_stage: ("eve" | "due" | "last" | "suspended") | null;
+      /** Reminder For End */
+      reminder_for_end: string | null;
+      /** Reminder At */
+      reminder_at: string | null;
       /** Payments */
       payments: components["schemas"]["SubscriptionPaymentRead"][];
       /** Payments Total */
       payments_total: number;
+    };
+    /**
+     * SubscriptionExtend
+     * @description « Prolonger » (ADR 0133) : N jours ajoutés à l'échéance, raison obligatoire.
+     */
+    SubscriptionExtend: {
+      /** Days */
+      days: number;
+      /** Reason */
+      reason: string;
     };
     /**
      * SubscriptionPaymentCreate
@@ -7963,6 +8120,7 @@ export interface components {
       is_license: boolean;
       /** Features */
       features: string[];
+      renewal?: components["schemas"]["RenewalBanner"] | null;
       /** Trial Ends At */
       trial_ends_at: string | null;
       /** Current Period End */
@@ -13792,6 +13950,61 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  extend_subscription_api_v1_platform_companies__company_id__subscription_extend_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        company_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SubscriptionExtend"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SubscriptionDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  reminders_api_v1_platform_reminders_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ReminderList"];
         };
       };
     };

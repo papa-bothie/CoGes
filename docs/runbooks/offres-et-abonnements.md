@@ -37,8 +37,10 @@ Changer d'offre ne touche ni la fin de période payée ni l'accès.
    il doit être **exactement** celui-là (sinon : « Le montant attendu est de 52 920 FCFA. »).
    Premium : montant du devis, libre.
 3. Date, moyen (Wave, Orange Money, espèces, virement), note (référence de la transaction).
-4. La fin de période avance de 1 ou 12 mois, à partir d'aujourd'hui ou de la fin en cours si
-   elle est plus loin. Une boutique suspendue retrouve l'accès.
+4. La fin de période avance de 1 ou 12 mois. Un **renouvellement** (période en cours ou dans ses
+   3 jours de grâce) part de l'ancienne fin ; une fin d'essai ou une boutique en pause part
+   d'aujourd'hui (ADR 0133). Une boutique suspendue retrouve l'accès. Relances et pauses :
+   `relances-et-suspensions.md`.
 
 Un double clic ne paie pas deux fois (clé d'idempotence). Pour changer d'offre **et** encaisser,
 changer l'offre d'abord : le montant attendu est celui de l'offre au moment du paiement.

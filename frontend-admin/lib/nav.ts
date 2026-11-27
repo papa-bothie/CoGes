@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  BellRing,
   Building2,
   Inbox,
   History,
@@ -28,6 +29,8 @@ export const NAV: { title: string; items: NavItem[] }[] = [
       { href: "/companies", label: "Entreprises", icon: Building2 },
       // Demandes d'inscription (ADR 0118) : le compteur de la file vient de l'en-tête.
       { href: "/demandes", label: "Demandes", icon: Inbox },
+      // Relances de fin d'essai et d'abonnement (ADR 0133) : la routine du matin.
+      { href: "/relances", label: "À relancer", icon: BellRing },
       { href: "/users", label: "Utilisateurs", icon: Users },
       { href: "/team", label: "Équipe", icon: UserCog },
       { href: "/audit", label: "Journal", icon: History, roles: ["administrator"] },

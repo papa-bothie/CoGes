@@ -3,7 +3,7 @@
 - **Date** : 2026-11-26
 - **Phase** : lot B (`docs/prompts/41-offres-pro-business-et-droits.md`)
 - **Statut** : acceptée — **amende l'ADR 0091** (catalogue, essai, `features`), et l'ADR 0125
-  (licence : Premium accepté, `is_license`)
+  (licence : Premium accepté, `is_license`) ; **amendée par l'ADR 0133** (bloc `plan.renewal` de `/auth/me` et de « Mon abonnement », ligne d'état pendant la grâce)
 - **Décideur** : propriétaire (décisions des 23 et 26 novembre 2026, écrites dans le prompt) et
   utilisateur (AskUserQuestion du 26 novembre 2026)
 

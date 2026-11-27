@@ -155,6 +155,11 @@ SQL
     uv run --directory backend python -m app.cli create-company --name "Parcours offres" \
       --slug offres-e2e --manager-email gerant@offres-e2e.example.com \
       --manager-name "Gérante en essai" --password demo-coges-2026
+    # Relances (ADR 0133) : une boutique en essai dont les parcours déplacent la fin
+    # (`e2e.sh system renewal relance-e2e <jour>`).
+    uv run --directory backend python -m app.cli create-company --name "Parcours relances" \
+      --slug relance-e2e --manager-email gerant@relance-e2e.example.com \
+      --manager-name "Gérante relancée" --manager-phone "77 000 00 43" --password demo-coges-2026
     # L'épicerie de la maquette v2, à part : la démo et `e2e` ne changent pas (ADR 0065).
     uv run --directory backend python -m app.seed_maquette --intelligence
     # La démo et la maquette montrent tout le produit (elles étaient en essai Premium avant

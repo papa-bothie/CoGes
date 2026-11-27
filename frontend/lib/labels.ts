@@ -127,8 +127,6 @@ export const labels = {
     temporaryExpired: "Ce mot de passe provisoire a expiré. Demandez-en un nouveau au gérant.",
     sessionExpired: "Votre session a expiré. Reconnectez-vous.",
     loggedOut: "Vous êtes déconnecté.",
-    suspended:
-      "L'accès de votre entreprise à CoGes est suspendu. Vos données sont conservées : contactez l'équipe CoGes pour le rétablir.",
     signupEmailPending: "Votre boutique n'est pas encore ouverte : ouvrez le lien reçu par e-mail.",
     signupResend: "Renvoyer le lien",
     signupResent: "Un nouveau lien vient de partir. Ouvrez-le pour ouvrir votre boutique.",
@@ -294,6 +292,35 @@ export const labels = {
     outdatedReload: "Recharger",
   },
   /** Accès support encadré (ADR 0092) : l'équipe CoGes lit, en lecture seule. */
+  /** Relances de fin d'essai et d'abonnement (ADR 0133), ton chaleureux. */
+  renewal: {
+    eve: (kind: "trial" | "paid", plan: string) =>
+      kind === "trial"
+        ? `Votre essai gratuit de CoGes ${plan} se termine demain. Pour continuer sans interruption, choisissez votre offre.`
+        : `Votre abonnement CoGes ${plan} se termine demain. Pour continuer sans interruption, renouvelez votre offre.`,
+    due: (kind: "trial" | "paid", daysLeft: number) => {
+      const what = kind === "trial" ? "Votre essai" : "Votre abonnement";
+      const when = daysLeft >= 3 ? "se termine aujourd’hui" : "s’est terminé hier";
+      const days = daysLeft > 1 ? `${daysLeft} jours` : "1 jour";
+      const then = kind === "trial" ? "choisir votre offre" : "le renouveler";
+      return `${what} ${when}. Pas d’inquiétude : votre boutique reste ouverte encore ${days}, le temps de ${then}.`;
+    },
+    last: "Dernier rappel : sans paiement, votre boutique sera mise en pause demain. Vos données sont gardées, et tout revient dès le paiement.",
+    lastOthers: "La boutique sera mise en pause demain. Prévenez votre gérant.",
+    pauseOn: (day: string) =>
+      `Mise en pause prévue le ${day.charAt(0).toLocaleLowerCase("fr-FR")}${day.slice(1)}.`,
+    choose: "Choisir mon offre",
+    hide: "Masquer pour aujourd’hui",
+    pausedTitle: "Votre boutique est en pause",
+    pausedBody:
+      "Vos ventes, votre stock et vos clients sont gardés, exactement comme vous les avez laissés. Dès votre paiement, tout revient.",
+    pausedHow: "Écrivez-nous sur WhatsApp : nous rouvrons votre boutique avec vous.",
+    pausedWhatsapp: "Payer sur WhatsApp",
+    pausedMessage: (shop: string) =>
+      shop
+        ? `Bonjour, je veux payer pour rouvrir ma boutique CoGes « ${shop} ».`
+        : "Bonjour, je veux payer pour rouvrir ma boutique CoGes.",
+  },
   support: {
     banner: (since: string, until: string) =>
       `Accès support actif depuis ${since}, par l’équipe CoGes, jusqu’à ${until}`,
@@ -1794,6 +1821,7 @@ export const labels = {
       active: "Actif",
       pastDue: (day: string) => `Paiement attendu depuis le ${day}`,
       pastDueNoDay: "Paiement attendu",
+      trialEnded: (day: string) => `Essai gratuit terminé le ${day}`,
       suspended: "Suspendu",
       license: (name: string) => `Licence sur site, offre ${name}`,
       accounts: (used: number, max: number | null) =>

@@ -254,6 +254,11 @@ class SubscriptionDetail(BaseModel):
     max_users_override: int | None
     #: Plafond effectif : le plafond acquis s'il existe, sinon celui de l'offre.
     max_users: int | None
+    #: Relances (ADR 0133) : dernière étape envoyée par la tâche de nuit, pour quelle
+    #: échéance, et quand ; `None` : rien envoyé pour l'échéance en cours.
+    reminder_stage: Literal["eve", "due", "last", "suspended"] | None
+    reminder_for_end: datetime | None
+    reminder_at: datetime | None
     #: Les 50 plus récents ; `payments_total` les compte tous.
     payments: list[SubscriptionPaymentRead]
     payments_total: int
@@ -314,6 +319,62 @@ class SubscriptionPaymentCreate(BaseModel):
         if value > datetime.now(UTC) + timedelta(minutes=5):
             raise ValueError("Un paiement ne peut pas être daté dans le futur.")
         return value
+
+
+class SubscriptionExtend(BaseModel):
+    """« Prolonger » (ADR 0133) : N jours ajoutés à l'échéance, raison obligatoire."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    days: int = Field(ge=1, le=90)
+    reason: str = Field(min_length=3, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if len(value.strip()) < 3:
+            raise ValueError("Donnez la raison de la prolongation.")
+        return value
+
+
+ReminderStage = Literal["eve", "due", "last", "suspended"]
+
+
+class ReminderContact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str
+    phone: str | None
+
+
+class ReminderItem(BaseModel):
+    """Une boutique « à relancer » (ADR 0133) : l'étape du jour et de quoi l'écrire."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    company_id: UUID
+    name: str
+    slug: str
+    status: SubscriptionStatus
+    kind: Literal["trial", "paid"]
+    #: L'étape du calendrier ce jour-là (`suspended` : déjà mise en pause).
+    stage: ReminderStage
+    #: La dernière étape déjà envoyée par la tâche de nuit pour cette échéance.
+    sent_stage: ReminderStage | None
+    ends_at: datetime
+    pause_on: date
+    plan_name: str
+    #: Le message de l'étape, prérempli dans le lien WhatsApp (modifiable avant l'envoi).
+    message: str
+    #: Les gérants actifs et leur téléphone.
+    contacts: list[ReminderContact]
+
+
+class ReminderList(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    computed_at: datetime
+    items: list[ReminderItem]
 
 
 # ---------------------------------------------------------- statistiques (ADR 0093)
@@ -695,6 +756,8 @@ class AttentionRead(BaseModel):
     #: Les 20 plus récentes ; `suspended_total` les compte toutes.
     suspended_companies: list[SuspendedCompany]
     suspended_total: int
+    #: Boutiques « à relancer » (ADR 0133) : de J-1 à J+3, et en pause depuis < 7 jours.
+    reminders: int
     #: Invitations en attente qui échoient dans les 24 h.
     expiring_invitations: list[ExpiringInvitation]
     #: Nouveaux appareils, codes de secours utilisés, enrôlements et réinitialisations

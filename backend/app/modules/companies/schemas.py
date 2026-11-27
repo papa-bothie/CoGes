@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal, Self
 from uuid import UUID
@@ -175,6 +175,21 @@ class SupportAccessRead(BaseModel):
     session: SupportAccessWindow | None
 
 
+class RenewalBanner(BaseModel):
+    """Le bandeau de relance de J-1 à J+2 (ADR 0133), calculé depuis `current_plan()` dans
+    le fuseau de l'entreprise. Le front le montre au gérant, et aux autres à J+2."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["trial", "paid"]
+    stage: Literal["eve", "due", "last"]
+    ends_at: datetime
+    #: Jour où la boutique sera mise en pause, au plus tôt (fuseau de l'entreprise).
+    pause_on: date
+    #: Jours d'ouverture qui restent avant la pause (1 la veille de la pause).
+    days_left: int
+
+
 class PlanSummary(BaseModel):
     """L'offre de la boutique, pour masquer ou verrouiller à l'écran (ADR 0132).
 
@@ -188,6 +203,8 @@ class PlanSummary(BaseModel):
     status: Literal["trial", "active", "past_due", "suspended"]
     is_license: bool
     features: list[str]
+    #: `None` hors de la fenêtre des relances (ADR 0133).
+    renewal: RenewalBanner | None = None
 
 
 class SubscriptionRead(PlanSummary):

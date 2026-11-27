@@ -473,7 +473,7 @@ def current_identity(session: Session, ctx: TenantContext) -> MeResponse:
             company=me_company,
             via_support=True,
             legal_version=legal.LEGAL_VERSION,
-            plan=companies_service.plan_summary(session),
+            plan=companies_service.plan_summary(session, timezone=me_company.timezone),
         )
     user = users_service.get_user(session, ctx, ctx.user_id)
     return MeResponse(
@@ -498,5 +498,5 @@ def current_identity(session: Session, ctx: TenantContext) -> MeResponse:
         permissions=sorted(ctx.permissions),
         company=me_company,
         legal_version=legal.LEGAL_VERSION,
-        plan=companies_service.plan_summary(session),
+        plan=companies_service.plan_summary(session, timezone=me_company.timezone),
     )

@@ -25,23 +25,30 @@ async function submit(): Promise<void> {
   await userEvent.click(screen.getByRole("button", { name: labels.login.submit }));
 }
 
-describe("connexion : entreprise suspendue (ADR 0089)", () => {
+describe("connexion : boutique en pause (ADR 0089, 0133)", () => {
   beforeEach(() => {
     login.mockReset();
     search = "";
   });
 
-  it("dit que l'accès est suspendu, pas que les identifiants sont faux", async () => {
+  it("montre la boutique en pause et WhatsApp pour payer, pas une erreur d'identifiants", async () => {
     login.mockRejectedValue(new ApiError(403, "company_suspended", "suspendu", {}));
     render(<LoginForm />);
     await submit();
-    expect(await screen.findByRole("alert")).toHaveTextContent(labels.login.suspended);
+    const paused = await screen.findByRole("alert");
+    expect(paused).toHaveTextContent(labels.renewal.pausedTitle);
+    expect(paused).toHaveTextContent("Vos ventes, votre stock et vos clients sont gardés");
     expect(screen.queryByText(labels.login.invalid)).toBeNull();
+    const link = screen.getByRole("link", { name: labels.renewal.pausedWhatsapp });
+    const url = new URL(link.getAttribute("href") ?? "");
+    expect(url.hostname).toBe("wa.me");
+    expect(url.searchParams.get("text")).toContain("rouvrir ma boutique CoGes");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("explique la déconnexion forcée en cours de session", () => {
     search = "reason=suspended";
     render(<LoginForm />);
-    expect(screen.getByRole("status")).toHaveTextContent(labels.login.suspended);
+    expect(screen.getByRole("status")).toHaveTextContent(labels.renewal.pausedTitle);
   });
 });

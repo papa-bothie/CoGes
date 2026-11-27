@@ -46,6 +46,10 @@ LABELS: dict[str, str] = {
     f"PUT {_PLATFORM}/companies/{{company_id}}/subscription/acquired-rights": (
         "Accorder ou retirer des droits acquis"
     ),
+    f"POST {_PLATFORM}/companies/{{company_id}}/subscription/extend": (
+        "Prolonger un essai ou un abonnement"
+    ),
+    f"GET {_PLATFORM}/reminders": "Voir les boutiques à relancer",
     f"GET {_PLATFORM}/companies/{{company_id}}/support-sessions": "Voir les accès support",
     f"POST {_PLATFORM}/companies/{{company_id}}/support-sessions": "Ouvrir un accès support",
     f"POST {_PLATFORM}/support-sessions/{{session_id}}/token": "Reprendre son accès support",

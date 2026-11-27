@@ -29,7 +29,7 @@ def read_subscription(
 
     Lu par la fonction `current_plan()` : l'entreprise du contexte, jamais une autre.
     """
-    return service.subscription(tenant.session)
+    return service.subscription(tenant.session, tenant.ctx)
 
 
 @router.get("/me", response_model=CompanyRead)

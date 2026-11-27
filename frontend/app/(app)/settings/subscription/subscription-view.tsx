@@ -10,7 +10,7 @@ import { useCompanyLocale } from "@/hooks/use-me";
 import { api, unwrap } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/queries/keys";
 import type { Schemas } from "@/lib/api/schema";
-import { formatDateLong } from "@/lib/format";
+import { formatDateLong, formatDayLong } from "@/lib/format";
 import { formatAmount } from "@/lib/format/money";
 import { labels } from "@/lib/labels";
 import {
@@ -41,10 +41,17 @@ export function statusLine(subscription: Subscription, timeZone: string): string
       return subscription.current_period_end
         ? t.paidUntil(formatDateLong(subscription.current_period_end, timeZone))
         : t.active;
-    case "past_due":
-      return subscription.current_period_end
+    case "past_due": {
+      // Délai de grâce (ADR 0133) : l'accès reste ouvert jusqu'à la pause annoncée.
+      const base = subscription.current_period_end
         ? t.pastDue(formatDateLong(subscription.current_period_end, timeZone))
-        : t.pastDueNoDay;
+        : subscription.trial_ends_at
+          ? t.trialEnded(formatDateLong(subscription.trial_ends_at, timeZone))
+          : t.pastDueNoDay;
+      return subscription.renewal
+        ? `${base}. ${labels.renewal.pauseOn(formatDayLong(subscription.renewal.pause_on))}`
+        : base;
+    }
     case "suspended":
       return t.suspended;
   }

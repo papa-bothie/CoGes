@@ -79,6 +79,15 @@ function ToHandle({ attention, signupQueue }: { attention: AttentionRead; signup
       tone: "attention",
     });
   }
+  // Relances (ADR 0133) : de la veille de la fin à J+3, et les pauses de la semaine.
+  if (attention.reminders > 0) {
+    items.push({
+      key: "relances",
+      text: `${attention.reminders} boutique${attention.reminders > 1 ? "s" : ""} à relancer`,
+      href: "/relances",
+      tone: "attention",
+    });
+  }
   for (const trial of attention.trials_ending) {
     items.push({
       key: `essai-${trial.company_id}`,
